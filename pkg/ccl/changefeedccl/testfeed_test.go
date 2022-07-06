@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -127,16 +129,27 @@ type sinklessFeed struct {
 
 	conn           *pgx.Conn
 	rows           pgx.Rows
+	ctx            context.Context
+	cancel         context.CancelFunc
 	latestResolved hlc.Timestamp
 }
 
 var _ cdctest.TestFeed = (*sinklessFeed)(nil)
+
+func deadline() time.Duration {
+	if util.RaceEnabled {
+		return 5 * time.Minute
+	}
+	return 30 * time.Second
+}
 
 // Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 
 // Next implements the TestFeed interface.
 func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
+	defer time.AfterFunc(deadline(), c.cancel).Stop()
+
 	m := &cdctest.TestFeedMessage{Partition: `sinkless`}
 	for {
 		if !c.rows.Next() {
@@ -168,9 +181,9 @@ func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 // Resume implements the TestFeed interface.
 func (c *sinklessFeed) start() error {
-	ctx := context.Background()
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 	var err error
-	c.conn, err = pgx.ConnectConfig(ctx, c.connCfg)
+	c.conn, err = pgx.ConnectConfig(c.ctx, c.connCfg)
 	if err != nil {
 		return err
 	}
@@ -185,14 +198,15 @@ func (c *sinklessFeed) start() error {
 			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		}
 	}
-	c.rows, err = c.conn.Query(ctx, create, c.args...)
+	c.rows, err = c.conn.Query(c.ctx, create, c.args...)
 	return err
 }
 
 // Close implements the TestFeed interface.
 func (c *sinklessFeed) Close() error {
+	c.cancel()
 	c.rows = nil
-	return c.conn.Close(context.Background())
+	return c.conn.Close(c.ctx)
 }
 
 // reportErrorResumer is a job resumer which reports OnFailOrCancel events.
@@ -707,6 +721,8 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(deadline()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -960,6 +976,8 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(deadline()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -1277,6 +1295,8 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
 		select {
+		case <-time.After(deadline()):
+			return nil, &contextutil.TimeoutError{}
 		case <-k.shutdown:
 			return nil, k.terminalJobError()
 		case msg = <-k.source:
@@ -1541,6 +1561,8 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(deadline()):
+			return nil, &contextutil.TimeoutError{}
 		case <-f.ss.eventReady():
 		case <-f.shutdown:
 			return nil, f.terminalJobError()
@@ -1784,6 +1806,8 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 		select {
+		case <-time.After(deadline()):
+			return nil, &contextutil.TimeoutError{}
 		case <-p.ss.eventReady():
 		case <-p.shutdown:
 			return nil, p.terminalJobError()

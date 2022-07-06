@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -82,9 +83,14 @@ func waitForSchemaChange(
 	})
 }
 
-func readNextMessages(f cdctest.TestFeed, numMessages int) ([]cdctest.TestFeedMessage, error) {
+func readNextMessages(
+	ctx context.Context, f cdctest.TestFeed, numMessages int,
+) ([]cdctest.TestFeedMessage, error) {
 	var actual []cdctest.TestFeedMessage
 	for len(actual) < numMessages {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		m, err := f.Next()
 		if log.V(1) {
 			if m != nil {
@@ -171,13 +177,15 @@ func assertPayloadsBase(
 	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) {
 	t.Helper()
-	require.NoError(t, assertPayloadsBaseErr(f, expected, stripTs, perKeyOrdered))
+	require.NoError(t, withTimeout(func(ctx context.Context) error {
+		return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
+	}))
 }
 
 func assertPayloadsBaseErr(
-	f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) error {
-	actual, err := readNextMessages(f, len(expected))
+	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err
 	}
@@ -214,6 +222,17 @@ func assertPayloadsBaseErr(
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
 	}
 	return nil
+}
+
+func withTimeout(fn func(ctx context.Context) error) error {
+	timeout := 30 * time.Second
+	if util.RaceEnabled {
+		timeout *= 10
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return fn(ctx)
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {

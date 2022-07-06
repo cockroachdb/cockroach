@@ -5241,7 +5241,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 			`foo: [1]->{"after": {"a": 1}}`,
 			`foo: [2]->{"after": {"a": 2}}`,
 		}
-		msgs, err := readNextMessages(foo, len(expected))
+		msgs, err := readNextMessages(context.Background(), foo, len(expected))
 		require.NoError(t, err)
 
 		var msgsFormatted []string
