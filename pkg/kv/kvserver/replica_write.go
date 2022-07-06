@@ -77,7 +77,7 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
-) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, _ *concurrency.Guard, _ *StoreWriteBytes, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
@@ -100,14 +100,14 @@ func (r *Replica) executeWriteBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedRWOrAdmin(ctx, ba, g)
 	if err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 
 	// Check the breaker. Note that we do this after
 	// checkExecutionCanProceedBeforeStorageSnapshot, so that NotLeaseholderError
 	// has precedence.
 	if err := r.signallerForBatch(ba).Err(); err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
@@ -159,13 +159,13 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
+		return nil, g, nil, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, _, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
+	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
@@ -175,9 +175,9 @@ func (r *Replica) executeWriteBatch(
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
 			// This exits with a fatal error, but returns in tests.
-			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
+			return nil, g, nil, r.setCorruptRaftMuLocked(ctx, cErr)
 		}
-		return nil, g, pErr
+		return nil, g, nil, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
@@ -280,7 +280,7 @@ func (r *Replica) executeWriteBatch(
 				propResult.Reply, propResult.Err = ba.CreateReply(), nil
 			}
 
-			return propResult.Reply, nil, propResult.Err
+			return propResult.Reply, nil, writeBytes, propResult.Err
 
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
@@ -320,7 +320,7 @@ func (r *Replica) executeWriteBatch(
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(
+			return nil, nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(
 				errors.Wrapf(ctx.Err(), "after %.2fs of attempting command", dur.Seconds()),
 			))
 
@@ -330,7 +330,8 @@ func (r *Replica) executeWriteBatch(
 			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultErrorf("server shutdown"))
+			return nil, nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultErrorf(
+				"server shutdown"))
 		}
 	}
 }

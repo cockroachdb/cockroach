@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -179,20 +180,29 @@ func (ls *Stores) GetReplicaForRangeID(
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	br, _, pErr := ls.SendWithWriteBytes(ctx, ba)
+	return br, pErr
+}
+
+type StoreWriteBytes = admission.StoreWorkDoneInfo
+
+func (ls *Stores) SendWithWriteBytes(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
-	br, pErr := store.Send(ctx, ba)
+	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
-	return br, pErr
+	return br, writeBytes, pErr
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
