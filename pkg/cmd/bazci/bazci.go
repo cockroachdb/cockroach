@@ -205,58 +205,63 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			return buildInfo{}, err
 		}
 		// The format of the output is `[kind] rule [full_target_name].
-		outputSplit := strings.Fields(output)
-		if len(outputSplit) != 3 {
-			return buildInfo{}, errors.Newf("Could not parse bazel query output: %v", output)
-		}
-		targetKind := outputSplit[0]
-		fullTarget := outputSplit[2]
-
-		if fullTarget == "//c-deps:libgeos" {
-			ret.geos = true
-			continue
-		}
-
-		switch targetKind {
-		case "genrule", "batch_gen":
-			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
-		case "go_binary":
-			ret.goBinaries = append(ret.goBinaries, fullTarget)
-		case "go_test":
-			ret.tests = append(ret.tests, fullTarget)
-		case "go_transition_test":
-			// These tests have their own special testlogs directory.
-			// We can find it by finding the location of the binary
-			// and munging it a bit.
-			args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
-			runOutput, err := runBazelReturningStdout("run", args...)
-			if err != nil {
-				return buildInfo{}, err
+		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+			lineSplit := strings.Fields(line)
+			if len(lineSplit) != 3 {
+				return buildInfo{}, errors.Newf("Could not parse bazel query output: %v", lineSplit)
 			}
-			var binLocation string
-			for _, line := range strings.Split(runOutput, "\n") {
-				if strings.HasPrefix(line, "/") {
-					// NB: We want the last line in the output that starts with /.
-					binLocation = strings.TrimSpace(line)
+			targetKind := lineSplit[0]
+			fullTarget := lineSplit[2]
+
+			if fullTarget == "//c-deps:libgeos" {
+				ret.geos = true
+				continue
+			}
+
+			switch targetKind {
+			case "genrule", "batch_gen":
+				ret.genruleTargets = append(ret.genruleTargets, fullTarget)
+			case "go_binary":
+				ret.goBinaries = append(ret.goBinaries, fullTarget)
+			case "go_test":
+				ret.tests = append(ret.tests, fullTarget)
+			case "go_transition_test":
+				// These tests have their own special testlogs directory.
+				// We can find it by finding the location of the binary
+				// and munging it a bit.
+				args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
+				runOutput, err := runBazelReturningStdout("run", args...)
+				if err != nil {
+					return buildInfo{}, err
 				}
+				var binLocation string
+				for _, line := range strings.Split(runOutput, "\n") {
+					if strings.HasPrefix(line, "/") {
+						// NB: We want the last line in the output that starts with /.
+						binLocation = strings.TrimSpace(line)
+					}
+				}
+				componentsBinLocation := strings.Split(binLocation, "/")
+				componentsTestlogs := strings.Split(testlogsDir, "/")
+				// The second to last component will be the one we need
+				// to replace (it's the output directory for the configuration).
+				componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
+				ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
+			case "nodejs_test":
+				ret.tests = append(ret.tests, fullTarget)
+			case "test_suite":
+				// Expand the list of tests from the test suite with another query.
+				allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
+				if err != nil {
+					return buildInfo{}, err
+				}
+				ret.tests = append(ret.tests, strings.Fields(allTests)...)
+			case "_get_x_data":
+				// Can ignore these.
+				continue
+			default:
+				return buildInfo{}, errors.Newf("Got unexpected target kind %v", targetKind)
 			}
-			componentsBinLocation := strings.Split(binLocation, "/")
-			componentsTestlogs := strings.Split(testlogsDir, "/")
-			// The second to last component will be the one we need
-			// to replace (it's the output directory for the configuration).
-			componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
-			ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
-		case "nodejs_test":
-			ret.tests = append(ret.tests, fullTarget)
-		case "test_suite":
-			// Expand the list of tests from the test suite with another query.
-			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
-			if err != nil {
-				return buildInfo{}, err
-			}
-			ret.tests = append(ret.tests, strings.Fields(allTests)...)
-		default:
-			return buildInfo{}, errors.Newf("Got unexpected target kind %v", targetKind)
 		}
 	}
 
