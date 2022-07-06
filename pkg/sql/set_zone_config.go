@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,11 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -56,103 +55,6 @@ type setZoneConfigNode struct {
 	setDefault    bool
 
 	run setZoneConfigRun
-}
-
-// supportedZoneConfigOptions indicates how to translate SQL variable
-// assignments in ALTER CONFIGURE ZONE to assignments to the member
-// fields of zonepb.ZoneConfig.
-var supportedZoneConfigOptions = map[tree.Name]struct {
-	requiredType *types.T
-	setter       func(*zonepb.ZoneConfig, tree.Datum)
-	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error // optional
-}{
-	"range_min_bytes": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-	},
-	"range_max_bytes": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-	},
-	"global_reads": {
-		requiredType: types.Bool,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
-		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
-			if !tree.MustBeDBool(d) {
-				// Always allow the value to be unset.
-				return nil
-			}
-			return base.CheckEnterpriseEnabled(
-				execCfg.Settings,
-				execCfg.LogicalClusterID(),
-				execCfg.Organization(),
-				"global_reads",
-			)
-		},
-	},
-	"num_replicas": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) },
-	},
-	"num_voters": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
-	},
-	"gc.ttlseconds": {
-		requiredType: types.Int,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
-		},
-	},
-	"constraints": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			constraintsList := zonepb.ConstraintsList{
-				Constraints: c.Constraints,
-				Inherited:   c.InheritedConstraints,
-			}
-			loadYAML(&constraintsList, string(tree.MustBeDString(d)))
-			c.Constraints = constraintsList.Constraints
-			c.InheritedConstraints = false
-		},
-	},
-	"voter_constraints": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			voterConstraintsList := zonepb.ConstraintsList{
-				Constraints: c.VoterConstraints,
-				Inherited:   c.InheritedVoterConstraints(),
-			}
-			loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
-			c.VoterConstraints = voterConstraintsList.Constraints
-			c.NullVoterConstraintsIsEmpty = true
-		},
-	},
-	"lease_preferences": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
-			c.InheritedLeasePreferences = false
-		},
-	},
-}
-
-// zoneOptionKeys contains the keys from suportedZoneConfigOptions in
-// deterministic order. Needed to make the event log output
-// deterministic.
-var zoneOptionKeys = func() []string {
-	l := make([]string, 0, len(supportedZoneConfigOptions))
-	for k := range supportedZoneConfigOptions {
-		l = append(l, string(k))
-	}
-	sort.Strings(l)
-	return l
-}()
-
-func loadYAML(dst interface{}, yamlString string) {
-	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
-		panic(err)
-	}
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
@@ -222,7 +124,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
-			req, ok := supportedZoneConfigOptions[opt.Key]
+			req, ok := zoneconfig.SupportedZoneConfigOptions[opt.Key]
 			if !ok {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
@@ -238,7 +140,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 				continue
 			}
 			valExpr, err := p.analyzeExpr(
-				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
+				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.RequiredType, true /*requireType*/, string(opt.Key))
 			if err != nil {
 				return nil, err
 			}
@@ -349,8 +251,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We iterate over zoneOptionKeys instead of iterating over
 		// n.options directly so that the optionStr string constructed for
 		// the event log remains deterministic.
-		for i := range zoneOptionKeys {
-			name := (*tree.Name)(&zoneOptionKeys[i])
+		for i := range zoneconfig.ZoneOptionKeys {
+			name := (*tree.Name)(&zoneconfig.ZoneOptionKeys[i])
 			val, ok := n.options[*name]
 			if !ok {
 				continue
@@ -374,13 +276,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
-			opt := supportedZoneConfigOptions[*name]
-			if opt.checkAllowed != nil {
-				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
+			opt := zoneconfig.SupportedZoneConfigOptions[*name]
+			if opt.CheckAllowed != nil {
+				if err := opt.CheckAllowed(params.ctx, func(featureName string) error {
+					return base.CheckEnterpriseEnabled(params.p.ExecCfg().Settings,
+						params.p.ExecCfg().LogicalClusterID(),
+						params.p.ExecCfg().Organization(),
+						featureName)
+				}, datum); err != nil {
 					return err
 				}
 			}
-			setter := opt.setter
+			setter := opt.Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}

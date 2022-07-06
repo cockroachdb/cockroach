@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "regionutils",
+    srcs = ["zone_config_reader.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scbuild",
+    ],
+)
+
+go_library(
+    name = "zoneconfig",
+    srcs = [
+        "zone_config_options.go",
+        "zone_config_reader.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/zoneconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
