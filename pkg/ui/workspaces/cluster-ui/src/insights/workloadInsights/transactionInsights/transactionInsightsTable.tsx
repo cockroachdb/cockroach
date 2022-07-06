@@ -18,6 +18,7 @@ import {
 import { DATE_FORMAT, Duration } from "src/util";
 import { InsightExecEnum, InsightEvent } from "src/insights";
 import { QueriesCell, InsightCell, insightsTableTitles } from "../util";
+import { Link } from "react-router-dom";
 
 interface TransactionInsightsTable {
   data: InsightEvent[];
@@ -33,8 +34,12 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
     {
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
-      cell: (item: InsightEvent) => String(item.executionID),
-      sort: (item: InsightEvent) => String(item.executionID),
+      cell: (item: InsightEvent) => (
+        <Link to={`/insights/${item.executionID}`}>
+          {String(item.executionID)}
+        </Link>
+      ),
+      sort: (item: InsightEvent) => item.executionID,
     },
     {
       name: "query",

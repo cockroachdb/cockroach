@@ -9,16 +9,24 @@
 // licenses/APL.txt.
 
 import { unset } from "src/util";
-import { InsightEventsResponse, InsightEventState } from "src/api/insightsApi";
+import {
+  InsightEventsResponse,
+  InsightEventState,
+  InsightEventDetailsResponse,
+  InsightEventDetailsState,
+} from "src/api/insightsApi";
 import {
   Insight,
   InsightExecEnum,
   InsightTypes,
   InsightEvent,
   InsightEventFilters,
+  InsightEventDetails,
 } from "./types";
 
-export const getInsights = (eventState: InsightEventState): Insight[] => {
+export const getInsights = (
+  eventState: InsightEventState | InsightEventDetailsState,
+): Insight[] => {
   const insights: Insight[] = [];
   InsightTypes.forEach(insight => {
     if (insight(eventState.execType).name == eventState.insightName) {
@@ -54,6 +62,21 @@ export function getInsightsFromState(
   });
 
   return insightEvents;
+}
+
+export function getInsightEventDetailsFromState(
+  insightEventDetailsResponse: InsightEventDetailsResponse,
+): InsightEventDetails {
+  let insightEventDetails: InsightEventDetails = null;
+  const insightsForEventDetails = getInsights(insightEventDetailsResponse[0]);
+  if (insightsForEventDetails.length > 0) {
+    delete insightEventDetailsResponse[0].insightName;
+    insightEventDetails = {
+      ...insightEventDetailsResponse[0],
+      insights: insightsForEventDetails,
+    };
+  }
+  return insightEventDetails;
 }
 
 export const filterTransactionInsights = (

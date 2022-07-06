@@ -40,6 +40,10 @@ import {
   reducer as clusterLocks,
 } from "./clusterLocks/clusterLocks.reducer";
 import { InsightsState, reducer as insights } from "./insights";
+import {
+  InsightDetailsState,
+  reducer as insightDetails,
+} from "./insightDetails";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -56,6 +60,7 @@ export type AdminUiState = {
   job: JobState;
   clusterLocks: ClusterLocksReqState;
   insights: InsightsState;
+  insightDetails: InsightDetailsState;
 };
 
 export type AppState = {
@@ -69,6 +74,7 @@ export const reducers = combineReducers<AdminUiState>({
   liveness,
   sessions,
   insights,
+  insightDetails,
   terminateQuery,
   uiConfig,
   sqlStats,

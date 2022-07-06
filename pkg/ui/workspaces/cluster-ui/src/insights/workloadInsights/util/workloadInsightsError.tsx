@@ -10,7 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./insightTable.module.scss";
+import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 

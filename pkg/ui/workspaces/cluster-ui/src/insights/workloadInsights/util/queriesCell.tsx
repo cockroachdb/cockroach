@@ -12,7 +12,7 @@ import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "src/util";
 import classNames from "classnames/bind";
-import styles from "./insightTable.module.scss";
+import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -37,9 +37,11 @@ export const QueriesCell = ({
         placement="bottom"
         content={
           <div>
-            {transactionQueries.map(query => (
-              <div key={query.slice(0, 3) + transactionQueries.indexOf(query)}>
+            {transactionQueries.map((query, idx, arr) => (
+              <div key={Math.random()}>
+                {idx != 0 && <br />}
                 {query}
+                {idx != arr.length - 1 && <br />}
               </div>
             ))}
           </div>
