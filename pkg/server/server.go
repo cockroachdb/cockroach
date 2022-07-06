@@ -503,7 +503,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
-	kvMemoryMonitor.Start(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(
 		ctx,
 		serverrangefeed.CreateBudgetFactoryConfig(

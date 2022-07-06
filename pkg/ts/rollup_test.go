@@ -273,7 +273,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		math.MaxInt64,
 		cluster.MakeTestingClusterSettings(),
 	)
-	adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+	adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 	defer adjustedMon.Stop(context.Background())
 
 	// Roll up time series with the new monitor to measure high-water mark
@@ -319,7 +319,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 
 		// Restart monitor to clear query memory options.
 		adjustedMon.Stop(context.Background())
-		adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+		adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 
 		qmc := MakeQueryMemoryContext(adjustedMon, adjustedMon, QueryMemoryOptions{
 			// Large budget, but not maximum to avoid overflows.

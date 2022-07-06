@@ -39,7 +39,7 @@ func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 		nil, nil,
 		128 /* small allocation increment */, 100,
 		cluster.MakeTestingClusterSettings())
-	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm
 }
 

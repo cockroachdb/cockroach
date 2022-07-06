@@ -368,7 +368,7 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	// serves as a parent for a memory monitor that accounts for memory used in
 	// the KV layer at the same node.
 	rootSQLMemoryMonitor.Start(
-		context.Background(), nil, mon.MakeStandaloneBudget(opts.memoryPoolSize))
+		context.Background(), nil, mon.NewStandaloneBudget(opts.memoryPoolSize))
 	return monitorAndMetrics{
 		rootSQLMemoryMonitor: rootSQLMemoryMonitor,
 		rootSQLMetrics:       rootSQLMetrics,
@@ -504,7 +504,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
+	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
@@ -512,7 +512,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor,
 	)
-	serverCacheMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
+	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	// Set up the DistSQL temp engine.
 

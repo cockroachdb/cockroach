@@ -342,7 +342,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	// we can test whether scans of wide tables are prevented if
 	// we have insufficient memory to do them.
 	memMon := mon.NewMonitor("test", mon.MemoryResource, nil, nil, -1, 1000, settings)
-	memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1<<20))
+	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)
 	txn := kv.NewTxn(ctx, kvDB, 0)
 	rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, memMon)

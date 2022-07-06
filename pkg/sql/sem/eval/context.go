@@ -279,7 +279,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}
-	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
 	ctx.Context = context.TODO()
 	now := timeutil.Now()

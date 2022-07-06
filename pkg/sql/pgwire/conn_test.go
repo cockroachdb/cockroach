@@ -116,7 +116,7 @@ func TestConn(t *testing.T) {
 			func() bool { return false }, /* draining */
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
-			mon.BoundAccount{}, /* reserved */
+			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 		)
 		return nil
@@ -1082,7 +1082,7 @@ func TestMaliciousInputs(t *testing.T) {
 				ctx,
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
-				mon.BoundAccount{},           /* reserved */
+				&mon.BoundAccount{},          /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 			)
 			if err := <-errChan; err != nil {

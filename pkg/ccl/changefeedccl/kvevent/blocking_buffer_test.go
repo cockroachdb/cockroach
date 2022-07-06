@@ -57,7 +57,7 @@ func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup 
 		nil, nil,
 		128 /* small allocation increment */, 100,
 		cluster.MakeTestingClusterSettings())
-	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
 }
 

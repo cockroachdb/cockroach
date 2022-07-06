@@ -212,7 +212,7 @@ type BytesMonitor struct {
 	// pool, reserved determines the maximum allocation capacity of this
 	// monitor. The reserved bytes are released to their owner monitor
 	// upon Stop.
-	reserved BoundAccount
+	reserved *BoundAccount
 
 	// limit specifies a hard limit on the number of bytes a monitor allows to
 	// be allocated. Note that this limit will not be observed if allocations
@@ -339,6 +339,11 @@ func NewMonitorInheritWithLimit(
 	)
 }
 
+// StartNoReserved is the same as Start when there is no pre-reserved budget.
+func (mm *BytesMonitor) StartNoReserved(ctx context.Context, pool *BytesMonitor) {
+	mm.Start(ctx, pool, &BoundAccount{})
+}
+
 // Start begins a monitoring region.
 // Arguments:
 // - pool is the upstream monitor that provision allocations exceeding the
@@ -346,7 +351,7 @@ func NewMonitorInheritWithLimit(
 //   and the pre-reserved budget determines the entire capacity of this monitor.
 //
 // - reserved is the pre-reserved budget (see above).
-func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved BoundAccount) {
+func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved *BoundAccount) {
 	if mm.mu.curAllocated != 0 {
 		panic(fmt.Sprintf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
 	}
@@ -390,7 +395,7 @@ func NewUnlimitedMonitor(
 		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
 		poolAllocationSize:   DefaultPoolAllocationSize,
-		reserved:             MakeStandaloneBudget(math.MaxInt64),
+		reserved:             NewStandaloneBudget(math.MaxInt64),
 		settings:             settings,
 	}
 	m.mu.curBytesCount = curCount
@@ -509,10 +514,9 @@ type BoundAccount struct {
 	Mu *syncutil.Mutex
 }
 
-// MakeStandaloneBudget creates a BoundAccount suitable for root
-// monitors.
-func MakeStandaloneBudget(capacity int64) BoundAccount {
-	return BoundAccount{used: capacity}
+// NewStandaloneBudget creates a BoundAccount suitable for root monitors.
+func NewStandaloneBudget(capacity int64) *BoundAccount {
+	return &BoundAccount{used: capacity}
 }
 
 // Used returns the number of bytes currently allocated through this account.
@@ -605,7 +609,7 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 		return
 	}
 	if b.mon == nil {
-		// An account created by MakeStandaloneBudget is disconnected from any
+		// An account created by NewStandaloneBudget is disconnected from any
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
@@ -620,7 +624,7 @@ func (b *BoundAccount) Close(ctx context.Context) {
 		return
 	}
 	if b.mon == nil {
-		// An account created by MakeStandaloneBudget is disconnected from any
+		// An account created by NewStandaloneBudget is disconnected from any
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}

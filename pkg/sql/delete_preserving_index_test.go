@@ -741,7 +741,7 @@ func fetchIndex(
 	var fetcher row.Fetcher
 	var alloc tree.DatumAlloc
 
-	mm := mon.MakeStandaloneBudget(1 << 30)
+	mm := mon.NewStandaloneBudget(1 << 30)
 	idx, err := table.FindIndexWithName(indexName)
 	require.NoError(t, err)
 	colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())

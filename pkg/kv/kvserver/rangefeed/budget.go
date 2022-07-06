@@ -328,14 +328,14 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 		systemRangeFeedBudget, config.rootMon)
 	systemRangeMonitor.SetMetrics(metrics.SystemBytesCount, nil /* maxHist */)
 	systemRangeMonitor.Start(ctx, config.rootMon,
-		mon.MakeStandaloneBudget(systemRangeFeedBudget))
+		mon.NewStandaloneBudget(systemRangeFeedBudget))
 
 	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit(
 		"rangefeed-monitor",
 		config.totalRangeReedBudget,
 		config.rootMon)
 	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
-	rangeFeedPoolMonitor.Start(ctx, config.rootMon, mon.BoundAccount{})
+	rangeFeedPoolMonitor.StartNoReserved(ctx, config.rootMon)
 
 	return &BudgetFactory{
 		limit:              config.provisionalFeedLimit,

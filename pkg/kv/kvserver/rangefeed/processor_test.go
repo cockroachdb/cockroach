@@ -1080,7 +1080,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 
 	s := cluster.MakeTestingClusterSettings()
 	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	m.Start(context.Background(), nil, mon.NewStandaloneBudget(math.MaxInt64))
 	//budgetEnabled := int32(1)
 	b := m.MakeBoundAccount()
 	fb := NewFeedBudget(&b, 0, &s.SV)
@@ -1228,7 +1228,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 func newTestBudget(limit int64) *FeedBudget {
 	s := cluster.MakeTestingClusterSettings()
 	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(limit))
+	m.Start(context.Background(), nil, mon.NewStandaloneBudget(limit))
 	b := m.MakeBoundAccount()
 	fb := NewFeedBudget(&b, 0, &s.SV)
 	return fb
