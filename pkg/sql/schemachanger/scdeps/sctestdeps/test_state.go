@@ -56,6 +56,7 @@ type TestState struct {
 	committed, uncommitted nstree.MutableCatalog
 
 	comments                map[descmetadata.CommentKey]string
+	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
 	currentDatabase         string
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
@@ -255,7 +256,7 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 
 // GetZoneConfig implements scbuild.ZoneConfigReader
 func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
-	return nil, nil
+	return s.zoneConfigs[id], nil
 }
 
 // ZoneConfigReader implements scbuild.Dependencies.
