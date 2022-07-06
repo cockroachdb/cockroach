@@ -26,6 +26,7 @@ export * from "./empty";
 export * from "./filter";
 export * from "./highlightedText";
 export * from "./indexDetailsPage";
+export * from "./insights";
 export * from "./jobs";
 export * from "./loading";
 export * from "./modal";
