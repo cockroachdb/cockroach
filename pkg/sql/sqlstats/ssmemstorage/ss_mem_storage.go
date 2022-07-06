@@ -120,7 +120,7 @@ type Container struct {
 	mon       *mon.BytesMonitor
 
 	knobs            *sqlstats.TestingKnobs
-	outliersRegistry *outliers.Registry
+	outliersRegistry outliers.Registry
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -135,7 +135,7 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	outliersRegistry *outliers.Registry,
+	outliersRegistry outliers.Registry,
 ) *Container {
 	s := &Container{
 		st:                         st,

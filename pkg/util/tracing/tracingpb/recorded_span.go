@@ -20,6 +20,11 @@ import (
 	types "github.com/gogo/protobuf/types"
 )
 
+const (
+	// AnonymousTagGroupName is the name of the anonymous tag group.
+	AnonymousTagGroupName = ""
+)
+
 // TraceID is a probabilistically-unique id, shared by all spans in a trace.
 type TraceID uint64
 
