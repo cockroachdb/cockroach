@@ -17,24 +17,24 @@ import (
 )
 
 // ComputeStatsForRange computes the stats for a given range by
-// iterating over all key ranges for the given range that should
+// iterating over all key spans for the given range that should
 // be accounted for in its stats.
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	var err error
-	for _, keyRange := range MakeReplicatedKeyRangesExceptLockTable(d) {
+	for _, keySpan := range MakeReplicatedKeySpansExceptLockTable(d) {
 		func() {
 			iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: keyRange.Start,
-				UpperBound: keyRange.End,
+				LowerBound: keySpan.Key,
+				UpperBound: keySpan.EndKey,
 			})
 			defer iter.Close()
 
 			var msDelta enginepb.MVCCStats
-			if msDelta, err = iter.ComputeStats(keyRange.Start, keyRange.End, nowNanos); err != nil {
+			if msDelta, err = iter.ComputeStats(keySpan.Key, keySpan.EndKey, nowNanos); err != nil {
 				return
 			}
 			ms.Add(msDelta)
