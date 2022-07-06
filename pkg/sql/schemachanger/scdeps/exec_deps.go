@@ -144,6 +144,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 		id,
 		tree.CommonLookupFlags{
 			Required:       true,
+			IncludeOffline: true,
 			IncludeDropped: true,
 			AvoidLeased:    true,
 		})
@@ -158,8 +159,9 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 			d.txn,
 			objectDesc.GetParentID(),
 			tree.CommonLookupFlags{
-				IncludeDropped: true,
 				Required:       true,
+				IncludeOffline: true,
+				IncludeDropped: true,
 				AvoidLeased:    true,
 			})
 		if err != nil {
@@ -168,6 +170,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(ctx, d.txn, objectDesc.GetParentSchemaID(),
 			tree.SchemaLookupFlags{
 				Required:       true,
+				IncludeOffline: true,
 				IncludeDropped: true,
 				AvoidLeased:    true,
 			})
@@ -185,8 +188,9 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 			d.txn,
 			objectDesc.GetParentID(),
 			tree.CommonLookupFlags{
-				IncludeDropped: true,
 				Required:       true,
+				IncludeOffline: true,
+				IncludeDropped: true,
 				AvoidLeased:    true,
 			})
 		if err != nil {

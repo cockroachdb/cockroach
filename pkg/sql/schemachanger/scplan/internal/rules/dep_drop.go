@@ -54,7 +54,7 @@ func init() {
 		s0 := opgen.InitialStatus(e, scpb.Status_ABSENT)
 		s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
 		switch s1 {
-		case scpb.Status_DROPPED:
+		case scpb.Status_OFFLINE, scpb.Status_DROPPED:
 			if IsDescriptor(e) {
 				return nil
 			}
