@@ -1288,6 +1288,37 @@ func FindTableSubZoneConfig(b ElementStatusIterator) (current Status, target Tar
 	return current, target, element
 }
 
+func (e TableSubZoneConfigOption) element() {}
+
+// ForEachTableSubZoneConfigOption iterates over elements of type TableSubZoneConfigOption.
+func ForEachTableSubZoneConfigOption(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableSubZoneConfigOption),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableSubZoneConfigOption); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableSubZoneConfigOption finds the first element of type TableSubZoneConfigOption.
+func FindTableSubZoneConfigOption(b ElementStatusIterator) (current Status, target TargetStatus, element *TableSubZoneConfigOption) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableSubZoneConfigOption); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e TableZoneConfig) element() {}
 
 // ForEachTableZoneConfig iterates over elements of type TableZoneConfig.
@@ -1311,6 +1342,37 @@ func FindTableZoneConfig(b ElementStatusIterator) (current Status, target Target
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableZoneConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e TableZoneConfigOption) element() {}
+
+// ForEachTableZoneConfigOption iterates over elements of type TableZoneConfigOption.
+func ForEachTableZoneConfigOption(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableZoneConfigOption),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableZoneConfigOption); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableZoneConfigOption finds the first element of type TableZoneConfigOption.
+func FindTableZoneConfigOption(b ElementStatusIterator) (current Status, target TargetStatus, element *TableZoneConfigOption) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableZoneConfigOption); ok {
 			element = elt
 			current = c
 			target = t
