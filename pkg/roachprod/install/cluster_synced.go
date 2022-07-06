@@ -1846,7 +1846,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) err
 			src := src
 			dest := dest
 			if len(nodes) > 1 {
-				base := fmt.Sprintf("%d.%s", nodes, filepath.Base(dest))
+				base := fmt.Sprintf("%d.%s", nodes[i], filepath.Base(dest))
 				dest = filepath.Join(filepath.Dir(dest), base)
 			}
 
