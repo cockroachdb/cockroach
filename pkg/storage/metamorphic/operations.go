@@ -300,6 +300,42 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 	return builder.String()
 }
 
+type mvccDeleteRangeUsingRangeTombstoneOp struct {
+	m      *metaTestRunner
+	writer readWriterID
+	key    roachpb.Key
+	endKey roachpb.Key
+	txn    txnID
+}
+
+func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
+	txn := m.m.getTxn(m.txn)
+	writer := m.m.getReadWriter(m.writer)
+	if m.key.Compare(m.endKey) >= 0 {
+		// Empty range. No-op.
+		return "no-op due to no non-conflicting key range"
+	}
+
+	txn.Sequence++
+
+	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey,
+		txn.WriteTimestamp, hlc.ClockTimestamp{}, m.key, m.endKey, 0 /* maxIntents */)
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	// Update the txn's lock spans to account for this span being written.
+	newLockSpans := make([]roachpb.Span, 0, len(txn.LockSpans)+1)
+	newLockSpans = append(newLockSpans, txn.LockSpans...)
+	newLockSpans = append(newLockSpans, roachpb.Span{
+		Key:    m.key,
+		EndKey: m.endKey,
+	})
+	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
+
+	return fmt.Sprintf("truncated range to delete = %s - %s", m.key, m.endKey)
+}
+
 type mvccClearTimeRangeOp struct {
 	m         *metaTestRunner
 	key       roachpb.Key
@@ -923,7 +959,44 @@ var opGenerators = []opGenerator{
 			operandUnusedMVCCKey,
 			operandUnusedMVCCKey,
 		},
-		weight: 20,
+		weight: 10,
+	},
+	{
+		name: "mvcc_delete_range_using_range_tombstone",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			txn := txnID(args[1])
+			key := m.keyGenerator.parse(args[2]).Key
+			endKey := m.keyGenerator.parse(args[3]).Key
+
+			if endKey.Compare(key) < 0 {
+				key, endKey = endKey, key
+			}
+			truncatedSpan := m.txnGenerator.truncateSpanForConflicts(writer, txn, key, endKey)
+			key = truncatedSpan.Key
+			endKey = truncatedSpan.EndKey
+
+			// Track this write in the txn generator. This ensures the batch will be
+			// committed before the transaction is committed
+			m.txnGenerator.trackTransactionalWrite(writer, txn, key, endKey)
+			return &mvccDeleteRangeUsingRangeTombstoneOp{
+				m:      m,
+				writer: writer,
+				key:    key,
+				endKey: endKey,
+				txn:    txn,
+			}
+		},
+		dependentOps: func(m *metaTestRunner, args ...string) []opReference {
+			return closeItersOnBatch(m, readWriterID(args[0]))
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandTransaction,
+			operandUnusedMVCCKey,
+			operandUnusedMVCCKey,
+		},
+		weight: 10,
 	},
 	{
 		name: "mvcc_clear_time_range",
