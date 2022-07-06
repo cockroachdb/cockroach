@@ -161,7 +161,7 @@ func (s *Container) RecordStatement(
 	}
 
 	s.outliersRegistry.ObserveStatement(value.SessionID, &outliers.Statement{
-		ID:               value.StatementID.GetBytes(),
+		ID:               &value.StatementID,
 		FingerprintID:    stmtFingerprintID,
 		LatencyInSeconds: value.ServiceLatency,
 	})
