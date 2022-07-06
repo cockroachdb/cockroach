@@ -50,7 +50,6 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | type | [CertificateDetails.CertificateType](#cockroach.server.serverpb.CertificatesResponse-cockroach.server.serverpb.CertificateDetails.CertificateType) |  |  | [reserved](#support-status) |
 | error_message | [string](#cockroach.server.serverpb.CertificatesResponse-string) |  | "error_message" and "data" are mutually exclusive. | [reserved](#support-status) |
-| data | [bytes](#cockroach.server.serverpb.CertificatesResponse-bytes) |  | data is the raw file contents of the certificate. This means PEM-encoded DER data. | [reserved](#support-status) |
 | fields | [CertificateDetails.Fields](#cockroach.server.serverpb.CertificatesResponse-cockroach.server.serverpb.CertificateDetails.Fields) | repeated |  | [reserved](#support-status) |
 
 
