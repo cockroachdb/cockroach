@@ -70,7 +70,7 @@ func (e *engineConfig) String() string {
 	return e.name
 }
 
-var engineConfigStandard = engineConfig{"standard=0", storage.DefaultPebbleOptions()}
+var engineConfigStandard = engineConfig{"standard=0", standardOptions(0)}
 
 type engineSequence struct {
 	name    string
