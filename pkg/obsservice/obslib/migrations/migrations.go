@@ -11,9 +11,9 @@ package migrations
 import (
 	"context"
 	"embed"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/pressly/goose/v3"
@@ -24,30 +24,20 @@ import (
 //go:embed sqlmigrations/*.sql
 var sqlMigrations embed.FS
 
-// defaultSinkDBName is the name of the database to be used by default
-const defaultSinkDBName = "obsservice"
-
 // RunDBMigrations brings the SQL schema in the sink cluster up to date.
 //
-// sinkPGURL is the connection string for the sink cluster. If it includes a
-// database, that database will be used. If it doesn't, a default one will be
-// used.
-func RunDBMigrations(ctx context.Context, sinkPGURL string) error {
-	connCfg, err := pgx.ParseConfig(sinkPGURL)
-	if err != nil {
-		return err
-	}
-	if connCfg.Database == "" {
-		fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-		connCfg.Database = defaultSinkDBName
-	}
-
+// connCfg represent the connection info for sink cluster.
+func RunDBMigrations(ctx context.Context, connCfg *pgx.ConnConfig) error {
 	if log.V(2) {
 		goose.SetVerbose(true)
 	}
 	goose.SetBaseFS(sqlMigrations)
 
+	if connCfg.Database == "" {
+		return errors.AssertionFailedf("expected database name to be set")
+	}
 	db := stdlib.OpenDB(*connCfg)
+	defer db.Close()
 	// We need to create the database by hand; Goose expects the database to exist.
 	if _, err := db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+connCfg.Database); err != nil {
 		return err

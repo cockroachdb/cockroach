@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
+	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -112,6 +118,7 @@ import (
 //   (route)
 //     |
 //     +--> system.eventlog if not disabled by setting
+//     |                   └ also the Obs Service, if connected
 //     |
 //     +--> DEV channel if requested by log.V
 //     |
@@ -249,7 +256,7 @@ func logEventInternalForSchemaChanges(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor,
+		ctx, execCfg.InternalExecutor, execCfg.EventsExporter,
 		txn,
 		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
@@ -300,7 +307,7 @@ func logEventInternalForSQLStatements(
 
 	return insertEventRecords(
 		ctx,
-		execCfg.InternalExecutor,
+		execCfg.InternalExecutor, execCfg.EventsExporter,
 		txn,
 		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1+depth,    /* depth */
@@ -355,7 +362,7 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 	}
 	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID())
 	return insertEventRecords(
-		ctx, l.execCfg.InternalExecutor,
+		ctx, l.execCfg.InternalExecutor, l.execCfg.EventsExporter,
 		l.txn,
 		int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
@@ -399,7 +406,7 @@ func LogEventForJobs(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor,
+		ctx, execCfg.InternalExecutor, execCfg.EventsExporter,
 		txn,
 		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function for vmodule filtering */
@@ -447,6 +454,7 @@ const (
 func InsertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
+	eventsExporter obs.EventsExporter,
 	txn *kv.Txn,
 	reportingID int32,
 	dst LogEventDestination,
@@ -464,7 +472,7 @@ func InsertEventRecords(
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return insertEventRecords(ctx, ex, txn, reportingID,
+	return insertEventRecords(ctx, ex, eventsExporter, txn, reportingID,
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
 		entries...)
@@ -483,6 +491,7 @@ func InsertEventRecords(
 func insertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
+	eventsExporter obs.EventsExporter,
 	txn *kv.Txn,
 	reportingID int32,
 	depth int,
@@ -533,18 +542,8 @@ func insertEventRecords(
 		return nil
 	}
 
-	// When logging to the system table, ensure that the external
-	// logging only sees the event when the transaction commits.
-	if opts.dst.hasFlag(LogExternally) {
-		txn.AddCommitTrigger(func(ctx context.Context) {
-			for i := range entries {
-				log.StructuredEvent(ctx, entries[i].event)
-			}
-		})
-	}
-
-	// The function below this point is specialized to write to the
-	// system table.
+	// Write to the system.eventlog table, to the event log, and to the Obs
+	// Service.
 
 	const colsPerEvent = 5
 	const baseQuery = `
@@ -553,8 +552,18 @@ INSERT INTO system.eventlog (
 )
 VALUES($1, $2, $3, $4, $5)`
 	args := make([]interface{}, 0, len(entries)*colsPerEvent)
-	constructArgs := func(reportingID int32, entry eventLogEntry) error {
+
+	events := make([]otel_logs_pb.LogRecord, len(entries))
+	sp := tracing.SpanFromContext(ctx)
+	var traceID, spanID [8]byte
+	if sp != nil {
+		binary.LittleEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
+		binary.LittleEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
+	}
+	for i := 0; i < len(entries); i++ {
+		entry := entries[i]
 		event := entry.event
+
 		infoBytes := redact.RedactableBytes("{")
 		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
 		infoBytes = append(infoBytes, '}')
@@ -570,29 +579,49 @@ VALUES($1, $2, $3, $4, $5)`
 			reportingID,
 			string(infoBytes),
 		)
-		return nil
+
+		events[i] = otel_logs_pb.LogRecord{
+			TimeUnixNano: uint64(timeutil.Now().UnixNano()),
+			Body:         &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: args[len(args)-1].(string)}},
+			Attributes: []*v1.KeyValue{{
+				Key:   obspb.EventlogEventTypeAttribute,
+				Value: &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: eventType}},
+			}},
+			TraceId: traceID[:],
+			SpanId:  spanID[:],
+		}
 	}
+
+	// When logging to the system table, ensure that the external logging and the
+	// Obs Service only sees the event when the transaction commits.
+	if opts.dst.hasFlag(LogExternally) {
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			for i := range entries {
+				log.StructuredEvent(ctx, entries[i].event)
+			}
+		})
+	}
+	txn.AddCommitTrigger(func(ctx context.Context) {
+		for i := range events {
+			eventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
+		}
+	})
 
 	// In the common case where we have just 1 event, we want to skeep
 	// the extra heap allocation and buffer operations of the loop
 	// below. This is an optimization.
 	query := baseQuery
-	if err := constructArgs(reportingID, entries[0]); err != nil {
-		return err
-	}
 	if len(entries) > 1 {
 		// Extend the query with additional VALUES clauses for all the
 		// events after the first one.
 		var completeQuery strings.Builder
 		completeQuery.WriteString(baseQuery)
 
-		for _, extraEntry := range entries[1:] {
-			placeholderNum := 1 + len(args)
-			if err := constructArgs(reportingID, extraEntry); err != nil {
-				return err
-			}
+		placeholderNum := 6
+		for range entries[1:] {
 			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, $%d)",
 				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4)
+			placeholderNum += 5
 		}
 		query = completeQuery.String()
 	}
@@ -604,5 +633,6 @@ VALUES($1, $2, $3, $4, $5)`
 	if rows != len(entries) {
 		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(entries))
 	}
+
 	return nil
 }

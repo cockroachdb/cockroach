@@ -66,18 +66,49 @@ obsservice --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui
 
 ## Functionality
 
-_This is the very beginning of the Obs Service; it doesn't have any
-functionality yet. Hopefully we'll keep this up to date as it evolves._
+In the current fledgeling state, the Obs Service does a couple of things:
 
-The Obs Service will reverse-proxy all HTTP routes it doesn't handle itself to
-CRDB. Currently the Obs Service doesn't handle any routes (other than
-`/debug/pprof/*`, which exposes the Obs Service's own pprof endpoints), so all
-requests are forwarded.
+1. The Obs Service serves the DB Console, when built with `--config=with_ui`.
 
-The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
-required schema is automatically created using SQL migrations run with
-[goose](https://github.com/pressly/goose). The state of migrations in a sink
-cluster can be inspected through the `observice.obs_admin.migrations` table.
+2. The Obs Service reverse-proxies some HTTP routes to
+   CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
+
+3. The Obs Service connects to a source node, identified by
+   `--crdb-events-addr`, through the `SubscribeToEvents` RPC. The Obs Service
+   will receive the events exported by the CRDB node through the `EventsServer`
+   library.
+   Only insecure source clusters are supported at the moment.
+
+4. The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
+   required schema is automatically created using SQL migrations run with
+   [goose](https://github.com/pressly/goose). The state of migrations in a sink
+   cluster can be inspected through the `observice.obs_admin.migrations` table.
+   The ingested events are saved in the sink cluster.
+
+## Event ingestion
+
+The Obs Service ingests events using the `SubscribeToEvents` RPC, which returns
+a stream of OpenTelemetry log records. These records are grouped into
+[`ResourceLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto)
+and,within that, into
+[`ScopeLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto#L64).
+A resource identifies the cluster/node/tenant that is emitting the respective
+events. A scope identifies the type of event; events of different types get
+persisted in different tables, based on this event type. Events of unrecognized
+types are dropped. Currently, a single event type is supported: `"eventlog"`.
+The log records carry attributes and a JSON payload representing the event.
+
+The mapping between event types and tables is listed in the table below:
+
+| Event type | Table          | Attributes   |
+|------------|----------------|--------------|
+| eventlog   | cluster_events | {event_type} |
+
+Each table storing events can have a different schema. It is expected that these
+tables store some event fields as columns and otherwise store the raw event in a
+JSON column. The values of the different columns can come from the attributes of
+the log record (listed in the table above), or from the JSON itself. Virtual or
+computed columns can be used to extract data from the JSON directly.
 
 ## Licensing
 

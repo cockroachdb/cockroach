@@ -358,6 +358,7 @@
 /pkg/util/admission/         @cockroachdb/kv-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
 /pkg/workload/               @cockroachdb/sql-experience-noreview
+/pkg/obs/                    @cockroachdb/obs-inf-prs
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
 
 # Own all bazel files to dev-inf, but don't request reviews for them
