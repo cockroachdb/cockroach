@@ -21,13 +21,28 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_PUBLIC,
+			to(scpb.Status_OFFLINE,
 				emit(func(this *scpb.Sequence) scop.Op {
 					return notImplemented(this)
 				}),
 			),
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Sequence) scop.Op {
+					return &scop.MarkDescriptorAsPublic{
+						DescID: this.SequenceID,
+					}
+				}),
+			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
+			to(scpb.Status_OFFLINE,
+				emit(func(this *scpb.Sequence, md *targetsWithElementMap) scop.Op {
+					return &scop.MarkDescriptorAsOffline{
+						DescID: this.SequenceID,
+						Reason: statementForDropJob(this, md).Statement,
+					}
+				}),
+			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.Sequence) scop.Op {

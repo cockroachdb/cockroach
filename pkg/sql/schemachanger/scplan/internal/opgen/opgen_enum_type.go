@@ -20,14 +20,29 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_PUBLIC,
+			to(scpb.Status_OFFLINE,
 				emit(func(this *scpb.EnumType) scop.Op {
 					return notImplemented(this)
+				}),
+			),
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.EnumType) scop.Op {
+					return &scop.MarkDescriptorAsPublic{
+						DescID: this.TypeID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			to(scpb.Status_OFFLINE,
+				emit(func(this *scpb.EnumType, md *targetsWithElementMap) scop.Op {
+					return &scop.MarkDescriptorAsOffline{
+						DescID: this.TypeID,
+						Reason: statementForDropJob(this, md).Statement,
+					}
+				}),
+			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.EnumType) scop.Op {

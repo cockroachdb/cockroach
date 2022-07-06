@@ -369,96 +369,16 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 8 elements transitioning toward ABSENT
+│       ├── • 1 element transitioning toward ABSENT
 │       │   │
-│       │   ├── • Namespace:{DescID: 113, Name: sq1, ReferencedDescID: 104}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │         rule: "descriptor drop right before dependent element removal"
-│       │   │
-│       │   ├── • Owner:{DescID: 113}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 113, Name: admin}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 113, Name: root}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
-│       │   │
-│       │   ├── • Sequence:{DescID: 113}
-│       │   │     PUBLIC → DROPPED
-│       │   │
-│       │   ├── • ObjectParent:{DescID: 113, ReferencedDescID: 105}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │         rule: "descriptor drop right before dependent element removal"
-│       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │   │         rule: "descriptor drop right before removing dependent with expr ref"
-│       │   │
-│       │   └── • ColumnDefaultExpression:{DescID: 115, ColumnID: 2}
-│       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
-│       │             rule: "descriptor drop right before removing dependent with expr ref"
+│       │   └── • Sequence:{DescID: 113}
+│       │         PUBLIC → OFFLINE
 │       │
-│       └── • 7 Mutation operations
+│       └── • 1 Mutation operation
 │           │
-│           ├── • MarkDescriptorAsDropped
-│           │     DescID: 113
-│           │
-│           ├── • RemoveAllTableComments
-│           │     TableID: 113
-│           │
-│           ├── • RemoveColumnDefaultExpression
-│           │     ColumnID: 2
-│           │     TableID: 114
-│           │
-│           ├── • UpdateBackReferencesInSequences
-│           │     BackReferencedColumnID: 2
-│           │     BackReferencedTableID: 114
-│           │     SequenceIDs:
-│           │     - 113
-│           │
-│           ├── • RemoveColumnDefaultExpression
-│           │     ColumnID: 2
-│           │     TableID: 115
-│           │
-│           ├── • UpdateBackReferencesInSequences
-│           │     BackReferencedColumnID: 2
-│           │     BackReferencedTableID: 115
-│           │     SequenceIDs:
-│           │     - 113
-│           │
-│           └── • DrainDescriptorName
-│                 Namespace:
-│                   DatabaseID: 104
-│                   DescriptorID: 113
-│                   Name: sq1
-│                   SchemaID: 105
+│           └── • MarkDescriptorAsOffline
+│                 DescID: 113
+│                 Reason: DROP SEQUENCE test.public.sq1 CASCADE
 │
 ├── • PreCommitPhase
 │   │
@@ -487,7 +407,7 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │                 - 115
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP SEQUENCE sq1 CASCADE
 │                   redactedstatement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
@@ -495,7 +415,114 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │
 └── • PostCommitNonRevertiblePhase
     │
-    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 8 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • Namespace:{DescID: 113, Name: sq1, ReferencedDescID: 104}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │         rule: "descriptor drop right before dependent element removal"
+    │   │   │
+    │   │   ├── • Owner:{DescID: 113}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │   │     rule: "descriptor drop right before dependent element removal"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 113, Name: admin}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │   │     rule: "descriptor drop right before dependent element removal"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 113, Name: root}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │   │     rule: "descriptor drop right before dependent element removal"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │
+    │   │   ├── • Sequence:{DescID: 113}
+    │   │   │     OFFLINE → DROPPED
+    │   │   │
+    │   │   ├── • ObjectParent:{DescID: 113, ReferencedDescID: 105}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │         rule: "descriptor drop right before dependent element removal"
+    │   │   │
+    │   │   ├── • ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │   │         rule: "descriptor drop right before removing dependent with expr ref"
+    │   │   │
+    │   │   └── • ColumnDefaultExpression:{DescID: 115, ColumnID: 2}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • SameStagePrecedence dependency from DROPPED Sequence:{DescID: 113}
+    │   │             rule: "descriptor drop right before removing dependent with expr ref"
+    │   │
+    │   └── • 11 Mutation operations
+    │       │
+    │       ├── • MarkDescriptorAsDropped
+    │       │     DescID: 113
+    │       │
+    │       ├── • RemoveAllTableComments
+    │       │     TableID: 113
+    │       │
+    │       ├── • RemoveColumnDefaultExpression
+    │       │     ColumnID: 2
+    │       │     TableID: 114
+    │       │
+    │       ├── • UpdateBackReferencesInSequences
+    │       │     BackReferencedColumnID: 2
+    │       │     BackReferencedTableID: 114
+    │       │     SequenceIDs:
+    │       │     - 113
+    │       │
+    │       ├── • RemoveColumnDefaultExpression
+    │       │     ColumnID: 2
+    │       │     TableID: 115
+    │       │
+    │       ├── • UpdateBackReferencesInSequences
+    │       │     BackReferencedColumnID: 2
+    │       │     BackReferencedTableID: 115
+    │       │     SequenceIDs:
+    │       │     - 113
+    │       │
+    │       ├── • DrainDescriptorName
+    │       │     Namespace:
+    │       │       DatabaseID: 104
+    │       │       DescriptorID: 113
+    │       │       Name: sq1
+    │       │       SchemaID: 105
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 113
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 114
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 115
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
         ├── • 1 element transitioning toward ABSENT
         │   │
@@ -724,93 +751,31 @@ EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
 Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 69 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 147, Name: v1dep, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 147}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 147, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 147, Name: root}
- │         │    ├── PUBLIC → DROPPED    View:{DescID: 147}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 147, ReferencedDescID: 105}
+ │         ├── 19 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → OFFLINE    View:{DescID: 147}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 147, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 147, Name: name, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 147, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 147, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967295}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 147, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 147, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 148}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 148, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 148, Name: root}
- │         │    ├── PUBLIC → DROPPED    View:{DescID: 148}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 148, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → OFFLINE    View:{DescID: 148}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 148, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 148, Name: n1, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 148, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 148, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 148, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967295}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 148, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 148, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 149}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 149, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 149, Name: root}
- │         │    ├── PUBLIC → DROPPED    View:{DescID: 149}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 149, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → OFFLINE    View:{DescID: 149}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 149, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 149, Name: name, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 149, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 149, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 149, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967295}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 149, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 149, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 150}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 150, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 150, Name: root}
- │         │    ├── PUBLIC → DROPPED    View:{DescID: 150}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 150, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → OFFLINE    View:{DescID: 150}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 150, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 150, Name: n2, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 150, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 150, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 150, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 150, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 150, Name: tableoid, ColumnID: 4294967294}
- │         │    └── PUBLIC → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         └── 16 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescID":147}
- │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":147}
- │              ├── RemoveAllTableComments {"TableID":147}
- │              ├── MarkDescriptorAsDropped {"DescID":148}
- │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":148}
- │              ├── RemoveAllTableComments {"TableID":148}
- │              ├── MarkDescriptorAsDropped {"DescID":149}
- │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":149}
- │              ├── RemoveAllTableComments {"TableID":149}
- │              ├── MarkDescriptorAsDropped {"DescID":150}
- │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":150}
- │              ├── RemoveAllTableComments {"TableID":150}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":148,"Name":"v2dep","SchemaID":105}}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":149,"Name":"v3dep","SchemaID":105}}
- │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":150,"Name":"v4dep","SchemaID":105}}
+ │         │    └── PUBLIC → WRITE_ONLY Column:{DescID: 150, ColumnID: 4294967294}
+ │         └── 4 Mutation operations
+ │              ├── MarkDescriptorAsOffline {"DescID":147,"Reason":"DROP VIEW test.p..."}
+ │              ├── MarkDescriptorAsOffline {"DescID":148,"Reason":"DROP VIEW test.p..."}
+ │              ├── MarkDescriptorAsOffline {"DescID":149,"Reason":"DROP VIEW test.p..."}
+ │              └── MarkDescriptorAsOffline {"DescID":150,"Reason":"DROP VIEW test.p..."}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 6 Mutation operations
@@ -821,27 +786,121 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │              ├── SetJobStateOnDescriptor {"DescriptorID":150,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 69 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 147, Name: v1dep, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 147}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 147, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 147, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     View:{DescID: 147}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 147, ReferencedDescID: 105}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 147, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 147, Name: name, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 147, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 147, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 147, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 147, Name: tableoid, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 148}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 148, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 148, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     View:{DescID: 148}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 148, ReferencedDescID: 105}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 148, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 148, Name: n1, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 148, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 148, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 148, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 148, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 148, Name: tableoid, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 149}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 149, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 149, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     View:{DescID: 149}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 149, ReferencedDescID: 105}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 149, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 149, Name: name, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 149, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 149, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 149, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 149, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 149, Name: tableoid, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 150}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 150, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 150, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     View:{DescID: 150}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 150, ReferencedDescID: 105}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 150, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 150, Name: n2, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 150, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 150, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 150, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 150, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 150, Name: tableoid, ColumnID: 4294967294}
+      │    │    └── PUBLIC     → ABSENT      ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    └── 22 Mutation operations
+      │         ├── MarkDescriptorAsDropped {"DescID":147}
+      │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":147}
+      │         ├── RemoveAllTableComments {"TableID":147}
+      │         ├── MarkDescriptorAsDropped {"DescID":148}
+      │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":148}
+      │         ├── RemoveAllTableComments {"TableID":148}
+      │         ├── MarkDescriptorAsDropped {"DescID":149}
+      │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":149}
+      │         ├── RemoveAllTableComments {"TableID":149}
+      │         ├── MarkDescriptorAsDropped {"DescID":150}
+      │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":150}
+      │         ├── RemoveAllTableComments {"TableID":150}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":148,"Name":"v2dep","SchemaID":105}}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":149,"Name":"v3dep","SchemaID":105}}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":150,"Name":"v4dep","SchemaID":105}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":146}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":147}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":148}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":149}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":150}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 19 elements transitioning toward ABSENT
-           │    ├── DROPPED    → ABSENT View:{DescID: 147}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967295}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967294}
-           │    ├── DROPPED    → ABSENT View:{DescID: 148}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967295}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967294}
-           │    ├── DROPPED    → ABSENT View:{DescID: 149}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967295}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967294}
-           │    ├── DROPPED    → ABSENT View:{DescID: 150}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967295}
-           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967294}
+           │    ├── DROPPED     → ABSENT View:{DescID: 147}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967295}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967294}
+           │    ├── DROPPED     → ABSENT View:{DescID: 148}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967295}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967294}
+           │    ├── DROPPED     → ABSENT View:{DescID: 149}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967295}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967294}
+           │    ├── DROPPED     → ABSENT View:{DescID: 150}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967295}
+           │    └── DELETE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967294}
            └── 29 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":147}
@@ -1215,7 +1274,7 @@ BEGIN
 statement ok
 DROP DATABASE db1 CASCADE
 
-statement error database "db1" does not exist
+statement error database "db1" is offline: DROP DATABASE db1 CASCADE
 SELECT * from db1.sc1.v1
 
 statement ok
@@ -1864,36 +1923,21 @@ EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 20 elements transitioning toward ABSENT
+ │         ├── 8 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 2, IndexID: 2}
  │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 1, IndexID: 2}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT     IndexName:{DescID: 265, Name: idx, IndexID: 2}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 266, Name: child, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 266}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: root}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: testuser}
- │         │    ├── PUBLIC → DROPPED    View:{DescID: 266}
- │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 266, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → OFFLINE    View:{DescID: 266}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: count, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: tableoid, ColumnID: 4294967294}
- │         │    └── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         └── 8 Mutation operations
+ │         │    └── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
+ │         └── 5 Mutation operations
  │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":265}
  │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":265}
+ │              ├── MarkDescriptorAsOffline {"DescID":266,"Reason":"DROP INDEX test...."}
  │              ├── scop.RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
- │              ├── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
- │              ├── MarkDescriptorAsDropped {"DescID":266}
- │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":266}
- │              ├── RemoveAllTableComments {"TableID":266}
- │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":266,"Name":"child","SchemaID":105}}
+ │              └── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 3 Mutation operations
@@ -1902,29 +1946,51 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 5 elements transitioning toward ABSENT
+      │    ├── 17 elements transitioning toward ABSENT
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
-      │    │    ├── DROPPED    → ABSENT      View:{DescID: 266}
-      │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 1}
-      │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967295}
-      │    │    └── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 266, Name: child, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 266}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: root}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: testuser}
+      │    │    ├── OFFLINE    → DROPPED     View:{DescID: 266}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 266, ReferencedDescID: 105}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 266, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 266, Name: count, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 266, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 266, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 266, Name: tableoid, ColumnID: 4294967294}
+      │    │    └── PUBLIC     → ABSENT      ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967294}
       │    └── 8 Mutation operations
+      │         ├── MarkDescriptorAsDropped {"DescID":266}
+      │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":266}
+      │         ├── RemoveAllTableComments {"TableID":266}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":265}
-      │         ├── LogEvent {"TargetStatus":1}
-      │         ├── DeleteDescriptor {"DescriptorID":266}
-      │         ├── MakeColumnAbsent {"ColumnID":1,"TableID":266}
-      │         ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":266}
-      │         ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":266}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":266,"Name":"child","SchemaID":105}}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":265}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":266}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
-           └── 5 Mutation operations
+           ├── 5 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
+           │    ├── DROPPED     → ABSENT View:{DescID: 266}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 266, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 266, ColumnID: 4294967295}
+           │    └── DELETE_ONLY → ABSENT Column:{DescID: 266, ColumnID: 4294967294}
+           └── 11 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
                 ├── CreateGcJobForIndex {"IndexID":2,"TableID":265}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":265}
+                ├── LogEvent {"TargetStatus":1}
+                ├── DeleteDescriptor {"DescriptorID":266}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":266}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":266}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":266}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":266}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
 
 statement ok
