@@ -18,7 +18,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -239,6 +238,14 @@ type Streamer struct {
 	// been returned by GetResults() yet.
 	results resultsBuffer
 
+	// numRangesPerScanRequestAccountedFor tracks how much space has been
+	// consumed from the budget in order to account for the
+	// numRangesPerScanRequest slice.
+	//
+	// It is only accessed from the Streamer's user goroutine, so it doesn't
+	// need the mutex protection.
+	numRangesPerScanRequestAccountedFor int64
+
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first. If the results' mutex needs to be locked,
@@ -257,7 +264,6 @@ type Streamer struct {
 		//
 		// It is allocated lazily if Hints.SingleRowLookup is false when the
 		// first ScanRequest is encountered in Enqueue.
-		// TODO(yuzefovich): perform memory accounting for this.
 		numRangesPerScanRequest []int32
 
 		// numRequestsInFlight tracks the number of single-range batches that
@@ -479,6 +485,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// requestsProvider right away. This is needed in order for the worker
 	// coordinator to not pick up any work until we account for
 	// totalReqsMemUsage.
+	// TODO(yuzefovich): this memory is not accounted for. However, the number
+	// of singleRangeBatch objects in flight is limited by the number of ranges
+	// of a single table, so it doesn't seem urgent to fix the accounting here.
 	var requestsToServe []singleRangeBatch
 	seekKey := rs.Key
 	const scanDir = kvcoord.Ascending
@@ -494,7 +503,23 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			s.mu.Unlock()
 		}
 	}()
+	// TODO(yuzefovich): reuse truncation helpers between different Enqueue()
+	// calls.
+	// TODO(yuzefovich): introduce a fast path when all requests are contained
+	// within a single range.
+	// The streamer can process the responses in an arbitrary order, so we don't
+	// require the helper to preserve the order of requests and allow it to
+	// reorder the reqs slice too.
+	const mustPreserveOrder = false
+	const canReorderRequestsSlice = true
+	truncationHelper, err := kvcoord.MakeBatchTruncationHelper(
+		scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+	)
+	if err != nil {
+		return err
+	}
 	var reqsKeysScratch []roachpb.Key
+	var newNumRangesPerScanRequestMemoryUsage int64
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Truncate the request span to the current range.
 		singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
@@ -502,11 +527,15 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			return err
 		}
 		// Find all requests that touch the current range.
-		singleRangeReqs, positions, err := kvcoord.Truncate(reqs, singleRangeSpan)
+		var singleRangeReqs []roachpb.RequestUnion
+		var positions []int
+		singleRangeReqs, positions, seekKey, err = truncationHelper.Truncate(singleRangeSpan)
 		if err != nil {
 			return err
 		}
+		rs.Key = seekKey
 		var subRequestIdx []int32
+		var subRequestIdxOverhead int64
 		if !s.hints.SingleRowLookup {
 			for i, pos := range positions {
 				if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
@@ -518,6 +547,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 						s.mu.Lock()
 						if cap(s.mu.numRangesPerScanRequest) < len(reqs) {
 							s.mu.numRangesPerScanRequest = make([]int32, len(reqs))
+							newNumRangesPerScanRequestMemoryUsage = int64(cap(s.mu.numRangesPerScanRequest)) * int32Size
 						} else {
 							// We can reuse numRangesPerScanRequest allocated on
 							// the previous call to Enqueue after we zero it
@@ -531,6 +561,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 					if s.mode == InOrder {
 						if subRequestIdx == nil {
 							subRequestIdx = make([]int32, len(singleRangeReqs))
+							subRequestIdxOverhead = int32SliceOverhead + int32Size*int64(cap(subRequestIdx))
 						}
 						subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
 					}
@@ -544,12 +575,15 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		//if !s.hints.UniqueRequests {
 		//}
 
+		overheadAccountedFor := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(singleRangeReqs)) + // reqs
+			intSliceOverhead + intSize*int64(cap(positions)) + // positions
+			subRequestIdxOverhead // subRequestIdx
 		r := singleRangeBatch{
 			reqs:                 singleRangeReqs,
 			positions:            positions,
 			subRequestIdx:        subRequestIdx,
 			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
-			overheadAccountedFor: requestUnionOverhead * int64(cap(singleRangeReqs)),
+			overheadAccountedFor: overheadAccountedFor,
 		}
 		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
@@ -573,22 +607,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 
 		requestsToServe = append(requestsToServe, r)
 		s.enqueuedSingleRangeRequests += len(singleRangeReqs)
-
-		// Determine next seek key, taking potentially sparse requests into
-		// consideration.
-		//
-		// In next iteration, query next range.
-		// It's important that we use the EndKey of the current descriptor
-		// as opposed to the StartKey of the next one: if the former is stale,
-		// it's possible that the next range has since merged the subsequent
-		// one, and unless both descriptors are stale, the next descriptor's
-		// StartKey would move us to the beginning of the current range,
-		// resulting in a duplicate scan.
-		seekKey, err = kvcoord.Next(reqs, ri.Desc().EndKey)
-		rs.Key = seekKey
-		if err != nil {
-			return err
-		}
 	}
 
 	if streamerLocked {
@@ -599,11 +617,16 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		streamerLocked = false
 	}
 
+	toConsume := totalReqsMemUsage
+	if newNumRangesPerScanRequestMemoryUsage != 0 && newNumRangesPerScanRequestMemoryUsage != s.numRangesPerScanRequestAccountedFor {
+		toConsume += newNumRangesPerScanRequestMemoryUsage - s.numRangesPerScanRequestAccountedFor
+		s.numRangesPerScanRequestAccountedFor = newNumRangesPerScanRequestMemoryUsage
+	}
 	// We allow the budget to go into debt iff a single request was enqueued.
 	// This is needed to support the case of arbitrarily large keys - the caller
 	// is expected to produce requests with such cases one at a time.
 	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
 		return err
 	}
 
@@ -1171,7 +1194,7 @@ func (w *workerCoordinator) performRequestAsync(
 			reqOveraccounted := req.reqsReservedBytes - fp.resumeReqsMemUsage
 			if fp.resumeReqsMemUsage == 0 {
 				// There will be no resume request, so we will lose the
-				// reference to the req.reqs slice and can release its memory
+				// reference to the slices in req and can release its memory
 				// reservation.
 				reqOveraccounted += req.overheadAccountedFor
 			}
@@ -1235,7 +1258,7 @@ func (w *workerCoordinator) performRequestAsync(
 
 			// Finally, process the results and add the ResumeSpans to be
 			// processed as well.
-			processSingleRangeResponse(w.s, req, br, fp)
+			processSingleRangeResponse(ctx, w.s, req, br, fp)
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
@@ -1273,15 +1296,6 @@ func (fp singleRangeBatchResponseFootprint) hasIncomplete() bool {
 func calculateFootprint(
 	req singleRangeBatch, br *roachpb.BatchResponse,
 ) (fp singleRangeBatchResponseFootprint, _ error) {
-	// Note that we cannot use Size() methods that are automatically generated
-	// by the protobuf library because they account for things differently from
-	// how the memory usage is accounted for by the KV layer for the purposes of
-	// tracking TargetBytes limit.
-
-	// getRequestScratch and scanRequestScratch are used to calculate
-	// the size of requests when we set the ResumeSpans on them.
-	var getRequestScratch roachpb.GetRequest
-	var scanRequestScratch roachpb.ScanRequest
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
 		switch req.reqs[i].GetInner().(type) {
@@ -1294,8 +1308,7 @@ func calculateFootprint(
 			}
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				getRequestScratch.SetSpan(*get.ResumeSpan)
-				fp.resumeReqsMemUsage += int64(getRequestScratch.Size())
+				fp.resumeReqsMemUsage += requestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
 				fp.numIncompleteGets++
 			} else {
 				// This Get was completed.
@@ -1322,8 +1335,7 @@ func calculateFootprint(
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
-				scanRequestScratch.SetSpan(*scan.ResumeSpan)
-				fp.resumeReqsMemUsage += int64(scanRequestScratch.Size())
+				fp.resumeReqsMemUsage += requestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
 		}
@@ -1340,12 +1352,13 @@ func calculateFootprint(
 // It also assumes that the budget has already been reconciled with the
 // reservations for Results that will be created.
 func processSingleRangeResponse(
+	ctx context.Context,
 	s *Streamer,
 	req singleRangeBatch,
 	br *roachpb.BatchResponse,
 	fp singleRangeBatchResponseFootprint,
 ) {
-	processSingleRangeResults(s, req, br, fp)
+	processSingleRangeResults(ctx, s, req, br, fp)
 	if fp.hasIncomplete() {
 		resumeReq := buildResumeSingeRangeBatch(s, req, br, fp)
 		s.requestsToServe.add(resumeReq)
@@ -1357,6 +1370,7 @@ func processSingleRangeResponse(
 // function is a no-op. This function handles the associated bookkeeping on the
 // streamer as it processes the results.
 func processSingleRangeResults(
+	ctx context.Context,
 	s *Streamer,
 	req singleRangeBatch,
 	br *roachpb.BatchResponse,
@@ -1400,7 +1414,7 @@ func processSingleRangeResults(
 	// the Streamer's one.
 	s.results.Lock()
 	defer s.results.Unlock()
-	defer s.results.doneAddingLocked()
+	defer s.results.doneAddingLocked(ctx)
 
 	// memoryTokensBytes accumulates all reservations that are made for all
 	// Results created below. The accounting for these reservations has already
@@ -1632,34 +1646,4 @@ func buildResumeSingeRangeBatch(
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
 
 	return resumeReq
-}
-
-var zeroInt32Slice []int32
-
-func init() {
-	zeroInt32Slice = make([]int32, 1<<10)
-}
-
-const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-
-func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
-	for _, r := range reqs {
-		memUsage += int64(r.Size())
-	}
-	return memUsage
-}
-
-// getResponseSize calculates the size of the GetResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func getResponseSize(get *roachpb.GetResponse) int64 {
-	if get.Value == nil {
-		return 0
-	}
-	return int64(len(get.Value.RawBytes))
-}
-
-// scanResponseSize calculates the size of the ScanResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func scanResponseSize(scan *roachpb.ScanResponse) int64 {
-	return scan.NumBytes
 }

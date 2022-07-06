@@ -79,7 +79,7 @@ func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, s
 func TestTenantStreaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 82706)
+	skip.WithIssue(t, 83697)
 
 	skip.UnderRace(t, "slow under race")
 

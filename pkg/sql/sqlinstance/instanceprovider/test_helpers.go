@@ -20,9 +20,10 @@ import (
 )
 
 // TestInstanceProvider exposes ShutdownSQLInstanceForTest
-// method for testing purposes.
+// and InitAndWaitForTest methods for testing purposes.
 type TestInstanceProvider interface {
 	sqlinstance.Provider
+	InitAndWaitForTest(context.Context)
 	ShutdownSQLInstanceForTest(context.Context)
 }
 
@@ -41,6 +42,11 @@ func NewTestInstanceProvider(
 	}
 	p.mu.started = true
 	return p
+}
+
+// InitAndWaitForTest explicitly calls initAndWait for testing purposes.
+func (p *provider) InitAndWaitForTest(ctx context.Context) {
+	_ = p.initAndWait(ctx)
 }
 
 // ShutdownSQLInstanceForTest explicitly calls shutdownSQLInstance for testing purposes.

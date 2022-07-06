@@ -113,14 +113,16 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				break
 			}
 
+			budget.mu.Lock()
 			b.Lock()
 			numToAdd := rng.Intn(len(addOrder)) + 1
 			for i := 0; i < numToAdd; i++ {
 				b.addLocked(results[addOrder[0]])
 				addOrder = addOrder[1:]
 			}
-			b.doneAddingLocked()
+			b.doneAddingLocked(ctx)
 			b.Unlock()
+			budget.mu.Unlock()
 
 			// With 50% probability, try spilling some of the buffered results
 			// to disk.
