@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 // maxCacheSize is the number of detected outliers we will retain in memory.
@@ -89,7 +88,7 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 
 	if hasOutlier {
 		for _, s := range statements {
-			r.mu.outliers.Add(uint128.FromBytes(s.ID), &Outlier{
+			r.mu.outliers.Add(s.ID, &Outlier{
 				Session:     &Session{ID: &sessionID},
 				Transaction: transaction,
 				Statement:   s,

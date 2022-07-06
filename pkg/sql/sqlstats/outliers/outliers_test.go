@@ -32,8 +32,9 @@ func TestOutliers(t *testing.T) {
 	session := &outliers.Session{ID: &sessionID}
 	txnID := uuid.FastMakeV4()
 	transaction := &outliers.Transaction{ID: &txnID}
+	statementID := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 	statement := &outliers.Statement{
-		ID:               []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+		ID:               &statementID,
 		FingerprintID:    roachpb.StmtFingerprintID(100),
 		LatencyInSeconds: 2,
 	}
@@ -82,8 +83,9 @@ func TestOutliers(t *testing.T) {
 	t.Run("too fast", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		statement2ID := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 		statement2 := &outliers.Statement{
-			ID:               []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+			ID:               &statement2ID,
 			FingerprintID:    roachpb.StmtFingerprintID(100),
 			LatencyInSeconds: 0.5,
 		}
@@ -106,8 +108,9 @@ func TestOutliers(t *testing.T) {
 		otherSession := &outliers.Session{ID: &otherSessionID}
 		otherTxnID := uuid.FastMakeV4()
 		otherTransaction := &outliers.Transaction{ID: &otherTxnID}
+		otherStatementID := clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd"))
 		otherStatement := &outliers.Statement{
-			ID:               []byte("dddddddddddddddddddddddddddddddd"),
+			ID:               &otherStatementID,
 			FingerprintID:    roachpb.StmtFingerprintID(101),
 			LatencyInSeconds: 3,
 		}
