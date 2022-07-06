@@ -3761,7 +3761,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// ultimately keep the last one.
 		sendingEngSnapshot := sendingEng.NewSnapshot()
 		defer sendingEngSnapshot.Close()
-		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.Desc)
+		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
 		it := rditer.NewReplicaEngineDataIterator(
 			inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */)
 		defer it.Close()
@@ -3773,10 +3773,10 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		ok, err := it.SeekStart()
 		require.NoError(t, err)
-		for _, r := range keyRanges {
+		for _, s := range keySpans {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
-			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
+			if err := sst.ClearRawRange(s.Key, s.EndKey); err != nil {
 				return err
 			}
 
@@ -3787,7 +3787,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				if key, err = it.UnsafeKey(); err != nil {
 					return err
 				}
-				if r.End.Compare(key.Key) <= 0 {
+				if s.EndKey.Compare(key.Key) <= 0 {
 					break
 				}
 				if err := sst.PutEngineKey(key, it.UnsafeValue()); err != nil {
@@ -3817,8 +3817,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
-			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false /* replicatedOnly */)
-			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
+			s := rditer.MakeRangeIDLocalKeySpan(rangeID, false /* replicatedOnly */)
+			if err := sst.ClearRawRange(s.Key, s.EndKey); err != nil {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
@@ -3843,8 +3843,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			StartKey: roachpb.RKey(keyD),
 			EndKey:   roachpb.RKey(keyEnd),
 		}
-		r := rditer.MakeUserKeyRange(&desc)
-		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, r.Start, r.End); err != nil {
+		s := rditer.MakeUserKeySpan(&desc)
+		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, s.Key, s.EndKey); err != nil {
 			return err
 		}
 		if err = sst.Finish(); err != nil {
