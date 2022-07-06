@@ -305,6 +305,10 @@ func (b *Builder) buildStmt(
 	case *tree.CreateView:
 		return b.buildCreateView(stmt, inScope)
 
+	case *tree.CreateFunction:
+		// TODO (Chengxiong): implement this
+		panic(unimplemented.NewWithIssue(83228, "CREATE FUNCTION unimplemented"))
+
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
