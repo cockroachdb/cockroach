@@ -643,9 +643,8 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
 	require.NoError(t, err)
-	_, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).ManuallyEnqueue(
-		ctx, "replicate", repl, true, /* skipShouldQueue */
-	)
+	_, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, enqueueErr)
 	_, isPurgErr := kvserver.IsPurgatoryError(processErr)
 	if !isPurgErr {
