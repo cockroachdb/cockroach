@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -248,17 +247,11 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 	}
 
 	if streamEvent.Checkpoint != nil {
-		resolvedSpans := make([]jobspb.ResolvedSpan, len(streamEvent.Checkpoint.Spans))
-		for i, eventSpan := range streamEvent.Checkpoint.Spans {
-			resolvedSpans[i] = jobspb.ResolvedSpan{
-				Span:      eventSpan.Span,
-				Timestamp: eventSpan.Timestamp,
-			}
-		}
-		event := streamingccl.MakeCheckpointEvent(resolvedSpans)
+		event := streamingccl.MakeCheckpointEvent(streamEvent.Checkpoint.ResolvedSpans)
 		streamEvent.Checkpoint = nil
 		return event
 	}
+
 	var event streamingccl.Event
 	if streamEvent.Batch != nil {
 		if len(streamEvent.Batch.Ssts) > 0 {

@@ -45,7 +45,7 @@ type Event interface {
 
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
-	GetResolvedSpans() []jobspb.ResolvedSpan
+	GetResolvedSpans() *[]jobspb.ResolvedSpan
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -71,8 +71,8 @@ func (kve kvEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (kve kvEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return make([]jobspb.ResolvedSpan, 0)
+func (kve kvEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return nil
 }
 
 // sstableEvent is a sstable that needs to be ingested.
@@ -96,8 +96,8 @@ func (sste sstableEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return make([]jobspb.ResolvedSpan, 0)
+func (sste sstableEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return nil
 }
 
 var _ Event = sstableEvent{}
@@ -126,8 +126,8 @@ func (ce checkpointEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (ce checkpointEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return ce.resolvedSpans
+func (ce checkpointEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return &ce.resolvedSpans
 }
 
 // generationEvent indicates that the topology of the stream has changed.
@@ -151,8 +151,8 @@ func (ge generationEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (ge generationEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return make([]jobspb.ResolvedSpan, 0)
+func (ge generationEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return nil
 }
 
 // MakeKVEvent creates an Event from a KV.

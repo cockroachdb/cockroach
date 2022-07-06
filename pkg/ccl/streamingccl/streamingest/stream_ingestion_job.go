@@ -71,7 +71,7 @@ func getStreamIngestionStats(
 		}
 		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
 		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
-		for _, resolvedSpan := range progress.GetStreamIngest().Checkpoint {
+		for _, resolvedSpan := range progress.GetStreamIngest().Checkpoint.ResolvedSpans {
 			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
 				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
@@ -137,10 +137,7 @@ func ingest(
 		}
 
 		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		checkpoint := make([]jobspb.ResolvedSpan, 0)
-		if ingestProgress.Checkpoint != nil {
-			checkpoint = ingestProgress.Checkpoint
-		}
+		checkpoint := ingestProgress.Checkpoint
 
 		evalCtx := execCtx.ExtendedEvalContext()
 		dsp := execCtx.DistSQLPlanner()

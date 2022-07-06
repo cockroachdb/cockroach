@@ -145,7 +145,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms'
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
-SET CLUSTER SETTING streaming.partition_progress_frequency = '100ms';
+SET CLUSTER SETTING stream_replication.job_checkpoint_frequency = '100ms';
 SET enable_experimental_stream_replication = true;
 `,
 		";")...)

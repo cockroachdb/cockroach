@@ -96,10 +96,15 @@ message StreamIngestionDetails {
   // NEXT ID: 8.
 }
 
+message StreamIngestionCheckpoint {
+  repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
+}
+
 message StreamIngestionProgress {
   // PartitionProgress stores fields that are related to the status of a
   // source cluster partition.
   message PartitionProgress {
+    reserved 1;
     // TODO(pbardea): Add an error message so that per-partition errors can be
     // surfaced to the user.
 
@@ -117,8 +122,8 @@ message StreamIngestionProgress {
   // TODO(pbardea): This could scale O(partitions) = O(nodes).
   map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];
 
-  // Checkpoint stores a set of resolved spans denoting completed progress
-  repeated ResolvedSpan checkpoint = 3 [(gogoproto.nullable) = false];
+  // Checkpoint stores a set of resolved spans denoting completed ingestion progress
+  StreamIngestionCheckpoint checkpoint = 3 [(gogoproto.nullable) = false];
 }
 
 message StreamReplicationDetails {

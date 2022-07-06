@@ -34,7 +34,7 @@ func distStreamIngestionPlanSpecs(
 	topology streamclient.Topology,
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
-	checkpoint []jobspb.ResolvedSpan,
+	checkpoint jobspb.StreamIngestionCheckpoint,
 	jobID jobspb.JobID,
 	streamID streaming.StreamID,
 	oldTenantID roachpb.TenantID,

@@ -61,7 +61,7 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 		if msg.Type() != streamingccl.CheckpointEvent {
 			return false
 		}
-		return lo.LessEq(minResolvedTimestamp(msg.GetResolvedSpans()))
+		return lo.LessEq(minResolvedTimestamp(*msg.GetResolvedSpans()))
 	}
 }
 
@@ -109,7 +109,7 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 // as high as the specified low watermark.  Returns observed resolved timestamp.
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
 	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
-	return minResolvedTimestamp(rf.msg.GetResolvedSpans())
+	return minResolvedTimestamp(*rf.msg.GetResolvedSpans())
 }
 
 // ObserveGeneration consumes the feed until we received a GenerationEvent. Returns true.

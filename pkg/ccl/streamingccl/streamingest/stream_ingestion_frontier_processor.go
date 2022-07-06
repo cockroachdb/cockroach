@@ -36,10 +36,11 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// PartitionProgressFrequency controls the frequency of partition progress checkopints.
-var PartitionProgressFrequency = settings.RegisterDurationSetting(
+// JobCheckpointFrequency controls the frequency of frontier checkpoints into
+// the jobs table.
+var JobCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"streaming.partition_progress_frequency",
+	"stream_replication.job_checkpoint_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled.",
 	10*time.Second,
 	settings.NonNegativeDuration,
@@ -94,7 +95,7 @@ func newStreamIngestionFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	for _, resolvedSpan := range spec.Checkpoint {
+	for _, resolvedSpan := range spec.Checkpoint.ResolvedSpans {
 		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return nil, err
 		}
@@ -384,7 +385,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // partition-specific information to track the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	ctx := sf.Ctx
-	updateFreq := PartitionProgressFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		return nil
 	}
@@ -411,7 +412,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 			prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
 
 			prog.PartitionProgress = partitionProgress
-			prog.Checkpoint = frontierResolvedSpans
+			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
 			// "FractionProgressed" isn't relevant on jobs that are streaming in changes.
 			return 0.0
 		},
