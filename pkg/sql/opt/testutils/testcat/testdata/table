@@ -415,3 +415,47 @@ TABLE t76994
  │    └── WHERE b < 0
  └── UNIQUE WITHOUT INDEX (a)
       └── WHERE b > 0
+
+# The following test cases check for invisible index feature.
+exec-ddl
+CREATE TABLE t1 (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) NOT VISIBLE)
+----
+
+exec-ddl
+SHOW CREATE t1
+----
+TABLE t1
+ ├── b int
+ ├── c string
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t1_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX t1_b_c_idx NOT VISIBLE
+      ├── b int
+      ├── c string desc
+      ├── rowid int not null default (unique_rowid()) [hidden]
+      └── c string (storing)
+
+exec-ddl
+CREATE TABLE t2 (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > 3 NOT VISIBLE)
+----
+
+exec-ddl
+SHOW CREATE t2
+----
+TABLE t2
+ ├── b int
+ ├── c string
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── c_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX t2_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INVERTED INDEX t2_b_c_idx NOT VISIBLE
+      ├── b int
+      ├── c_inverted_key encodedkey not null [inverted] desc
+      ├── rowid int not null default (unique_rowid()) [hidden]
+      └── WHERE c > 3
