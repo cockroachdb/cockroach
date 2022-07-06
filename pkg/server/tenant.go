@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -52,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -140,11 +143,6 @@ func startTenantInternal(
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
-	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
-		memoryPoolSize:          args.MemoryPoolSize,
-		histogramWindowInterval: args.HistogramWindowInterval(),
-		settings:                args.Settings,
-	})
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
@@ -342,6 +340,15 @@ func startTenantInternal(
 	); err != nil {
 		return nil, nil, nil, "", "", err
 	}
+	clusterID := args.rpcContext.LogicalClusterID.Get()
+	instanceID := s.SQLInstanceID()
+	if clusterID.Equal(uuid.Nil) {
+		log.Fatalf(ctx, "expected LogicalClusterID to be initialized after preStart")
+	}
+	if instanceID == 0 {
+		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
+	}
+	args.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
 		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
@@ -543,6 +550,26 @@ func makeTenantSQLServerArgs(
 
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
+
+	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
+		memoryPoolSize:          sqlCfg.MemoryPoolSize,
+		histogramWindowInterval: baseCfg.HistogramWindowInterval(),
+		settings:                baseCfg.Settings,
+	})
+
+	// Create the EventServer. It will be made operational later, after the
+	// cluster ID is known, with a SetResourceInfo() call.
+	obsServer := obs.NewEventServer(
+		baseCfg.AmbientCtx,
+		timeutil.DefaultTimeSource{},
+		stopper,
+		5*time.Second,                          // maxStaleness
+		1<<20,                                  // triggerSizeBytes - 1MB
+		10*1<<20,                               // maxBufferSizeBytes - 10MB
+		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
+	)
+	obspb.RegisterObsServer(grpcServer.Server, obsServer)
+
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -586,7 +613,9 @@ func makeTenantSQLServerArgs(
 		regionsServer:            tenantConnect,
 		tenantStatusServer:       tenantConnect,
 		costController:           costController,
+		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
+		eventsServer:             obsServer,
 	}, nil
 }
 
