@@ -14,91 +14,44 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
 ----
 
 exec-sql
-CREATE DATABASE d;
-CREATE TABLE d.foo (id INT);
+CREATE DATABASE dd;
+CREATE TABLE dd.foo (id INT);
+CREATE SCHEMA dd.s;
 ----
 
 new-schema-change expect-pausepoint
-DROP DATABASE d CASCADE;
+DROP DATABASE dd CASCADE;
 ----
 job paused at pausepoint
 
-# At this point, we have a descriptor entry for `d` in a DROP state.
+# At this point, we have a descriptor entry for `dd` in an OFFLINE state.
 query-sql
 WITH tbls AS (
 	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
 )
 SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = 107;
 ----
-"d" "DROP"
+"dd" "OFFLINE"
 
-# A database backup should fail since we are explicitly targeting a dropped
+# A database backup should fail since we are explicitly targeting an offline
 # object.
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
+BACKUP DATABASE dd INTO 'nodelocal://0/dropped-database';
 ----
-pq: failed to resolve targets specified in the BACKUP stmt: database "d" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
+pq: failed to resolve targets specified in the BACKUP stmt: database "dd" does not exist
 
-# A cluster backup should succeed but should ignore the dropped database
-# and table descriptors.
+# A cluster backup should succeed.
 exec-sql
 BACKUP INTO 'nodelocal://0/cluster/dropped-database';
 ----
 
+# The offline descriptors should end up in the cluster backup.
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-database'] WHERE object_name = 'd' OR object_name = 'foo';
+SELECT count(*)
+  FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-database']
+  WHERE object_name IN ('dd', 'foo', 's');
 ----
-0
-
-# Now create another descriptor entry with the same name in a PUBLIC state.
-exec-sql
-CREATE DATABASE d;
-CREATE TABLE d.bar (id INT);
-----
-
-# A database backup should succeed since we have a public database descriptor that matches the
-# target.
-exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/dropped-database';
-----
-
-# A cluster backup should succeed and include the public database descriptor and
-# its table.
-exec-sql
-BACKUP INTO 'nodelocal://0/cluster/dropped-database';
-----
-
-# Restore from the database backup to ensure it is valid.
-# Sanity check that we did not backup the table 'foo' that belonged to the
-# dropped database 'd'.
-exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/dropped-database' WITH new_db_name = 'd1';
-----
-
-exec-sql
-USE d1;
-----
-
-query-sql
-SELECT schema_name,table_name FROM [SHOW TABLES];
-----
-public bar
-
-# Restore from the cluster backup to ensure it is valid.
-# Sanity check that we did not backup the table 'foo' that belonged to the
-# dropped database 'd'.
-exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/dropped-database' WITH new_db_name = 'd2';
-----
-
-exec-sql
-USE d2;
-----
-
-query-sql
-SELECT schema_name,table_name FROM [SHOW TABLES];
-----
-public bar
+3
 
 subtest end
 
@@ -146,8 +99,7 @@ WITH tbls AS (
 )
 SELECT orig->'schema'->'name', orig->'schema'->'state' FROM tbls WHERE id = 112;
 ----
-"s" "DROP"
-
+"s" "OFFLINE"
 
 query-sql
 WITH tbls AS (
@@ -155,33 +107,34 @@ WITH tbls AS (
 )
 SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = 110 OR id = 111;
 ----
-"typ" "DROP"
-"_typ" "DROP"
+"typ" "OFFLINE"
+"_typ" "OFFLINE"
 
-# A database backup should succeed but should not include the dropped schema,
+# A database backup should succeed and should include the offline schema,
 # type, and table.
 exec-sql
 BACKUP DATABASE d2 INTO 'nodelocal://0/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/dropped-schema-in-database'] WHERE
-object_name = 's' OR object_name = 'typ';
+SELECT count(*)
+  FROM [SHOW BACKUP LATEST IN 'nodelocal://0/dropped-schema-in-database']
+  WHERE object_name IN ('s', 't', 'typ', '_typ');
 ----
-0
+4
 
-
-# A cluster backup should succeed but should not include the dropped schema,
+# A cluster backup should succeed but should include the offline schema,
 # type, and table.
 exec-sql
 BACKUP INTO 'nodelocal://0/cluster/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*) FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database']
-WHERE object_name = 's' OR object_name = 'typ';
+SELECT count(*)
+  FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database']
+  WHERE object_name IN ('s', 't', 'typ', '_typ');
 ----
-0
+4
 
 # Restore the backups to check they are valid.
 exec-sql
@@ -192,11 +145,12 @@ exec-sql
 USE d3;
 ----
 
-# We don't expect to see the dropped schema 's'.
+# We expect to see the offline schema 's'.
 query-sql
 SELECT schema_name FROM [SHOW SCHEMAS];
 ----
 public
+s
 crdb_internal
 information_schema
 pg_catalog
@@ -207,7 +161,7 @@ query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
 ----
 public t2
-
+s t
 
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
@@ -221,6 +175,7 @@ query-sql
 SELECT schema_name FROM [SHOW SCHEMAS];
 ----
 public
+s
 crdb_internal
 information_schema
 pg_catalog
@@ -230,5 +185,6 @@ query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
 ----
 public t2
+s t
 
 subtest end

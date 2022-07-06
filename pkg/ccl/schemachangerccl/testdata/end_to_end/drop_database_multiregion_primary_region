@@ -19,12 +19,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
-## StatementPhase stage 1 of 1 with 14 MutationType ops
-delete database namespace entry {0 0 multi_region_test_db} -> 104
-delete object namespace entry {104 106 crdb_internal_region} -> 105
-delete schema namespace entry {104 0 public} -> 106
-delete object namespace entry {104 106 _crdb_internal_region} -> 107
-delete object namespace entry {104 106 table_regional_by_table} -> 108
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
    database:
      id: 104
@@ -32,12 +27,14 @@ upsert descriptor #104
   -    wallTime: "1640995200000000000"
   +  modificationTime: {}
      name: multi_region_test_db
+  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      privileges:
+       ownerProto: root
   ...
        public:
          id: 106
   -  version: "1"
-  +  state: DROP
+  +  state: OFFLINE
   +  version: "2"
 upsert descriptor #105
   ...
@@ -47,12 +44,14 @@ upsert descriptor #105
   -    wallTime: "1640995200000000000"
   +  modificationTime: {}
      name: crdb_internal_region
+  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
+     parentSchemaId: 106
   ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   -  version: "2"
-  +  state: DROP
+  +  state: OFFLINE
   +  version: "3"
 upsert descriptor #106
    schema:
@@ -61,12 +60,14 @@ upsert descriptor #106
   -    wallTime: "1640995200000000000"
   +  modificationTime: {}
      name: public
+  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
+     privileges:
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
-  +  state: DROP
+  +  state: OFFLINE
   +  version: "2"
 upsert descriptor #107
   ...
@@ -76,20 +77,16 @@ upsert descriptor #107
   -    wallTime: "1640995200000000000"
   +  modificationTime: {}
      name: _crdb_internal_region
+  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
+     parentSchemaId: 106
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
-  +  state: DROP
+  +  state: OFFLINE
   +  version: "2"
 upsert descriptor #108
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  +  dropTime: <redacted>"
-     families:
-     - columnIds:
   ...
        regionalByTable:
          region: us-east2
@@ -99,14 +96,18 @@ upsert descriptor #108
      name: table_regional_by_table
      nextColumnId: 2
   ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     parentId: 104
+     primaryIndex:
+  ...
      replacementOf:
        time: {}
-  +  state: DROP
+  +  state: OFFLINE
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
-delete all comments for table descriptors [108]
-delete role settings for database on #104
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
@@ -116,14 +117,14 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -211,7 +212,7 @@ upsert descriptor #104
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      name: multi_region_test_db
-     privileges:
+     offlineReason: DROP DATABASE multi_region_test_db CASCADE
   ...
 upsert descriptor #105
    type:
@@ -220,16 +221,16 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -346,7 +347,7 @@ upsert descriptor #105
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      name: crdb_internal_region
-     parentId: 104
+     offlineReason: DROP DATABASE multi_region_test_db CASCADE
   ...
 upsert descriptor #106
    schema:
@@ -354,13 +355,13 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -441,7 +442,7 @@ upsert descriptor #106
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      name: public
-     parentId: 104
+     offlineReason: DROP DATABASE multi_region_test_db CASCADE
   ...
 upsert descriptor #107
   ...
@@ -451,13 +452,13 @@ upsert descriptor #107
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -552,7 +553,7 @@ upsert descriptor #107
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      name: _crdb_internal_region
-     parentId: 104
+     offlineReason: DROP DATABASE multi_region_test_db CASCADE
   ...
 upsert descriptor #108
   ...
@@ -562,26 +563,26 @@ upsert descriptor #108
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - VALIDATED
-  +    - ABSENT
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -807,8 +808,8 @@ upsert descriptor #108
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
-     dropTime: <redacted>"
      families:
+     - columnIds:
   ...
        regionalByTable:
          region: us-east2
@@ -827,7 +828,248 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 20 MutationType ops
+delete database namespace entry {0 0 multi_region_test_db} -> 104
+delete object namespace entry {104 106 crdb_internal_region} -> 105
+delete schema namespace entry {104 0 public} -> 106
+delete object namespace entry {104 106 _crdb_internal_region} -> 107
+delete object namespace entry {104 106 table_regional_by_table} -> 108
+upsert descriptor #104
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+         targetStatus: ABSENT
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: multi_region_test_db
+  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     privileges:
+       ownerProto: root
+  ...
+       public:
+         id: 106
+  -  state: OFFLINE
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #105
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+     id: 105
+     kind: MULTIREGION_ENUM
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: crdb_internal_region
+  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     parentId: 104
+     parentSchemaId: 106
+  ...
+       primaryRegion: us-east1
+       zoneConfigExtensions: {}
+  -  state: OFFLINE
+  -  version: "3"
+  +  state: DROP
+  +  version: "4"
+upsert descriptor #106
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+         targetStatus: ABSENT
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: public
+  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     parentId: 104
+     privileges:
+  ...
+         withGrantOption: 2
+       version: 2
+  -  state: OFFLINE
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #107
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+     id: 107
+     kind: ALIAS
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: _crdb_internal_region
+  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     parentId: 104
+     parentSchemaId: 106
+  ...
+         withGrantOption: 2
+       version: 2
+  -  state: OFFLINE
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #108
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - VALIDATED
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+           subWorkId: 1
+         targetStatus: ABSENT
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+       regionalByTable:
+         region: us-east2
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: table_regional_by_table
+     nextColumnId: 2
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     parentId: 104
+     primaryIndex:
+  ...
+     replacementOf:
+       time: {}
+  -  state: OFFLINE
+  +  state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "2"
+  +  version: "3"
+delete all comments for table descriptors [108]
+delete role settings for database on #104
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 14 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 20 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -844,17 +1086,17 @@ upsert descriptor #108
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - WRITE_ONLY
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
-  -    - WRITE_ONLY
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
-  -    - WRITE_ONLY
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - VALIDATED
+  -    - DELETE_ONLY
   -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
@@ -1087,15 +1329,15 @@ upsert descriptor #108
        regionalByTable:
          region: us-east2
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      name: table_regional_by_table
      nextColumnId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 106
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 delete descriptor #104
 delete descriptor #105
 delete descriptor #106
@@ -1104,6 +1346,6 @@ write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹m
 create job #2 (non-cancelable: true): "GC for DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [108 104]
 update progress of schema change job #1: "all stages completed"
-commit transaction #3
+commit transaction #4
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
