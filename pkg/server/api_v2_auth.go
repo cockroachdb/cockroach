@@ -277,32 +277,54 @@ func newAuthenticationV2Mux(s *authenticationV2Server, inner http.Handler) *auth
 	}
 }
 
-// getSession decodes the cookie from the request, looks up the corresponding session, and
-// returns the logged in user name. If there's an error, it returns an error value and
+// getSession decodes the cookie from the request, looks up the
+// corresponding session, and returns the logged in user name. The
+// session can be looked up either from a session cookie as used in the
+// non-v2 API server, or via the session header. In order for us to pick
+// up a session, the header must still be non-empty in the case of
+// cookie-based auth. If there's an error, it returns an error value and
 // also sends the error over http using w.
 func (a *authenticationV2Mux) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
-	// Validate the returned cookie.
+	// Validate the returned session header or cookie.
 	rawSession := req.Header.Get(apiV2AuthHeader)
 	if len(rawSession) == 0 {
 		err := errors.New("invalid session header")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return "", nil, err
 	}
+
+	possibleSessions := []string{}
+	cookies := req.Cookies()
+	for _, c := range cookies {
+		if c.Name != SessionCookieName {
+			continue
+		}
+		possibleSessions = append(possibleSessions, c.Value)
+	}
+	possibleSessions = append(possibleSessions, rawSession)
+
 	sessionCookie := &serverpb.SessionCookie{}
-	decoded, err := base64.StdEncoding.DecodeString(rawSession)
+	var decoded []byte
+	var err error
+	for i := range possibleSessions {
+		decoded, err = base64.StdEncoding.DecodeString(possibleSessions[i])
+		if err != nil {
+			continue
+		}
+		err = protoutil.Unmarshal(decoded, sessionCookie)
+		if err != nil {
+			continue
+		}
+		// We've successfully decoded a session from cookie or header
+		break
+	}
 	if err != nil {
 		err := errors.New("invalid session header")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return "", nil, err
 	}
-	if err := protoutil.Unmarshal(decoded, sessionCookie); err != nil {
-		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
-	}
-
 	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
 	if err != nil {
 		apiV2InternalError(req.Context(), err, w)
