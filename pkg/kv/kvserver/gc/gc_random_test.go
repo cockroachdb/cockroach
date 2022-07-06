@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,7 +95,6 @@ const intentAgeThreshold = 2 * time.Hour
 // implementation. It runs both the new and old implementation and ensures
 // that they produce exactly the same results on the same set of keys.
 func TestRunNewVsOld(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
 	ctx := context.Background()
 	const N = 100000
 
@@ -117,6 +117,9 @@ func TestRunNewVsOld(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttlSec=%v", tc.ds, tc.now, tc.ttlSec), func(t *testing.T) {
+			rng, seed := randutil.NewTestRand()
+			t.Logf("Using subtest seed: %d", seed)
+
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 
@@ -152,7 +155,6 @@ func TestRunNewVsOld(t *testing.T) {
 // BenchmarkRun benchmarks the old and implementations of Run with different
 // data distributions.
 func BenchmarkRun(b *testing.B) {
-	rng := rand.New(rand.NewSource(1))
 	ctx := context.Background()
 	runGC := func(eng storage.Engine, old bool, spec randomRunGCTestSpec) (Info, error) {
 		runGCFunc := Run
@@ -176,7 +178,7 @@ func BenchmarkRun(b *testing.B) {
 				return nil
 			})
 	}
-	makeTest := func(old bool, spec randomRunGCTestSpec) func(b *testing.B) {
+	makeTest := func(old bool, spec randomRunGCTestSpec, rng *rand.Rand) func(b *testing.B) {
 		return func(b *testing.B) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
@@ -207,8 +209,11 @@ func BenchmarkRun(b *testing.B) {
 	specs = append(specs, specsWithTTLs(lotsOfVersionsMidSizeRows, ts100, ttls)...)
 	for _, old := range []bool{true, false} {
 		b.Run(fmt.Sprintf("old=%v", old), func(b *testing.B) {
+			rng, seed := randutil.NewTestRand()
+			b.Logf("Using benchmark seed: %d", seed)
+
 			for _, spec := range specs {
-				b.Run(fmt.Sprint(spec.ds), makeTest(old, spec))
+				b.Run(fmt.Sprint(spec.ds), makeTest(old, spec, rng))
 			}
 		})
 	}
@@ -254,7 +259,9 @@ func TestNewVsInvariants(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttl=%vsec", tc.ds, tc.now, tc.ttlSec), func(t *testing.T) {
-			rng := rand.New(rand.NewSource(1))
+			rng, seed := randutil.NewTestRand()
+			t.Logf("Using subtest seed: %d", seed)
+
 			desc := tc.ds.desc()
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
