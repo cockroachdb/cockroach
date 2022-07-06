@@ -1,0 +1,25 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ingest",
+    srcs = ["ingest.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgx",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v4//pgxpool",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials/insecure",
+    ],
+)
+
+get_x_data(name = "get_x_data")

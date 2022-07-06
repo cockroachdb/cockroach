@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -138,11 +140,6 @@ func startTenantInternal(
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
-	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
-		memoryPoolSize:          args.MemoryPoolSize,
-		histogramWindowInterval: args.HistogramWindowInterval(),
-		settings:                args.Settings,
-	})
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
@@ -531,6 +528,28 @@ func makeTenantSQLServerArgs(
 
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
+
+	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
+		memoryPoolSize:          sqlCfg.MemoryPoolSize,
+		histogramWindowInterval: baseCfg.HistogramWindowInterval(),
+		settings:                baseCfg.Settings,
+	})
+
+	obsServer := obs.NewEventServer(
+		baseCfg.AmbientCtx,
+		timeutil.DefaultTimeSource{},
+		stopper,
+		5*time.Second,                          // maxStaleness
+		1<<20,                                  // triggerSizeBytes - 1MB
+		10*1<<20,                               // maxBufferSizeBytes - 10MB
+		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
+	)
+	// TODO(andrei): figure out what cluster ID and node ID to use and then call
+	// SetResourceInfo(). Before we do, the Obs Server will refuse event
+	// subscriptions.
+	// obsServer.SetResourceInfo(...)
+	obspb.RegisterObsServer(grpcServer.Server, obsServer)
+
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -574,7 +593,9 @@ func makeTenantSQLServerArgs(
 		regionsServer:            tenantConnect,
 		tenantStatusServer:       tenantConnect,
 		costController:           costController,
+		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
+		eventsExporter:           obsServer,
 	}, nil
 }
 
