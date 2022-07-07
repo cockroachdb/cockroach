@@ -8228,13 +8228,13 @@ truncate_stmt:
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
 password_clause:
-  ENCRYPTED PASSWORD string_or_placeholder
+  ENCRYPTED PASSWORD sconst_or_placeholder
   {
     /* SKIP DOC */
     // This is a legacy postgres syntax.
     $$.val = tree.KVOption{Key: tree.Name($2), Value: $3.expr()}
   }
-| PASSWORD string_or_placeholder
+| PASSWORD sconst_or_placeholder
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: $2.expr()}
   }

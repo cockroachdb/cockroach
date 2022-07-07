@@ -456,7 +456,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	defer sql.Stopper().Stop(ctx)
 
 	// Create some user with password authn.
-	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
 	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
@@ -639,7 +639,7 @@ func TestDenylistUpdate(t *testing.T) {
 	defer sql.Stopper().Stop(ctx)
 
 	// Create some user with password authn.
-	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
 	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()

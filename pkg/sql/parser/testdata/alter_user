@@ -1,14 +1,14 @@
-parse
+error
 ALTER USER foo PASSWORD bar
 ----
-ALTER USER foo WITH PASSWORD '*****' -- normalized!
-ALTER USER foo WITH PASSWORD '*****' -- fully parenthesized
-ALTER USER foo WITH PASSWORD '*****' -- literals removed
-ALTER USER _ WITH PASSWORD '*****' -- identifiers removed
-ALTER USER foo WITH PASSWORD 'bar' -- passwords exposed
+at or near "bar": syntax error
+DETAIL: source SQL:
+ALTER USER foo PASSWORD bar
+                        ^
+HINT: try \h ALTER ROLE
 
 parse
-ALTER USER foo WITH PASSWORD bar
+ALTER USER foo PASSWORD 'bar'
 ----
 ALTER USER foo WITH PASSWORD '*****' -- normalized!
 ALTER USER foo WITH PASSWORD '*****' -- fully parenthesized
@@ -16,8 +16,35 @@ ALTER USER foo WITH PASSWORD '*****' -- literals removed
 ALTER USER _ WITH PASSWORD '*****' -- identifiers removed
 ALTER USER foo WITH PASSWORD 'bar' -- passwords exposed
 
+error
+ALTER USER foo WITH PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+ALTER USER foo WITH PASSWORD bar
+                             ^
+HINT: try \h ALTER ROLE
+
 parse
+ALTER USER foo WITH PASSWORD 'bar'
+----
+ALTER USER foo WITH PASSWORD '*****' -- normalized!
+ALTER USER foo WITH PASSWORD '*****' -- fully parenthesized
+ALTER USER foo WITH PASSWORD '*****' -- literals removed
+ALTER USER _ WITH PASSWORD '*****' -- identifiers removed
+ALTER USER foo WITH PASSWORD 'bar' -- passwords exposed
+
+error
 ALTER USER foo WITH ENCRYPTED PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+ALTER USER foo WITH ENCRYPTED PASSWORD bar
+                                       ^
+HINT: try \h ALTER ROLE
+
+parse
+ALTER USER foo WITH ENCRYPTED PASSWORD 'bar'
 ----
 ALTER USER foo WITH PASSWORD '*****' -- normalized!
 ALTER USER foo WITH PASSWORD '*****' -- fully parenthesized
