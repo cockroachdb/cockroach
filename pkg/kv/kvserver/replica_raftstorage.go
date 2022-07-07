@@ -337,9 +337,8 @@ func (r *Replica) raftLastIndexRLocked() uint64 {
 }
 
 // LastIndex implements the raft.Storage interface.
-// LastIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) LastIndex() (uint64, error) {
-	return (*Replica)(r).raftLastIndexRLocked(), nil
+	return (*Replica)(r).GetLastIndex(), nil
 }
 
 // GetLastIndex returns the index of the last entry in the replica's Raft log.
@@ -356,9 +355,8 @@ func (r *Replica) raftFirstIndexRLocked() uint64 {
 }
 
 // FirstIndex implements the raft.Storage interface.
-// FirstIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	return (*Replica)(r).raftFirstIndexRLocked(), nil
+	return (*Replica)(r).GetFirstIndex(), nil
 }
 
 // GetFirstIndex returns the index of the first entry in the replica's Raft log.
