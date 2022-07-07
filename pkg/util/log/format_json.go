@@ -12,12 +12,16 @@ package log
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -412,4 +416,192 @@ func escapeString(buf *buffer, s string) {
 	b := buf.Bytes()
 	b = jsonbytes.EncodeString(b, s)
 	buf.Buffer = *bytes.NewBuffer(b)
+}
+
+type entryDecoderJSON struct {
+	decoder         *json.Decoder
+	sensitiveEditor redactEditor
+	compact         bool
+}
+
+type jsonCommon struct {
+	Header  int                    `json:"header,omitempty"`
+	Message string                 `json:"message"`
+	Stacks  string                 `json:"stacks"`
+	Tags    map[string]interface{} `json:"tags"`
+	Event   map[string]interface{} `json:"event"`
+}
+
+// JSONEntry represents a JSON log entry.
+type JSONEntry struct {
+	jsonCommon
+
+	//Channel         Channel  `json:"channel,omitempty"`
+	ChannelNumeric int64  `json:"channel_numeric,omitempty"`
+	Timestamp      string `json:"timestamp,omitempty"`
+	//Severity        Severity `json:"severity,omitempty"`
+	SeverityNumeric int64  `json:"severity_numeric,omitempty"`
+	Goroutine       int64  `json:"goroutine,omitempty"`
+	File            string `json:"file,omitempty"`
+	Line            int64  `json:"line,omitempty"`
+	EntryCounter    uint64 `json:"entry_counter,omitempty"`
+	Redactable      int    `json:"redactable,omitempty"`
+	NodeID          int64  `json:"node_id,omitempty"`
+	ClusterID       string `json:"cluster_id,omitempty"`
+	Version         string `json:"version,omitempty"`
+	InstanceID      int64  `json:"instance_id,omitempty"`
+	TenantID        int64  `json:"tenant_id,omitempty"`
+}
+
+// JSONCompactEntry represents a JSON log entry in the compact format.
+type JSONCompactEntry struct {
+	jsonCommon
+
+	//Channel         Channel  `json:"C,omitempty"`
+	ChannelNumeric int64  `json:"c,omitempty"`
+	Timestamp      string `json:"t,omitempty"`
+	//Severity        Severity `json:"sev,omitempty"`
+	SeverityNumeric int64  `json:"s,omitempty"`
+	Goroutine       int64  `json:"g,omitempty"`
+	File            string `json:"f,omitempty"`
+	Line            int64  `json:"l,omitempty"`
+	EntryCounter    uint64 `json:"n,omitempty"`
+	Redactable      int    `json:"r,omitempty"`
+	NodeID          int64  `json:"N,omitempty"`
+	ClusterID       string `json:"x,omitempty"`
+	Version         string `json:"v,omitempty"`
+	InstanceID      int64  `json:"q,omitempty"`
+	TenantID        int64  `json:"T,omitempty"`
+}
+
+// populate is a method that populates fields from the source JSONEntry
+// into the `logpb.Entry`. Redactability is applied to the tags,
+// message, stacks, and event fields if it's missing.
+func (e *JSONEntry) populate(entry *logpb.Entry, d *entryDecoderJSON) (*redactablePackage, error) {
+	ts, err := fromFluent(e.Timestamp)
+	if err != nil {
+		return nil, err
+	}
+	entry.Time = ts
+
+	entry.Goroutine = e.Goroutine
+	entry.File = e.File
+	entry.Line = e.Line
+	entry.Redactable = e.Redactable == 1
+
+	if e.Header == 0 {
+		entry.Severity = Severity(e.SeverityNumeric)
+		entry.Channel = Channel(e.ChannelNumeric)
+		entry.Counter = e.EntryCounter
+	}
+
+	var entryMsg bytes.Buffer
+	if e.Event != nil {
+		by, err := json.Marshal(e.Event)
+		if err != nil {
+			return nil, err
+		}
+		entryMsg.Write(by)
+		entry.StructuredStart = 0
+		entry.StructuredEnd = uint32(entryMsg.Len())
+	} else {
+		entryMsg.Write([]byte(e.Message))
+	}
+
+	if e.Tags != nil {
+		var t *logtags.Buffer
+		for k, v := range e.Tags {
+			t = t.Add(k, v)
+		}
+		s := &strings.Builder{}
+		t.FormatToString(s)
+		tagStrings := strings.Split(s.String(), ",")
+		sort.Strings(tagStrings)
+		r := redactablePackage{
+			msg:        []byte(strings.Join(tagStrings, ",")),
+			redactable: entry.Redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Tags = string(r.msg)
+	}
+
+	if e.Stacks != "" {
+		entry.StackTraceStart = uint32(entryMsg.Len()) + 1
+		entryMsg.Write([]byte("\nstack trace:\n"))
+		entryMsg.Write([]byte(e.Stacks))
+	}
+
+	return &redactablePackage{
+		msg:        entryMsg.Bytes(),
+		redactable: entry.Redactable,
+	}, nil
+}
+
+func (e *JSONCompactEntry) toEntry(entry *JSONEntry) {
+	entry.jsonCommon = e.jsonCommon
+	entry.ChannelNumeric = e.ChannelNumeric
+	entry.Timestamp = e.Timestamp
+	entry.SeverityNumeric = e.SeverityNumeric
+	entry.Goroutine = e.Goroutine
+	entry.File = e.File
+	entry.Line = e.Line
+	entry.EntryCounter = e.EntryCounter
+	entry.Redactable = e.Redactable
+	entry.NodeID = e.NodeID
+	entry.ClusterID = e.ClusterID
+	entry.Version = e.Version
+	entry.InstanceID = e.InstanceID
+	entry.TenantID = e.TenantID
+}
+
+// Decode decodes the next log entry into the provided protobuf message.
+func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
+	var rp *redactablePackage
+	var e JSONEntry
+	if d.compact {
+		var compact JSONCompactEntry
+		err := d.decoder.Decode(&compact)
+		if err != nil {
+			return err
+		}
+		compact.toEntry(&e)
+	} else {
+		err := d.decoder.Decode(&e)
+		if err != nil {
+			return err
+		}
+	}
+	rp, err := e.populate(entry, d)
+	if err != nil {
+		return err
+	}
+
+	r := d.sensitiveEditor(*rp)
+	entry.Message = string(r.msg)
+	entry.Redactable = r.redactable
+
+	return nil
+}
+
+// fromFluent parses a fluentbit timestamp format into nanoseconds since
+// the epoch. The fluentbit format is a string consisting of two
+// concatenanted integers joined by a `.`. The left-hand side is the
+// number of seconds since the epich, the right hand side is the
+// additional number of nanoseconds of precision.
+//
+// For example: `"1136214245.654321000"` parses into `1136214245654321000`.
+func fromFluent(timestamp string) (int64, error) {
+	parts := strings.Split(timestamp, ".")
+	if len(parts) != 2 {
+		return 0, errors.New("bad timestamp format")
+	}
+	left, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	right, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return left*1000000000 + right, nil
 }

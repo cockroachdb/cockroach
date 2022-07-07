@@ -13,6 +13,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"io"
 	"regexp"
 
@@ -27,13 +28,22 @@ var (
 			/* Prefix */ `(?:.*\[config\][ ]+log format \(utf8=.+\): )` +
 			/* Format */ `(.*)$`,
 	)
-	v1IndicatorRE = regexp.MustCompile(
-		`(?m)^` +
-			/* crdb-v1 Indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid file:line.*)$`,
-	)
 	v2IndicatorRE = regexp.MustCompile(
 		`(?m)^` +
-			/* crdb-v2 Indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid \[chan@\]file:line.*)$`)
+			/* crdb-v2 indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid \[chan@\]file:line.*)$`,
+	)
+	v1IndicatorRE = regexp.MustCompile(
+		`(?m)^` +
+			/* crdb-v1 indicator */ `(?:.*line format: \[IWEF\]yymmdd hh:mm:ss.uuuuuu goid file:line.*)$`,
+	)
+	jsonIndicatorRE = regexp.MustCompile(
+		`(?m)^` + `(?:.*\"config\".+log format \(utf8=.+\): )json\".+$`)
+	jsonCompactIndicatorRE = regexp.MustCompile(
+		`(?m)^` + `(?:.*\"config\".+log format \(utf8=.+\): )json-compact\".+$`)
+	jsonFluentIndicatorRE = regexp.MustCompile(
+		`(?m)^` + `(?:.*\"config\".+log format \(utf8=.+\): )json-fluent\".+$`)
+	jsonFluentCompactIndicatorRE = regexp.MustCompile(
+		`(?m)^` + `(?:.*\"config\".+log format \(utf8=.+\): )json-fluent-compact\".+$`)
 )
 
 // EntryDecoder is used to decode log entries.
@@ -83,6 +93,17 @@ func NewEntryDecoderWithFormat(
 		}
 		decoder.scanner.Split(decoder.split)
 		d = decoder
+	case "json":
+		d = &entryDecoderJSON{
+			decoder:         json.NewDecoder(in),
+			sensitiveEditor: getEditor(editMode),
+		}
+	case "json-compact":
+		d = &entryDecoderJSON{
+			decoder:         json.NewDecoder(in),
+			sensitiveEditor: getEditor(editMode),
+			compact:         true,
+		}
 	default:
 		// The unimplemented.WithIssue function is not used here because it results in circular dependency issues.
 		return nil, errors.WithTelemetry(
@@ -131,5 +152,17 @@ func getLogFormat(data []byte) (string, error) {
 		return "crdb-v2", nil
 	}
 
+	if jsonIndicatorRE.Match(data) {
+		return "json", nil
+	}
+	if jsonCompactIndicatorRE.Match(data) {
+		return "json-compact", nil
+	}
+	if jsonFluentIndicatorRE.Match(data) {
+		return "json-fluent", nil
+	}
+	if jsonFluentCompactIndicatorRE.Match(data) {
+		return "json-fluent-compact", nil
+	}
 	return "", errors.New("failed to extract log file format from the log")
 }
