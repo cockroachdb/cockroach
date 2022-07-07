@@ -193,22 +193,16 @@ message BackupProgressTraceEvent {
   util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
 }
 
-// BackupExportTraceRequestEvent is the trace event recorded when an
-// ExportRequest has been sent.
-message BackupExportTraceRequestEvent {
-  string span = 1;
-  int32 attempt = 2;
-  string priority = 3;
-  string req_sent_time = 4;
-}
-
-// BackupExportTraceResponseEvent is the trace event recorded when we receive a
-// response from the ExportRequest.
-message BackupExportTraceResponseEvent {
-  string duration = 1;
-  int32 num_files = 2;
-  repeated roachpb.RowCount file_summaries = 3 [(gogoproto.nullable) = false];
-  reserved 4 ;
-  string retryable_error = 5;
+// ExportStats is a message containing information about each
+// Export{Request,Response}.
+message ExportStats {
+  // NumFiles is the number of SST files produced by the ExportRequest.
+  int64 num_files = 1;
+  // DataSize is the byte size of all the SST files produced by the
+  // ExportRequest.
+  int64 data_size = 2;
+  // Duration is the total time taken to send an ExportRequest, receive an
+  // ExportResponse and push the response on a channel.
+  int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
 }
 

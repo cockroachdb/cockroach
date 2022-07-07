@@ -461,7 +461,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	//
 	// Note that we have to create the child in this parent goroutine; we can't
 	// defer the creation to the spawned async goroutine since the parent span
-	// might get Finish()ed by then. However, we'll update the child'd goroutine
+	// might get Finish()ed by then. However, we'll update the child's goroutine
 	// ID.
 	var sp *tracing.Span
 	switch opt.SpanOpt {

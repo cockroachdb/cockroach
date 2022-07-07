@@ -116,6 +116,7 @@ go_library(
         "//pkg/storage",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/bulk",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
