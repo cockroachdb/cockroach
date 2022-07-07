@@ -1,0 +1,195 @@
+# tests from https://github.com/postgres/postgres/blob/4ca9985957881c223b4802d309c0bbbcf8acd1c1/src/test/regress/sql/text.sql#L55
+
+query T
+select format(NULL)
+----
+NULL
+
+query T
+select format('Hello')
+----
+Hello
+
+query T
+select format('Hello %s', 'World')
+----
+Hello World
+
+query T
+select format('Hello %%')
+----
+Hello %
+
+query T
+select format('Hello %%%%')
+----
+Hello %%
+
+query error pq: format\(\): error parsing format string: not enough arguments
+select format('Hello %s %s', 'World')
+
+query error pq: format\(\): error parsing format string: not enough arguments
+select format('Hello %s')
+
+query error pq: format\(\): error parsing format string: unrecognized verb x
+select format('Hello %x', 20)
+
+query T
+select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello')
+----
+INSERT INTO mytab VALUES('10','Hello')
+
+query T
+select format('%s%s%s','Hello', NULL,'World')
+----
+HelloWorld
+
+query T
+select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL)
+----
+INSERT INTO mytab VALUES('10',NULL)
+
+query T
+select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
+----
+INSERT INTO mytab VALUES(NULL,'Hello')
+
+query error pq: format\(\): error parsing format string: NULL cannot be formatted as a SQL identifier
+select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello')
+
+# Many of the below tests involve strings with a literal $.
+# This can break TestLogic under some conditions. If you're seeing mysterious errors in this file,
+# they can likely be fixed by escaping $ into \x24, e.g. replace '%1$s' with E'%\x24s'.
+# For now, strings are left unescaped here for readability.
+query T
+select format('%1$s %3$s', 1, 2, 3)
+----
+1 3
+
+query T
+select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+----
+1 12
+
+query error pq: format\(\): error parsing format string: not enough arguments
+select format('%1$s %4$s', 1, 2, 3)
+
+query error pq: format\(\): error parsing format string: not enough arguments
+select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+
+query error pq: format\(\): error parsing format string: positions must be positive and 1-indexed
+select format('%0$s', 'Hello')
+
+query error pq: format\(\): error parsing format string: positions must be positive and 1-indexed
+select format('%*0$s', 'Hello')
+
+query error pq: format\(\): error parsing format string: unterminated format specifier
+select format('%1$', 1)
+
+query error pq: format\(\): error parsing format string: unterminated format specifier
+select format('%1$1', 1)
+
+query error pq: format\(\): error parsing format string: unterminated format specifier
+select format('%1$1', 1)
+
+# Mixing positional and non-positional placeholders is allowed here, unusually.
+# A non-positional placeholder consumes the argument after the last one,
+# whether or not the last one was positional.
+
+query T
+select format('Hello %s %1$s %s', 'World', 'Hello again')
+----
+Hello World World Hello again
+
+query T
+select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again')
+----
+Hello World Hello again, Hello again Hello again
+
+query T
+select format('>>%10s<<', 'Hello')
+----
+>>     Hello<<
+
+query T
+select format('>>%10s<<', NULL)
+----
+>>          <<
+
+query T
+select format('>>%10s<<', '')
+----
+>>          <<
+
+query T
+select format('>>%-10s<<', '')
+----
+>>          <<
+
+query T
+select format('>>%-10s<<', 'Hello')
+----
+>>Hello     <<
+
+query T
+select format('>>%-10s<<', NULL)
+----
+>>          <<
+
+query T
+select format('>>%1$10s<<', 'Hello')
+----
+>>     Hello<<
+
+query T
+select format('>>%1$-10I<<', 'Hello')
+----
+>>"Hello"   <<
+
+query T
+select format('>>%2$*1$L<<', 10, 'Hello')
+----
+>>   'Hello'<<
+
+query T
+select format('>>%2$*1$L<<', 10, NULL)
+----
+>>      NULL<<
+
+query T
+select format('>>%*s<<', 10, 'Hello')
+----
+>>     Hello<<
+
+query T
+select format('>>%*1$s<<', 10, 'Hello')
+----
+>>     Hello<<
+
+query T
+select format('>>%-s<<', 'Hello')
+----
+>>Hello<<
+
+query T
+select format('>>%10L<<', NULL)
+----
+>>      NULL<<
+
+# Null is equivalent to zero minimum width.
+# Zero minimum width has no effect.
+query T
+select format('>>%2$*1$L<<', NULL, 'Hello')
+----
+>>'Hello'<<
+
+query T
+select format('>>%2$*1$L<<', 0, 'Hello')
+----
+>>'Hello'<<
+
+# This isn't a Postgres test case, but Postgres
+# errors with 'unrecognized format() type specifier "2"',
+# so for compatibility we'll also error here.
+query error pq: format\(\): error parsing format string: positional argument flag must precede width flag
+select format('>>%*1$2$L<<', 10, 'Hello')

@@ -344,7 +344,6 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 			testName:         "implicit pg_catalog schema in path",
 			exprStr:          "lower('HI')",
 			searchPath:       []string{"sc1", "sc2"},
-			expectedFuncOID:  825,
 			expectedFuncBody: "",
 			desiredType:      types.String,
 		},
@@ -400,9 +399,13 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 				require.Equal(t, tc.expectedFuncBody, funcExpr.ResolvedOverload().Body)
 				if tc.expectedFuncBody != "" {
 					require.True(t, funcExpr.ResolvedOverload().IsUDF)
+				} else {
+					require.False(t, funcExpr.ResolvedOverload().IsUDF)
 				}
 				require.False(t, funcExpr.ResolvedOverload().UDFContainsOnlySignature)
-				require.Equal(t, tc.expectedFuncOID, int(funcExpr.ResolvedOverload().Oid))
+				if tc.expectedFuncOID > 0 {
+					require.Equal(t, tc.expectedFuncOID, int(funcExpr.ResolvedOverload().Oid))
+				}
 				require.Equal(t, tc.expectedFuncBody, funcExpr.ResolvedOverload().Body)
 			})
 		}
