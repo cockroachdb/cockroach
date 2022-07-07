@@ -200,6 +200,48 @@ func GetCastOperator(
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBytesUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.DateFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDateDecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDateFloatOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castDateInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castDateInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castDateIntOp{castOpBase: base}, nil
+					}
+				}
+			}
 		case types.DecimalFamily:
 			switch fromType.Width() {
 			case -1:
@@ -211,6 +253,18 @@ func GetCastOperator(
 					default:
 						return &castDecimalBoolOp{castOpBase: base}, nil
 					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalDecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalFloatOp{castOpBase: base}, nil
+					}
 				case types.IntFamily:
 					switch toType.Width() {
 					case 16:
@@ -220,108 +274,6 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castDecimalIntOp{castOpBase: base}, nil
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castDecimalFloatOp{castOpBase: base}, nil
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castDecimalDecimalOp{castOpBase: base}, nil
-					}
-				}
-			}
-		case types.IntFamily:
-			switch fromType.Width() {
-			case 16:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 32:
-						return &castInt2Int4Op{castOpBase: base}, nil
-					case -1:
-					default:
-						return &castInt2IntOp{castOpBase: base}, nil
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt2BoolOp{castOpBase: base}, nil
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt2DecimalOp{castOpBase: base}, nil
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt2FloatOp{castOpBase: base}, nil
-					}
-				}
-			case 32:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return &castInt4Int2Op{castOpBase: base}, nil
-					case -1:
-					default:
-						return &castInt4IntOp{castOpBase: base}, nil
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt4BoolOp{castOpBase: base}, nil
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt4DecimalOp{castOpBase: base}, nil
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castInt4FloatOp{castOpBase: base}, nil
-					}
-				}
-			case -1:
-			default:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return &castIntInt2Op{castOpBase: base}, nil
-					case 32:
-						return &castIntInt4Op{castOpBase: base}, nil
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castIntBoolOp{castOpBase: base}, nil
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castIntDecimalOp{castOpBase: base}, nil
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castIntFloatOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -354,45 +306,106 @@ func GetCastOperator(
 					}
 				}
 			}
-		case types.DateFamily:
+		case types.IntFamily:
 			switch fromType.Width() {
-			case -1:
-			default:
+			case 16:
 				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return &castDateInt2Op{castOpBase: base}, nil
-					case 32:
-						return &castDateInt4Op{castOpBase: base}, nil
-					case -1:
-					default:
-						return &castDateIntOp{castOpBase: base}, nil
-					}
-				case types.FloatFamily:
+				case types.BoolFamily:
 					switch toType.Width() {
 					case -1:
 					default:
-						return &castDateFloatOp{castOpBase: base}, nil
+						return &castInt2BoolOp{castOpBase: base}, nil
 					}
 				case types.DecimalFamily:
 					switch toType.Width() {
 					case -1:
 					default:
-						return &castDateDecimalOp{castOpBase: base}, nil
+						return &castInt2DecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt2FloatOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 32:
+						return &castInt2Int4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castInt2IntOp{castOpBase: base}, nil
+					}
+				}
+			case 32:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4BoolOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4DecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4FloatOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castInt4Int2Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castInt4IntOp{castOpBase: base}, nil
+					}
+				}
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntBoolOp{castOpBase: base}, nil
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntDecimalOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntFloatOp{castOpBase: base}, nil
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castIntInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castIntInt4Op{castOpBase: base}, nil
 					}
 				}
 			}
-		case types.BytesFamily:
+		case types.JsonFamily:
 			switch fromType.Width() {
 			case -1:
 			default:
 				switch toType.Family() {
-				case types.UuidFamily:
+				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
 					default:
-						return &castBytesUuidOp{castOpBase: base}, nil
+						return &castJsonbStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -424,19 +437,6 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castStringUuidOp{castOpBase: base}, nil
-					}
-				}
-			}
-		case types.JsonFamily:
-			switch fromType.Width() {
-			case -1:
-			default:
-				switch toType.Family() {
-				case types.StringFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castJsonbStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -564,6 +564,48 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					}
 				}
 			}
+		case types.BytesFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.DateFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
 		case types.DecimalFamily:
 			switch fromType.Width() {
 			case -1:
@@ -575,114 +617,24 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				case types.IntFamily:
 					switch toType.Width() {
 					case 16:
 						return true
 					case 32:
 						return true
-					case -1:
-					default:
-						return true
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				}
-			}
-		case types.IntFamily:
-			switch fromType.Width() {
-			case 16:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 32:
-						return true
-					case -1:
-					default:
-						return true
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				}
-			case 32:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return true
-					case -1:
-					default:
-						return true
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				}
-			case -1:
-			default:
-				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return true
-					case 32:
-						return true
-					}
-				case types.BoolFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.DecimalFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				case types.FloatFamily:
-					switch toType.Width() {
 					case -1:
 					default:
 						return true
@@ -718,22 +670,11 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					}
 				}
 			}
-		case types.DateFamily:
+		case types.IntFamily:
 			switch fromType.Width() {
-			case -1:
-			default:
+			case 16:
 				switch toType.Family() {
-				case types.IntFamily:
-					switch toType.Width() {
-					case 16:
-						return true
-					case 32:
-						return true
-					case -1:
-					default:
-						return true
-					}
-				case types.FloatFamily:
+				case types.BoolFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -745,14 +686,86 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				}
+			case 32:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				}
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.BoolFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					}
 				}
 			}
-		case types.BytesFamily:
+		case types.JsonFamily:
 			switch fromType.Width() {
 			case -1:
 			default:
 				switch toType.Family() {
-				case types.UuidFamily:
+				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -784,19 +797,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					}
 				case types.UuidFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
-				}
-			}
-		case types.JsonFamily:
-			switch fromType.Width() {
-			case -1:
-			default:
-				switch toType.Family() {
-				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -1552,6 +1552,774 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 	return batch
 }
 
+type castBytesUuidOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBytesUuidOp{}
+var _ colexecop.ClosableOperator = &castBytesUuidOp{}
+
+func (c *castBytesUuidOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateDecimalOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateDecimalOp{}
+var _ colexecop.ClosableOperator = &castDateDecimalOp{}
+
+func (c *castDateDecimalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateFloatOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateFloatOp{}
+var _ colexecop.ClosableOperator = &castDateFloatOp{}
+
+func (c *castDateFloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateInt2Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateInt2Op{}
+var _ colexecop.ClosableOperator = &castDateInt2Op{}
+
+func (c *castDateInt2Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateInt4Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateInt4Op{}
+var _ colexecop.ClosableOperator = &castDateInt4Op{}
+
+func (c *castDateInt4Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateIntOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateIntOp{}
+var _ colexecop.ClosableOperator = &castDateIntOp{}
+
+func (c *castDateIntOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castDecimalBoolOp struct {
 	castOpBase
 }
@@ -1653,6 +2421,282 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r bool
 							r = v.Sign() != 0
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalDecimalOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDecimalDecimalOp{}
+var _ colexecop.ClosableOperator = &castDecimalDecimalOp{}
+
+func (c *castDecimalDecimalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.Set(&v)
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalFloatOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDecimalFloatOp{}
+var _ colexecop.ClosableOperator = &castDecimalFloatOp{}
+
+func (c *castDecimalFloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							{
+								f, err := v.Float64()
+								if err != nil {
+									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+								}
+								r = f
+							}
+
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
 						}
@@ -2192,2154 +3236,6 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 								}
 								r = int64(_i)
 							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castDecimalFloatOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castDecimalFloatOp{}
-var _ colexecop.ClosableOperator = &castDecimalFloatOp{}
-
-func (c *castDecimalFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Decimal()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Float64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							{
-								f, err := v.Float64()
-								if err != nil {
-									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
-								}
-								r = f
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							{
-								f, err := v.Float64()
-								if err != nil {
-									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
-								}
-								r = f
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							{
-								f, err := v.Float64()
-								if err != nil {
-									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
-								}
-								r = f
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							{
-								f, err := v.Float64()
-								if err != nil {
-									colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
-								}
-								r = f
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castDecimalDecimalOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castDecimalDecimalOp{}
-var _ colexecop.ClosableOperator = &castDecimalDecimalOp{}
-
-func (c *castDecimalDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Decimal()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Decimal()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt2Int4Op struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt2Int4Op{}
-var _ colexecop.ClosableOperator = &castInt2Int4Op{}
-
-func (c *castInt2Int4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int32()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-							r = int32(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-							r = int32(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-							r = int32(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-							r = int32(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt2IntOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt2IntOp{}
-var _ colexecop.ClosableOperator = &castInt2IntOp{}
-
-func (c *castInt2IntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt2BoolOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt2BoolOp{}
-var _ colexecop.ClosableOperator = &castInt2BoolOp{}
-
-func (c *castInt2BoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Bool()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt2DecimalOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt2DecimalOp{}
-var _ colexecop.ClosableOperator = &castInt2DecimalOp{}
-
-func (c *castInt2DecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Decimal()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt2FloatOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt2FloatOp{}
-var _ colexecop.ClosableOperator = &castInt2FloatOp{}
-
-func (c *castInt2FloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Float64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt4Int2Op struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt4Int2Op{}
-var _ colexecop.ClosableOperator = &castInt4Int2Op{}
-
-func (c *castInt4Int2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int16()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt4IntOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt4IntOp{}
-var _ colexecop.ClosableOperator = &castInt4IntOp{}
-
-func (c *castInt4IntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int64
-							r = int64(v)
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt4BoolOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt4BoolOp{}
-var _ colexecop.ClosableOperator = &castInt4BoolOp{}
-
-func (c *castInt4BoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Bool()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt4DecimalOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt4DecimalOp{}
-var _ colexecop.ClosableOperator = &castInt4DecimalOp{}
-
-func (c *castInt4DecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Decimal()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt4FloatOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castInt4FloatOp{}
-var _ colexecop.ClosableOperator = &castInt4FloatOp{}
-
-func (c *castInt4FloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Float64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castIntInt2Op struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castIntInt2Op{}
-var _ colexecop.ClosableOperator = &castIntInt2Op{}
-
-func (c *castIntInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int16()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int16
-
-							shifted := v >> uint(15)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
-							}
-							r = int16(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castIntInt4Op struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castIntInt4Op{}
-var _ colexecop.ClosableOperator = &castIntInt4Op{}
-
-func (c *castIntInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int32()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castIntBoolOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castIntBoolOp{}
-var _ colexecop.ClosableOperator = &castIntBoolOp{}
-
-func (c *castIntBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Bool()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r bool
-
-							r = v != 0
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castIntDecimalOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castIntDecimalOp{}
-var _ colexecop.ClosableOperator = &castIntDecimalOp{}
-
-func (c *castIntDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Decimal()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
-
-							r.SetInt64(int64(v))
-
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
-								colexecerror.ExpectedError(err)
-							}
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castIntFloatOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castIntFloatOp{}
-var _ colexecop.ClosableOperator = &castIntFloatOp{}
-
-func (c *castIntFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Float64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r float64
-
-							r = float64(v)
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5012,14 +3908,14 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 	return batch
 }
 
-type castDateInt2Op struct {
+type castInt2BoolOp struct {
 	castOpBase
 }
 
-var _ colexecop.ResettableOperator = &castDateInt2Op{}
-var _ colexecop.ClosableOperator = &castDateInt2Op{}
+var _ colexecop.ResettableOperator = &castInt2BoolOp{}
+var _ colexecop.ClosableOperator = &castInt2BoolOp{}
 
-func (c *castDateInt2Op) Next() coldata.Batch {
+func (c *castInt2BoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5033,7 +3929,983 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 	_ = toType
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt2DecimalOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt2DecimalOp{}
+var _ colexecop.ClosableOperator = &castInt2DecimalOp{}
+
+func (c *castInt2DecimalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt2FloatOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt2FloatOp{}
+var _ colexecop.ClosableOperator = &castInt2FloatOp{}
+
+func (c *castInt2FloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt2Int4Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt2Int4Op{}
+var _ colexecop.ClosableOperator = &castInt2Int4Op{}
+
+func (c *castInt2Int4Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+							r = int32(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt2IntOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt2IntOp{}
+var _ colexecop.ClosableOperator = &castInt2IntOp{}
+
+func (c *castInt2IntOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int64
+							r = int64(v)
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt4BoolOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt4BoolOp{}
+var _ colexecop.ClosableOperator = &castInt4BoolOp{}
+
+func (c *castInt4BoolOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bool()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r bool
+
+							r = v != 0
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt4DecimalOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt4DecimalOp{}
+var _ colexecop.ClosableOperator = &castInt4DecimalOp{}
+
+func (c *castInt4DecimalOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Decimal()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r apd.Decimal
+
+							r.SetInt64(int64(v))
+
+							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt4FloatOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt4FloatOp{}
+var _ colexecop.ClosableOperator = &castInt4FloatOp{}
+
+func (c *castInt4FloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt4Int2Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt4Int2Op{}
+var _ colexecop.ClosableOperator = &castInt4Int2Op{}
+
+func (c *castInt4Int2Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
@@ -5148,14 +5020,14 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 	return batch
 }
 
-type castDateInt4Op struct {
+type castInt4IntOp struct {
 	castOpBase
 }
 
-var _ colexecop.ResettableOperator = &castDateInt4Op{}
-var _ colexecop.ClosableOperator = &castDateInt4Op{}
+var _ colexecop.ResettableOperator = &castInt4IntOp{}
+var _ colexecop.ClosableOperator = &castInt4IntOp{}
 
-func (c *castDateInt4Op) Next() coldata.Batch {
+func (c *castInt4IntOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5169,143 +5041,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 	_ = toType
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Int32()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						_ = inputCol.Get(n - 1)
-						_ = outputCol.Get(n - 1)
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							//gcassert:bce
-							v := inputCol.Get(tupleIdx)
-							var r int32
-
-							shifted := v >> uint(31)
-							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
-							}
-							r = int32(v)
-
-							//gcassert:bce
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castDateIntOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castDateIntOp{}
-var _ colexecop.ClosableOperator = &castDateIntOp{}
-
-func (c *castDateIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
+			inputCol := inputVec.Int32()
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
@@ -5396,14 +5132,14 @@ func (c *castDateIntOp) Next() coldata.Batch {
 	return batch
 }
 
-type castDateFloatOp struct {
+type castIntBoolOp struct {
 	castOpBase
 }
 
-var _ colexecop.ResettableOperator = &castDateFloatOp{}
-var _ colexecop.ClosableOperator = &castDateFloatOp{}
+var _ colexecop.ResettableOperator = &castIntBoolOp{}
+var _ colexecop.ClosableOperator = &castIntBoolOp{}
 
-func (c *castDateFloatOp) Next() coldata.Batch {
+func (c *castIntBoolOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5419,7 +5155,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Int64()
 			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Float64()
+			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
@@ -5435,9 +5171,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r float64
+							var r bool
 
-							r = float64(v)
+							r = v != 0
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5457,9 +5193,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r float64
+							var r bool
 
-							r = float64(v)
+							r = v != 0
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5479,9 +5215,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r float64
+							var r bool
 
-							r = float64(v)
+							r = v != 0
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5501,9 +5237,9 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r float64
+							var r bool
 
-							r = float64(v)
+							r = v != 0
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5516,14 +5252,14 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 	return batch
 }
 
-type castDateDecimalOp struct {
+type castIntDecimalOp struct {
 	castOpBase
 }
 
-var _ colexecop.ResettableOperator = &castDateDecimalOp{}
-var _ colexecop.ClosableOperator = &castDateDecimalOp{}
+var _ colexecop.ResettableOperator = &castIntDecimalOp{}
+var _ colexecop.ClosableOperator = &castIntDecimalOp{}
 
-func (c *castDateDecimalOp) Next() coldata.Batch {
+func (c *castIntDecimalOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5652,14 +5388,14 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castBytesUuidOp struct {
+type castIntFloatOp struct {
 	castOpBase
 }
 
-var _ colexecop.ResettableOperator = &castBytesUuidOp{}
-var _ colexecop.ClosableOperator = &castBytesUuidOp{}
+var _ colexecop.ResettableOperator = &castIntFloatOp{}
+var _ colexecop.ClosableOperator = &castIntFloatOp{}
 
-func (c *castBytesUuidOp) Next() coldata.Batch {
+func (c *castIntFloatOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5673,7 +5409,399 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 	_ = toType
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Bytes()
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							r = float64(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castIntInt2Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castIntInt2Op{}
+var _ colexecop.ClosableOperator = &castIntInt2Op{}
+
+func (c *castIntInt2Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							shifted := v >> uint(15)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castIntInt4Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castIntInt4Op{}
+var _ colexecop.ClosableOperator = &castIntInt4Op{}
+
+func (c *castIntInt4Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = inputCol.Get(n - 1)
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							shifted := v >> uint(31)
+							if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(v)
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castJsonbStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castJsonbStringOp{}
+var _ colexecop.ClosableOperator = &castJsonbStringOp{}
+
+func (c *castJsonbStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.JSON()
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
@@ -5693,11 +5821,16 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_uuid, err := uuid.FromBytes(v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
 							}
-							r = _uuid.GetBytes()
+							r = []byte(_string)
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5716,11 +5849,16 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_uuid, err := uuid.FromBytes(v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
 							}
-							r = _uuid.GetBytes()
+							r = []byte(_string)
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5741,11 +5879,16 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_uuid, err := uuid.FromBytes(v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
 							}
-							r = _uuid.GetBytes()
+							r = []byte(_string)
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5764,11 +5907,16 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_uuid, err := uuid.FromBytes(v)
-							if err != nil {
-								colexecerror.ExpectedError(err)
+							_string := v.String()
+							switch toType.Oid() {
+							case oid.T_char:
+								// "char" is supposed to truncate long values.
+								_string = util.TruncateString(_string, 1)
+							case oid.T_bpchar:
+								// bpchar types truncate trailing whitespace.
+								_string = strings.TrimRight(_string, " ")
 							}
-							r = _uuid.GetBytes()
+							r = []byte(_string)
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -6365,154 +6513,6 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(err)
 							}
 							r = _uuid.GetBytes()
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castJsonbStringOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castJsonbStringOp{}
-var _ colexecop.ClosableOperator = &castJsonbStringOp{}
-
-func (c *castJsonbStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.JSON()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Bytes()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
-								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
-							}
-							r = []byte(_string)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
-								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
-							}
-							r = []byte(_string)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
-								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
-							}
-							r = []byte(_string)
-
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
-						_ = evalCtx
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
-								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
-							}
-							r = []byte(_string)
 
 							outputCol.Set(tupleIdx, r)
 						}
