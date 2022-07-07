@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1063,6 +1064,25 @@ func (s *TestState) SwapDescriptorSubComment(
 func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	s.LogSideEffectf("delete scheduleId: %d", id)
 	return nil
+}
+
+// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater.
+func (s *TestState) DeleteZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (numAffectedRows int, err error) {
+	if _, ok := s.zoneConfigs[id]; !ok {
+		return 0, nil
+	}
+	delete(s.zoneConfigs, id)
+	return 1, nil
+}
+
+// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater.
+func (s *TestState) UpsertZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) (numAffected int, err error) {
+	s.zoneConfigs[id] = zone
+	return 1, nil
 }
 
 // DescriptorMetadataUpdater implement scexec.Dependencies.

@@ -79,7 +79,7 @@ func gcIndexes(
 				return err
 			}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, freshParentTableDesc, []uint32{uint32(index.IndexID)},
+				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
 		if err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs); err != nil {

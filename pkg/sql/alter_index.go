@@ -127,6 +127,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					params.ctx,
 					params.p.txn,
 					n.tableDesc,
+					params.p.Descriptors(),
 					n.index.GetID(),
 					oldPartitioning,
 					n.index.GetPartitioning(),
