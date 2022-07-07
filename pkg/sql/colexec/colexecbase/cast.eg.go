@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -46,6 +48,7 @@ var (
 	_ = uuid.FromBytes
 	_ = oid.T_name
 	_ = util.TruncateString
+	_ = pgdate.ParseTimestamp
 )
 
 func isIdentityCast(fromType, toType *types.T) bool {
@@ -413,11 +416,39 @@ func GetCastOperator(
 					default:
 						return &castStringBytesOp{castOpBase: base}, nil
 					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return &castStringInt2Op{castOpBase: base}, nil
+					case 32:
+						return &castStringInt4Op{castOpBase: base}, nil
+					case -1:
+					default:
+						return &castStringIntOp{castOpBase: base}, nil
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringFloatOp{castOpBase: base}, nil
+					}
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
 					default:
 						return &castStringStringOp{castOpBase: base}, nil
+					}
+				case types.TimestampFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringTimestampOp{castOpBase: base}, nil
+					}
+				case types.TimestampTZFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringTimestamptzOp{castOpBase: base}, nil
 					}
 				case types.UuidFamily:
 					switch toType.Width() {
@@ -777,7 +808,35 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.IntFamily:
+					switch toType.Width() {
+					case 16:
+						return true
+					case 32:
+						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.TimestampFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.TimestampTZFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -6040,6 +6099,622 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 	return batch
 }
 
+type castStringInt2Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringInt2Op{}
+var _ colexecop.ClosableOperator = &castStringInt2Op{}
+
+func (c *castStringInt2Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int16
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(15)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+								}
+								r = int16(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringInt4Op struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringInt4Op{}
+var _ colexecop.ClosableOperator = &castStringInt4Op{}
+
+func (c *castStringInt4Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int32
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+
+								shifted := _i >> uint(31)
+								if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+									colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+								}
+								r = int32(_i)
+
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringIntOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringIntOp{}
+var _ colexecop.ClosableOperator = &castStringIntOp{}
+
+func (c *castStringIntOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+								r = int64(_i)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+								r = int64(_i)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+								r = int64(_i)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r int64
+
+							{
+								_s := string(v)
+								_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+								if err != nil {
+									colexecerror.ExpectedError(tree.MakeParseError(_s, toType, err))
+								}
+								r = int64(_i)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringFloatOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringFloatOp{}
+var _ colexecop.ClosableOperator = &castStringFloatOp{}
+
+func (c *castStringFloatOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							_s := string(v)
+							var _err error
+							r, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+							if _err != nil {
+								colexecerror.ExpectedError(tree.MakeParseError(_s, toType, _err))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							_s := string(v)
+							var _err error
+							r, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+							if _err != nil {
+								colexecerror.ExpectedError(tree.MakeParseError(_s, toType, _err))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							_s := string(v)
+							var _err error
+							r, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+							if _err != nil {
+								colexecerror.ExpectedError(tree.MakeParseError(_s, toType, _err))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r float64
+
+							_s := string(v)
+							var _err error
+							r, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+							if _err != nil {
+								colexecerror.ExpectedError(tree.MakeParseError(_s, toType, _err))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castStringStringOp struct {
 	castOpBase
 }
@@ -6238,6 +6913,318 @@ func (c *castStringStringOp) Next() coldata.Batch {
 								r = v
 							}
 
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringTimestampOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringTimestampOp{}
+var _ colexecop.ClosableOperator = &castStringTimestampOp{}
+
+func (c *castStringTimestampOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Timestamp()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestampWithoutTimezone(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringTimestamptzOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringTimestamptzOp{}
+var _ colexecop.ClosableOperator = &castStringTimestamptzOp{}
+
+func (c *castStringTimestamptzOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Timestamp()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var evalCtx *eval.Context = c.evalCtx
+						// Silence unused warning.
+						_ = evalCtx
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r time.Time
+
+							_roundTo := tree.TimeFamilyPrecisionToRoundDuration(toType.Precision())
+							_now := evalCtx.GetRelativeParseTime()
+							_dateStyle := evalCtx.GetDateStyle()
+							_t, _, err := pgdate.ParseTimestamp(_now, _dateStyle, string(v))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _t.Round(_roundTo)
+							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
+							}
+
+							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
 						}
 					}

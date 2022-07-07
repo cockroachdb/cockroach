@@ -2526,6 +2526,16 @@ func (d *DTimeTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// NewTimestampExceedsBoundsError returns a new "exceeds supported timestamp
+// bounds" error for the given timestamp, with the correct pgcode.
+func NewTimestampExceedsBoundsError(t time.Time) error {
+	return pgerror.Newf(
+		pgcode.InvalidTimeZoneDisplacementValue,
+		"timestamp %q exceeds supported timestamp bounds",
+		t.Format(time.RFC3339),
+	)
+}
+
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
 	// Time always has UTC location.
@@ -2536,9 +2546,7 @@ type DTimestamp struct {
 func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, pgerror.Newf(
-			pgcode.InvalidTimeZoneDisplacementValue,
-			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, NewTimestampExceedsBoundsError(ret)
 	}
 	return &DTimestamp{Time: ret}, nil
 }
@@ -2820,9 +2828,7 @@ type DTimestampTZ struct {
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, pgerror.Newf(
-			pgcode.InvalidTimeZoneDisplacementValue,
-			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, NewTimestampExceedsBoundsError(ret)
 	}
 	return &DTimestampTZ{Time: ret}, nil
 }
