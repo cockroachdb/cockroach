@@ -294,7 +294,10 @@ func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *w
 // samples to compute a reliable average.
 func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 	if n == nil || n.resolver == nil {
-		return 0, errors.New("no node dialer configured")
+		return 0, errors.AssertionFailedf("no node dialer configured")
+	}
+	if n.rpcContext.RemoteClocks == nil {
+		return 0, errors.AssertionFailedf("can't call Latency in a client command")
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
