@@ -1071,17 +1071,27 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
+	var nullableArgFns []overloadImpl
+	var notNullableArgsFn []overloadImpl
+	for _, f := range fns {
+		if f.(*Overload).NullableArgs {
+			nullableArgFns = append(nullableArgFns, f)
+		} else {
+			notNullableArgsFn = append(notNullableArgsFn, f)
+		}
+	}
+
 	// If the function is an aggregate that does not accept null arguments and we
 	// have arguments of unknown type, see if we can assign type string instead.
 	// TODO(rytaft): If there are no overloads with string inputs, Postgres
 	// chooses the overload with preferred type for the given category. For
 	// example, float8 is the preferred type for the numeric category in Postgres.
 	// To match Postgres' behavior, we should add that logic here too.
-	if !def.NullableArgs && def.FunctionProperties.Class == AggregateClass {
+	if def.FunctionProperties.Class == AggregateClass {
 		for i := range typedSubExprs {
 			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
 				var filtered []overloadImpl
-				for j := range fns {
+				for j := range notNullableArgsFn {
 					if fns[j].params().GetAt(i).Equivalent(types.String) {
 						if filtered == nil {
 							filtered = make([]overloadImpl, 0, len(fns)-j)
@@ -1092,7 +1102,7 @@ func (expr *FuncExpr) TypeCheck(
 
 				// Only use the filtered list if it's not empty.
 				if filtered != nil {
-					fns = filtered
+					notNullableArgsFn = filtered
 
 					// Cast the expression to a string so the execution engine will find
 					// the correct overload.
@@ -1100,12 +1110,13 @@ func (expr *FuncExpr) TypeCheck(
 				}
 			}
 		}
+		fns = append(nullableArgFns, notNullableArgsFn...)
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
-	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass &&
+	if len(fns) > 0 && len(nullableArgFns) == 0 && def.FunctionProperties.Class != GeneratorClass &&
 		def.FunctionProperties.Class != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {

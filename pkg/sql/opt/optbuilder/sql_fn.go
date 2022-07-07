@@ -63,7 +63,7 @@ func (b *Builder) buildSQLFn(
 			))
 		}
 		exprs[i] = memo.ExtractConstDatum(info.args[i])
-		if exprs[i] == tree.DNull && !info.def.Properties.NullableArgs {
+		if exprs[i] == tree.DNull && !info.def.Overload.NullableArgs {
 			return b.factory.ConstructNull(info.ResolvedType())
 		}
 	}

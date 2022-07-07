@@ -54,6 +54,7 @@ PROTOBUF_SRCS = [
   "//pkg/testutils/grpcutils:grpcutils_go_proto",
   "//pkg/ts/catalog:catalog_go_proto",
   "//pkg/ts/tspb:tspb_go_proto",
+  "//pkg/util/admission/admissionpb:admissionpb_go_proto",
   "//pkg/util/duration:duration_go_proto",
   "//pkg/util/hlc:hlc_go_proto",
   "//pkg/util/log/eventpb:eventpb_go_proto",
