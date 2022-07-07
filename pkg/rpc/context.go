@@ -1666,6 +1666,16 @@ func (rpcCtx *Context) runHeartbeat(
 	maxOffset := rpcCtx.MaxOffset
 	maxOffsetNanos := maxOffset.Nanoseconds()
 
+	// The request object. Note that we keep the same object from
+	// heartbeat to heartbeat: we compute a new .Offset at the end of
+	// the current heartbeat as input to the next one.
+	request := &PingRequest{
+		OriginAddr:           rpcCtx.Config.Addr,
+		OriginMaxOffsetNanos: maxOffsetNanos,
+		TargetNodeID:         conn.remoteNodeID,
+		ServerVersion:        rpcCtx.Settings.Version.BinaryVersion(),
+	}
+
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 
 	var heartbeatTimer timeutil.Timer
@@ -1692,16 +1702,10 @@ func (rpcCtx *Context) runHeartbeat(
 		}
 
 		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, "rpc heartbeat", func(ctx context.Context) error {
-			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
+			// Pick up any asynchronous update to clusterID and NodeID.
 			clusterID := rpcCtx.StorageClusterID.Get()
-			request := &PingRequest{
-				OriginNodeID:         rpcCtx.NodeID.Get(),
-				OriginAddr:           rpcCtx.Config.Addr,
-				OriginMaxOffsetNanos: maxOffsetNanos,
-				ClusterID:            &clusterID,
-				TargetNodeID:         conn.remoteNodeID,
-				ServerVersion:        rpcCtx.Settings.Version.BinaryVersion(),
-			}
+			request.ClusterID = &clusterID
+			request.OriginNodeID = rpcCtx.NodeID.Get()
 
 			interceptor := func(context.Context, *PingRequest) error { return nil }
 			if fn := rpcCtx.OnOutgoingPing; fn != nil {
