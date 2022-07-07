@@ -276,7 +276,6 @@ func TestClockOffsetInPingRequest(t *testing.T) {
 	require.Zero(t, firstPing.Offset.Uncertainty)
 	require.Zero(t, firstPing.Offset.MeasuredAt)
 	for i := 1; i < 3; i++ {
-		t.Skip(85027)
 		nextPing := <-pings
 		require.NotZero(t, nextPing.Offset.Offset, i)
 		require.NotZero(t, nextPing.Offset.Uncertainty, i)
