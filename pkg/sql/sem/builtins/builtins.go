@@ -8184,7 +8184,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8197,7 +8197,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 	)
 }
@@ -8215,7 +8215,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8228,7 +8228,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 	)
 }
@@ -8246,7 +8246,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8259,7 +8259,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info:       info,
-			Volatility: volatility.LeakProof,
+			Volatility: volatility.Leakproof,
 		},
 	)
 }

@@ -740,7 +740,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.Buffer.WriteString(name)
 		}
 
-		if !relational.VolatilitySet.IsLeakProof() {
+		if !relational.VolatilitySet.IsLeakproof() {
 			writeFlag(relational.VolatilitySet.String())
 		}
 		if relational.CanMutate {
@@ -1023,7 +1023,7 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 			if !scalarProps.OuterCols.Empty() {
 				emitProp("outer=%s", scalarProps.OuterCols)
 			}
-			if !scalarProps.VolatilitySet.IsLeakProof() {
+			if !scalarProps.VolatilitySet.IsLeakproof() {
 				emitProp(scalarProps.VolatilitySet.String())
 			}
 			if scalarProps.HasCorrelatedSubquery {
