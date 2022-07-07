@@ -37,6 +37,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate bazel     # DEPS.bzl and BUILD.bazel files
         dev generate cgo       # files that help non-Bazel systems (IDEs, go) link to our C dependencies
         dev generate docs      # generates documentation
+        dev generate execgen   # generates execgen go code (subset of 'dev generate go')
         dev generate go        # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
         dev generate go_nocgo  # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
@@ -63,6 +64,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"bazel":    d.generateBazel,
 		"cgo":      d.generateCgo,
 		"docs":     d.generateDocs,
+		"execgen":  d.generateExecgen,
 		"go":       d.generateGo,
 		"go_nocgo": d.generateGoNoCgo,
 		"protobuf": d.generateProtobuf,
@@ -152,6 +154,10 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 		return err
 	}
 	return d.generateRedactSafe(ctx)
+}
+
+func (d *dev) generateExecgen(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:execgen")
 }
 
 func (d *dev) generateGoAndDocs(cmd *cobra.Command) error {
