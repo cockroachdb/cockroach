@@ -117,9 +117,15 @@ export const searchTransactionsData = (
   transactions: Transaction[],
   statements: Statement[],
 ): Transaction[] => {
+  let searchTerms = search?.split(" ");
+  // If search term is wrapped by quotes, do the exact search term.
+  if (search?.startsWith('"') && search?.endsWith('"')) {
+    searchTerms = [search.substring(1, search.length - 1)];
+  }
+
   return transactions.filter((t: Transaction) =>
     search
-      ? search.split(" ").every(val =>
+      ? searchTerms.every(val =>
           collectStatementsText(
             getStatementsByFingerprintId(
               t.stats_data.statement_fingerprint_ids,
