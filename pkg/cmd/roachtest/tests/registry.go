@@ -16,6 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 func RegisterTests(r registry.Registry) {
 	registerAcceptance(r)
 	registerActiveRecord(r)
+	registerAdmissionControlFollowerOverload(r)
 	registerAllocator(r)
 	registerAlterPK(r)
 	registerAWSDMS(r)
