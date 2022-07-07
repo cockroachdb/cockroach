@@ -49,6 +49,12 @@ const (
 	sstTenantsPrefix = "tenant/"
 )
 
+var iterOpts = storage.IterOptions{
+KeyTypes:             storage.IterKeyTypePointsAndRanges,
+LowerBound:           keys.LocalMax,
+UpperBound:           keys.MaxKey,
+}
+
 // WriteBackupMetadataSST is responsible for constructing and writing the
 // `metadata.sst` to dest. This file contains the metadata corresponding to this
 // backup.
@@ -618,7 +624,7 @@ func debugDumpFileSST(
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, store, fileInfoPath, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []cloud.ExternalStorage{store}, []string{fileInfoPath}, encOpts,iterOpts)
 	if err != nil {
 		return err
 	}
@@ -664,8 +670,8 @@ func DebugDumpMetadataSST(
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-
-	iter, err := storageccl.ExternalSSTReader(ctx, store, path, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []cloud.ExternalStorage{store}, []string{path},
+	encOpts,iterOpts)
 	if err != nil {
 		return err
 	}
@@ -804,8 +810,7 @@ func NewBackupMetadata(
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-
-	iter, err := storageccl.ExternalSSTReader(ctx, exportStore, sstFileName, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []cloud.ExternalStorage{exportStore}, []string{sstFileName}, encOpts,iterOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -921,8 +926,7 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 		if err != nil {
 			break
 		}
-
-		iter, err := storageccl.ExternalSSTReader(ctx, b.store, path, encOpts)
+		iter, err := storageccl.ExternalSSTReader(ctx, []cloud.ExternalStorage{b.store}, []string{path}, encOpts,iterOpts)
 		if err != nil {
 			return FileIterator{err: err}
 		}
@@ -1232,7 +1236,7 @@ func makeBytesIter(
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
 
-	iter, err := storageccl.ExternalSSTReader(ctx, store, path, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []cloud.ExternalStorage{store}, []string{path}, encOpts,iterOpts)
 	if err != nil {
 		return bytesIter{iterError: err}
 	}

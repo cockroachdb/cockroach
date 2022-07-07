@@ -10,6 +10,20 @@ package storageccl
 
 import (
 	"bytes"
+	"context"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -71,4 +85,77 @@ func TestSSTReaderCache(t *testing.T) {
 	// Read at where prior non-suffix read finished does not make a new call.
 	_, _ = raw.ReadAt(discard, 10)
 	require.Equal(t, expectedOpenCalls, openCalls)
+}
+
+// TestNewExternalSSTReader ensures that ExternalSSTReader properly reads and
+// iterates through SSTs stored in different external storage base directories.
+func TestNewExternalSSTReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	args := base.TestServerArgs{ExternalIODir: dir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	clusterSettings := tc.Server(0).ClusterSettings()
+
+	const localFoo = "nodelocal://1/foo"
+
+	subdirs := []string{"a", "b", "c"}
+	stores := make([]cloud.ExternalStorage, len(subdirs))
+	fileNames := make([]string, len(subdirs))
+
+	for i, subdir := range subdirs {
+
+		// Create a store rooted in the file's subdir
+		store, err := cloud.ExternalStorageFromURI(
+			ctx,
+			localFoo+subdir+"/",
+			base.ExternalIODirConfig{},
+			clusterSettings,
+			blobs.TestBlobServiceClient(dir),
+			username.RootUserName(),
+			tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+		require.NoError(t, err)
+
+		stores[i] = store
+
+		// Create an SST and write it to external storage
+		kvs := make(storageutils.KVs, 100000)
+		for j := 0; j < 100000; j++ {
+			kvs[j] = storageutils.PointKV(subdir+"a"+strconv.Itoa(123), i, "1")
+		}
+
+		fileName := subdir + "DistinctFileName.sst"
+		fileNames[i] = fileName
+
+		sst, _, _ := storageutils.MakeSST(t, clusterSettings, kvs)
+
+		w, err := store.Writer(ctx, fileName)
+		require.NoError(t, err)
+		_, err = w.Write(sst)
+		require.NoError(t, err)
+		w.Close()
+	}
+
+	var iterOpts = storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+
+	iter, err := ExternalSSTReader(ctx, stores, fileNames, nil, iterOpts)
+	require.NoError(t, err)
+
+	// TODO (msbutler): the test currently passes even with the bug because I need
+	// iter.iter. externalReaders.openAt( ) to get called again, i.e. when
+	// vfs.ReadAt() gets called again.
+	for iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+	}
 }
