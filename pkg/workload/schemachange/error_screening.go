@@ -727,7 +727,7 @@ WITH tab_json AS (
 GROUP BY name;
 		`, tableName.String())
 		if err != nil {
-			return false, nil, nil, err
+			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 		}
 
 		for _, constraint := range constraints {
