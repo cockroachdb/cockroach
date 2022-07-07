@@ -45,7 +45,7 @@ func distBackupPlanSpecs(
 	startTime, endTime hlc.Timestamp,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "backup-plan-specs")
+	ctx, span = tracing.ChildSpan(ctx, "backupccl.distBackupPlanSpecs")
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
 	user := execCtx.User()
@@ -158,7 +158,7 @@ func distBackup(
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	backupSpecs map[base.SQLInstanceID]*execinfrapb.BackupDataSpec,
 ) error {
-	ctx, span := tracing.ChildSpan(ctx, "backup-distsql")
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.distBackup")
 	defer span.Finish()
 	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn

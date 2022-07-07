@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -509,7 +510,11 @@ func (s *crdbSpan) recordFinishedChildren(childRecording tracingpb.Recording) {
 	// children being added to s.
 	for _, span := range childRecording {
 		for _, record := range span.StructuredRecords {
-			s.notifyEventListeners(record.Payload)
+			var d types.DynamicAny
+			if err := types.UnmarshalAny(record.Payload, &d); err != nil {
+				continue
+			}
+			s.notifyEventListeners(d.Message.(protoutil.Message))
 		}
 	}
 
@@ -930,6 +935,9 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 					childKey := string(tag.Key)
 					childValue := tag.Value.Emit()
 
+					if rs.Tags == nil {
+						rs.Tags = make(map[string]string)
+					}
 					rs.Tags[childKey] = childValue
 
 					tagGroup.Tags = append(tagGroup.Tags,
