@@ -16,6 +16,5 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/streaming",
-        "//pkg/util/hlc",
     ],
 )
