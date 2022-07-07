@@ -137,13 +137,7 @@ const (
 	// keep collecting entries and intents or skip entries.
 	MVCCIncrementalIterIntentPolicyAggregate
 	// MVCCIncrementalIterIntentPolicyEmit will return intents to
-	// the caller if they are inside the time range. Intents
-	// outside of the time range will be filtered without error.
-	//
-	// TODO(ssd): If we relaxed the requirement that intents are
-	// filtered by time range, we could avoid parsing intents
-	// inside the iterator and leave it to the caller to deal
-	// with.
+	// the caller if they are inside or outside the time range.
 	MVCCIncrementalIterIntentPolicyEmit
 )
 
@@ -629,8 +623,12 @@ func (i *MVCCIncrementalIterator) ignoreTimeHelper() {
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
 		// the intent's corresponding provisional value.
 		//
-		// TODO(msbulter): investigate if it's clearer for the caller to emit the intent rather than the
-		// provisional value
+		// Note: it's important to surface the intent's provisional value as callers rely on observing
+		// any value -- provisional, or not -- to make decisions. MVCClearTimeRange, for example,
+		// flushes keys for deletion whenever it encounters a key outside (StartTime,EndTime].
+		//
+		// TODO(msbulter): investigate if it's clearer for the caller to emit the intent in
+		// addition to the provisional value.
 		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
 			i.iter.Next()
 			continue
@@ -643,8 +641,8 @@ func (i *MVCCIncrementalIterator) ignoreTimeHelper() {
 
 // NextIgnoringTime returns the next key/value that would be encountered in a
 // non-incremental iteration by moving the underlying non-TBI iterator forward.
-// Intents in the time range (startTime,EndTime] are handled according to the
-// iterator policy.
+// Intents within and outside the (StartTime, EndTime] time range are handled
+// according to the iterator policy.
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	i.iter.Next()
 	i.ignoreTimeHelper()
@@ -652,8 +650,8 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 
 // NextKeyIgnoringTime returns the next distinct key that would be encountered
 // in a non-incremental iteration by moving the underlying non-TBI iterator
-// forward. Intents in the time range (startTime,EndTime] are handled according
-// to the iterator policy.
+// forward. Intents within and outside the (StartTime, EndTime] time range are
+// handled according to the iterator policy.
 func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 	i.iter.NextKey()
 	i.ignoreTimeHelper()
