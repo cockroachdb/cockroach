@@ -504,9 +504,14 @@ func rewriteSchemaChangerState(
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
+			if *id == descpb.InvalidID {
+				// Some descriptor ID fields in elements may be deliberately unset.
+				// Skip these as they are not subject to rewrite.
+				return nil
+			}
 			rewrite, ok := descriptorRewrites[*id]
 			if !ok {
-				return errors.Errorf("missing rewrite for id %d in %T", *id, t)
+				return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
 			}
 			*id = rewrite.ID
 			return nil
@@ -580,7 +585,7 @@ func DatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRe
 		err := db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
 			rewrite, ok := descriptorRewrites[id]
 			if !ok {
-				return errors.Errorf("missing rewrite for schema %d", db.ID)
+				return errors.Errorf("missing rewrite for schema %d", id)
 			}
 			newSchemas[name] = descpb.DatabaseDescriptor_SchemaInfo{ID: rewrite.ID}
 			return nil
