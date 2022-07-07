@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-/* global module */
+/* global module, __dirname, process */
 /* eslint-disable @typescript-eslint/no-var-requires */
 
 const path = require("path");
@@ -16,7 +16,10 @@ const { compilerOptions } = require("./tsconfig.json");
 const isBazel = !!process.env.BAZEL_TARGET;
 
 const v8 = require("v8");
-console.log("maxoldspace (MB) = ", v8.getHeapStatistics().total_available_size / 1024 / 1024);
+console.log(
+  "maxoldspace (MB) = ",
+  v8.getHeapStatistics().total_available_size / 1024 / 1024,
+);
 
 const bazelOnlySettings = {
   haste: {
@@ -99,8 +102,8 @@ module.exports = {
 
   // A set of global variables that need to be available in all test environments
   globals: {
-    'ts-jest': {
-      tsconfig: path.join(__dirname, './tsconfig.linting.json'),
+    "ts-jest": {
+      tsconfig: path.join(__dirname, "./tsconfig.linting.json"),
     },
   },
 
@@ -144,7 +147,7 @@ module.exports = {
   // projects: undefined,
 
   // Use this configuration option to add custom reporters to Jest
-  // reporters: [["jest-silent-reporter", { "useDots": true }]],
+  // reporters: [],
 
   // Automatically reset mock state before every test
   // resetMocks: false,
@@ -215,7 +218,10 @@ module.exports = {
   // A map from regular expressions to paths to transformers
   transform: {
     "^.+\\.tsx?$": "ts-jest",
-    "^.+\\.js?$": ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
+    "^.+\\.js?$": [
+      "babel-jest",
+      { configFile: path.resolve(__dirname, "babel.config.js") },
+    ],
   },
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
@@ -236,5 +242,5 @@ module.exports = {
 
   // Whether to use watchman for file crawling
   // watchman: true,
-  ...( isBazel ? bazelOnlySettings : {} ),
+  ...(isBazel ? bazelOnlySettings : {}),
 };
