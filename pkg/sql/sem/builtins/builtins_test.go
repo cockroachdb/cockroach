@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -301,6 +302,35 @@ func TestEscapeFormatRandom(t *testing.T) {
 		}
 		if !bytes.Equal(decodedResult, b) {
 			t.Fatalf("generated %#v, after round-tripping got %#v", b, decodedResult)
+		}
+	}
+}
+
+func TestFormatWithWeirdFormatStrings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	specialFormatChars := []byte{'%', '$', '-', '*', '0', '1', 's', 'I', 'L'}
+	numSpecial := len(specialFormatChars)
+	specialFreq := 0.2
+	evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	datums := make(tree.Datums, 10)
+	for i := range datums {
+		datums[i] = tree.NewDInt(tree.DInt(i))
+	}
+	for i := 0; i < 1000; i++ {
+		b := make([]byte, rand.Intn(100))
+		for j := 0; j < len(b); j++ {
+			if rand.Float64() < specialFreq {
+				b[j] = specialFormatChars[rand.Intn(numSpecial)]
+			} else {
+				b[j] = byte(rand.Intn(256))
+			}
+		}
+		str := string(b)
+		// Mostly just making sure no panics
+		_, err := pgformat.Format(evalContext, str, datums...)
+		if err != nil {
+			require.Regexp(t, `position|width|not enough arguments|unrecognized verb|unterminated format`, err.Error(),
+				"input string was %s", str)
 		}
 	}
 }
