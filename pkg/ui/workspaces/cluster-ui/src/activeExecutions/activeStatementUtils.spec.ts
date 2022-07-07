@@ -13,6 +13,7 @@ import {
   SessionsResponse,
   ActiveTransaction,
   ActiveStatement,
+  SessionStatusType,
 } from "./types";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment";
@@ -185,6 +186,14 @@ describe("test activeStatementUtils", () => {
           client_address: "clientAddress2",
           active_queries: activeQueries,
         },
+        {
+          id: new Uint8Array(),
+          username: "foo",
+          status: SessionStatusType.CLOSED,
+          application_name: "application2",
+          client_address: "clientAddress2",
+          active_queries: activeQueries,
+        },
       ],
       errors: [],
       internal_app_name_prefix: "",
@@ -270,6 +279,15 @@ describe("test activeStatementUtils", () => {
           active_queries: [makeActiveQuery()],
           active_txn: txns[1],
         },
+        {
+          id: new Uint8Array(),
+          username: "foo",
+          status: SessionStatusType.CLOSED,
+          application_name: "closed_application",
+          client_address: "clientAddress2",
+          active_queries: [makeActiveQuery()],
+          active_txn: txns[1],
+        },
       ],
       errors: [],
       internal_app_name_prefix: "",
@@ -280,6 +298,9 @@ describe("test activeStatementUtils", () => {
       sessionsResponse,
       LAST_UPDATED,
     );
+
+    // Should filter out the txn from closed  session.
+    expect(activeTransactions.length).toBe(2);
 
     expect(activeTransactions.length).toBe(txns.length);
 

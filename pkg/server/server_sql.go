@@ -953,7 +953,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
-		cfg.gossip,
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
