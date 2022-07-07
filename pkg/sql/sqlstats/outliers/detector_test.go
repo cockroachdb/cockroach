@@ -39,17 +39,17 @@ func TestAnyDetector(t *testing.T) {
 
 	t.Run("isOutlier is false without any detectors", func(t *testing.T) {
 		detector := &anyDetector{}
-		require.False(t, detector.isOutlier(&Outlier_Statement{}))
+		require.False(t, detector.isOutlier(&Statement{}))
 	})
 
 	t.Run("isOutlier is false without any concerned detectors", func(t *testing.T) {
 		detector := &anyDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
-		require.False(t, detector.isOutlier(&Outlier_Statement{}))
+		require.False(t, detector.isOutlier(&Statement{}))
 	})
 
 	t.Run("isOutlier is true with at least one concerned detector", func(t *testing.T) {
 		detector := &anyDetector{[]detector{&fakeDetector{stubIsOutlier: true}, &fakeDetector{}}}
-		require.True(t, detector.isOutlier(&Outlier_Statement{}))
+		require.True(t, detector.isOutlier(&Statement{}))
 	})
 
 	t.Run("isOutlier consults all detectors without short-circuiting", func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAnyDetector(t *testing.T) {
 		d1 := &fakeDetector{stubIsOutlier: true}
 		d2 := &fakeDetector{stubIsOutlier: true}
 		detector := &anyDetector{[]detector{d1, d2}}
-		detector.isOutlier(&Outlier_Statement{})
+		detector.isOutlier(&Statement{})
 		require.True(t, d1.isOutlierCalled, "the first detector should be consulted")
 		require.True(t, d2.isOutlierCalled, "the second detector should be consulted")
 	})
@@ -117,9 +117,9 @@ func TestLatencyQuantileDetector(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				d := newLatencyQuantileDetector(st, NewMetrics())
 				for i := 0; i < 1000; i++ {
-					d.isOutlier(&Outlier_Statement{LatencyInSeconds: test.seedLatency.Seconds()})
+					d.isOutlier(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
 				}
-				require.Equal(t, test.isOutlier, d.isOutlier(&Outlier_Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
+				require.Equal(t, test.isOutlier, d.isOutlier(&Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
 			})
 		}
 	})
@@ -172,7 +172,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 				d := newLatencyQuantileDetector(st, metrics)
 				// Show the detector `test.fingerprints` distinct fingerprints.
 				for i := 0; i < test.fingerprints; i++ {
-					d.isOutlier(&Outlier_Statement{
+					d.isOutlier(&Statement{
 						LatencyInSeconds: LatencyQuantileDetectorInterestingThreshold.Get(&st.SV).Seconds(),
 						FingerprintID:    roachpb.StmtFingerprintID(i),
 					})
@@ -191,7 +191,7 @@ func BenchmarkLatencyQuantileDetector(b *testing.B) {
 	LatencyQuantileDetectorEnabled.Override(context.Background(), &settings.SV, true)
 	d := newLatencyQuantileDetector(settings, NewMetrics())
 	for i := 0; i < b.N; i++ {
-		d.isOutlier(&Outlier_Statement{
+		d.isOutlier(&Statement{
 			LatencyInSeconds: random.Float64(),
 		})
 	}
@@ -212,21 +212,21 @@ func TestLatencyThresholdDetector(t *testing.T) {
 
 	t.Run("isOutlier false when disabled", func(t *testing.T) {
 		detector := latencyThresholdDetector{st: cluster.MakeTestingClusterSettings()}
-		require.False(t, detector.isOutlier(&Outlier_Statement{LatencyInSeconds: 1}))
+		require.False(t, detector.isOutlier(&Statement{LatencyInSeconds: 1}))
 	})
 
 	t.Run("isOutlier false when fast enough", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.False(t, detector.isOutlier(&Outlier_Statement{LatencyInSeconds: 0.5}))
+		require.False(t, detector.isOutlier(&Statement{LatencyInSeconds: 0.5}))
 	})
 
 	t.Run("isOutlier true beyond threshold", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.True(t, detector.isOutlier(&Outlier_Statement{LatencyInSeconds: 1}))
+		require.True(t, detector.isOutlier(&Statement{LatencyInSeconds: 1}))
 	})
 }
 
@@ -240,7 +240,7 @@ func (f fakeDetector) enabled() bool {
 	return f.stubEnabled
 }
 
-func (f *fakeDetector) isOutlier(_ *Outlier_Statement) bool {
+func (f *fakeDetector) isOutlier(_ *Statement) bool {
 	f.isOutlierCalled = true
 	return f.stubIsOutlier
 }

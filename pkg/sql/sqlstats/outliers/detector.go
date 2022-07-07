@@ -20,7 +20,7 @@ import (
 
 type detector interface {
 	enabled() bool
-	isOutlier(*Outlier_Statement) bool
+	isOutlier(*Statement) bool
 }
 
 var _ detector = &anyDetector{}
@@ -40,7 +40,7 @@ func (a anyDetector) enabled() bool {
 	return false
 }
 
-func (a anyDetector) isOutlier(statement *Outlier_Statement) bool {
+func (a anyDetector) isOutlier(statement *Statement) bool {
 	// Because some detectors may need to observe all statements to build up
 	// their baseline sense of what "normal" is, we avoid short-circuiting.
 	result := false
@@ -68,7 +68,7 @@ func (d latencyQuantileDetector) enabled() bool {
 	return LatencyQuantileDetectorEnabled.Get(&d.settings.SV)
 }
 
-func (d *latencyQuantileDetector) isOutlier(stmt *Outlier_Statement) (decision bool) {
+func (d *latencyQuantileDetector) isOutlier(stmt *Statement) (decision bool) {
 	if !d.enabled() {
 		return false
 	}
@@ -86,7 +86,7 @@ func (d *latencyQuantileDetector) isOutlier(stmt *Outlier_Statement) (decision b
 }
 
 func (d *latencyQuantileDetector) withFingerprintLatencySummary(
-	stmt *Outlier_Statement, consumer func(latencySummary *quantile.Stream),
+	stmt *Statement, consumer func(latencySummary *quantile.Stream),
 ) {
 	var latencySummary *quantile.Stream
 
@@ -138,6 +138,6 @@ func (l latencyThresholdDetector) enabled() bool {
 	return LatencyThreshold.Get(&l.st.SV) > 0
 }
 
-func (l latencyThresholdDetector) isOutlier(s *Outlier_Statement) bool {
+func (l latencyThresholdDetector) isOutlier(s *Statement) bool {
 	return l.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&l.st.SV).Seconds()
 }

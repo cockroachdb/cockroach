@@ -14,23 +14,28 @@ option go_package = "outliers";
 
 import "gogoproto/gogo.proto";
 
+message Session {
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+}
+
+message Transaction {
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+}
+
+message Statement {
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+  uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+  double latency_in_seconds = 3;
+}
+
 message Outlier {
-  message Session {
-    bytes id = 1 [(gogoproto.customname) = "ID"];
-  }
-
-  message Transaction {
-    bytes id = 1 [(gogoproto.customname) = "ID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
-  }
-
-  message Statement {
-    bytes id = 1 [(gogoproto.customname) = "ID"];
-    uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
-    double latency_in_seconds = 3;
-  }
-
   Session session = 1;
   Transaction transaction = 2;
   Statement statement = 3;
