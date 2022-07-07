@@ -268,3 +268,50 @@ user testuser
 statement ok
 ALTER DATABASE repartition_privs ADD REGION "ap-southeast-2";
 ALTER DATABASE repartition_privs DROP REGION "us-east-1"
+
+subtest revalidate_privs
+
+user root
+
+statement ok
+CREATE DATABASE revalidate_privs PRIMARY REGION "ca-central-1" REGIONS "us-east-1"
+
+statement ok
+CREATE TABLE revalidate_privs.rbr () LOCALITY REGIONAL BY ROW
+
+user testuser
+
+statement ok
+USE revalidate_privs
+
+# Check that revalidate_unique_constraint* builtins respect privileges.
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraints_in_all_tables()
+
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraints_in_table('revalidate_privs.rbr')
+
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraint('revalidate_privs.rbr', 'rbr_pkey')
+
+user root
+
+statement ok
+GRANT SELECT ON revalidate_privs.rbr TO testuser
+
+user testuser
+
+query T
+SELECT crdb_internal.revalidate_unique_constraints_in_all_tables()
+----
+·
+
+query T
+SELECT crdb_internal.revalidate_unique_constraints_in_table('repartition_privs.rbr')
+----
+·
+
+query T
+SELECT crdb_internal.revalidate_unique_constraint('repartition_privs.rbr', 'rbr_pkey')
+----
+·
