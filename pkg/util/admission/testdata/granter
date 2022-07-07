@@ -778,3 +778,16 @@ cpu-load runnable=0 procs=2 clamp=3
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 3 used-soft: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+
+init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1 enabled-soft-slot-granting=false
+----
+GrantCoordinator:
+(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+
+try-get-soft-slots slots=1
+----
+requested: 1, granted: 0
+GrantCoordinator:
+(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
