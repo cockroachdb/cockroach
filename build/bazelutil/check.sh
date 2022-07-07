@@ -6,6 +6,9 @@ set -euo pipefail
 # wrong with the Bazel build. This is run in CI as well as by `dev generate`.
 # Set COCKROACH_BAZEL_CHECK_FAST to skip the longer-running logic in this file.
 
+CONFIGS="-c grep.column=false -c grep.lineNumber=false -c grep.fullName=false"
+GIT_GREP="git $CONFIGS grep"
+
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
@@ -63,7 +66,7 @@ pkg/util/buildutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
 "
 
 if [ -z "${COCKROACH_BAZEL_CHECK_FAST:-}" ]; then
-    git grep 'go:generate stringer' pkg | while read LINE; do
+    $GIT_GREP 'go:generate stringer' pkg | while read LINE; do
         dir=$(dirname $(echo $LINE | cut -d: -f1))
         type=$(echo $LINE | grep -o -- '-type[= ][^ ]*' | sed 's/-type[= ]//g' | awk '{print tolower($0)}')
         build_out=$(bazel query --output=build "//$dir:${type}_string.go")
@@ -79,7 +82,7 @@ fi
 # We exclude stringer and add-leaktest.sh -- the former is already all
 # Bazelfied, and the latter can be safely ignored since we have a lint to check
 # the same thing: https://github.com/cockroachdb/cockroach/issues/64440
-git grep '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leaktest\.sh' | while read LINE; do
+$GIT_GREP '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leaktest\.sh' | while read LINE; do
     if [[ "$EXISTING_GO_GENERATE_COMMENTS" == *"$LINE"* ]]; then
 	# Grandfathered.
 	continue
@@ -93,7 +96,7 @@ git grep '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leaktes
     exit 1
 done
 
-git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
+$GIT_GREP 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
     if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
 	# Grandfathered.
 	continue
@@ -103,7 +106,7 @@ git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | g
     exit 1
 done
 
-git grep '//go:build' pkg | grep crdb_test | while read LINE; do
+$GIT_GREP '//go:build' pkg | grep crdb_test | while read LINE; do
     if [[ "$EXISTING_CRDB_TEST_BUILD_CONSTRAINTS" == *"$LINE"* ]]; then
         # Grandfathered.
         continue
