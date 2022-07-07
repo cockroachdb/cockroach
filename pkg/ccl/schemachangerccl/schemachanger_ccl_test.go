@@ -55,15 +55,16 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 	sctest.EndToEndSideEffects(t, endToEndPath(t), newCluster)
 }
 
-func TestBackupRestore(t *testing.T) {
+func TestBackupRestoreCCL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("ccl", func(t *testing.T) {
-		sctest.Backup(t, endToEndPath(t), newCluster)
-	})
-	t.Run("non-ccl", func(t *testing.T) {
-		sctest.Backup(t, sharedTestdata(t), sctest.SingleNodeCluster)
-	})
+	sctest.Backup(t, endToEndPath(t), newCluster)
+}
+
+func TestBackupRestoreNonCCL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, sharedTestdata(t), sctest.SingleNodeCluster)
 }
 
 func TestRollback(t *testing.T) {
