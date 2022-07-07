@@ -6140,6 +6140,13 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
 				nodeID := int32(tree.MustBeDInt(args[0]))
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
