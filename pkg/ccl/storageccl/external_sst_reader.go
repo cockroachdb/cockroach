@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 )
 
+// RemoteSSTs lets external SSTables get iterated directly in some cases,
+// rather than being downloaded entirely first.
 var remoteSSTs = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulk_ingest.stream_external_ssts.enabled",
@@ -39,32 +41,49 @@ var remoteSSTSuffixCacheSize = settings.RegisterByteSizeSetting(
 	64<<10,
 )
 
-// ExternalSSTReader returns opens an SST in external storage, optionally
-// decrypting with the supplied parameters, and returns iterator over it.
-//
-// ctx is captured and used throughout the life of the returned iterator, until
-// the iterator's Close() method is called.
-func ExternalSSTReader(
-	ctx context.Context,
-	e cloud.ExternalStorage,
-	basename string,
-	encryption *roachpb.FileEncryptionOptions,
-) (storage.SimpleMVCCIterator, error) {
+func getFileWithRetry(
+	ctx context.Context, basename string, e cloud.ExternalStorage,
+) (ioctx.ReadCloserCtx, int64, error) {
 	// Do an initial read of the file, from the beginning, to get the file size as
-	// this is used e.g. to read the trailer.
+	// this is used E.g. to read the trailer.
 	var f ioctx.ReadCloserCtx
 	var sz int64
-
 	const maxAttempts = 3
 	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 		var err error
 		f, sz, err = e.ReadFileAt(ctx, basename, 0)
 		return err
 	}); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	return f, sz, nil
+}
 
-	if !remoteSSTs.Get(&e.Settings().SV) {
+// StoreFile groups a file with its corresponding external storage handler.
+type StoreFile struct {
+	Store    cloud.ExternalStorage
+	FilePath string
+}
+
+// newMemPebbleSSTReader returns a PebbleSSTIterator for in-memory SSTs from
+// external storage, optionally decrypting with the supplied parameters.
+//
+// ctx is captured and used throughout the life of the returned iterator, until
+// the iterator's Close() method is called.
+func newMemPebbleSSTReader(
+	ctx context.Context,
+	storeFiles []StoreFile,
+	encryption *roachpb.FileEncryptionOptions,
+	iterOps storage.IterOptions,
+) (storage.SimpleMVCCIterator, error) {
+
+	inMemorySSTs := make([][]byte, 0, len(storeFiles))
+
+	for _, sf := range storeFiles {
+		f, _, err := getFileWithRetry(ctx, sf.FilePath, sf.Store)
+		if err != nil {
+			return nil, err
+		}
 		content, err := ioctx.ReadAll(ctx, f)
 		f.Close(ctx)
 		if err != nil {
@@ -76,44 +95,74 @@ func ExternalSSTReader(
 				return nil, err
 			}
 		}
-		return storage.NewMemSSTIterator(content, false)
+		inMemorySSTs = append(inMemorySSTs, content)
 	}
+	return storage.NewPebbleMultiMemSSTIterator(inMemorySSTs, false, iterOps)
+}
 
-	raw := &sstReader{
-		ctx:  ctx,
-		sz:   sizeStat(sz),
-		body: f,
-		openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
-			reader, _, err := e.ReadFileAt(ctx, basename, offset)
-			return reader, err
-		},
+// ExternalSSTReader returns a PebbleSSTIterator for the SSTs in external storage,
+// optionally decrypting with the supplied parameters.
+//
+// Note: the order of SSTs matters if multiple SSTs contain the exact same
+// Pebble key (that is, the same key/timestamp combination). In this case, the
+// PebbleIterator will only surface the key in the first SST that contains it.
+//
+// ctx is captured and used throughout the life of the returned iterator, until
+// the iterator's Close() method is called.
+func ExternalSSTReader(
+	ctx context.Context,
+	storeFiles []StoreFile,
+	encryption *roachpb.FileEncryptionOptions,
+	iterOpts storage.IterOptions,
+) (storage.SimpleMVCCIterator, error) {
+
+	if !remoteSSTs.Get(&storeFiles[0].Store.Settings().SV) {
+		return newMemPebbleSSTReader(ctx, storeFiles, encryption, iterOpts)
 	}
+	remoteCacheSize := remoteSSTSuffixCacheSize.Get(&storeFiles[0].Store.Settings().SV)
+	readers := make([]sstable.ReadableFile, 0, len(storeFiles))
 
-	var reader sstable.ReadableFile = raw
+	for _, sf := range storeFiles {
+		// prevent capturing the loop variables by reference when defining openAt below.
+		filePath := sf.FilePath
+		store := sf.Store
 
-	if encryption != nil {
-		r, err := decryptingReader(raw, encryption.Key)
+		f, sz, err := getFileWithRetry(ctx, filePath, store)
 		if err != nil {
-			f.Close(ctx)
 			return nil, err
 		}
-		reader = r
-	} else {
-		// We only explicitly buffer the suffix of the file when not decrypting as
-		// the decrypting reader has its own internal block buffer.
-		if err := raw.readAndCacheSuffix(remoteSSTSuffixCacheSize.Get(&e.Settings().SV)); err != nil {
-			f.Close(ctx)
-			return nil, err
+
+		raw := &sstReader{
+			ctx:  ctx,
+			sz:   sizeStat(sz),
+			body: f,
+			openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
+				reader, _, err := store.ReadFileAt(ctx, filePath, offset)
+				return reader, err
+			},
 		}
-	}
 
-	iter, err := storage.NewSSTIterator(reader)
-	if err != nil {
-		reader.Close()
-		return nil, err
-	}
+		var reader sstable.ReadableFile
 
-	return iter, nil
+		if encryption != nil {
+			r, err := decryptingReader(raw, encryption.Key)
+			if err != nil {
+				f.Close(ctx)
+				return nil, err
+			}
+			reader = r
+		} else {
+			// We only explicitly buffer the suffix of the file when not decrypting as
+			// the decrypting reader has its own internal block buffer.
+			if err := raw.readAndCacheSuffix(remoteCacheSize); err != nil {
+				f.Close(ctx)
+				return nil, err
+			}
+			reader = raw
+		}
+		readers = append(readers, reader)
+	}
+	return storage.NewPebbleSSTIterator(readers, iterOpts)
 }
 
 type sstReader struct {
