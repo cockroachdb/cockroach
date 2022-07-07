@@ -591,7 +591,7 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	log.Infof(sip.Ctx, "got checkpoint %v", event.GetResolved())
+	log.VInfof(sip.Ctx, 3, "got checkpoint %v", event.GetResolved())
 	resolvedTimePtr := event.GetResolved()
 	if resolvedTimePtr == nil {
 		return errors.New("checkpoint event expected to have a resolved timestamp")

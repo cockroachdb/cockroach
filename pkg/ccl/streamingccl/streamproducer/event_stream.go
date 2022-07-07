@@ -223,9 +223,7 @@ func (s *eventStream) onValue(ctx context.Context, value *roachpb.RangeFeedValue
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{Val: value}:
-		if log.V(1) {
-			log.Infof(ctx, "onValue: %s@%s", value.Key, value.Value.Timestamp)
-		}
+		log.VInfof(ctx, 1, "onValue: %s@%s", value.Key, value.Value.Timestamp)
 	}
 }
 
@@ -233,9 +231,7 @@ func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *roachpb.Rang
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{Checkpoint: checkpoint}:
-		if log.V(1) {
-			log.Infof(ctx, "onCheckpoint: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
-		}
+		log.VInfof(ctx, 1, "onCheckpoint: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 	}
 }
 
@@ -248,9 +244,7 @@ func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) erro
 	case <-ctx.Done():
 		return ctx.Err()
 	case s.eventsCh <- roachpb.RangeFeedEvent{Checkpoint: &checkpoint}:
-		if log.V(1) {
-			log.Infof(ctx, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
-		}
+		log.VInfof(ctx, 1, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 		return nil
 	}
 }
@@ -259,9 +253,7 @@ func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTab
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{SST: sst}:
-		if log.V(1) {
-			log.Infof(ctx, "onSSTable: %s@%s", sst.Span, sst.WriteTS)
-		}
+		log.VInfof(ctx, 1, "onSSTable: %s@%s", sst.Span, sst.WriteTS)
 	}
 }
 
