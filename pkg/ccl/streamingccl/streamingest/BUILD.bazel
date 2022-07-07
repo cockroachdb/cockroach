@@ -97,7 +97,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
-	      "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/eval",

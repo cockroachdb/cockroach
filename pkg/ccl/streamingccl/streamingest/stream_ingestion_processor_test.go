@@ -535,14 +535,11 @@ func TestRandomClientGeneration(t *testing.T) {
 		var resolvedSpans jobspb.ResolvedSpans
 		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpans))
 
+		latestResolvedTimestamp := hlc.MinTimestamp
 		for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
-			if _, ok := partitionSpanToTableID[resolvedSpan.Span.String()]; !ok {
-				t.Fatalf("expected resolved span %v to be in one of the supplied partition"+
-					" addresses %v", resolvedSpan.Span, partitionSpanToTableID)
+			if latestResolvedTimestamp.Less(resolvedSpan.Timestamp) {
+				latestResolvedTimestamp = resolvedSpan.Timestamp
 			}
-
-			// All resolved timestamp events should be greater than the start time.
-			require.Greater(t, resolvedSpan.Timestamp.WallTime, startTime.WallTime)
 
 			// Track the max resolved timestamp per partition.
 			if ts, ok := maxResolvedTimestampPerPartition[resolvedSpan.Span.String()]; !ok ||
@@ -551,6 +548,9 @@ func TestRandomClientGeneration(t *testing.T) {
 			}
 			numResolvedEvents++
 		}
+
+		// We must have at least some progress across the frontier
+		require.Greater(t, latestResolvedTimestamp.WallTime, startTime.WallTime)
 	}
 
 	// Ensure that no errors were reported to the validator.
@@ -670,14 +670,24 @@ func getStreamIngestionProcessor(
 	return sip, out, err
 }
 
+func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
+	minTS := hlc.MaxTimestamp
+	for _, rs := range resolvedSpans {
+		if rs.Timestamp.Less(minTS) {
+			minTS = rs.Timestamp
+		}
+	}
+	return minTS
+}
+
 func registerValidatorWithClient(
 	validator *streamClientValidator,
 ) func(event streamingccl.Event, spec streamclient.SubscriptionToken) {
 	return func(event streamingccl.Event, spec streamclient.SubscriptionToken) {
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
-			// resolvedTS := event.GetResolvedSpans()
-			err := validator.noteResolved(string(spec), hlc.Timestamp{})
+			resolvedTS := resolvedSpansMinTS(*event.GetResolvedSpans())
+			err := validator.noteResolved(string(spec), resolvedTS)
 			if err != nil {
 				panic(err.Error())
 			}
