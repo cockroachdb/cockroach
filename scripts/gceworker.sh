@@ -6,7 +6,7 @@ cd "$(dirname "${0}")/.."
 source build/shlib.sh
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
-export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
+export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-d}}
 NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
 FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 
@@ -126,6 +126,12 @@ case "${cmd}" in
     from="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
     shift
     gcloud compute scp --recurse "${from}" "$@"
+    ;;
+    put)
+    to="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
+    shift
+    echo "gcloud compute scp --recurse ${@} ${to}"
+    gcloud compute scp --recurse "$@" "${to}" 
     ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
