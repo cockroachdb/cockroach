@@ -577,13 +577,19 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
-		RemoteClocks: newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
 		rpcCompression:   enableRPCCompression,
 		MasterCtx:        masterCtx,
 		metrics:          makeMetrics(),
 		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
 	}
+
+	// We only monitor remote clocks in server-to-server connections.
+	// CLI commands are exempted.
+	if !opts.ClientOnly {
+		rpcCtx.RemoteClocks = newRemoteClockMonitor(
+			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval())
+	}
+
 	if id := opts.Knobs.StorageClusterID; id != nil {
 		rpcCtx.StorageClusterID.Set(masterCtx, *id)
 	}
@@ -1764,25 +1770,33 @@ func (rpcCtx *Context) runHeartbeat(
 
 			if err == nil {
 				everSucceeded = true
-				receiveTime := rpcCtx.Clock.Now()
 
-				// Only update the clock offset measurement if we actually got a
-				// successful response from the server.
-				pingDuration := receiveTime.Sub(sendTime)
-				if pingDuration > maximumPingDurationMult*rpcCtx.MaxOffset {
-					request.Offset.Reset()
-				} else {
-					// Offset and error are measured using the remote clock reading
-					// technique described in
-					// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-					// However, we assume that drift and min message delay are 0, for
-					// now.
-					request.Offset.MeasuredAt = receiveTime.UnixNano()
-					request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
-					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
-					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+				// Only a server connecting to another server needs to check
+				// clock offsets. A CLI command does not need to update its
+				// local HLC, nor does it care that strictly about
+				// client-server latency, nor does it need to track the
+				// offsets.
+				if rpcCtx.RemoteClocks != nil {
+					receiveTime := rpcCtx.Clock.Now()
+
+					// Only update the clock offset measurement if we actually got a
+					// successful response from the server.
+					pingDuration := receiveTime.Sub(sendTime)
+					if pingDuration > maximumPingDurationMult*rpcCtx.MaxOffset {
+						request.Offset.Reset()
+					} else {
+						// Offset and error are measured using the remote clock reading
+						// technique described in
+						// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+						// However, we assume that drift and min message delay are 0, for
+						// now.
+						request.Offset.MeasuredAt = receiveTime.UnixNano()
+						request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+						remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
+						request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+					}
+					rpcCtx.RemoteClocks.UpdateOffset(ctx, target, request.Offset, pingDuration)
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(ctx, target, request.Offset, pingDuration)
 
 				if cb := rpcCtx.HeartbeatCB; cb != nil {
 					cb()
