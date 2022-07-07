@@ -151,6 +151,9 @@ type Memo struct {
 	nullOrderedLast                        bool
 	costScansWithDefaultColSize            bool
 	allowUnconstrainedNonCoveringIndexScan bool
+	testingOptimizerRandomSeed             int64
+	testingOptimizerCostPerturbation       float64
+	testingOptimizerDisableRuleProbability float64
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -197,6 +200,9 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		nullOrderedLast:                        evalCtx.SessionData().NullOrderedLast,
 		costScansWithDefaultColSize:            evalCtx.SessionData().CostScansWithDefaultColSize,
 		allowUnconstrainedNonCoveringIndexScan: evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
+		testingOptimizerRandomSeed:             evalCtx.SessionData().TestingOptimizerRandomSeed,
+		testingOptimizerCostPerturbation:       evalCtx.SessionData().TestingOptimizerCostPerturbation,
+		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -326,7 +332,10 @@ func (m *Memo) IsStale(
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
 		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
-		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled {
+		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled ||
+		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
+		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
+		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability {
 		return true, nil
 	}
 
