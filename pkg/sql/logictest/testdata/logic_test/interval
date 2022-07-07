@@ -713,3 +713,32 @@ millisecond   1111 years 4 mons 1 day 01:01:01.001
 milliseconds  1111 years 4 mons 1 day 01:01:01.001
 microsecond   1111 years 4 mons 1 day 01:01:01.001001
 microseconds  1111 years 4 mons 1 day 01:01:01.001001
+
+# Regression test for #83756. Interval encoding overflow should be detected
+# correctly.
+statement ok
+CREATE TABLE t83756 (i INTERVAL PRIMARY KEY);
+
+# These intervals do not overflow.
+statement ok
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854775');
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854775');
+
+# These intervals overflow.
+# TODO(#84078): These intervals overflow due to limitations of our INTERVAL key
+# encoding. All values in the range [-178000000 years, 178000000 years] should
+# be allowed.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854776');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854776');
+
+# These intervals overflow when multiplying the days and the number of
+# nanoseconds in a day, even though the total nanosecond calculation would not
+# overflow.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-3558 months 106752 days');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('3558 months -106752 days');
