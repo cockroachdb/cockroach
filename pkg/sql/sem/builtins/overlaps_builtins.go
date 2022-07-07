@@ -58,8 +58,7 @@ func initOverlapsBuiltins() {
 var overlapsBuiltins = map[string]builtinDefinition{
 	"overlaps": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryDateAndTime,
-			NullableArgs: false,
+			Category: builtinconstants.CategoryDateAndTime,
 		},
 		makeOverlapsOverloads()...,
 	),

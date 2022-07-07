@@ -48,6 +48,7 @@ var SQLPasses = []reduce.Pass{
 	removeCreateNullDefs,
 	removeIndexCols,
 	removeIndexPredicate,
+	removeIndexStoringCols,
 	removeWindowPartitions,
 	removeDBSchema,
 	removeFroms,
@@ -496,31 +497,31 @@ var (
 		switch node := node.(type) {
 		case *tree.Delete:
 			n := len(node.OrderBy)
-			if xfi < len(node.OrderBy) {
+			if xfi < n {
 				node.OrderBy = append(node.OrderBy[:xfi], node.OrderBy[xfi+1:]...)
 			}
 			return n
 		case *tree.FuncExpr:
 			n := len(node.OrderBy)
-			if xfi < len(node.OrderBy) {
+			if xfi < n {
 				node.OrderBy = append(node.OrderBy[:xfi], node.OrderBy[xfi+1:]...)
 			}
 			return n
 		case *tree.Select:
 			n := len(node.OrderBy)
-			if xfi < len(node.OrderBy) {
+			if xfi < n {
 				node.OrderBy = append(node.OrderBy[:xfi], node.OrderBy[xfi+1:]...)
 			}
 			return n
 		case *tree.Update:
 			n := len(node.OrderBy)
-			if xfi < len(node.OrderBy) {
+			if xfi < n {
 				node.OrderBy = append(node.OrderBy[:xfi], node.OrderBy[xfi+1:]...)
 			}
 			return n
 		case *tree.WindowDef:
 			n := len(node.OrderBy)
-			if xfi < len(node.OrderBy) {
+			if xfi < n {
 				node.OrderBy = append(node.OrderBy[:xfi], node.OrderBy[xfi+1:]...)
 			}
 			return n
@@ -544,7 +545,7 @@ var (
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.GroupBy)
-			if xfi < len(node.GroupBy) {
+			if xfi < n {
 				node.GroupBy = append(node.GroupBy[:xfi], node.GroupBy[xfi+1:]...)
 			}
 			return n
@@ -568,7 +569,7 @@ var (
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.Exprs)
-			if xfi < len(node.Exprs) {
+			if xfi < n {
 				node.Exprs = append(node.Exprs[:xfi], node.Exprs[xfi+1:]...)
 			}
 			return n
@@ -590,7 +591,7 @@ var (
 				break
 			}
 			n := len(clause.Exprs)
-			if xfi < len(clause.Exprs) {
+			if xfi < n {
 				node.Name.Cols = append(node.Name.Cols[:xfi], node.Name.Cols[xfi+1:]...)
 				clause.Exprs = append(clause.Exprs[:xfi], clause.Exprs[xfi+1:]...)
 			}
@@ -688,7 +689,7 @@ var (
 				break
 			}
 			n := len(clause.Exprs)
-			if xfi < len(clause.Exprs) {
+			if xfi < n {
 				node.As.Cols = append(node.As.Cols[:xfi], node.As.Cols[xfi+1:]...)
 				clause.Exprs = append(clause.Exprs[:xfi], clause.Exprs[xfi+1:]...)
 			}
@@ -747,7 +748,7 @@ var (
 		switch node := node.(type) {
 		case *tree.CreateTable:
 			n := len(node.Defs)
-			if xfi < len(node.Defs) {
+			if xfi < n {
 				node.Defs = append(node.Defs[:xfi], node.Defs[xfi+1:]...)
 			}
 			return n
@@ -785,7 +786,7 @@ var (
 	removeIndexCols = walkSQL("remove INDEX cols", func(xfi int, node interface{}) int {
 		removeCol := func(idx *tree.IndexTableDef) int {
 			n := len(idx.Columns)
-			if xfi < len(idx.Columns) {
+			if xfi < n {
 				idx.Columns = append(idx.Columns[:xfi], idx.Columns[xfi+1:]...)
 			}
 			return n
@@ -811,11 +812,27 @@ var (
 		}
 		return 0
 	})
+	removeIndexStoringCols = walkSQL("remove INDEX STORING cols", func(xfi int, node interface{}) int {
+		removeStoringCol := func(idx *tree.IndexTableDef) int {
+			n := len(idx.Storing)
+			if xfi < n {
+				idx.Storing = append(idx.Storing[:xfi], idx.Storing[xfi+1:]...)
+			}
+			return n
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removeStoringCol(node)
+		case *tree.UniqueConstraintTableDef:
+			return removeStoringCol(&node.IndexTableDef)
+		}
+		return 0
+	})
 	removeWindowPartitions = walkSQL("remove WINDOW partitions", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.WindowDef:
 			n := len(node.Partitions)
-			if xfi < len(node.Partitions) {
+			if xfi < n {
 				node.Partitions = append(node.Partitions[:xfi], node.Partitions[xfi+1:]...)
 			}
 			return n
@@ -826,7 +843,7 @@ var (
 		switch node := node.(type) {
 		case *tree.ValuesClause:
 			n := len(node.Rows)
-			if xfi < len(node.Rows) {
+			if xfi < n {
 				node.Rows = append(node.Rows[:xfi], node.Rows[xfi+1:]...)
 			}
 			return n
@@ -837,7 +854,7 @@ var (
 		switch node := node.(type) {
 		case *tree.With:
 			n := len(node.CTEList)
-			if xfi < len(node.CTEList) {
+			if xfi < n {
 				node.CTEList = append(node.CTEList[:xfi], node.CTEList[xfi+1:]...)
 			}
 			return n
@@ -861,7 +878,7 @@ var (
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.From.Tables)
-			if xfi < len(node.From.Tables) {
+			if xfi < n {
 				node.From.Tables = append(node.From.Tables[:xfi], node.From.Tables[xfi+1:]...)
 			}
 			return n
@@ -1024,7 +1041,7 @@ var (
 			return 1, nil
 		case *tree.With:
 			n := len(node.CTEList)
-			if xfi < len(node.CTEList) {
+			if xfi < n {
 				return n, node.CTEList[xfi].Stmt
 			}
 			return n, nil
