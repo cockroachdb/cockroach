@@ -415,6 +415,8 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
+	// SelectDelegateSnapshotSender returns a replica to send delegated snapshots.
+	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) *roachpb.ReplicaDescriptor
 
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)

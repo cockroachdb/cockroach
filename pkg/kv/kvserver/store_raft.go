@@ -171,6 +171,19 @@ func (s *Store) HandleDelegatedSnapshot(
 	sp := tracing.SpanFromContext(ctx)
 	// Pass the request to the sender replica.
 	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
+		// Send a DelegationResponse_ERROR if the sender has rejected the
+		// request during handshake.
+		if errors.Is(err, errSenderRejectedDelegateSnapshotReq) {
+			return stream.Send(
+				&kvserverpb.DelegateSnapshotResponse{
+					DelegationResponse: &kvserverpb.DelegateSnapshotResponse_DelegationResponse{
+						Status:  kvserverpb.DelegateSnapshotResponse_DelegationResponse_ERROR,
+						Message: err.Error(),
+					},
+				},
+			)
+		}
+		// If an error occurred during snapshot sending, send an error response.
 		return stream.Send(
 			&kvserverpb.DelegateSnapshotResponse{
 				SnapResponse: &kvserverpb.SnapshotResponse{
