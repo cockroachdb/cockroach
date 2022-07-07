@@ -1169,6 +1169,7 @@ message GetTraceResponse {
   // return the recording already serialized as formatted string for easy
   // consumption in the browser.
   string serialized_recording = 4;
+  string operation = 5;
 }
 
 // TracingSnapshot represents a snapshot of the active spans registry, including

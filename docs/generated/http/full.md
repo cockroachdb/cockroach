@@ -7085,6 +7085,7 @@ GetTrace represents the response to the GetTrace RPC.
 | trace_id | [uint64](#cockroach.server.serverpb.GetTraceResponse-uint64) |  |  | [reserved](#support-status) |
 | still_exists | [bool](#cockroach.server.serverpb.GetTraceResponse-bool) |  | still_exists is set if any spans from this trace are currently present in the active spans registry.<br><br>If snapshot_id is 0, still_exists is always set. | [reserved](#support-status) |
 | serialized_recording | [string](#cockroach.server.serverpb.GetTraceResponse-string) |  | serialized_recording represents the serialization of trace recording. We return the recording already serialized as formatted string for easy consumption in the browser. | [reserved](#support-status) |
+| operation | [string](#cockroach.server.serverpb.GetTraceResponse-string) |  |  | [reserved](#support-status) |
 
 
 

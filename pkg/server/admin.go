@@ -3706,11 +3706,16 @@ func (s *adminServer) GetTrace(
 		return nil, errors.Errorf("Trace %d not found.", traceID)
 	}
 
+	operation := ""
+	if len(recording) > 0 {
+		operation = recording[0].Operation
+	}
 	return &serverpb.GetTraceResponse{
 		SnapshotID:          snapID,
 		TraceID:             traceID,
 		StillExists:         traceStillExists,
 		SerializedRecording: recording.String(),
+		Operation:           operation,
 	}, nil
 }
 
