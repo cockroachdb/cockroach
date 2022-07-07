@@ -53,6 +53,7 @@ export type ActiveTransactionsViewStateProps = {
   sessionsError: Error | null;
   filters: ActiveTransactionFilters;
   sortSetting: SortSetting;
+  internalAppNamePrefix: string;
 };
 
 export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
@@ -70,6 +71,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   transactions,
   sessionsError,
   filters,
+  internalAppNamePrefix,
 }: ActiveTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -152,12 +154,16 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
 
-  const apps = getAppsFromActiveTransactions(transactions);
+  const apps = getAppsFromActiveTransactions(
+    transactions,
+    internalAppNamePrefix,
+  );
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredTransactions = filterActiveTransactions(
     transactions,
     filters,
+    internalAppNamePrefix,
     search,
   );
   return (
