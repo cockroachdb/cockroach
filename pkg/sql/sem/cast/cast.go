@@ -324,7 +324,7 @@ func LookupCastVolatility(from, to *types.T) (_ volatility.V, ok bool) {
 		if len(fromTypes) != len(toTypes) {
 			return 0, false
 		}
-		maxVolatility := volatility.LeakProof
+		maxVolatility := volatility.Leakproof
 		for i := range fromTypes {
 			v, lookupOk := LookupCastVolatility(fromTypes[i], toTypes[i])
 			if !lookupOk {

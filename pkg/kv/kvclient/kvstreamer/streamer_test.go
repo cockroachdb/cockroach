@@ -47,6 +47,7 @@ func getStreamer(
 		limitBytes,
 		acc,
 		nil, /* batchRequestsIssued */
+		lock.None,
 	)
 }
 
@@ -98,6 +99,7 @@ func TestStreamerLimitations(t *testing.T) {
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
 				nil,           /* batchRequestsIssued */
+				lock.None,
 			)
 		})
 	})
