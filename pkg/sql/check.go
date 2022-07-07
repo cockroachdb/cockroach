@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -382,7 +383,9 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 	}
 
 	for _, tableDesc := range tableDescs {
-		if err = RevalidateUniqueConstraintsInTable(ctx, p.Txn(), p.ExecCfg().InternalExecutor, tableDesc); err != nil {
+		if err = RevalidateUniqueConstraintsInTable(
+			ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+		); err != nil {
 			return err
 		}
 	}
@@ -403,7 +406,9 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 	if err != nil {
 		return err
 	}
-	return RevalidateUniqueConstraintsInTable(ctx, p.Txn(), p.ExecCfg().InternalExecutor, tableDesc)
+	return RevalidateUniqueConstraintsInTable(
+		ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+	)
 }
 
 // RevalidateUniqueConstraint verifies that the given unique constraint on the
@@ -439,6 +444,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.GetPredicate(),
 					p.ExecCfg().InternalExecutor,
 					p.Txn(),
+					p.User(),
 					true, /* preExisting */
 				)
 			}
@@ -458,6 +464,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.Predicate,
 				p.ExecCfg().InternalExecutor,
 				p.Txn(),
+				p.User(),
 				true, /* preExisting */
 			)
 		}
@@ -491,7 +498,11 @@ func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 // enforced by an index. This includes implicitly partitioned UNIQUE indexes
 // and UNIQUE WITHOUT INDEX constraints.
 func RevalidateUniqueConstraintsInTable(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, tableDesc catalog.TableDescriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	user security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	tableDesc catalog.TableDescriptor,
 ) error {
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
@@ -504,6 +515,7 @@ func RevalidateUniqueConstraintsInTable(
 				index.GetPredicate(),
 				ie,
 				txn,
+				user,
 				true, /* preExisting */
 			); err != nil {
 				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
@@ -523,6 +535,7 @@ func RevalidateUniqueConstraintsInTable(
 				uc.Predicate,
 				ie,
 				txn,
+				user,
 				true, /* preExisting */
 			); err != nil {
 				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
@@ -551,6 +564,7 @@ func validateUniqueConstraint(
 	pred string,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
+	user security.SQLUsername,
 	preExisting bool,
 ) error {
 	query, colNames, err := duplicateRowQuery(
@@ -567,7 +581,9 @@ func validateUniqueConstraint(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate unique constraint", txn, query)
+	sessionDataOverride := sessiondata.NoSessionDataOverride
+	sessionDataOverride.User = user
+	values, err := ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
 	if err != nil {
 		return err
 	}
