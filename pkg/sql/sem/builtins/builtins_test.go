@@ -300,6 +300,35 @@ func TestEscapeFormatRandom(t *testing.T) {
 	}
 }
 
+func TestFormatWithWeirdFormatStrings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	specialFormatChars := []byte{'%', '$', '-', '*', '0', '1', 's', 'I', 'L'}
+	numSpecial := len(specialFormatChars)
+	specialFreq := 0.2
+	evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	datums := make(tree.Datums, 10)
+	for i := range datums {
+		datums[i] = tree.NewDInt(tree.DInt(i))
+	}
+	for i := 0; i < 1000; i++ {
+		b := make([]byte, rand.Intn(100))
+		for j := 0; j < len(b); j++ {
+			if rand.Float64() < specialFreq {
+				b[j] = specialFormatChars[rand.Intn(numSpecial)]
+			} else {
+				b[j] = byte(rand.Intn(256))
+			}
+		}
+		str := string(b)
+		// Mostly just making sure no panics
+		_, err := sqlFormat(evalContext, str, datums...)
+		if err != nil {
+			require.Regexp(t, `position|width|not enough arguments|unrecognized verb`, err.Error(),
+				"input string was %s", str)
+		}
+	}
+}
+
 func TestLPadRPad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {

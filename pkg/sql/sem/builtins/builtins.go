@@ -228,6 +228,8 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
+	"format": formatImpls,
+
 	"octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
@@ -7053,6 +7055,27 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 	}
 	return b
 }
+
+var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+	tree.Overload{
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			if args[0] == tree.DNull {
+				return tree.DNull, nil
+			}
+			formatStr := tree.MustBeDString(args[0])
+			formatArgs := args[1:]
+			str, err := sqlFormat(ctx, string(formatStr), formatArgs...)
+			if err != nil {
+				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error parsing format string")
+			}
+			return tree.NewDString(str), nil
+		},
+		Info:         "Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.",
+		Volatility:   volatility.Stable,
+		NullableArgs: true,
+	})
 
 var substringImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
