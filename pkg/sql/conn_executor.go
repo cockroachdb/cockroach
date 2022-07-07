@@ -1112,10 +1112,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}); err != nil {
-		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
-	}
-
+	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
 		err := cleanupSessionTempObjects(
@@ -1658,7 +1655,7 @@ func (ns *prepStmtNamespace) resetTo(
 // finishes execution (either commits, rollbacks or restarts). Based on the
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -1700,8 +1697,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
 	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
 	// savepoints, or it's a rewind which also deals with them.
-
-	return nil
 }
 
 // Ctx returns the transaction's ctx, if we're inside a transaction, or the
@@ -2394,8 +2389,8 @@ func (ex *connExecutor) execCopyIn(
 		}
 	} else {
 		txnOpt = copyTxnOpt{
-			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
+			resetExtraTxnState: func(ctx context.Context) {
+				ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
 			},
 		}
 	}
@@ -2986,9 +2981,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
-			return advanceInfo{}, err
-		}
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
