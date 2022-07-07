@@ -1121,7 +1121,7 @@ func (*importResumer) checkVirtualConstraints(
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := execCfg.InternalExecutorFactory(ctx, sql.NewFakeSessionData(execCfg.SV()))
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, ie, desc)
+				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, username.NodeUserName(), ie, desc)
 			})
 		}); err != nil {
 			return err
