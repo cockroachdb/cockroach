@@ -6211,9 +6211,9 @@ CREATE TABLE crdb_internal.node_execution_outliers (
 			ctx context.Context, o *outliers.Outlier,
 		) {
 			err = errors.CombineErrors(err, addRow(
-				tree.NewDString(hex.EncodeToString(o.Session.ID)),
-				tree.NewDUuid(tree.DUuid{UUID: *o.Transaction.ID}),
-				tree.NewDString(hex.EncodeToString(o.Statement.ID)),
+				tree.NewDString(hex.EncodeToString(o.Session.ID.GetBytes())),
+				tree.NewDUuid(tree.DUuid{UUID: o.Transaction.ID}),
+				tree.NewDString(hex.EncodeToString(o.Statement.ID.GetBytes())),
 				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(o.Statement.FingerprintID)))),
 			))
 		})

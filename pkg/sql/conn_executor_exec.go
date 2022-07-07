@@ -2180,10 +2180,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
 
-	// Transaction received time is the time at which the statement that prompted
-	// the creation of this transaction was received.
-	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionReceived,
-		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionStarted, txnStart)
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction, timeutil.Now())
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction,
 		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction))
@@ -2275,6 +2272,10 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
+	}
+
+	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
+		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
 	}
 
 	return ex.statsCollector.RecordTransaction(

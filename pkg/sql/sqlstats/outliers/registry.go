@@ -13,13 +13,10 @@ package outliers
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // maxCacheSize is the number of detected outliers we will retain in memory.
@@ -40,7 +37,7 @@ type registry struct {
 	// before enabling the outliers subsystem by default.
 	mu struct {
 		syncutil.RWMutex
-		statements map[clusterunique.ID][]*Outlier_Statement
+		statements map[clusterunique.ID][]*Statement
 		outliers   *cache.UnorderedCache
 	}
 }
@@ -59,30 +56,21 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 			latencyThresholdDetector{st: st},
 			newLatencyQuantileDetector(st, metrics),
 		}}}
-	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
+	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
 }
 
-func (r *registry) ObserveStatement(
-	sessionID clusterunique.ID,
-	statementID clusterunique.ID,
-	statementFingerprintID roachpb.StmtFingerprintID,
-	latencyInSeconds float64,
-) {
+func (r *registry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], &Outlier_Statement{
-		ID:               statementID.GetBytes(),
-		FingerprintID:    statementFingerprintID,
-		LatencyInSeconds: latencyInSeconds,
-	})
+	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], statement)
 }
 
-func (r *registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUID) {
+func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
 	}
@@ -100,9 +88,9 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUI
 
 	if hasOutlier {
 		for _, s := range statements {
-			r.mu.outliers.Add(uint128.FromBytes(s.ID), &Outlier{
-				Session:     &Outlier_Session{ID: sessionID.GetBytes()},
-				Transaction: &Outlier_Transaction{ID: &txnID},
+			r.mu.outliers.Add(s.ID, &Outlier{
+				Session:     &Session{ID: sessionID},
+				Transaction: transaction,
 				Statement:   s,
 			})
 		}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -191,6 +192,9 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 func revertToCutoverTimestamp(
 	ctx context.Context, execCtx interface{}, ingestionJobID jobspb.JobID,
 ) error {
+	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
+	defer span.Finish()
+
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
 	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, ingestionJobID)
