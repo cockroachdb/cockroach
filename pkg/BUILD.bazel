@@ -462,6 +462,7 @@ ALL_TESTS = [
     "//pkg/util/binfetcher:binfetcher_test",
     "//pkg/util/bitarray:bitarray_test",
     "//pkg/util/buildutil:buildutil_test",
+    "//pkg/util/bulk:bulk_test",
     "//pkg/util/cache:cache_test",
     "//pkg/util/caller:caller_test",
     "//pkg/util/cgroups:cgroups_test",
