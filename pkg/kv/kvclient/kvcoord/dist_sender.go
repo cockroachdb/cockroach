@@ -1339,7 +1339,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// TODO(yuzefovich): refactor the DistSender so that the truncation helper
 	// could reorder requests as it pleases.
 	const canReorderRequestsSlice = false
-	truncationHelper, err := MakeBatchTruncationHelper(
+	truncationHelper, err := NewBatchTruncationHelper(
 		scanDir, ba.Requests, mustPreserveOrder, canReorderRequestsSlice,
 	)
 	if err != nil {

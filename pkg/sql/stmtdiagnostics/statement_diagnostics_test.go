@@ -317,6 +317,10 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	_, err := db0.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
+	// Lower the polling interval to speed up the test.
+	_, err = db0.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '1ms'")
+	require.NoError(t, err)
+
 	var minExecutionLatency, expiresAfter time.Duration
 	var samplingProbability float64
 
