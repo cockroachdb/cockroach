@@ -58,10 +58,6 @@ const (
 	nanosInMonth  = DaysPerMonth * nanosInDay
 	nanosInSecond = 1000 * 1000 * 1000
 	nanosInMicro  = 1000
-
-	// Used in overflow calculations.
-	maxYearsInDuration = math.MaxInt64 / nanosInMonth
-	minYearsInDuration = math.MinInt64 / nanosInMonth
 )
 
 var (
@@ -690,17 +686,26 @@ func (d Duration) StringNanos() string {
 // (using Decode) and the first int will approximately sort a collection of
 // encoded Durations.
 func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error) {
-	// The number of whole years equivalent to any value of Duration always fits
-	// in an int64. Use this to compute a conservative estimate of overflow.
+	// Calculate the total nanoseconds while checking for int64 overflow as:
 	//
-	// TODO(dan): Compute overflow exactly, then document that EncodeBigInt can be
-	// used in overflow cases.
-	years := d.Months/12 + d.Days/DaysPerMonth/12 + d.nanos/nanosInMonth/12
-	if years > maxYearsInDuration || years < minYearsInDuration {
+	//   totalNanos = d.Months*nanosInMonth + d.Days*nanosInDay * d.nanos
+	//
+	monthNanos, ok := arith.MulHalfPositiveWithOverflow(d.Months, nanosInMonth)
+	if !ok {
 		return 0, 0, 0, errEncodeOverflow
 	}
-
-	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.nanos
+	dayNanos, ok := arith.MulHalfPositiveWithOverflow(d.Days, nanosInDay)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
+	totalNanos, ok := arith.AddWithOverflow(monthNanos, dayNanos)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
+	totalNanos, ok = arith.AddWithOverflow(totalNanos, d.nanos)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
 	return totalNanos, d.Months, d.Days, nil
 }
 
