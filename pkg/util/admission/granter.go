@@ -56,6 +56,14 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
+// DisableSoftSlotGranting can be set to true to disable soft slot granting.
+var DisableSoftSlotGranting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"admission.disable_soft_slot_granting",
+	"soft slot granting is disabled if this setting is set to true",
+	false,
+)
+
 // grantChainID is the ID for a grant chain. See continueGrantChain for
 // details.
 type grantChainID uint64
@@ -2308,6 +2316,9 @@ func MakeSoftSlotGranter(gc *GrantCoordinator) (*SoftSlotGranter, error) {
 // TryGetSlots attempts to acquire count slots and returns what was acquired
 // (possibly 0).
 func (ssg *SoftSlotGranter) TryGetSlots(count int) int {
+	if DisableSoftSlotGranting.Get(&ssg.kvGranter.coord.settings.SV) {
+		return 0
+	}
 	return ssg.kvGranter.tryGetSoftSlots(count)
 }
 
