@@ -79,6 +79,9 @@ export function getHighlightedText(
   if (!highlight || highlight.length === 0) {
     return text;
   }
+  if (highlight.startsWith('"') && highlight.endsWith('"')) {
+    highlight = highlight.substring(1, highlight.length - 1);
+  }
 
   highlight = highlight.replace(
     /[°§%()\[\]{}\\?´`'#|;:+^*-]+/g,
