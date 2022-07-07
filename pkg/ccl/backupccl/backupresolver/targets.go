@@ -370,7 +370,7 @@ func DescriptorsMatchingTargets(
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				schemaDesc, tree.CommonLookupFlags{},
+				schemaDesc, tree.CommonLookupFlags{IncludeOffline: !requirePublic},
 			); err != nil {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
@@ -554,31 +554,31 @@ func DescriptorsMatchingTargets(
 		}
 	}
 
-	addTableDescsInSchema := func(schemas map[string]descpb.ID) error {
-		for _, id := range schemas {
+	addObjectDescsInSchema := func(objects map[string]descpb.ID) error {
+		for _, id := range objects {
 			desc := r.DescByID[id]
+			if err := catalog.FilterDescriptorState(
+				desc, tree.CommonLookupFlags{IncludeOffline: true},
+			); err != nil {
+				// Don't include this object in the expansion since it's not in a valid
+				// state. Silently fail since this object was not directly requested,
+				// but was just part of an expansion.
+				continue
+			}
+			// If this object is a member of a user defined schema, then request the
+			// user defined schema.
+			if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
+				// Note, that although we're processing the database expansions,
+				// since the table is in a PUBLIC state, we also expect the schema
+				// to be in a similar state.
+				if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
+					return err
+				}
+			}
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
-				if err := catalog.FilterDescriptorState(
-					desc, tree.CommonLookupFlags{},
-				); err != nil {
-					// Don't include this table in the expansion since it's not in a valid
-					// state. Silently fail since this table was not directly requested,
-					// but was just part of an expansion.
-					continue
-				}
 				if _, ok := alreadyRequestedTables[id]; !ok {
 					ret.Descs = append(ret.Descs, desc)
-				}
-				// If this table is a member of a user defined schema, then request the
-				// user defined schema.
-				if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
-					// Note, that although we're processing the database expansions,
-					// since the table is in a PUBLIC state, we also expect the schema
-					// to be in a similar state.
-					if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
-						return err
-					}
 				}
 				// Get all the types used by this table.
 				dbRaw := r.DescByID[desc.GetParentID()]
@@ -600,7 +600,7 @@ func DescriptorsMatchingTargets(
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
 		if requestedSchemas, ok := alreadyRequestedSchemasByDBs[dbID]; !ok {
-			for schemaName, schemas := range r.ObjsByName[dbID] {
+			for schemaName, objects := range r.ObjsByName[dbID] {
 				schemaID, err := getSchemaIDByName(schemaName, dbID)
 				if err != nil {
 					return ret, err
@@ -608,14 +608,14 @@ func DescriptorsMatchingTargets(
 				if err := maybeAddSchemaDesc(schemaID, false /* requirePublic */); err != nil {
 					return ret, err
 				}
-				if err := addTableDescsInSchema(schemas); err != nil {
+				if err := addObjectDescsInSchema(objects); err != nil {
 					return ret, err
 				}
 			}
 		} else {
 			for schemaName := range requestedSchemas {
-				schemas := r.ObjsByName[dbID][schemaName]
-				if err := addTableDescsInSchema(schemas); err != nil {
+				objects := r.ObjsByName[dbID][schemaName]
+				if err := addObjectDescsInSchema(objects); err != nil {
 					return ret, err
 				}
 			}
