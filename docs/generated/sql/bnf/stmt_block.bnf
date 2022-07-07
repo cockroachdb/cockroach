@@ -2995,7 +2995,7 @@ backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
 password_clause ::=
-	'PASSWORD' string_or_placeholder
+	'PASSWORD' sconst_or_placeholder
 	| 'PASSWORD' 'NULL'
 
 valid_until_clause ::=

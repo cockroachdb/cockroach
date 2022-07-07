@@ -68,6 +68,19 @@ SELECT crdb_internal.repair_ttl_table_scheduled_job('tbl'::regclass::oid)
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
+let $tbl_oid
+SELECT 'tbl'::regclass::oid
+
+user testuser
+
+statement error insufficient privilege
+SELECT crdb_internal.repair_ttl_table_scheduled_job($tbl_oid)
+
+statement error insufficient privilege
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+user root
+
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
 ALTER TABLE tbl RESET (ttl_expire_after)
 
