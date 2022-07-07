@@ -959,7 +959,7 @@ func TestEventListener(t *testing.T) {
 	tr := NewTracer()
 	rootEventListener := &mockEventListener{}
 	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured),
-		WithEventListeners([]EventListener{rootEventListener}))
+		WithEventListeners(rootEventListener))
 
 	// Record a few Structured events.
 	sp.RecordStructured(&types.Int32Value{Value: 4})
@@ -969,7 +969,7 @@ func TestEventListener(t *testing.T) {
 	// Register another event listener on only the child span.
 	childEventListener := &mockEventListener{}
 	childSp := tr.StartSpan("child", WithParent(sp),
-		WithEventListeners([]EventListener{childEventListener}))
+		WithEventListeners(childEventListener))
 
 	childSp.RecordStructured(&types.Int32Value{Value: 6})
 	childSp.RecordStructured(&types.Int32Value{Value: 7})
@@ -1015,7 +1015,7 @@ func TestEventListenerNotifiedWithoutHoldingSpanMutex(t *testing.T) {
 	tr := NewTracer()
 	rootEventListener := &mockEventListener{}
 	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured),
-		WithEventListeners([]EventListener{rootEventListener}))
+		WithEventListeners(rootEventListener))
 	defer sp.Finish()
 
 	// Set the EventListeners Notify() method to acquire the span's mutex.

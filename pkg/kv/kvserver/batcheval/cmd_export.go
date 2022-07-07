@@ -102,7 +102,7 @@ func evalExport(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ExportResponse)
 
-	ctx, evalExportSpan := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
+	ctx, evalExportSpan := tracing.ChildSpan(ctx, "evalExport")
 	defer evalExportSpan.Finish()
 
 	var evalExportTrace types.StringValue

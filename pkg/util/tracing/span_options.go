@@ -474,6 +474,6 @@ func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
 //
 // The caller should not mutate `eventListeners` after calling
 // WithEventListeners.
-func WithEventListeners(eventListeners []EventListener) SpanOption {
+func WithEventListeners(eventListeners ...EventListener) SpanOption {
 	return (eventListenersOption)(eventListeners)
 }
