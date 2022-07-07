@@ -316,8 +316,8 @@ func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescript
 	return ReplicaDescriptor{}, false
 }
 
-// GetReplicaDescriptorByID returns the replica which matches the specified
-// replica ID.
+// GetReplicaDescriptorByID returns the replica in the range which matches the
+// given replicaID.
 func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
 	return r.Replicas().GetReplicaDescriptorByID(replicaID)
 }

@@ -1030,6 +1030,25 @@ func (sp *StorePool) GetLocalitiesByNode(
 	return localities
 }
 
+// GetLocalitiesPerReplica returns the localities for the provided replicas. In this
+// case we only consider the locality by node, where the node itself is not
+// part of the failure domain.
+func (sp *StorePool) GetLocalitiesPerReplica(
+	replicas []roachpb.ReplicaDescriptor,
+) map[roachpb.ReplicaID]roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	localities := make(map[roachpb.ReplicaID]roachpb.Locality)
+	for _, replica := range replicas {
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.ReplicaID] = locality.locality
+		} else {
+			localities[replica.ReplicaID] = roachpb.Locality{}
+		}
+	}
+	return localities
+}
+
 // GetNodeLocalityString returns the locality information for the given node
 // in its string format.
 func (sp *StorePool) GetNodeLocalityString(nodeID roachpb.NodeID) string {
