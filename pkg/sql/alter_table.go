@@ -599,7 +599,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.ExecCfg().InternalExecutorFactory(
 							params.ctx, params.SessionData(),
-						), n.tableDesc, params.EvalContext().Txn, name,
+						), n.tableDesc, params.EvalContext().Txn, params.p.User(), name,
 					); err != nil {
 						return err
 					}
