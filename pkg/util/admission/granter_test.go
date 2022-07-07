@@ -100,6 +100,7 @@ func (kvsa *kvSlotAdjuster) setModerateSlotsClamp(val int) {
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
 // sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// enabled-soft-slot-granting=<bool>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
@@ -169,6 +170,14 @@ func TestGranterBasic(t *testing.T) {
 			var err error
 			ssg, err = MakeSoftSlotGranter(coord)
 			require.NoError(t, err)
+			if d.HasArg("enabled-soft-slot-granting") {
+				var enabledSoftSlotGranting bool
+				d.ScanArgs(t, "enabled-soft-slot-granting", &enabledSoftSlotGranting)
+				if !enabledSoftSlotGranting {
+					EnabledSoftSlotGranting.Override(context.Background(), &settings.SV, false)
+				}
+			}
+
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
