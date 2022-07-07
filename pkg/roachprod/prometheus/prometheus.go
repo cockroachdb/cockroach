@@ -192,12 +192,15 @@ func Init(
 	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, cfg Config,
 ) (_ *Prometheus, _ error) {
 	if len(cfg.NodeExporter) > 0 {
+		// NB: when upgrading here, make sure to target a version that picks up this PR:
+		// https://github.com/prometheus/node_exporter/pull/2311
+		// At time of writing, there hasn't been a release in over half a year.
 		if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, cfg.NodeExporter,
 			"download node exporter",
 			`
 (sudo systemctl stop node_exporter || true) &&
 rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-  https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz |
+  https://github.com/prometheus/node_exporter/releases/download/v1.2.2/node_exporter-1.2.2.linux-amd64.tar.gz |
   tar zxv --strip-components 1 -C node_exporter
 `); err != nil {
 			return nil, err
