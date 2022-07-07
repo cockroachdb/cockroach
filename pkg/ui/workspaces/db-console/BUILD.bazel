@@ -350,9 +350,7 @@ jest_test(
     name = "jest",
     data = JEST_DEPS,
     templated_args = [
-        #"--node_options=--expose-gc --report-on-fatalerror --report-filename=/tmp/ouch.json",
-        # "--node_options='--heapsnapshot-near-heap-limit=12 --heap-prof'",
-        # "--node_options=--max-old-space-size=8192",
+        "--node_options=--max-old-space-size=8192",
         "-w 25%",
         "--ci",
         "--config",
