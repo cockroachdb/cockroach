@@ -118,6 +118,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         kvs{rangeKV("a", "d", 1, "")},
 			expectStatsEst: true,
 		},
+		"blind extends overlapping range tombstone": {
+			data:           kvs{rangeKV("c", "e", 1, "")},
+			sst:            kvs{rangeKV("d", "f", 1, "")},
+			expect:         kvs{rangeKV("c", "f", 1, "")},
+			expectStatsEst: true,
+		},
 		"blind rejects SST inline values under race only": { // unfortunately, for performance
 			sst:            kvs{pointKV("a", 0, "inline")},
 			expect:         kvs{pointKV("a", 0, "inline")},
