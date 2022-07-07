@@ -1466,6 +1466,18 @@ var charts = []sectionDescription{
 					"streaming.ingested_bytes",
 				},
 			},
+			{
+				Title:   "Earliest Frontier Span",
+				Metrics: []string{"streaming.earliest_frontier_span"},
+			},
+			{
+				Title:   "Latest Frontier Span",
+				Metrics: []string{"streaming.latest_frontier_span"},
+			},
+			{
+				Title:   "Frontier Span Count",
+				Metrics: []string{"streaming.frontier_span_count"},
+			},
 		},
 	},
 	{
