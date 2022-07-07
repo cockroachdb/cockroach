@@ -1059,8 +1059,13 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			if notNull || s.coin() {
 				names = append(names, c.Name)
 				row = append(row,
-					randgen.RandDatumWithNullChance(s.rnd, tree.MustBeStaticallyKnownType(c.Type),
-						randgen.NullChance(!notNull), s.favorCommonData, c.Unique.IsUnique))
+					randgen.RandDatumWithNullChance(
+						s.rnd,
+						tree.MustBeStaticallyKnownType(c.Type),
+						randgen.NullChance(!notNull),
+						s.favorCommonData,
+						c.Unique.IsUnique || c.PrimaryKey.IsPrimaryKey,
+					))
 			}
 		}
 
