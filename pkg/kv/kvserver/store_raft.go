@@ -153,10 +153,8 @@ func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 // HandleDelegatedSnapshot reads the incoming delegated snapshot message and
 // throttles sending snapshots before passing the request to the sender replica.
 func (s *Store) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream DelegateSnapshotResponseStream,
-) error {
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+) (*kvserverpb.DelegateSnapshotResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
 	if fn := s.cfg.TestingKnobs.SendSnapshot; fn != nil {
@@ -165,45 +163,28 @@ func (s *Store) HandleDelegatedSnapshot(
 
 	sender, err := s.GetReplica(req.RangeID)
 	if err != nil {
-		return err
+		// FIXME
+		return nil, err
 	}
 
 	sp := tracing.SpanFromContext(ctx)
 	// Pass the request to the sender replica.
-	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
-		// Send a DelegationResponse_ERROR if the sender has rejected the
-		// request during handshake.
-		if errors.Is(err, errSenderRejectedDelegateSnapshotReq) {
-			return stream.Send(
-				&kvserverpb.DelegateSnapshotResponse{
-					DelegationResponse: &kvserverpb.DelegateSnapshotResponse_DelegationResponse{
-						Status:  kvserverpb.DelegateSnapshotResponse_DelegationResponse_ERROR,
-						Message: err.Error(),
-					},
-				},
-			)
-		}
+	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req); err != nil {
 		// If an error occurred during snapshot sending, send an error response.
-		return stream.Send(
-			&kvserverpb.DelegateSnapshotResponse{
-				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_ERROR,
-					Message: err.Error(),
-				},
-				CollectedSpans: sp.GetConfiguredRecording(),
-			},
-		)
+		//nolint:returnerrcheck
+		return &kvserverpb.DelegateSnapshotResponse{
+			Error:          err.Error(),
+			CollectedSpans: sp.GetConfiguredRecording(),
+		}, nil
 	}
 
-	resp := &kvserverpb.DelegateSnapshotResponse{
+	return &kvserverpb.DelegateSnapshotResponse{
 		SnapResponse: &kvserverpb.SnapshotResponse{
 			Status:  kvserverpb.SnapshotResponse_APPLIED,
 			Message: "Snapshot successfully applied by recipient",
 		},
 		CollectedSpans: sp.GetConfiguredRecording(),
-	}
-	// Send a final response that snapshot sending is completed.
-	return stream.Send(resp)
+	}, nil
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if

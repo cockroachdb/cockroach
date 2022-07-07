@@ -22,13 +22,13 @@ service MultiRaft {
     // (so the client delegates the sending of the snapshot to the server). The
     // server responds in two phases.
     //
-    // TODO(nvanbenschoten): This RPC is bi-directional streaming (as opposed to
-    // only server-streaming) because of future aspirations; at the moment the
+    // This sends a DelegateRequest to the chosen
+  // ; at the moment the
     // request is unary. In the future, we wanted to pause all log truncation,
     // then handshake with the delegated sender, then weaken log truncation
     // protection to just below the index that the sender was sending the
     // snapshot at.
-    rpc DelegateRaftSnapshot(stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotResponse) {}
+    rpc DelegateRaftSnapshot(cockroach.kv.kvserver.kvserverpb.DelegateSnapshotRequest) returns (cockroach.kv.kvserver.kvserverpb.DelegateSnapshotResponse) {}
 }
 
 service PerReplica {

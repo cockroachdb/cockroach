@@ -2678,25 +2678,12 @@ func (r *Replica) sendSnapshot(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
-	sender, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return err
-	}
-	// Check follower snapshots cluster setting.
-	if FollowerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
-		sender, err = r.getSenderReplica(recipient)
-		if err != nil {
-			return err
-		}
-	}
-
-	log.VEventf(
-		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
-	)
 	replDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
+		// Don't send a snapshot if we don't have this replica.
 		return err
 	}
+
 	status := r.RaftStatus()
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
@@ -2717,6 +2704,19 @@ func (r *Replica) sendSnapshot(
 		)
 	}
 
+	// By default, send the descriptor using the local store as the DelegatedSender.
+	sender := replDesc
+	// Check follower snapshots setting and if there is a useable follower sender.
+	if FollowerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
+		followerSender, err := r.getSenderReplica(recipient)
+		if err == nil {
+			// Locally send the snapshot if we can't find a remote sender.
+			sender = followerSender
+			log.VEventf(
+				ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
+			)
+		}
+	}
 	// Create new delegate snapshot request with only required metadata.
 	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
 		RangeID:              r.RangeID,
@@ -2737,34 +2737,22 @@ func (r *Replica) sendSnapshot(
 			)
 		},
 	)
-
-	if err != nil {
-		if errors.Is(err, errSenderRejectedDelegateSnapshotReq) {
-			// The sender rejected the request during the handshake, attempt to send
-			// the snapshot again.
-			delegateRequest := &kvserverpb.DelegateSnapshotRequest{
-				RangeID:              r.RangeID,
-				CoordinatorReplica:   replDesc,
-				RecipientReplica:     recipient,
-				Priority:             priority,
-				Type:                 snapType,
-				Term:                 status.Term,
-				DelegatedSender:      replDesc,
-				TruncatedIndex:       truncatedState.Index,
-				DescriptorGeneration: r.Desc().Generation,
-			}
-			err = contextutil.RunWithTimeout(
-				ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
-					return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
-				},
-			)
-			if err != nil {
-				return errors.Mark(err, errMarkSnapshotError)
-			}
-		}
-		return errors.Mark(err, errMarkSnapshotError)
+	// If the attempt failed, and was sent through a delegate, then try again
+	// sending locally.
+	if err != nil && sender != replDesc {
+		// Create new delegate snapshot request with only required metadata.
+		delegateRequest.DelegatedSender = replDesc
+		err = contextutil.RunWithTimeout(
+			ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+				return r.store.cfg.Transport.DelegateSnapshot(
+					ctx,
+					delegateRequest,
+				)
+			},
+		)
 	}
-	return nil
+
+	return err
 }
 
 // FollowerSnapshotsEnabled is used to enable or disable follower snapshots.
@@ -2783,10 +2771,7 @@ var FollowerSnapshotsEnabled = func() *settings.BoolSetting {
 // snapshot from this replica. The entire process of generating and transmitting
 // the snapshot is handled, and errors are propagated back to the leaseholder.
 func (r *Replica) followerSendSnapshot(
-	ctx context.Context,
-	recipient roachpb.ReplicaDescriptor,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream DelegateSnapshotResponseStream,
+	ctx context.Context, recipient roachpb.ReplicaDescriptor, req *kvserverpb.DelegateSnapshotRequest,
 ) (retErr error) {
 	ctx = r.AnnotateCtx(ctx)
 
@@ -2802,8 +2787,7 @@ func (r *Replica) followerSendSnapshot(
 			// If the recipient is not in the current descriptor and the current
 			// descriptor’s generation is past the coordinator's, immediately fail.
 			// This could be due to a replica being immediately removed.
-			return errors.Wrapf(
-				errSenderRejectedDelegateSnapshotReq,
+			return errors.Errorf(
 				"%s: couldn't find receiver replica %s in sender descriptor %s",
 				r, recipient, r.Desc(),
 			)
@@ -2825,8 +2809,7 @@ func (r *Replica) followerSendSnapshot(
 			}
 		}
 		if _, ok := r.Desc().GetReplicaDescriptorByID(recipient.ReplicaID); !ok {
-			return errors.Wrapf(
-				errSenderRejectedDelegateSnapshotReq,
+			return errors.Errorf(
 				"%s: couldn't find receiver replica %s in sender descriptor %s",
 				r, recipient, r.Desc(),
 			)
@@ -2837,7 +2820,7 @@ func (r *Replica) followerSendSnapshot(
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return errors.Wrap(err, "Unable to throttle snapshot sending")
+		return errors.Wrap(err, "Unable to reserve space for sending this snapshot")
 	}
 	defer cleanup()
 
@@ -2857,21 +2840,9 @@ func (r *Replica) followerSendSnapshot(
 			ctx, "sender: %v is not fit to send snapshot;"+" sender applied index: %v, "+
 				"coordinator applied index: %v", req.DelegatedSender, replIdx, req.TruncatedIndex,
 		)
-		return errors.Wrapf(
-			errSenderRejectedDelegateSnapshotReq,
+		return errors.Errorf(
 			"sender: %v is not fit to send snapshot due to needing snapshot", req.DelegatedSender,
 		)
-	}
-
-	// Acknowledge that the request has been accepted.
-	if err := stream.Send(
-		&kvserverpb.DelegateSnapshotResponse{
-			DelegationResponse: &kvserverpb.DelegateSnapshotResponse_DelegationResponse{
-				Status: kvserverpb.DelegateSnapshotResponse_DelegationResponse_ACCEPTED,
-			},
-		},
-	); err != nil {
-		return err
 	}
 
 	snapType := req.Type

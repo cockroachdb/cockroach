@@ -1382,66 +1382,32 @@ func sendSnapshot(
 	}
 }
 
-// errSenderRejectedDelegateSnapshotReq
-var errSenderRejectedDelegateSnapshotReq = errors.New("sender couldn't accept delegated request due to error")
+type DelegateSnapshotResult int
 
-// delegateSnapshot sends an outgoing delegated snapshot request via a
+const (
+	SUCCESS = iota
+	REJECTED
+	FAILED
+)
+
+// processSnapshotResponse FIXME: sends an outgoing delegated snapshot request via a
 // pre-opened GRPC stream. It sends the delegated snapshot request to the
 // sender and waits for confirmation that the snapshot has been applied.
-func delegateSnapshot(
-	ctx context.Context, stream outgoingDelegatedStream, req *kvserverpb.DelegateSnapshotRequest,
+func processSnapshotResponse(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	resp *kvserverpb.DelegateSnapshotResponse,
 ) error {
-
 	delegatedSender := req.DelegatedSender
-	if err := stream.Send(req); err != nil {
-		return err
-	}
-	// Wait for a delegation response from the sender.
-	resp, err := stream.Recv()
-	if err != nil {
-		return err
-	}
 
-	switch resp.DelegationResponse.Status {
-	case kvserverpb.DelegateSnapshotResponse_DelegationResponse_ERROR:
+	if resp.Error != "" {
 		log.Infof(
-			ctx, "%s: delegated sender couldn't accept request with error: %s", delegatedSender,
-			resp.DelegationResponse.Message,
+			ctx, "%s: delegated sender couldn't process request with error: %s", delegatedSender,
+			resp.Error,
 		)
-		return errSenderRejectedDelegateSnapshotReq
-
-	case kvserverpb.DelegateSnapshotResponse_DelegationResponse_ACCEPTED:
-		// The sender accepted the request, it will continue with sending.
-		log.VEventf(
-			ctx, 2, "sender %s accepted snapshot request %s", delegatedSender,
-			req,
-		)
-	default:
-		err := errors.Errorf(
-			"%s: server sent an invalid status while negotiating %s: %s",
-			delegatedSender, req, resp.DelegationResponse.Status,
-		)
-		return err
+		return errors.Errorf("%s: delegated sender couldn't process request with error: %s", delegatedSender, resp.Error)
 	}
 
-	// Wait for response to see if the receiver successfully applied the snapshot.
-	resp, err = stream.Recv()
-	if err != nil {
-		return errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender)
-	}
-	// Wait for EOF to ensure server side processing is complete.
-	if unexpectedResp, err := stream.Recv(); err != io.EOF {
-		if err != nil {
-			return errors.Wrapf(
-				err, "%s: expected EOF, got resp=%v with error",
-				delegatedSender.StoreID, unexpectedResp,
-			)
-		}
-		return errors.Newf(
-			"%s: expected EOF, got resp=%v", delegatedSender.StoreID,
-			unexpectedResp,
-		)
-	}
 	// Import the remotely collected spans, if any.
 	if len(resp.CollectedSpans) != 0 {
 		span := tracing.SpanFromContext(ctx)
@@ -1451,18 +1417,12 @@ func delegateSnapshot(
 			span.ImportRemoteRecording(resp.CollectedSpans)
 		}
 	}
-	switch resp.SnapResponse.Status {
-	case kvserverpb.SnapshotResponse_ERROR:
-		return errors.Newf("%s", resp.SnapResponse.Message)
-	case kvserverpb.SnapshotResponse_APPLIED:
-		// This is the response we're expecting. Snapshot successfully applied.
-		log.VEventf(ctx, 2, "%s: delegated snapshot was successfully applied", delegatedSender)
-		return nil
-	default:
-		return errors.Errorf(
-			"%s: server sent an invalid status during finalization: %s",
-			delegatedSender, resp.SnapResponse.Status,
-		)
+	// On a delegated request, we only see the fully applied result.
+	if resp.SnapResponse.Status != kvserverpb.SnapshotResponse_APPLIED {
+		log.VEventf(ctx, 2, "%s", resp.SnapResponse.Message)
+		return errors.Errorf("%s: error: %s", delegatedSender, resp.Error)
 	}
+	log.VEventf(ctx, 2, "%s: delegated snapshot was successfully applied", delegatedSender)
+	return nil
 
 }
