@@ -2483,6 +2483,61 @@ SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
 ----
 NULL  NULL
 
+# Examples from https://www.postgresql.org/docs/9.3/functions-string.html#FUNCTIONS-STRING-FORMAT
+query T
+SELECT format('Hello %s', 'World')
+----
+Hello World
+
+query T
+SELECT format('INSERT INTO %I VALUES(%L)', 'locations', 'C:\Program Files')
+----
+INSERT INTO locations VALUES(e'C:\\Program Files')
+
+query T
+SELECT format('|%10s|', 'foo')
+----
+|       foo|
+
+query T
+SELECT format('|%-10s|', 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%*s|', 10, 'foo')
+----
+|       foo|
+
+query T
+SELECT format('|%*s|', -10, 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%-*s|', 10, 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%-*s|', -10, 'foo')
+----
+|foo       |
+
+# Escaping $ into \x24 only needed in testlogic or prepared statements
+query T
+SELECT format(E'Testing %3\x24s, %2\x24s, %1\x24s', 'one', 'two', 'three')
+----
+Testing three, two, one
+
+query T
+SELECT format(E'Testing %3\x24s, %2\x24s, %s', 'one', 'two', 'three')
+----
+Testing three, two, three
+
+query error pq: format\(\): error parsing format string: not enough arguments
+SELECT format(E'%2\x24s','foo');
+
 subtest pg_is_in_recovery
 
 query B colnames
