@@ -57,6 +57,10 @@ var positiveDurationTests = []durationTest{
 	{1, Duration{Months: 1, Days: 10, nanos: 0}, false},
 	{0, Duration{Months: 0, Days: 40, nanos: 0}, false},
 	{1, Duration{Months: 2, Days: 0, nanos: 0}, false},
+	// '106751 days 23:47:16.854775' should not overflow.
+	{1, Duration{Months: 0, Days: 106751, nanos: 85636854775000}, false},
+	// '106751 days 23:47:16.854776' should overflow.
+	{1, Duration{Months: 0, Days: 106751, nanos: 85636854776000}, true},
 	{1, Duration{Months: math.MaxInt64 - 1, Days: DaysPerMonth - 1, nanos: nanosInDay * 2}, true},
 	{1, Duration{Months: math.MaxInt64 - 1, Days: DaysPerMonth * 2, nanos: nanosInDay * 2}, true},
 	{1, Duration{Months: math.MaxInt64, Days: math.MaxInt64, nanos: nanosInMonth + nanosInDay}, true},
