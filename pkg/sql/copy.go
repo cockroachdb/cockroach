@@ -263,9 +263,9 @@ type copyTxnOpt struct {
 	stmtTimestamp time.Time
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 
-	// resetExecutor should be called upon completing a batch from the copy
+	// resetExtraTxnState should be called upon completing a batch from the copy
 	// machine when the copy machine handles its own transaction.
-	resetExtraTxnState func(ctx context.Context) error
+	resetExtraTxnState func(ctx context.Context)
 }
 
 // run consumes all the copy-in data from the network connection and inserts it
@@ -707,11 +707,7 @@ func (p *planner) preparePlannerForCopy(
 		// Ensure that we clean up any accumulated extraTxnState state if we've
 		// been handed a mechanism to do so.
 		if txnOpt.resetExtraTxnState != nil {
-			defer func() {
-				// Note: combine errors will return nil if both are nil and the
-				// non-nil error in the case that there's just one.
-				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx))
-			}()
+			defer txnOpt.resetExtraTxnState(ctx)
 		}
 		if prevErr == nil {
 			// Ensure that the txn is committed if the copyMachine is in charge of
