@@ -10,15 +10,18 @@ package backuppb
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // required for backup.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // IsIncremental returns if the BackupManifest corresponds to an incremental
@@ -121,6 +124,64 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 
 	m.BackupStatement = backup.String()
 	return json.Marshal(m)
+}
+
+var _ bulk.TracingAggregatorEvent = &ExportStats{}
+
+const (
+	tagNumFiles   = "num_files"
+	tagDataSize   = "data_size"
+	tagThroughput = "throughput"
+)
+
+// Render implements the LazyTag interface.
+func (e *ExportStats) Render() []attribute.KeyValue {
+	const mb = 1 << 20
+	tags := make([]attribute.KeyValue, 0)
+	if e.NumFiles > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagNumFiles,
+			Value: attribute.Int64Value(e.NumFiles),
+		})
+	}
+	if e.DataSize > 0 {
+		dataSizeMB := float64(e.DataSize) / mb
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagDataSize,
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", dataSizeMB)),
+		})
+
+		if e.Duration > 0 {
+			throughput := dataSizeMB / e.Duration.Seconds()
+			tags = append(tags, attribute.KeyValue{
+				Key:   tagThroughput,
+				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
+			})
+		}
+	}
+
+	return tags
+}
+
+// Identity implements the AggregatorEvent interface.
+func (e *ExportStats) Identity() bulk.TracingAggregatorEvent {
+	return &ExportStats{}
+}
+
+// Combine implements the AggregatorEvent interface.
+func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
+	otherExportStats, ok := other.(*ExportStats)
+	if !ok {
+		panic(fmt.Sprintf("`other` is not of type ExportStats: %T", other))
+	}
+	e.NumFiles += otherExportStats.NumFiles
+	e.DataSize += otherExportStats.DataSize
+	e.Duration += otherExportStats.Duration
+}
+
+// Tag implements the AggregatorEvent interface.
+func (e *ExportStats) Tag() string {
+	return "ExportStats"
 }
 
 func init() {

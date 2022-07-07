@@ -79,7 +79,7 @@ func retrieveSingleTenantMetadata(
 	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
 ) (descpb.TenantInfoWithUsage, error) {
 	row, err := ie.QueryRow(
-		ctx, "backup-lookup-tenant", txn,
+		ctx, "backupccl.retrieveSingleTenantMetadata", txn,
 		tenantMetadataQuery+` WHERE id = $1`, tenantID.ToUint64(),
 	)
 	if err != nil {
@@ -99,7 +99,7 @@ func retrieveAllTenantsMetadata(
 	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn,
 ) ([]descpb.TenantInfoWithUsage, error) {
 	rows, err := ie.QueryBuffered(
-		ctx, "backup-lookup-tenants", txn,
+		ctx, "backupccl.retrieveAllTenantsMetadata", txn,
 		// XXX Should we add a `WHERE active`? We require the tenant to be active
 		// when it is specified..
 		tenantMetadataQuery,

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,6 +107,10 @@ type backupDataProcessor struct {
 
 	// BoundAccount that reserves the memory usage of the backup processor.
 	memAcc *mon.BoundAccount
+
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// backupDataProcessors' trace recording.
+	agg *bulk.TracingAggregator
 }
 
 var (
@@ -153,6 +158,12 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", bp.spec.JobID)
 	ctx = bp.StartInternal(ctx, backupProcessorName)
 	ctx, cancel := context.WithCancel(ctx)
+
+	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
+	// bps' trace recording.
+	ctx, bp.agg = bulk.MakeTracingAggregatorWithSpan(ctx,
+		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
+
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
 		for range bp.progCh {
@@ -160,7 +171,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	}
 	log.Infof(ctx, "starting backup data")
 	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
-		TaskName: "backup-worker",
+		TaskName: "backupDataProcessor.runBackupProcessor",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
@@ -198,6 +209,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
+	bp.agg.Close()
 	if bp.InternalClose() {
 		bp.memAcc.Close(bp.Ctx)
 	}
@@ -387,26 +399,16 @@ func runBackupProcessor(
 						Source:                   roachpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					}
-					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
+					log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawResp roachpb.Response
 					var pErr *roachpb.Error
-					var reqSentTime time.Time
-					var respReceivedTime time.Time
+					requestSentAt := timeutil.Now()
 					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
-							reqSentTime = timeutil.Now()
-							backupProcessorSpan.RecordStructured(&backuppb.BackupExportTraceRequestEvent{
-								Span:        span.span.String(),
-								Attempt:     int32(span.attempts + 1),
-								Priority:    header.UserPriority.String(),
-								ReqSentTime: reqSentTime.String(),
-							})
-
 							rawResp, pErr = kv.SendWrappedWithAdmission(
 								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
-							respReceivedTime = timeutil.Now()
 							if pErr != nil {
 								return pErr.GoError()
 							}
@@ -419,9 +421,7 @@ func runBackupProcessor(
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							backupProcessorSpan.RecordStructured(&backuppb.BackupExportTraceResponseEvent{
-								RetryableError: tracing.RedactAndTruncateError(intentErr),
-							})
+							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
 							continue
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
@@ -480,19 +480,12 @@ func runBackupProcessor(
 						completedSpans = 1
 					}
 
-					duration := respReceivedTime.Sub(reqSentTime)
-					exportResponseTraceEvent := &backuppb.BackupExportTraceResponseEvent{
-						Duration:      duration.String(),
-						FileSummaries: make([]roachpb.RowCount, 0),
-					}
-
 					if len(resp.Files) > 1 {
 						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 					}
 
 					for i, file := range resp.Files {
 						entryCounts := countRows(file.Exported, spec.PKIDs)
-						exportResponseTraceEvent.FileSummaries = append(exportResponseTraceEvent.FileSummaries, entryCounts)
 
 						ret := exportedSpan{
 							// BackupManifest_File just happens to contain the exact fields
@@ -521,8 +514,9 @@ func runBackupProcessor(
 							return ctx.Err()
 						}
 					}
-					exportResponseTraceEvent.NumFiles = int32(len(resp.Files))
-					backupProcessorSpan.RecordStructured(exportResponseTraceEvent)
+
+					// Emit the stats for the processed ExportRequest.
+					recordExportStats(backupProcessorSpan, resp, timeutil.Since(requestSentAt))
 
 				default:
 					// No work left to do, so we can exit. Note that another worker could
@@ -574,6 +568,22 @@ func runBackupProcessor(
 	})
 
 	return grp.Wait()
+}
+
+// recordExportStats emits a StructuredEvent containing the stats about the
+// evaluated ExportRequest.
+func recordExportStats(
+	sp *tracing.Span, resp *roachpb.ExportResponse, exportDuration time.Duration,
+) {
+	if sp == nil {
+		return
+	}
+	exportStats := backuppb.ExportStats{Duration: exportDuration}
+	for _, f := range resp.Files {
+		exportStats.NumFiles++
+		exportStats.DataSize += int64(len(f.SST))
+	}
+	sp.RecordStructured(&exportStats)
 }
 
 func init() {
