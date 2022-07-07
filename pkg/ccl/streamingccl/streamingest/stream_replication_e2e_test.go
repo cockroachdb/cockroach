@@ -396,6 +396,8 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 func TestTenantStreamingCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
 	skip.UnderStressRace(t, "slow under stressrace")
 
 	ctx := context.Background()

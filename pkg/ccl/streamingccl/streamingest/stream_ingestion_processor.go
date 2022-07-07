@@ -635,9 +635,10 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-	sip.metrics.EarliestFrontierSpan.Update(lowestTimestamp.GoTime().UnixNano())
-	sip.metrics.LatestFrontierSpan.Update(highestTimestamp.GoTime().UnixNano())
-	sip.metrics.FrontierSpanCount.Update(int64(len(resolvedSpans)))
+
+	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
+	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
+	sip.metrics.DataCheckpointSpanCount.Update(int64(len(resolvedSpans)))
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }

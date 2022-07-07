@@ -406,6 +406,10 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
+
+	sf.metrics.JobProgressUpdates.Inc(1)
+	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+
 	// TODO(pbardea): Only update partitions that have changed.
 	return job.FractionProgressed(ctx, nil, /* txn */
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
