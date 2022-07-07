@@ -77,7 +77,8 @@ import HotRangesPage from "src/views/hotRanges/index";
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
-import { Tracez } from "src/views/tracez/tracez";
+import { TraceCollection } from "src/views/tracez/traceCollection";
+import { TraceDetails } from "src/views/tracez/traceDetails";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -292,7 +293,21 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                 {/* debug pages */}
                 <Route exact path="/debug" component={Debug} />
-                <Route exact path="/debug/tracez" component={Tracez} />
+                <Redirect
+                  exact
+                  from="/debug/tracez"
+                  to={"/debug/tracez/trace_collection/"}
+                />
+                <Route
+                  exact
+                  path="/debug/tracez/trace_collection/:collectionID?"
+                  component={TraceCollection}
+                />
+                <Route
+                  exact
+                  path="/debug/tracez/trace_collection/:collectionID/trace_details/:traceID"
+                  component={TraceDetails}
+                />
                 <Route exact path="/debug/redux" component={ReduxDebug} />
                 <Route exact path="/debug/chart" component={CustomChart} />
                 <Route

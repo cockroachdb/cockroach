@@ -29,8 +29,6 @@ import {
 } from "src/views/shared/components/pageconfig";
 import { cockroach, google } from "src/js/protos";
 import {
-  getLiveTrace,
-  getTraceForSnapshot,
   getTracingSnapshot,
   listTracingSnapshots,
   setTraceRecordingType,
@@ -41,11 +39,10 @@ import { Switch } from "antd";
 import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
 import ITracingSpan = cockroach.server.serverpb.ITracingSpan;
 import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
-import GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
-import IGetTraceResponse = cockroach.server.serverpb.IGetTraceResponse;
 import ISpanTag = cockroach.server.serverpb.ISpanTag;
 import SetTraceRecordingTypeRequest = cockroach.server.serverpb.SetTraceRecordingTypeRequest;
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
+import { RouteComponentProps, useParams } from "react-router-dom";
 
 const TS_FORMAT = "MMMM Do YYYY, H:mm:ss"; // January 28th 2022, 19:12:40;
 
@@ -195,14 +192,14 @@ const TagBadge = ({
 
 const OperationCell = (props: {
   sr: SnapshotRow;
-  setRecording: (trace: cockroach.server.serverpb.ITracingSpan) => void;
+  setRecording: (traceID: Long) => void;
 }) => {
   return (
     <div>
       <Button
         as="a"
         intent="tertiary"
-        onClick={() => props.setRecording(props.sr.span)}
+        onClick={() => props.setRecording(props.sr.span.trace_id)}
       >
         {props.sr.span.operation}
       </Button>
@@ -265,7 +262,7 @@ const TagCell = (props: {
 };
 
 const snapshotColumns = (
-  setRecording: (span: ITracingSpan) => void,
+  setRecording: (traceID: Long) => void,
   setSearch: (s: string) => void,
   setTraceRecordingVerbose: (span: ITracingSpan) => void,
 ): ColumnDescriptor<SnapshotRow>[] => {
@@ -321,7 +318,7 @@ const CurrentSnapshot = ({
 }: {
   snapshot: Snapshot;
   search: string;
-  setRecording: (trace: cockroach.server.serverpb.ITracingSpan) => void;
+  setRecording: (traceID: Long) => void;
   setSearch: (s: string) => void;
   setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }) => {
@@ -352,25 +349,38 @@ interface Snapshot {
   captured_at?: google.protobuf.ITimestamp;
 }
 
-export const Tracez = () => {
+// TODO(benbardin): Move state to Redux to enable caching across pages.
+export const TraceCollection = (props: RouteComponentProps) => {
   // Snapshot state
   const [snapshot, setSnapshot] = useState<Snapshot>({ rows: [] });
   const [search, setSearch] = useState<string>("");
   const [snapshots, setSnapshots] = useState<ISnapshotInfo[]>([]);
 
-  // Recording view state
-  // In the UI when you click on an operation we set the requestedSpan. Then
-  // the effect is triggered to retrieve the trace for that span, once that's
-  // updated the UI is changed.
-  const [requestedSpan, setRequestedSpan] =
-    useState<cockroach.server.serverpb.ITracingSpan>(null);
-  const [currentTrace, setCurrentTrace] = useState<IGetTraceResponse>(null);
-  const [showTrace, setShowTrace] = useState<boolean>(false);
-  const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);
+  const { history } = props;
+  const { collectionID: collectionIDParam } = useParams<{collectionID: string}>();
+  const snapshotID = collectionIDParam
+    ? Long.fromString(collectionIDParam)
+    : undefined;
 
   const setSnapshotID = (id: Long) => {
+    if (id === snapshotID) {
+      return;
+    }
+    history.push(`/debug/tracez/trace_collection/${id}`);
+  };
+
+  useEffect(() => {
+    if (snapshots.length && snapshotID === undefined) {
+      setSnapshotID(snapshots[snapshots.length - 1].snapshot_id);
+    }
+  }, [snapshots]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (snapshotID === undefined) {
+      return;
+    }
     const req = new GetTracingSnapshotRequest({
-      snapshot_id: id,
+      snapshot_id: snapshotID,
     });
     getTracingSnapshot(req).then(req => {
       setSnapshot({
@@ -386,7 +396,7 @@ export const Tracez = () => {
         ),
       });
     });
-  };
+  }, [collectionIDParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // takeSnapshot takes a snapshot and displays it.
   const takeSnapshot = () => {
@@ -403,33 +413,9 @@ export const Tracez = () => {
     });
   };
 
-  useEffect(refreshTracingSnapshots, []);
-
   useEffect(() => {
-    if (showTrace) {
-      if (showLiveTrace) {
-        getLiveTrace(
-          new GetTraceRequest({
-            trace_id: requestedSpan.trace_id,
-            recording_type: RecordingMode.VERBOSE,
-          }),
-        ).then(resp => {
-          setCurrentTrace(resp);
-          setShowTrace(true);
-        });
-      } else {
-        getTraceForSnapshot(
-          new GetTraceRequest({
-            trace_id: requestedSpan.trace_id,
-            snapshot_id: snapshot.id,
-          }),
-        ).then(resp => {
-          setCurrentTrace(resp);
-          setShowTrace(true);
-        });
-      }
-    }
-  }, [showTrace, snapshot, requestedSpan, showLiveTrace]);
+    refreshTracingSnapshots();
+  }, []);
 
   const setTraceRecordingVerbose = (span: ITracingSpan) => {
     const recMode =
@@ -456,80 +442,20 @@ export const Tracez = () => {
     });
   };
   return (
-    <div>
-      {showTrace && currentTrace ? (
-        <TraceView
-          currentTrace={currentTrace}
-          cancel={() => {
-            setShowTrace(false);
-            setShowLiveTrace(false);
-          }}
-          showLive={() => {
-            setShowLiveTrace(true);
-          }}
-          operation={requestedSpan.operation}
-        />
-      ) : (
-        <SnapshotView
-          takeSnapshot={takeSnapshot}
-          setSnapshotID={setSnapshotID}
-          snapshots={snapshots}
-          snapshot={snapshot}
-          setSearch={setSearch}
-          search={search}
-          setRecording={span => {
-            setRequestedSpan(span);
-            setShowTrace(true);
-          }}
-          setTraceRecordingVerbose={setTraceRecordingVerbose}
-        />
-      )}
-    </div>
-  );
-};
-
-interface TraceViewProps {
-  currentTrace: IGetTraceResponse;
-  cancel: () => void;
-  showLive: () => void;
-  operation: string;
-}
-
-const TraceView = ({
-  currentTrace,
-  cancel,
-  showLive,
-  operation,
-}: TraceViewProps) => {
-  return (
-    <>
-      <h3 className="base-heading">
-        Active Traces{" "}
-        <span>
-          <CaretRight />
-          {currentTrace.snapshot_id.toNumber() === 0
-            ? "Latest"
-            : `Snapshot: ${currentTrace.snapshot_id}`}
-          <CaretRight />
-          {operation}
-        </span>
-      </h3>
-      <PageConfig>
-        <PageConfigItem>
-          <Button as={"button"} onClick={cancel}>
-            Back
-          </Button>
-        </PageConfigItem>
-        <PageConfigItem>
-          <Button as={"button"} onClick={showLive}>
-            Switch to Latest
-          </Button>
-        </PageConfigItem>
-      </PageConfig>
-      <section className="section" style={{ maxWidth: "none" }}>
-        <pre>{currentTrace.serialized_recording}</pre>
-      </section>
-    </>
+    <SnapshotView
+      takeSnapshot={takeSnapshot}
+      setSnapshotID={setSnapshotID}
+      snapshots={snapshots}
+      snapshot={snapshot}
+      setSearch={setSearch}
+      search={search}
+      setRecording={(traceID: Long) => {
+        history.push(
+          `/debug/tracez/trace_collection/${collectionIDParam}/trace_details/${traceID}`,
+        );
+      }}
+      setTraceRecordingVerbose={setTraceRecordingVerbose}
+    />
   );
 };
 
@@ -540,7 +466,7 @@ interface SnapshotViewProps {
   snapshot: Snapshot;
   setSearch: (s: string) => void;
   search: string;
-  setRecording: (s: cockroach.server.serverpb.ITracingSpan) => void;
+  setRecording: (traceID: Long) => void;
   setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }
 
