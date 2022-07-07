@@ -300,6 +300,30 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 	return builder.String()
 }
 
+type mvccDeleteRangeUsingRangeTombstoneOp struct {
+	m      *metaTestRunner
+	writer readWriterID
+	key    roachpb.Key
+	endKey roachpb.Key
+	ts     hlc.Timestamp
+}
+
+func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
+	writer := m.m.getReadWriter(m.writer)
+	if m.key.Compare(m.endKey) >= 0 {
+		// Empty range. No-op.
+		return "no-op due to no non-conflicting key range"
+	}
+
+	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey,
+		m.ts, hlc.ClockTimestamp{}, m.key, m.endKey, math.MaxInt64 /* maxIntents */)
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	return fmt.Sprintf("deleted range = %s - %s", m.key, m.endKey)
+}
+
 type mvccClearTimeRangeOp struct {
 	m         *metaTestRunner
 	key       roachpb.Key
@@ -923,7 +947,34 @@ var opGenerators = []opGenerator{
 			operandUnusedMVCCKey,
 			operandUnusedMVCCKey,
 		},
-		weight: 20,
+		weight: 10,
+	},
+	{
+		name: "mvcc_delete_range_using_range_tombstone",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			key := m.keyGenerator.parse(args[1]).Key
+			endKey := m.keyGenerator.parse(args[2]).Key
+			ts := m.nextTSGenerator.parse(args[3])
+
+			if endKey.Compare(key) < 0 {
+				key, endKey = endKey, key
+			}
+			return &mvccDeleteRangeUsingRangeTombstoneOp{
+				m:      m,
+				writer: writer,
+				key:    key,
+				endKey: endKey,
+				ts:     ts,
+			}
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandNextTS,
+		},
+		weight: 10,
 	},
 	{
 		name: "mvcc_clear_time_range",
