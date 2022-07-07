@@ -124,7 +124,7 @@ module.exports = {
       "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
         "<rootDir>/src/test-utils/file.mock.js",
       "\\.(css|scss|less|styl)$": "identity-obj-proxy",
-      // "^react($|/.+)": "<rootDir>/node_modules/react$1",
+      "^react($|/.+)": "<rootDir>/node_modules/react$1",
     },
   ),
 
