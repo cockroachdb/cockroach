@@ -53,6 +53,19 @@ SELECT crdb_internal.repair_ttl_table_scheduled_job('tbl'::regclass::oid)
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
+let $tbl_oid
+SELECT 'tbl'::regclass::oid
+
+user testuser
+
+statement error insufficient privilege
+SELECT crdb_internal.repair_ttl_table_scheduled_job($tbl_oid)
+
+statement error insufficient privilege
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+user root
+
 statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
 
