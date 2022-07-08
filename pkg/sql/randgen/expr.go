@@ -85,6 +85,7 @@ func isAllowedPartialIndexColType(columnTableDef *tree.ColumnTableDef) bool {
 	}
 }
 
+// TODO(jordan): should we be including more comparison operators here?
 var cmpOps = []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GE, treecmp.GT}
 
 // randBoolColumnExpr returns a random boolean expression with the given column.
