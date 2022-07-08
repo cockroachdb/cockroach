@@ -1,0 +1,49 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "schematelemetrycontroller_proto",
+    srcs = ["schema_telemetry.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "schematelemetrycontroller_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
+    proto = ":schematelemetrycontroller_proto",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "schematelemetrycontroller",
+    srcs = ["controller.go"],
+    embed = [":schematelemetrycontroller_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/scheduledjobs",
+        "//pkg/security/username",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_robfig_cron_v3//:cron",
+    ],
+)
+
+get_x_data(name = "get_x_data")

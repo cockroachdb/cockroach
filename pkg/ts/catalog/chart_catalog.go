@@ -2331,6 +2331,37 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Schema Telemetry"}},
+		Charts: []chartDescription{
+			{
+				Title: "Jobs Running",
+				Metrics: []string{
+					"jobs.auto_schema_telemetry.currently_running",
+					"jobs.auto_schema_telemetry.currently_idle",
+				},
+			},
+			{
+				Title: "Jobs Statistics",
+				Metrics: []string{
+					"jobs.auto_schema_telemetry.fail_or_cancel_completed",
+					"jobs.auto_schema_telemetry.fail_or_cancel_failed",
+					"jobs.auto_schema_telemetry.fail_or_cancel_retry_error",
+					"jobs.auto_schema_telemetry.resume_completed",
+					"jobs.auto_schema_telemetry.resume_failed",
+					"jobs.auto_schema_telemetry.resume_retry_error",
+				},
+			},
+			{
+				Title: "Scheduled Jobs Statistics",
+				Metrics: []string{
+					"schedules.scheduled-schema-telemetry-executor.succeeded",
+					"schedules.scheduled-schema-telemetry-executor.started",
+					"schedules.scheduled-schema-telemetry-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
 		Charts: []chartDescription{
 			{

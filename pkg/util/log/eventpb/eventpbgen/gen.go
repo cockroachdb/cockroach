@@ -381,8 +381,11 @@ func readInput(
 			}
 
 			typ := fieldDefRe.ReplaceAllString(line, "$typ")
-			if typ == "google.protobuf.Timestamp" {
+			switch typ {
+			case "google.protobuf.Timestamp":
 				typ = "timestamp"
+			case "cockroach.sql.sqlbase.Descriptor":
+				typ = "protobuf"
 			}
 
 			if otherMsg, ok := infos[typ]; ok {
@@ -518,11 +521,13 @@ import (
 
   "github.com/cockroachdb/redact"
   "github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 {{range .AllRegexps}}
 var {{ .ReName }} = regexp.MustCompile(` + "`{{ .ReDef }}`" + `)
 {{end}}
+var _ = jsonpb.Marshaler{}
 
 {{range .AllEvents}}
 // AppendJSONFields implements the EventPayload interface.
@@ -621,6 +626,15 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+   }
+   {{- else if eq .FieldType "protobuf"}}
+   if m.{{.FieldName}} != nil {
+     if printComma { b = append(b, ',')}; printComma = true
+     jsonEncoder := jsonpb.Marshaler{}
+     if str, err := jsonEncoder.MarshalToString(m.{{.FieldName}}); err == nil {
+       b = append(b, "\"{{.FieldName}}\":"...)
+       b = append(b, []byte(str)...)
+     }
    }
    {{- else}}
    {{ error  .FieldType }}

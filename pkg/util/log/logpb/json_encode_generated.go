@@ -7,7 +7,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/jsonpb"
 )
+
+var _ = jsonpb.Marshaler{}
 
 // AppendJSONFields implements the EventPayload interface.
 func (m *CommonEventDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {

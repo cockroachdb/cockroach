@@ -2577,6 +2577,58 @@ contains common SQL event/execution details.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
+### `schema_descriptor`
+
+An event of type `schema_descriptor` is an event for schema telemetry, whose purpose is
+to take periodic snapshots of the cluster's SQL schema and publish them in
+the telemetry log channel. For all intents and purposes, the data in such a
+snapshot can be thought of the outer join of certain system tables:
+namespace, descriptor, and at some point perhaps zones, etc.
+
+Snapshots are too large to conveniently be published as a single log event,
+so instead they're broken down into SchemaDescriptor events which
+contain the data in one record of this outer join projection. These events
+are prefixed by a header (a SchemaSnapshotMetadata event).
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SnapshotID` | SnapshotID is the unique identifier of the snapshot that this event is part of. | no |
+| `ParentDatabaseID` | ParentDatabaseID matches the same key column in system.namespace. | no |
+| `ParentSchemaID` | ParentSchemaID matches the same key column in system.namespace. | no |
+| `Name` | Name matches the same key column in system.namespace. | no |
+| `DescID` | DescID matches the 'id' column in system.namespace and system.descriptor. | no |
+| `Desc` | Desc matches the 'descriptor' column in system.descriptor. Some contents of the descriptor may be redacted to prevent leaking PII. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
+### `schema_snapshot_metadata`
+
+An event of type `schema_snapshot_metadata` is an event describing a schema snapshot, which
+is a set of SchemaDescriptor messages sharing the same SnapshotID.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SnapshotID` | SnapshotID is the unique identifier of this snapshot. | no |
+| `NumRecords` | NumRecords is how many SchemaDescriptor events are in the snapshot. | no |
+| `AsOfTimestamp` | AsOfTimestamp is when the snapshot was taken. This is equivalent to the timestamp given in the AS OF SYSTEM TIME clause when querying the namespace and descriptor tables in the system database. Expressed as nanoseconds since the Unix epoch. | no |
+| `Errors` | Errors records any errors encountered when post-processing this snapshot, which includes the redaction of any potential PII. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Zone config events
 
 Events in this category pertain to zone configuration changes on

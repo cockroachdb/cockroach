@@ -174,6 +174,10 @@ type ServerConfig struct {
 	// introduce dependency on the sql package.
 	SQLStatsController eval.SQLStatsController
 
+	// SchemaTelemetryController is an interface used by the builtins to create a
+	// job schedule for schema telemetry jobs.
+	SchemaTelemetryController eval.SchemaTelemetryController
+
 	// IndexUsageStatsController is an interface used to reset index usage stats without
 	// the need to introduce dependency on the sql package.
 	IndexUsageStatsController eval.IndexUsageStatsController
