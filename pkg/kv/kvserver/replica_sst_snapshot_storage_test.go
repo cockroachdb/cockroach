@@ -12,6 +12,8 @@ package kvserver
 import (
 	"context"
 	"io/ioutil"
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -40,6 +42,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	sstSnapshotStorage.Init()
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.
@@ -93,11 +96,17 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
 
-	// Check that Clear removes the directory.
-	require.NoError(t, scratch.Clear())
+	// Check that Close removes the snapshot directory as well as the range
+	// directory.
+	require.NoError(t, scratch.Close())
 	_, err = eng.Stat(scratch.snapDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
+	}
+	rangeDir := filepath.Join(sstSnapshotStorage.dir, strconv.Itoa(int(scratch.rangeID)))
+	_, err = eng.Stat(rangeDir)
+	if !oserror.IsNotExist(err) {
+		t.Fatalf("expected %s to not exist", rangeDir)
 	}
 	require.NoError(t, sstSnapshotStorage.Clear())
 	_, err = eng.Stat(sstSnapshotStorage.dir)
@@ -122,6 +131,7 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	sstSnapshotStorage.Init()
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	var cancel func()
@@ -159,6 +169,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	sstSnapshotStorage.Init()
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 	desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKey("d"),

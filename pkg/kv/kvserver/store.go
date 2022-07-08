@@ -1250,6 +1250,7 @@ func NewStore(
 	// it can clean it up. If this fails it's not a correctness issue since the
 	// storage is also cleared before receiving a snapshot.
 	s.sstSnapshotStorage = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
+	s.sstSnapshotStorage.Init()
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
