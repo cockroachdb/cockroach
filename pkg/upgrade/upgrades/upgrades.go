@@ -157,6 +157,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		alterSystemSQLInstancesAddLocality,
 	),
+	upgrade.NewTenantUpgrade(
+		"add the system.external_connections table",
+		toCV(clusterversion.SystemExternalConnectionsTable),
+		NoPrecondition,
+		systemExternalConnectionsTableMigration,
+	),
 }
 
 func init() {

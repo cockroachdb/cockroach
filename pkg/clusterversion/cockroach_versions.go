@@ -386,6 +386,8 @@ const (
 	// AlterSystemSQLInstancesAddLocality adds a locality column to the
 	// system.sql_instances table.
 	AlterSystemSQLInstancesAddLocality
+	// SystemExternalConnectionsTable adds system.external_connections table.
+	SystemExternalConnectionsTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -686,6 +688,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
+	},
+	{
+		Key:     SystemExternalConnectionsTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
 	},
 
 	// *************************************************
