@@ -7068,38 +7068,36 @@ func TestReplicaDestroy(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 
 	repl, err := tc.store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+		_, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
 			DestroyData: true,
-		}); err != nil {
-			t.Fatal(err)
-		}
+		})
+		require.NoError(t, err)
 	}()
 
 	engSnapshot := tc.repl.store.Engine().NewSnapshot()
 	defer engSnapshot.Close()
 
-	iter := rditer.NewReplicaEngineDataIterator(tc.repl.Desc(), engSnapshot,
-		false /* replicatedOnly */)
-	defer iter.Close()
-	ok, err := iter.SeekStart()
-	require.NoError(t, err)
-	require.True(t, ok, "expected a tombstone key, but iterator was empty")
-
 	// If the range is destroyed, only a tombstone key should be there.
-	k1, err := iter.UnsafeKey()
-	require.NoError(t, err)
-	require.Equal(t, keys.RangeTombstoneKey(tc.repl.RangeID), k1.Key)
+	expectedKeys := []roachpb.Key{keys.RangeTombstoneKey(tc.repl.RangeID)}
+	actualKeys := []roachpb.Key{}
 
-	ok, err = iter.Next()
-	require.NoError(t, err)
-	require.False(t, ok, "expected destroyed replica to only have a tombstone key, but found more")
+	require.NoError(t, rditer.IterateReplicaKeySpans(tc.repl.Desc(), engSnapshot, false, /* replicatedOnly */
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			require.Equal(t, storage.IterKeyTypePointsOnly, keyType)
+			var err error
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				key, err := iter.UnsafeEngineKey()
+				require.NoError(t, err)
+				actualKeys = append(actualKeys, key.Key.Clone())
+			}
+			return err
+		}))
+	require.Equal(t, expectedKeys, actualKeys)
 }
 
 // TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by

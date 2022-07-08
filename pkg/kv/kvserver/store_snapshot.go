@@ -403,11 +403,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// bytesSent is updated as key-value batches are sent with sendBatch. It does
 	// not reflect the log entries sent (which are never sent in newer versions of
 	// CRDB, as of VersionUnreplicatedTruncatedState).
-	bytesSent := int64(0)
-
-	// Iterate over all keys (point keys and range keys) using the provided
-	// iterator and stream out batches of key-values.
+	var bytesSent int64
 	var kvs, rangeKVs int
+
+	// Iterate over all keys (point keys and range keys) and stream out batches of
+	// key-values.
 	var b storage.Batch
 	defer func() {
 		if b != nil {
@@ -427,57 +427,61 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	iter := snap.Iter
-	var ok bool
-	var err error
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		// NB: EngineReplicaDataIterator will never expose point/range keys
-		// together: it first iterates over all point keys in a key span, then over
-		// all range keys in a key span, then moves onto the next key span.
-		hasPoint, hasRange := iter.HasPointAndRange()
-
-		if hasPoint {
-			kvs++
-			var unsafeKey storage.EngineKey
-			if unsafeKey, err = iter.UnsafeKey(); err != nil {
-				return 0, err
-			}
-			unsafeValue := iter.UnsafeValue()
-			if b == nil {
-				b = kvSS.newBatch()
-			}
-			if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
-				return 0, err
-			}
-			if int64(b.Len()) >= kvSS.batchSize {
-				if err = flushBatch(); err != nil {
-					return 0, err
-				}
-			}
+	maybeFlushBatch := func() error {
+		if int64(b.Len()) >= kvSS.batchSize {
+			return flushBatch()
 		}
+		return nil
+	}
 
-		if hasRange {
-			bounds, err := iter.RangeBounds()
-			if err != nil {
-				return 0, err
-			}
-			for _, rkv := range iter.RangeKeys() {
-				rangeKVs++
-				if b == nil {
-					b = kvSS.newBatch()
-				}
-				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-				if err != nil {
-					return 0, err
-				}
-				if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
-					if err = flushBatch(); err != nil {
-						return 0, err
+	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			var err error
+			switch keyType {
+			case storage.IterKeyTypePointsOnly:
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					kvs++
+					if b == nil {
+						b = kvSS.newBatch()
+					}
+					key, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					if err = b.PutEngineKey(key, iter.UnsafeValue()); err != nil {
+						return err
+					}
+					if err = maybeFlushBatch(); err != nil {
+						return err
 					}
 				}
+
+			case storage.IterKeyTypeRangesOnly:
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, rkv := range iter.EngineRangeKeys() {
+						rangeKVs++
+						if b == nil {
+							b = kvSS.newBatch()
+						}
+						err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+						if err != nil {
+							return err
+						}
+						if err = maybeFlushBatch(); err != nil {
+							return err
+						}
+					}
+				}
+
+			default:
+				return errors.AssertionFailedf("unexpected key type %v", keyType)
 			}
-		}
-	}
+			return err
+		})
 	if err != nil {
 		return 0, err
 	}
