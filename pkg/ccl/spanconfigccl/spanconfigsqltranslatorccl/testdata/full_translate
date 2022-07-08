@@ -72,6 +72,7 @@ full-translate
 /Table/4{7-8}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/11{0-1}                             range default
 /Table/11{1-2}                             range default
 /Table/11{2-3}                             range default

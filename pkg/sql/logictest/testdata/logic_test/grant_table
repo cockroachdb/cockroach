@@ -929,6 +929,14 @@ system         public        privileges                       root     DELETE   
 system         public        privileges                       root     INSERT          true
 system         public        privileges                       root     SELECT          true
 system         public        privileges                       root     UPDATE          true
+system         public        external_connections             admin    DELETE          true
+system         public        external_connections             admin    INSERT          true
+system         public        external_connections             admin    SELECT          true
+system         public        external_connections             admin    UPDATE          true
+system         public        external_connections             root     DELETE          true
+system         public        external_connections             root     INSERT          true
+system         public        external_connections             root     SELECT          true
+system         public        external_connections             root     UPDATE          true
 a              pg_extension  NULL                             public   USAGE           false
 a              public        NULL                             admin    ALL             true
 a              public        NULL                             public   CREATE          false
@@ -1292,6 +1300,10 @@ system         public       eventlog                         root     DELETE    
 system         public       eventlog                         root     INSERT          true
 system         public       eventlog                         root     SELECT          true
 system         public       eventlog                         root     UPDATE          true
+system         public       external_connections             root     DELETE          true
+system         public       external_connections             root     INSERT          true
+system         public       external_connections             root     SELECT          true
+system         public       external_connections             root     UPDATE          true
 system         public       jobs                             root     DELETE          true
 system         public       jobs                             root     INSERT          true
 system         public       jobs                             root     SELECT          true

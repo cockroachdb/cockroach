@@ -71,27 +71,31 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 	// One subtest for each precondition we wish to test.
 	t.Run("upgrade fails if there exists invalid descriptors", func(t *testing.T) {
 		/*
-			The hex for the descriptor to inject was created by running the following
-			commands in a 21.2 binary.
-			At the time this is written, `CREATE MATERIALIZED VIEW` has a bug that if
-			it fails, it left dangling back-references in the table `t`. Injecting `t`
-			and later attempting to upgrade will trigger the precondition check where
-			we can expect a failure.
+				The hex for the descriptor to inject was created by running the following
+				commands in a 21.2 binary.
+				At the time this is written, `CREATE MATERIALIZED VIEW` has a bug that if
+				it fails, it left dangling back-references in the table `t`. Injecting `t`
+				and later attempting to upgrade will trigger the precondition check where
+				we can expect a failure.
 
-					CREATE TABLE t (i INT PRIMARY KEY);
-					INSERT INTO t VALUES (1);
-					CREATE MATERIALIZED VIEW v AS (SELECT i/0 FROM t);
+						CREATE TABLE t (i INT PRIMARY KEY);
+						INSERT INTO t VALUES (1);
+						CREATE MATERIALIZED VIEW v AS (SELECT i/0 FROM t);
 
-					SELECT encode(descriptor, 'hex')
-					FROM system.descriptor
-					WHERE id = (
-							SELECT id
-							FROM system.namespace
-							WHERE name = 't'
-					);
+						SELECT encode(descriptor, 'hex')
+						FROM system.descriptor
+						WHERE id = (
+								SELECT id
+								FROM system.namespace
+								WHERE name = 't'
+						);
+
+			NB: As of 07/15/22 the injected descriptor has been edited to have an ID
+			104 so that it does collide with system tables that are allowed IDs below
+			100.
 		*/
 
-		const tableDescriptorToInject = "0a85020a01741834203228023a0042260a016910011a0c080110401800300050146000200030006800700078008001008801009801004802524c0a077072696d61727910011801220169300140004a10080010001a00200028003000380040005a007a0408002000800100880100900104980101a20106080012001800a80100b20100ba010060026a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741802800101880103980100b201120a077072696d61727910001a016920012800b80101c20100d201080835100018012000e80100f2010408001200f801008002009202009a020a08f084c3bfb1c1ccfe16b20200b80200c0021dc80200e00200f00200"
+		const tableDescriptorToInject = "0a85020a01741868203228023a0042260a016910011a0c080110401800300050146000200030006800700078008001008801009801004802524c0a077072696d61727910011801220169300140004a10080010001a00200028003000380040005a007a0408002000800100880100900104980101a20106080012001800a80100b20100ba010060026a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741802800101880103980100b201120a077072696d61727910001a016920012800b80101c20100d201080835100018012000e80100f2010408001200f801008002009202009a020a08f084c3bfb1c1ccfe16b20200b80200c0021dc80200e00200f00200"
 
 		// Decode and insert the table descriptor.
 		decodeTableDescriptorAndInsert(t, ctx, sqlDB, tableDescriptorToInject, parentID, parentSchemaID)
@@ -101,7 +105,7 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 		require.Error(t, err, "upgrade should be refused because precondition is violated.")
 		require.Equal(t, "pq: internal error: verifying precondition for version 21.2-2: There exists invalid "+
 			"descriptors as listed below. Fix these descriptors before attempting to upgrade again.\n"+
-			"Invalid descriptor: defaultdb.public.t (52) because 'relation \"t\" (52): invalid depended-on-by relation "+
+			"Invalid descriptor: defaultdb.public.t (104) because 'relation \"t\" (104): invalid depended-on-by relation "+
 			"back reference: referenced table ID 53: referenced descriptor not found'", err.Error())
 		// The cluster version should remain at `v0`.
 		tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})

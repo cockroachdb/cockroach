@@ -664,6 +664,17 @@ CREATE TABLE system.privileges (
 	CONSTRAINT "primary" PRIMARY KEY (username, path),
 	FAMILY "primary" (username, path, privileges, grant_options)
 );`
+
+	SystemExternalConnectionsTableSchema = `
+CREATE TABLE system.external_connections (
+	connection_name STRING NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT now(),
+	updated TIMESTAMP NOT NULL DEFAULT now(),
+	connection_type STRING NOT NULL,
+	connection_details BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (connection_name),
+	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2421,6 +2432,37 @@ var (
 				KeyColumnNames:      []string{"username", "path"},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		),
+	)
+
+	SystemExternalConnectionsTable = registerSystemTable(
+		SystemExternalConnectionsTableSchema,
+		systemTable(
+			catconstants.SystemExternalConnectionsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "connection_name", ID: 1, Type: types.String},
+				{Name: "created", ID: 2, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "updated", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "connection_type", ID: 4, Type: types.String},
+				{Name: "connection_details", ID: 5, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"connection_name", "created", "updated", "connection_type", "connection_details"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"connection_name"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
 			},
 		),
 	)
