@@ -35,12 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -55,6 +58,9 @@ var (
 	_ = uuid.FromBytes
 	_ = oid.T_name
 	_ = util.TruncateString
+	_ = pgcode.Syntax
+	_ = pgdate.ParseTimestamp
+	_ = pgerror.Wrapf
 )
 
 // {{/*
@@ -75,7 +81,7 @@ const _TYPE_WIDTH = 0
 // "castOp" template in the scope of this value's "callsite".
 const _GENERATE_CAST_OP = 0
 
-func _CAST(to, from, fromCol, toType interface{}) {
+func _CAST(to, from, evalCtx, toType interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
