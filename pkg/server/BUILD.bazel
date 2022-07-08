@@ -164,6 +164,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/hydrateddesc",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/schematelemetry",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
