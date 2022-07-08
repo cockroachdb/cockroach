@@ -323,13 +323,7 @@ type Planner interface {
 	//
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
-	QueryIteratorEx(
-		ctx context.Context,
-		opName string,
-		override sessiondata.InternalExecutorOverride,
-		stmt string,
-		qargs ...interface{},
-	) (InternalRows, error)
+	QueryIteratorEx(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
