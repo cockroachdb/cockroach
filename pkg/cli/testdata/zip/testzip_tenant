@@ -18,7 +18,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] requesting data for debug/reports/problemranges: last request failed: rpc error: ...
 [cluster] requesting data for debug/reports/problemranges: creating error output: debug/reports/problemranges.json.err.txt... done
 [cluster] retrieving list of system tables... done
-[cluster] 36 system tables found
+[cluster] 37 system tables found
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
@@ -54,6 +54,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
 [cluster] retrieving SQL data for system.descriptor_id_seq... writing output: debug/system.descriptor_id_seq.txt... done
 [cluster] retrieving SQL data for system.eventlog... writing output: debug/system.eventlog.txt... done
+[cluster] retrieving SQL data for system.external_connections... writing output: debug/system.external_connections.txt... done
 [cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
 [cluster] retrieving SQL data for system.lease... writing output: debug/system.lease.txt... done
 [cluster] retrieving SQL data for system.locations... writing output: debug/system.locations.txt... done

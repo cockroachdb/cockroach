@@ -15,6 +15,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -36,6 +37,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/10{6-7}                             range default
 
 # All parent schema zone config changes cascade to the entire table's span.
@@ -54,6 +56,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 
 # Apply a zone configuration on one of the partitions, `one_two`, which
@@ -77,6 +80,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
 /Table/106/1/{2-3}                         global_reads=true num_replicas=7 num_voters=5
@@ -100,6 +104,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
 /Table/106/1/{2-3}                         global_reads=true num_replicas=7 num_voters=5
@@ -137,6 +142,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/106{-/1}                            num_replicas=7 num_voters=5
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
@@ -172,6 +178,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/106{-/1}                            num_replicas=7
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7
@@ -201,3 +208,4 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
