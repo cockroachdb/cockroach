@@ -670,6 +670,7 @@ var commands = map[string]cmd{
 
 	"iter_new":                    {typReadOnly, cmdIterNew},
 	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
+	"iter_new_read_as_of":         {typReadOnly, cmdIterNewReadAsOf},    // readAsOfIterator
 	"iter_seek_ge":                {typReadOnly, cmdIterSeekGE},
 	"iter_seek_lt":                {typReadOnly, cmdIterSeekLT},
 	"iter_seek_intent_ge":         {typReadOnly, cmdIterSeekIntentGE},
@@ -1390,6 +1391,29 @@ func cmdIterNewIncremental(e *evalCtx) error {
 
 	r, closer := metamorphicReader(e, "iter-incremental-reader")
 	e.iter = &iterWithCloser{NewMVCCIncrementalIterator(r, opts), closer}
+	return nil
+}
+
+func cmdIterNewReadAsOf(e *evalCtx) error {
+	if e.iter != nil {
+		e.iter.Close()
+	}
+	var asOf hlc.Timestamp
+	if e.hasArg("asOfTs") {
+		asOf = e.getTsWithName("asOfTs")
+	}
+	opts := IterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		RangeKeyMaskingBelow: asOf}
+	if e.hasArg("k") {
+		opts.LowerBound, opts.UpperBound = e.getKeyRange()
+	}
+	if len(opts.UpperBound) == 0 {
+		opts.UpperBound = keys.MaxKey
+	}
+	r, closer := metamorphicReader(e, "iter-reader")
+	iter := &iterWithCloser{r.NewMVCCIterator(MVCCKeyIterKind, opts), closer}
+	e.iter = NewReadAsOfIterator(iter, asOf)
 	return nil
 }
 
