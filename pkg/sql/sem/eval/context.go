@@ -191,6 +191,8 @@ type Context struct {
 
 	SQLStatsController SQLStatsController
 
+	SchemaTelemetryController SchemaTelemetryController
+
 	IndexUsageStatsController IndexUsageStatsController
 
 	// CompactEngineSpan is used to force compaction of a span in a store.

@@ -1,0 +1,74 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schematelemetry",
+    srcs = [
+        "scheduled_job_executor.go",
+        "schema_telemetry_event.go",
+        "schema_telemetry_job.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/scheduledjobs",
+        "//pkg/security/username",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinconstants",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
+        "//pkg/util/metric",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "schematelemetry_test",
+    srcs = [
+        "main_test.go",
+        "schema_telemetry_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/jobs/jobstest",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
+        "//pkg/sql/sem/builtins/builtinconstants",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

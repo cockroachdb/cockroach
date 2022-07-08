@@ -190,7 +190,7 @@ func (s *Server) Decommission(
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecord(
+				return sql.InsertEventRecords(
 					ctx,
 					s.sqlServer.execCfg.InternalExecutor,
 					txn,

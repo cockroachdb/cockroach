@@ -1205,6 +1205,7 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
+	SchemaTelemetryTestingKnobs          *SchemaTelemetryTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
 	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
@@ -1549,6 +1550,16 @@ type TTLTestingKnobs struct {
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TTLTestingKnobs) ModuleTestingKnobs() {}
+
+// SchemaTelemetryTestingKnobs contains testing knobs for schema telemetry.
+type SchemaTelemetryTestingKnobs struct {
+	// AOSTDuration changes the AOST timestamp duration to add to the
+	// current time.
+	AOSTDuration *time.Duration
+}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*SchemaTelemetryTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
