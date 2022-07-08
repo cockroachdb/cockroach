@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "zoneconfig",
+    srcs = ["zone_config_options.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/zoneconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "zoneconfig_test",
+    srcs = ["zone_config_options_test.go"],
+    embed = [":zoneconfig"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -427,6 +427,7 @@ ALL_TESTS = [
     "//pkg/sql/ttl/ttljob:ttljob_test",
     "//pkg/sql/types:types_disallowed_imports_test",
     "//pkg/sql/types:types_test",
+    "//pkg/sql/zoneconfig:zoneconfig_test",
     "//pkg/sql:sql_disallowed_imports_test",
     "//pkg/sql:sql_test",
     "//pkg/startupmigrations/leasemanager:leasemanager_test",
