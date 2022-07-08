@@ -1046,7 +1046,7 @@ func (d *DDecimal) SetString(s string) error {
 	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
-		return MakeParseError(s, types.Decimal, nil)
+		return MakeParseError(s, types.Decimal, err)
 	}
 	switch d.Form {
 	case apd.NaNSignaling:
@@ -2260,8 +2260,7 @@ func ParseDTime(
 
 	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, dateStyle(ctx), s)
 	if err != nil {
-		// Build our own error message to avoid exposing the dummy date.
-		return nil, false, MakeParseError(s, types.Time, nil)
+		return nil, false, MakeParseError(s, types.Time, err)
 	}
 	return MakeDTime(timeofday.FromTime(t).Round(precision)), dependsOnContext, nil
 }
@@ -2532,6 +2531,16 @@ func (d *DTimeTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// NewTimestampExceedsBoundsError returns a new "exceeds supported timestamp
+// bounds" error for the given timestamp, with the correct pgcode.
+func NewTimestampExceedsBoundsError(t time.Time) error {
+	return pgerror.Newf(
+		pgcode.InvalidTimeZoneDisplacementValue,
+		"timestamp %q exceeds supported timestamp bounds",
+		t.Format(time.RFC3339),
+	)
+}
+
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
 	// Time always has UTC location.
@@ -2542,9 +2551,7 @@ type DTimestamp struct {
 func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, pgerror.Newf(
-			pgcode.InvalidTimeZoneDisplacementValue,
-			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, NewTimestampExceedsBoundsError(ret)
 	}
 	return &DTimestamp{Time: ret}, nil
 }
@@ -2827,9 +2834,7 @@ type DTimestampTZ struct {
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, pgerror.Newf(
-			pgcode.InvalidTimeZoneDisplacementValue,
-			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, NewTimestampExceedsBoundsError(ret)
 	}
 	return &DTimestampTZ{Time: ret}, nil
 }
@@ -3023,9 +3028,8 @@ func MustBeDInterval(e Expr) *DInterval {
 
 // NewDInterval creates a new DInterval.
 func NewDInterval(d duration.Duration, itm types.IntervalTypeMetadata) *DInterval {
-	ret := &DInterval{Duration: d}
-	truncateDInterval(ret, itm)
-	return ret
+	truncateInterval(&d, itm)
+	return &DInterval{Duration: d}
 }
 
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
@@ -3034,28 +3038,28 @@ func ParseDInterval(style duration.IntervalStyle, s string) (*DInterval, error) 
 	return ParseDIntervalWithTypeMetadata(style, s, types.DefaultIntervalTypeMetadata)
 }
 
-// truncateDInterval truncates the input DInterval downward to the nearest
+// truncateInterval truncates the input interval downward to the nearest
 // interval quantity specified by the DurationField input.
 // If precision is set for seconds, this will instead round at the second layer.
-func truncateDInterval(d *DInterval, itm types.IntervalTypeMetadata) {
+func truncateInterval(d *duration.Duration, itm types.IntervalTypeMetadata) {
 	switch itm.DurationField.DurationType {
 	case types.IntervalDurationType_YEAR:
-		d.Duration.Months = d.Duration.Months - d.Duration.Months%12
-		d.Duration.Days = 0
-		d.Duration.SetNanos(0)
+		d.Months = d.Months - d.Months%12
+		d.Days = 0
+		d.SetNanos(0)
 	case types.IntervalDurationType_MONTH:
-		d.Duration.Days = 0
-		d.Duration.SetNanos(0)
+		d.Days = 0
+		d.SetNanos(0)
 	case types.IntervalDurationType_DAY:
-		d.Duration.SetNanos(0)
+		d.SetNanos(0)
 	case types.IntervalDurationType_HOUR:
-		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Hour.Nanoseconds())
+		d.SetNanos(d.Nanos() - d.Nanos()%time.Hour.Nanoseconds())
 	case types.IntervalDurationType_MINUTE:
-		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Minute.Nanoseconds())
+		d.SetNanos(d.Nanos() - d.Nanos()%time.Minute.Nanoseconds())
 	case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
 		if itm.PrecisionIsSet || itm.Precision > 0 {
 			prec := TimeFamilyPrecisionToRoundDuration(itm.Precision)
-			d.Duration.SetNanos(time.Duration(d.Duration.Nanos()).Round(prec).Nanoseconds())
+			d.SetNanos(time.Duration(d.Nanos()).Round(prec).Nanoseconds())
 		}
 	}
 }
@@ -3066,17 +3070,29 @@ func truncateDInterval(d *DInterval, itm types.IntervalTypeMetadata) {
 func ParseDIntervalWithTypeMetadata(
 	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
 ) (*DInterval, error) {
-	d, err := parseDInterval(style, s, itm)
+	d, err := ParseIntervalWithTypeMetadata(style, s, itm)
 	if err != nil {
 		return nil, err
 	}
-	truncateDInterval(d, itm)
+	return &DInterval{Duration: d}, nil
+}
+
+// ParseIntervalWithTypeMetadata is the same as ParseDIntervalWithTypeMetadata
+// but returns a duration.Duration.
+func ParseIntervalWithTypeMetadata(
+	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (duration.Duration, error) {
+	d, err := parseInterval(style, s, itm)
+	if err != nil {
+		return d, err
+	}
+	truncateInterval(&d, itm)
 	return d, nil
 }
 
-func parseDInterval(
+func parseInterval(
 	style duration.IntervalStyle, s string, itm types.IntervalTypeMetadata,
-) (*DInterval, error) {
+) (duration.Duration, error) {
 	// At this time the only supported interval formats are:
 	// - SQL standard.
 	// - Postgres compatible.
@@ -3086,34 +3102,34 @@ func parseDInterval(
 
 	// If it's a blank string, exit early.
 	if len(s) == 0 {
-		return nil, MakeParseError(s, types.Interval, nil)
+		return duration.Duration{}, MakeParseError(s, types.Interval, nil)
 	}
 	if s[0] == 'P' {
 		// If it has a leading P we're most likely working with an iso8601
 		// interval.
 		dur, err := iso8601ToDuration(s)
 		if err != nil {
-			return nil, MakeParseError(s, types.Interval, err)
+			return duration.Duration{}, MakeParseError(s, types.Interval, err)
 		}
-		return &DInterval{Duration: dur}, nil
+		return dur, nil
 	}
 	if strings.IndexFunc(s, unicode.IsLetter) == -1 {
 		// If it has no letter, then we're most likely working with a SQL standard
 		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
 		dur, err := sqlStdToDuration(s, itm)
 		if err != nil {
-			return nil, MakeParseError(s, types.Interval, err)
+			return duration.Duration{}, MakeParseError(s, types.Interval, err)
 		}
-		return &DInterval{Duration: dur}, nil
+		return dur, nil
 	}
 
 	// We're either a postgres string or a Go duration.
 	// Our postgres syntax parser also supports golang, so just use that for both.
 	dur, err := parseDuration(style, s, itm)
 	if err != nil {
-		return nil, MakeParseError(s, types.Interval, err)
+		return duration.Duration{}, MakeParseError(s, types.Interval, err)
 	}
-	return &DInterval{Duration: dur}, nil
+	return dur, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
