@@ -382,6 +382,10 @@ func (p *planner) maybeLogStatementInternal(
 				SkippedQueries:       skippedQueries,
 				CostEstimate:         p.curPlan.instrumentation.costEstimate,
 				Distribution:         p.curPlan.instrumentation.distribution.String(),
+				SessionID:            p.extendedEvalCtx.SessionID.String(),
+				Database:             p.CurrentDatabase(),
+				StatementID:          p.stmt.QueryID.String(),
+				TransactionID:        p.txn.ID().String(),
 			}})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
