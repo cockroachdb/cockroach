@@ -25,24 +25,24 @@ import (
 )
 
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
-//// present in the input TableDescriptor. See hydrateTypesInTableDescWitOptions.
+// present in the input TableDescriptor. See hydrateTypesInTableDescWithOptions.
 func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
-	return tc.hydrateTypesInTableDescWitOptions(ctx,
+	return tc.hydrateTypesInTableDescWithOptions(ctx,
 		txn,
 		desc,
 		false, /* includeOffline */
 		false /*avoidLeased*/)
 }
 
-// hydrateTypesInTableDescWitOptions installs user defined type metadata in all types.T
+// hydrateTypesInTableDescWithOptions installs user defined type metadata in all types.T
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
 // are not modified during the process of metadata installation. Dropped tables
 // do not get hydrated. Optionally, when hydrating types we can include offline
 // descriptors and avoid leasing depending on the context.
-func (tc *Collection) hydrateTypesInTableDescWitOptions(
+func (tc *Collection) hydrateTypesInTableDescWithOptions(
 	ctx context.Context,
 	txn *kv.Txn,
 	desc catalog.TableDescriptor,
