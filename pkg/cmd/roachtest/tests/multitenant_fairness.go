@@ -64,6 +64,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			s.maxLoadOps = 100_000
 
 			r.Add(registry.TestSpec{
+				Skip:              "#83994",
 				Name:              fmt.Sprintf("multitenant/fairness/kv/%s/%s", s.name, acStr[s.acEnabled]),
 				Cluster:           r.MakeClusterSpec(5),
 				Owner:             registry.OwnerSQLQueries,
@@ -93,6 +94,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			s.maxLoadOps = 1000
 
 			r.Add(registry.TestSpec{
+				Skip:              "#83994",
 				Name:              fmt.Sprintf("multitenant/fairness/store/%s/%s", s.name, acStr[s.acEnabled]),
 				Cluster:           r.MakeClusterSpec(5),
 				Owner:             registry.OwnerSQLQueries,
