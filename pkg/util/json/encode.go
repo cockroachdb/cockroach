@@ -37,7 +37,7 @@ const jEntryLen = 4
 // JSON value, but check it just to be safe.
 func checkLength(length int) error {
 	if length > maxByteLength {
-		return errors.AssertionFailedf("JSON value too large: %d bytes", errors.Safe(length))
+		return errors.Newf("JSON value too large: %d bytes", errors.Safe(length))
 	}
 	return nil
 }
