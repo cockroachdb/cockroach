@@ -215,7 +215,14 @@ func generateFunctions(from []string, categorize bool) []byte {
 				info := md.RenderToString([]byte(fn.Info))
 				extra = fmt.Sprintf("<span class=\"funcdesc\">%s</span>", info)
 			}
-			s := fmt.Sprintf("<tr><td><a name=\"%s\"></a><code>%s(%s) &rarr; %s</code></td><td>%s</td></tr>", name, name, linkArguments(args), linkArguments(ret), extra)
+			s := fmt.Sprintf("<tr><td><a name=\"%s\"></a><code>%s(%s) &rarr; %s</code></td><td>%s</td><td>%s</td></tr>",
+				name,
+				name,
+				linkArguments(args),
+				linkArguments(ret),
+				extra,
+				fn.Volatility.TitleString(),
+			)
 			functions[cat] = append(functions[cat], s)
 		}
 	}
@@ -239,7 +246,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 		if categorize {
 			fmt.Fprintf(b, "### %s functions\n\n", cat)
 		}
-		b.WriteString("<table>\n<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>\n")
+		b.WriteString("<table>\n<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>\n")
 		b.WriteString("<tbody>\n")
 		b.WriteString(strings.Join(functions[cat], "\n"))
 		b.WriteString("</tbody>\n</table>\n\n")
