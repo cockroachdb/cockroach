@@ -69,7 +69,11 @@ type Command struct {
 	EvalRO func(context.Context, storage.Reader, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
-var cmds = make(map[roachpb.Method]Command)
+func (c Command) isEmpty() bool {
+	return c.EvalRW == nil && c.EvalRO == nil
+}
+
+var cmds [roachpb.NumMethods]Command
 
 // RegisterReadWriteCommand makes a read-write command available for execution.
 // It must only be called before any evaluation takes place.
@@ -98,7 +102,7 @@ func RegisterReadOnlyCommand(
 }
 
 func register(method roachpb.Method, command Command) {
-	if _, ok := cmds[method]; ok {
+	if !cmds[method].isEmpty() {
 		log.Fatalf(context.TODO(), "cannot overwrite previously registered method %v", method)
 	}
 	cmds[method] = command
@@ -107,12 +111,15 @@ func register(method roachpb.Method, command Command) {
 // UnregisterCommand is provided for testing and allows removing a command.
 // It is a no-op if the command is not registered.
 func UnregisterCommand(method roachpb.Method) {
-	delete(cmds, method)
+	cmds[method] = Command{}
 }
 
 // LookupCommand returns the command for the given method, with the boolean
 // indicating success or failure.
 func LookupCommand(method roachpb.Method) (Command, bool) {
-	cmd, ok := cmds[method]
-	return cmd, ok
+	if int(method) >= len(cmds) {
+		return Command{}, false
+	}
+	cmd := cmds[method]
+	return cmd, !cmd.isEmpty()
 }
