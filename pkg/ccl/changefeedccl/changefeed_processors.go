@@ -1633,11 +1633,12 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 	if updateCheckpoint || updateHighWater {
 		checkpointStart := timeutil.Now()
-		if err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint); err != nil {
+		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
+		if err != nil {
 			return false, err
 		}
 		cf.js.checkpointCompleted(cf.Ctx, timeutil.Since(checkpointStart))
-		return true, nil
+		return updated, nil
 	}
 
 	return false, nil
@@ -1645,20 +1646,20 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 func (cf *changeFrontier) checkpointJobProgress(
 	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
-) (err error) {
+) (bool, error) {
 	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
-
-	return cf.js.job.Update(cf.Ctx, nil, func(
+	var updateSkipped error
+	if err := cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		// If we're unable to update the job due to the job state, such as during
 		// pause-requested, simply skip the checkpoint
 		if err := md.CheckRunningOrReverting(); err != nil {
-			log.Warningf(cf.Ctx, "skipping changefeed checkpoint: %s", err.Error())
+			updateSkipped = err
 			return nil
 		}
 
@@ -1696,7 +1697,16 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return false, err
+	}
+
+	if updateSkipped != nil {
+		log.Warningf(cf.Ctx, "skipping changefeed checkpoint: %s", updateSkipped)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
