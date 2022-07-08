@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -1471,6 +1472,10 @@ type ExecutorTestingKnobs struct {
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
+
+	// OnRecordTxnFinish, if set, will be called as we record a transaction
+	// finishing.
+	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

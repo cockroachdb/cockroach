@@ -13,7 +13,9 @@ package sslocal_test
 import (
 	"context"
 	"math"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -664,4 +667,62 @@ func TestUnprivilegedUserReset(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testData := []*struct {
+		query        string
+		placeholders []interface{}
+		phaseTimes   *sessionphase.Times
+	}{
+		{
+			query:        "SELECT $1::INT8",
+			placeholders: []interface{}{1},
+			phaseTimes:   nil,
+		},
+	}
+
+	waitTxnFinish := make(chan struct{})
+	currentTestCaseIdx := 0
+	const latencyThreshold = time.Second * 5
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
+			if !isInternal && testData[currentTestCaseIdx].query == stmt {
+				testData[currentTestCaseIdx].phaseTimes = phaseTimes.Clone()
+				go func() {
+					waitTxnFinish <- struct{}{}
+				}()
+			}
+		},
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "StartServer", url.User(security.RootUser))
+	defer cleanupGoDB()
+	c, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err, "error connecting with pg url")
+
+	for currentTestCaseIdx < len(testData) {
+		tc := testData[currentTestCaseIdx]
+		// Make extended protocol query
+		_ = c.QueryRow(ctx, tc.query, tc.placeholders...)
+		require.NoError(t, err, "error scanning row")
+		<-waitTxnFinish
+
+		// Ensure test case phase times are populated by query txn.
+		require.True(t, tc.phaseTimes != nil)
+		// Ensure SessionTransactionStarted variable is populated.
+		require.True(t, !tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).IsZero())
+		// Ensure compute transaction service latency is within a reasonable threshold.
+		require.True(t, tc.phaseTimes.GetTransactionServiceLatency() < latencyThreshold)
+		currentTestCaseIdx++
+	}
 }
