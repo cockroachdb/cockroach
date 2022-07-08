@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
+        "//pkg/sql/zoneconfig",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
