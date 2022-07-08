@@ -497,10 +497,8 @@ type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
-	// The RocksDB snapshot that will be streamed from.
+	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
-	// The complete range iterator for the snapshot to stream.
-	Iter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
 	// Allows access the original Replica's sideloaded storage. Note that
@@ -525,7 +523,6 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.Iter.Close()
 	s.EngineSnap.Close()
 	if s.onClose != nil {
 		s.onClose()
@@ -598,15 +595,10 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
 	}
 
-	// Intentionally let this iterator and the snapshot escape so that the
-	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snap, true /* replicatedOnly */)
-
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
 		EngineSnap:     snap,
-		Iter:           iter,
 		State:          state,
 		SnapUUID:       snapUUID,
 		RaftSnap: raftpb.Snapshot{
