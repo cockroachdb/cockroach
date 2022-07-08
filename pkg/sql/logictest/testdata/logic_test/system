@@ -16,6 +16,7 @@ public  comments                         table  NULL  NULL
 public  database_role_settings           table  NULL  NULL
 public  descriptor                       table  NULL  NULL
 public  eventlog                         table  NULL  NULL
+public  external_connections             table  NULL  NULL
 public  jobs                             table  NULL  NULL
 public  join_tokens                      table  NULL  NULL
 public  lease                            table  NULL  NULL
@@ -60,6 +61,7 @@ public  database_role_settings           table     NULL  NULL
 public  descriptor                       table     NULL  NULL
 public  descriptor_id_seq                sequence  NULL  NULL
 public  eventlog                         table     NULL  NULL
+public  external_connections             table     NULL  NULL
 public  jobs                             table     NULL  NULL
 public  join_tokens                      table     NULL  NULL
 public  lease                            table     NULL  NULL
@@ -138,6 +140,7 @@ SELECT id FROM system.descriptor
 47
 50
 51
+52
 100
 101
 102
@@ -186,6 +189,7 @@ SELECT id FROM system.descriptor
 46
 50
 51
+52
 100
 101
 102
@@ -337,6 +341,14 @@ system  public  eventlog                         root    DELETE  true
 system  public  eventlog                         root    INSERT  true
 system  public  eventlog                         root    SELECT  true
 system  public  eventlog                         root    UPDATE  true
+system  public  external_connections             admin   DELETE  true
+system  public  external_connections             admin   INSERT  true
+system  public  external_connections             admin   SELECT  true
+system  public  external_connections             admin   UPDATE  true
+system  public  external_connections             root    DELETE  true
+system  public  external_connections             root    INSERT  true
+system  public  external_connections             root    SELECT  true
+system  public  external_connections             root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true
@@ -607,6 +619,14 @@ system  public  eventlog                         root    DELETE  true
 system  public  eventlog                         root    INSERT  true
 system  public  eventlog                         root    SELECT  true
 system  public  eventlog                         root    UPDATE  true
+system  public  external_connections             admin   DELETE  true
+system  public  external_connections             admin   INSERT  true
+system  public  external_connections             admin   SELECT  true
+system  public  external_connections             admin   UPDATE  true
+system  public  external_connections             root    DELETE  true
+system  public  external_connections             root    INSERT  true
+system  public  external_connections             root    SELECT  true
+system  public  external_connections             root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true

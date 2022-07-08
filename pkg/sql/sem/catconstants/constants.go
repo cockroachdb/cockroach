@@ -82,6 +82,7 @@ const (
 	TenantSettingsTableName                SystemTableName = "tenant_settings"
 	SpanCountTableName                     SystemTableName = "span_count"
 	SystemPrivilegeTableName               SystemTableName = "privileges"
+	SystemExternalConnectionsTableName     SystemTableName = "external_conecctions"
 )
 
 // Oid for virtual database and table.
