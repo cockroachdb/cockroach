@@ -125,6 +125,10 @@ func newStreamIngestionFrontierProcessor(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{sf.input},
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				sf.close()
+				return nil
+			},
 		},
 	); err != nil {
 		return nil, err
@@ -146,8 +150,8 @@ type heartbeatSender struct {
 	flowCtx         *execinfra.FlowCtx
 	// cg runs the heartbeatSender thread.
 	cg ctxgroup.Group
-	// Send signal to stopChan to stop heartbeat sender.
-	stopChan chan struct{}
+	// cancel stops heartbeat sender.
+	cancel func()
 	// heartbeatSender closes this channel when it stops.
 	stoppedChan chan struct{}
 }
@@ -164,7 +168,7 @@ func newHeartbeatSender(
 		streamID:        streaming.StreamID(spec.StreamID),
 		flowCtx:         flowCtx,
 		frontierUpdates: make(chan hlc.Timestamp),
-		stopChan:        make(chan struct{}),
+		cancel:          func() {},
 		stoppedChan:     make(chan struct{}),
 	}, nil
 }
@@ -182,6 +186,8 @@ func (h *heartbeatSender) maybeHeartbeat(
 }
 
 func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	h.cancel = cancel
 	h.cg = ctxgroup.WithContext(ctx)
 	h.cg.GoCtx(func(ctx context.Context) error {
 		sendHeartbeats := func() error {
@@ -196,8 +202,6 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-h.stopChan:
-					return nil
 				case <-timer.C:
 					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
 						Get(&h.flowCtx.EvalCtx.Settings.SV))
@@ -231,15 +235,20 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 }
 
 // Stop the heartbeat loop and returns any error at time of heartbeatSender's exit.
-// Should be called at most once.
+// Can be called multiple times.
 func (h *heartbeatSender) stop() error {
-	close(h.stopChan) // Panic if closed multiple times
-	return h.cg.Wait()
+	h.cancel()
+	return h.wait()
 }
 
 // Wait for heartbeatSender to be stopped and returns any error.
-func (h *heartbeatSender) err() error {
-	return h.cg.Wait()
+func (h *heartbeatSender) wait() error {
+	err := h.cg.Wait()
+	// We expect to see context cancelled when shutting down.
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }
 
 // Start is part of the RowSource interface.
@@ -305,8 +314,10 @@ func (sf *streamIngestionFrontier) Next() (
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.stoppedChan:
-			err := sf.heartbeatSender.err()
-			log.Warningf(sf.Ctx, "heartbeat sender has stopped with error: %s", err)
+			err := sf.heartbeatSender.wait()
+			if err != nil {
+				log.Errorf(sf.Ctx, "heartbeat sender exited with error: %s", err)
+			}
 			sf.MoveToDraining(err)
 			return nil, sf.DrainHelper()
 		}
@@ -314,14 +325,18 @@ func (sf *streamIngestionFrontier) Next() (
 	return nil, sf.DrainHelper()
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (sf *streamIngestionFrontier) ConsumerClosed() {
+func (sf *streamIngestionFrontier) close() {
+	if err := sf.heartbeatSender.stop(); err != nil {
+		log.Errorf(sf.Ctx, "heartbeat sender exited with error: %s", err)
+	}
 	if sf.InternalClose() {
-		if err := sf.heartbeatSender.stop(); err != nil {
-			log.Errorf(sf.Ctx, "heartbeatSender exited with error: %s", err.Error())
-		}
 		sf.metrics.RunningCount.Dec(1)
 	}
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (sf *streamIngestionFrontier) ConsumerClosed() {
+	sf.close()
 }
 
 // decodeResolvedSpans decodes an encoded datum of jobspb.ResolvedSpans into a
