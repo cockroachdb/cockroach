@@ -96,6 +96,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		alterSystemStatementStatisticsAddIndexRecommendations,
 	),
+	upgrade.NewTenantUpgrade(
+		"add default SQL schema telemetry schedule",
+		toCV(clusterversion.SQLSchemaTelemetryScheduledJobs),
+		NoPrecondition,
+		ensureSQLSchemaTelemetrySchedule,
+	),
 }
 
 func init() {

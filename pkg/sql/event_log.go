@@ -104,7 +104,7 @@ import (
 //   Timestamp field must be set too.)
 //     |
 //     v
-// InsertEventRecord() / insertEventRecords()
+// InsertEventRecords() / insertEventRecords()
 //     |
 //  (finalize field EventType from struct type)
 //     |
@@ -416,7 +416,7 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
-// LogEventDestination indicates for InsertEventRecord where the
+// LogEventDestination indicates for InsertEventRecords where the
 // event should be directed to.
 type LogEventDestination int
 
@@ -425,14 +425,14 @@ func (d LogEventDestination) hasFlag(f LogEventDestination) bool {
 }
 
 const (
-	// LogToSystemTable makes InsertEventRecord write one or more
+	// LogToSystemTable makes InsertEventRecords write one or more
 	// entries to the system eventlog table. (This behavior may be
 	// removed in a later version.)
 	LogToSystemTable LogEventDestination = 1 << iota
-	// LogExternally makes InsertEventRecord write the event(s) to the
+	// LogExternally makes InsertEventRecords write the event(s) to the
 	// external logs.
 	LogExternally
-	// LogToDevChannelIfVerbose makes InsertEventRecord copy
+	// LogToDevChannelIfVerbose makes InsertEventRecords copy
 	// the structured event to the DEV logging channel
 	// if the vmodule filter for the log call is set high enough.
 	LogToDevChannelIfVerbose
@@ -441,26 +441,34 @@ const (
 	LogEverywhere LogEventDestination = LogExternally | LogToSystemTable | LogToDevChannelIfVerbose
 )
 
-// InsertEventRecord inserts a single event into the event log as part
+// InsertEventRecords inserts events into the event log as part
 // of the provided transaction, using the provided internal executor.
 //
 // This converts to a call to insertEventRecords() with just 1 entry.
-func InsertEventRecord(
+func InsertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
 	reportingID int32,
 	dst LogEventDestination,
 	targetID int32,
-	info eventpb.EventPayload,
+	info ...eventpb.EventPayload,
 ) error {
+	if len(info) == 0 {
+		return nil
+	}
+	entries := make([]eventLogEntry, len(info))
+	for i, ev := range info {
+		entries[i].targetID = targetID
+		entries[i].event = ev
+	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(ctx, ex, txn, reportingID,
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
-		eventLogEntry{targetID: targetID, event: info})
+		entries...)
 }
 
 // insertEventRecords inserts one or more event into the event log as

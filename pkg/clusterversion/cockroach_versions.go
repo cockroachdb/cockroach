@@ -327,6 +327,9 @@ const (
 	// AlterSystemStatementStatisticsAddIndexRecommendations adds an
 	// index_recommendations column to the system.statement_statistics table.
 	AlterSystemStatementStatisticsAddIndexRecommendations
+	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	// telemetry logging jobs.
+	SQLSchemaTelemetryScheduledJobs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -563,6 +566,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
+	},
+	{
+		Key:     SQLSchemaTelemetryScheduledJobs,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
 	},
 
 	// *************************************************
