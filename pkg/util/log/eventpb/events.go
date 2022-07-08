@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/types"
 )
 
 // GetEventTypeName retrieves the system.eventlog type name for the given payload.
@@ -95,3 +97,19 @@ var _ EventWithCommonJobPayload = (*Restore)(nil)
 
 // RecoveryEventType describes the type of recovery for a RecoveryEvent.
 type RecoveryEventType string
+
+func serializeAny(any *types.Any) ([]byte, error) {
+	m, err := types.EmptyAny(any)
+	if err != nil {
+		return nil, err
+	}
+	if err := types.UnmarshalAny(any, m); err != nil {
+		return nil, err
+	}
+	jsonEncoder := jsonpb.Marshaler{}
+	str, err := jsonEncoder.MarshalToString(m)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(str), nil
+}
