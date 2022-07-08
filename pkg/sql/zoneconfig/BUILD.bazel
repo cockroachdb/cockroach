@@ -17,13 +17,21 @@ go_library(
 
 go_library(
     name = "zoneconfig",
-    srcs = ["zone_config_options.go"],
+    srcs = [
+        "zone_config_options.go",
+        "zone_config_reader.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/zoneconfig",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
+        "//pkg/kv",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/types",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_protobuf//proto",
     ],

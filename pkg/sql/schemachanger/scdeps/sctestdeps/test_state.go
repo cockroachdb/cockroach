@@ -253,3 +253,13 @@ func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
 }
+
+// GetZoneConfig implements scbuild.ZoneConfigReader
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+	return nil, nil
+}
+
+// ZoneConfigReader implements scbuild.Dependencies.
+func (s *TestState) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return s
+}
