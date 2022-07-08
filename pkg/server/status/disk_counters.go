@@ -45,3 +45,19 @@ func getDiskCounters(ctx context.Context) ([]diskStats, error) {
 
 	return output, nil
 }
+
+func GetDriveStatsForAC(ctx context.Context) ([]DriveStats, error) {
+	driveStats, err := disk.IOCountersWithContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var stats []DriveStats
+	for _, counters := range driveStats {
+		stats = append(stats, DriveStats{
+			Name:         counters.Name,
+			BytesRead:    int64(counters.ReadBytes),
+			BytesWritten: int64(counters.WriteBytes),
+		})
+	}
+	return stats, nil
+}

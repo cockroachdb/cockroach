@@ -265,6 +265,7 @@ go_library(
         "@com_github_gorilla_mux//:mux",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@com_github_grpc_ecosystem_grpc_gateway//utilities:go_default_library",
+        "@com_github_lufia_iostat//:iostat",
         "@com_github_marusama_semaphore//:semaphore",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_etcd_go_etcd_raft_v3//:raft",

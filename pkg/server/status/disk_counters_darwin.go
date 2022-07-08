@@ -42,3 +42,19 @@ func getDiskCounters(context.Context) ([]diskStats, error) {
 
 	return output, nil
 }
+
+func GetDriveStatsForAC(context.Context) ([]DriveStats, error) {
+	driveStats, err := iostat.ReadDriveStats()
+	if err != nil {
+		return nil, err
+	}
+	var stats []DriveStats
+	for i := range driveStats {
+		stats = append(stats, DriveStats{
+			Name:         driveStats[i].Name,
+			BytesRead:    driveStats[i].BytesRead,
+			BytesWritten: driveStats[i].BytesWritten,
+		})
+	}
+	return stats, nil
+}
