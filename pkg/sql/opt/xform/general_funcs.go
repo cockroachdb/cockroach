@@ -544,7 +544,6 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	var noLimitSpans constraint.Spans
 	var last memo.RelExpr
 	queue := list.New()
-	queueLength := 0
 	for i, n := 0, spans.Count(); i < n; i++ {
 		if i >= budgetExceededIndex {
 			// The Scan budget has been reached; no additional Scans can be created.
@@ -577,11 +576,10 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 				)
 			}
 			queue.PushBack(newScanOrSelect)
-			queueLength++
 		}
 	}
 	var outCols opt.ColList
-	oddNumScans := (queueLength % 2) != 0
+	oddNumScans := (queue.Len() % 2) != 0
 
 	// Make the UNION ALLs as a balanced tree. This performs better for large
 	// numbers of spans than a left-deep tree because neighboring branches can
