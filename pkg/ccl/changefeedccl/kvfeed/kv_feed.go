@@ -249,9 +249,10 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 		// We have scanned scannedSpans up to and including scannedTS.  Advance frontier
-		// for those spans -- we can start their range feed from scannedTS.Next().
+		// for those spans.  Note, since rangefeed start time is *exclusive* (that it, rangefeed
+		// starts from timestamp.Next()), we advanced frontier to the scannedTS.
 		for _, sp := range scannedSpans {
-			if _, err := rangeFeedResumeFrontier.Forward(sp, scannedTS.Next()); err != nil {
+			if _, err := rangeFeedResumeFrontier.Forward(sp, scannedTS); err != nil {
 				return err
 			}
 		}
