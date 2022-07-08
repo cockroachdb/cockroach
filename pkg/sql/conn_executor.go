@@ -2858,6 +2858,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
+
+			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+				ex.extraTxnState.txnFinishClosure.implicit = false
+				if err = ex.statsCollector.UpgradeImplicitTxn(ex.Ctx()); err != nil {
+					return advanceInfo{}, err
+				}
+			}
+
 		}
 	case txnStart:
 		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
