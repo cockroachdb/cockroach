@@ -35,6 +35,29 @@ guidance is intentionally vague. Many complex projects spread over
 multiple PRs do not require an RFC, though they do require adequate
 communication and discussion.<sup>[1](#sql-syntax)</sup>
 
+An RFC can help you get buy-in and alignment from necessary stakeholders
+on how to best approach your project. Such alignment helps ensure that
+by the time the team starts the implementation phase, your design &
+approach are sound & have been properly vetted.
+
+A few good questions to ask yourself before writing an RFC are:
+1. Does my project introduce new/modify existing architecture that is
+   significant to the operations of the database?
+1. Will my project have a broad impact on sensitive parts of the product,
+   where mistakes or poor design decisions could have a large negative
+   impact?
+
+If the answer to either of these questions is a resounding "yes", an RFC
+may very well be appropriate. As mentioned before, whether you should
+write an RFC is a nuanced topic. When appropriate, an RFC can be a very
+effective tool. However, the process can sometimes be slow & come with a
+good amount of toil. People need time to respond, edits need to be made,
+prototypes need to be modified, and this cycle may repeat multiple times.
+Therefore, it's worth giving this question of whether or not to write an
+RFC the proper consideration. If it is indeed appropriate, then the RFC
+process will be a great tool for strengthening the design and concepts
+behind your project.
+
 It is encouraged to develop a [prototype](#prototyping) concurrently
 with writing the RFC. One of the significant benefits of an RFC is
 that it forces bigger picture thinking which reviewers can then
