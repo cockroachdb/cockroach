@@ -64,6 +64,13 @@ kind("generated file", //docs/...:*)
 		query:  `labels("outs", kind("genrule rule", //pkg/sql/sem/... + //pkg/sql/parser/... + //pkg/sql/lexbase/...))`,
 	},
 	{
+		target: "schemachanger",
+		query: `
+kind("generated file", //pkg/sql/schemachanger/...:*)
+  - labels("out", kind("_gomock_prog_gen rule", //pkg/sql/schemachanger/...:*))
+`,
+	},
+	{
 		target: "excluded",
 		query: `
 let all = kind("generated file", {{ .All }})
@@ -85,14 +92,15 @@ kind("bindata", {{ .All }})`,
 		target: "misc",
 		query: `
 kind("generated file", {{ .All }}) - (
-    {{ template "protobuf" $ }}
-  + {{ template "gomock" $ }}
-  + {{ template "stringer" $ }}
-  + {{ template "execgen" $ }}
-  + {{ template "optgen" $ }}
-  + {{ template "docs" $ }}
-  + {{ template "excluded" $ }}
-  + {{ template "parser" $ }}
+    ({{ template "protobuf" $ }})
+  + ({{ template "gomock" $ }})
+  + ({{ template "stringer" $ }})
+  + ({{ template "execgen" $ }})
+  + ({{ template "optgen" $ }})
+  + ({{ template "docs" $ }})
+  + ({{ template "excluded" $ }})
+  + ({{ template "parser" $ }})
+  + ({{ template "schemachanger" $ }})
 )`,
 	},
 }
