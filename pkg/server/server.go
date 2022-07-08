@@ -1262,6 +1262,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
+	s.stopper.AddCloser(stop.CloserFn(func() { fileTableInternalExecutor.Close(ctx) }))
 	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
 		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
 			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)

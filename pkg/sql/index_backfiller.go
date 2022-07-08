@@ -128,11 +128,20 @@ func (ib *IndexBackfillPlanner) plan(
 
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
+	defer func() {
+		if evalCtx.InternalExecutor != nil {
+			evalCtx.InternalExecutor.Close(ctx)
+		}
+	}()
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
 	if err := DescsTxn(ctx, ib.execCfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
+		if evalCtx.InternalExecutor != nil {
+			evalCtx.InternalExecutor.Close(ctx)
+			evalCtx.InternalExecutor = nil
+		}
 		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			true /* distribute */)

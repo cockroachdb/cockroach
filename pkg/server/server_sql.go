@@ -793,6 +793,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
+	cfg.stopper.AddCloser(stop.CloserFn(func() { execCfg.InternalExecutor.Close(ctx) }))
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
@@ -1023,6 +1024,7 @@ func (s *SQLServer) preStart(
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
+	defer migrationsExecutor.Close(ctx)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{

@@ -296,6 +296,10 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		return err
 	}
 
+	// We no longer need the internal executor.
+	tf.ie.Close(ctx)
+	tf.ie = nil
+
 	tf.mu.Lock()
 	// Register all types used by the initial set of tables.
 	for _, desc := range initialDescs {

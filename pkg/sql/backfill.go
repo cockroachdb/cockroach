@@ -149,6 +149,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors)
+			defer evalCtx.InternalExecutor.Close(ctx)
 			return retryable(ctx, txn, &evalCtx)
 		})
 	}
@@ -175,6 +176,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			ie := createSchemaChangeEvalCtx(
 				ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors,
 			).InternalExecutor.(*InternalExecutor)
+			defer ie.Close(ctx)
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -1066,6 +1068,12 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
+	defer func() {
+		if evalCtx.InternalExecutor != nil {
+			evalCtx.InternalExecutor.Close(ctx)
+			evalCtx.InternalExecutor = nil
+		}
+	}()
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
@@ -1087,6 +1095,10 @@ func (sc *SchemaChanger) distIndexBackfill(
 		tableDesc, err := sc.getTableVersion(ctx, txn, descriptors, version)
 		if err != nil {
 			return err
+		}
+		if evalCtx.InternalExecutor != nil {
+			evalCtx.InternalExecutor.Close(ctx)
+			evalCtx.InternalExecutor = nil
 		}
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory, descriptors)
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
@@ -1360,6 +1372,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory, descriptors)
+			defer evalCtx.InternalExecutor.Close(ctx)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,

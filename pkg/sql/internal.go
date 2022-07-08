@@ -94,7 +94,8 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 	return run()
 }
 
-// MakeInternalExecutor creates an InternalExecutor.
+// MakeInternalExecutor creates an InternalExecutor which must be closed once no
+// longer in use.
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
@@ -113,6 +114,11 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
+}
+
+// Close closes the internal executor.
+func (ie *InternalExecutor) Close(ctx context.Context) {
+	ie.mon.Stop(ctx)
 }
 
 // SetSessionData binds the session variables that will be used by queries

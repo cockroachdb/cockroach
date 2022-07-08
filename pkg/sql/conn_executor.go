@@ -361,6 +361,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
+	// This internal executor is not closed, but that's ok.
 	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
 		Settings:         s.cfg.Settings,
@@ -1004,6 +1005,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		defer ie.Close(ctx)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
@@ -1049,6 +1051,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
+
+	if ie := ex.planner.extendedEvalCtx.InternalExecutor; ie != nil {
+		ie.Close(ctx)
+	}
 
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
@@ -2155,6 +2161,7 @@ func (ex *connExecutor) execCopyIn(
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
 		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+		// TODO: not sure about the internal executor here.
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
@@ -2408,6 +2415,10 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
+	if evalCtx != nil && evalCtx.InternalExecutor != nil {
+		evalCtx.InternalExecutor.Close(ctx)
+		evalCtx.InternalExecutor = nil
+	}
 	ie := MakeInternalExecutor(
 		ctx,
 		ex.server,
