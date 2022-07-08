@@ -1422,7 +1422,9 @@ func zipArtifacts(path string) error {
 			if err != nil {
 				return err
 			}
-			if !info.IsDir() && strings.HasSuffix(path, ".zip") {
+			dir, _ := filepath.Split(rel(path))
+			isTopLevel := dir == ""
+			if !info.IsDir() && isTopLevel && strings.HasSuffix(path, ".zip") {
 				// Skip any top-level zip files, which notably includes itself
 				// and, if present, the debug.zip.
 				return nil
