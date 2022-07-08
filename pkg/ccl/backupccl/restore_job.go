@@ -1608,6 +1608,7 @@ func revalidateIndexes(
 	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
 		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData(execCfg.SV())).(*sql.InternalExecutor)
+			defer ie.Close(ctx)
 			return fn(ctx, txn, ie)
 		})
 	}

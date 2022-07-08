@@ -41,6 +41,7 @@ func TestVerifyPassword(t *testing.T) {
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
+	defer ie.Close(ctx)
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the

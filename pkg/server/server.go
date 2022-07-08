@@ -1262,6 +1262,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
+	//
+	// Note that we don't need to close this internal executor since it is a
+	// singleton and is alive throughout the lifetime of the Server.
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
 	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
 		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),

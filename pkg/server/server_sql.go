@@ -791,6 +791,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
+	// Note that we don't need to close this internal executor since it is a
+	// singleton and is alive throughout the lifetime of the SQLServer.
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
@@ -1025,6 +1027,7 @@ func (s *SQLServer) preStart(
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
+	defer migrationsExecutor.Close(ctx)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{

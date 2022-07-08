@@ -3302,6 +3302,7 @@ type InternalExecutor interface {
 	QueryRow(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (Datums, error)
+	Close(context.Context)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise

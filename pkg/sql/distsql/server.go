@@ -321,10 +321,18 @@ func (ds *ServerImpl) setupFlow(
 		if err != nil {
 			return ctx, nil, nil, err
 		}
+
+		var lazyIE sqlutil.InternalExecutor
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {
-				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
+				lazyIE = ds.SessionBoundInternalExecutorFactory(ctx, sd)
+				return lazyIE
 			},
+		}
+		onFlowCleanup = func() {
+			if lazyIE != nil {
+				lazyIE.Close(ctx)
+			}
 		}
 
 		// It's important to populate evalCtx.Txn early. We'll write it again in the

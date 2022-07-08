@@ -1351,6 +1351,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		// concurrently.
 		var factoryEvalCtx extendedEvalContext
 		ex.initEvalCtx(ctx, &factoryEvalCtx, planner)
+		defer func() {
+			factoryEvalCtx.InternalExecutor.Close(ctx)
+		}()
 		evalCtxFactory = func() *extendedEvalContext {
 			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
