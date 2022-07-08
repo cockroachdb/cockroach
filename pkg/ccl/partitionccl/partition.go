@@ -46,7 +46,11 @@ import (
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ tree.PartitionByType, evalCtx *eval.Context, maybeTuple tree.Expr, cols []catalog.Column,
+	typ tree.PartitionByType,
+	evalCtx *eval.Context,
+	maybeTuple tree.Expr,
+	cols []catalog.Column,
+	forList bool,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -117,6 +121,10 @@ func valueEncodePartitionTuple(
 		datum, err := eval.Expr(evalCtx, typedExpr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
+		}
+		if forList && datum == tree.DNull {
+			return nil, pgerror.New(pgcode.InvalidParameterValue,
+				"NULL cannot be used in PARTITION values")
 		}
 		if err := colinfo.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
@@ -213,7 +221,7 @@ func createPartitioningImpl(
 		}
 		for _, expr := range l.Exprs {
 			encodedTuple, err := valueEncodePartitionTuple(
-				tree.PartitionByList, evalCtx, expr, cols)
+				tree.PartitionByList, evalCtx, expr, cols, true /* forList */)
 			if err != nil {
 				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
@@ -251,12 +259,12 @@ func createPartitioningImpl(
 		}
 		var err error
 		p.FromInclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
+			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols, false /* forList */)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
+			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols, false /* forList */)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}

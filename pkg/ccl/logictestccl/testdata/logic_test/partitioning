@@ -109,7 +109,7 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p2 VALUES IN (1)
 )
 
-statement error \(NULL\) cannot be present in more than one partition
+statement error NULL cannot be used in PARTITION values
 CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1, NULL),
     PARTITION p2 VALUES IN (2, NULL)
@@ -920,7 +920,7 @@ CREATE TABLE IF NOT EXISTS ok12 (
 )
   PARTITION BY LIST (a)
     (
-      PARTITION pu VALUES IN (NULL),
+      PARTITION pu VALUES IN (0),
       PARTITION p1 VALUES IN (1),
       PARTITION p2 VALUES IN (2)
     )
@@ -934,7 +934,7 @@ ok12  CREATE TABLE public.ok12 (
       c INT8 NULL,
       CONSTRAINT ok12_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
-  PARTITION pu VALUES IN ((NULL)),
+  PARTITION pu VALUES IN ((0)),
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
 )
@@ -955,7 +955,7 @@ TABLE ok12
       └── partitions
            ├── pu
            │    └── partition by list prefixes
-           │         └── (NULL)
+           │         └── (0)
            ├── p1
            │    └── partition by list prefixes
            │         └── (1)
