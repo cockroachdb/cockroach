@@ -2957,6 +2957,30 @@ group-by (hash)
       └── array-agg [as=array_agg:10, outer=(1)]
            └── r:1
 
+# Regression test for #83973. Do not attempt to split a scan when the first
+# splittable span splits into too many keys.
+exec-ddl
+CREATE TABLE t83973 (a INT PRIMARY KEY, b INT);
+----
+
+opt expect-not=SplitGroupByScanIntoUnionScans
+SELECT b FROM t83973
+WHERE (a NOT BETWEEN (1) AND (1 + 1) AND (a IS DISTINCT FROM -1000))
+GROUP BY b;
+----
+distinct-on
+ ├── columns: b:2
+ ├── grouping columns: b:2
+ ├── key: (2)
+ └── scan t83973
+      ├── columns: a:1!null b:2
+      ├── constraint: /1
+      │    ├── [ - /-1001]
+      │    ├── [/-999 - /0]
+      │    └── [/3 - ]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
 # ------------------------------------------------------------------------
 # EliminateIndexJoinOrProjectInsideGroupBy
 # ------------------------------------------------------------------------

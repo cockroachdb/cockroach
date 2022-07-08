@@ -533,6 +533,13 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			queue.PushBack(newScanOrSelect)
 		}
 	}
+
+	// Return early if the queue is empty. This is possible if the first
+	// splittable span splits into a number of keys greater than maxScanCount.
+	if queue.Len() == 0 {
+		return nil, false
+	}
+
 	var outCols opt.ColList
 	oddNumScans := (queue.Len() % 2) != 0
 
