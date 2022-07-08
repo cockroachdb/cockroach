@@ -896,6 +896,10 @@ SELECT crdb_internal.compact_engine_span(1, 23, decode('c08989', 'hex'), decode(
 query error is not less than end
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
+user testuser
+query error crdb_internal.compact_engine_span\(\): insufficient privilege
+SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
+
 subtest builtin_is_admin
 
 user root

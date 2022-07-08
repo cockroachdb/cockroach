@@ -204,6 +204,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
+	admissionOptions := admission.DefaultOptions
+	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
+		admissionOptions.Override(opts)
+	}
+	admissionOptions.Settings = st
+	gcoords, metrics := admission.NewGrantCoordinators(cfg.AmbientCtx, admissionOptions)
+	ssg, err := admission.MakeSoftSlotGranter(gcoords.Regular)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to soft slot granter")
+	}
+	cfg.SoftSlotGranter = ssg
+
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create engines")
@@ -368,12 +380,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	admissionOptions := admission.DefaultOptions
-	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
-		admissionOptions.Override(opts)
-	}
-	admissionOptions.Settings = st
-	gcoords, metrics := admission.NewGrantCoordinators(cfg.AmbientCtx, admissionOptions)
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
 	}
