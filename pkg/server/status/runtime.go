@@ -708,3 +708,9 @@ func GetCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err e
 	}
 	return int64(cpuTime.User), int64(cpuTime.Sys), nil
 }
+
+type DriveStats struct {
+	Name         string
+	BytesRead    int64
+	BytesWritten int64
+}

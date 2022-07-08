@@ -1605,15 +1605,15 @@ func (q *StoreWorkQueue) Admit(
 		return StoreWorkHandle{}, errors.Errorf("IngestRequest must specify WriteBytes")
 	}
 	// For now, we compute a workClass based on priority.
-	workClass := regularWorkClass
+	wc := regularWorkClass
 	if info.Priority < admissionpb.NormalPri {
-		workClass = elasticWorkClass
+		wc = elasticWorkClass
 	}
 	h := StoreWorkHandle{
 		tenantID:      info.TenantID,
 		writeBytes:    info.WriteBytes,
 		ingestRequest: info.IngestRequest,
-		workClass:     workClass,
+		workClass:     wc,
 	}
 	q.mu.RLock()
 	estimates := q.mu.estimates
@@ -1621,7 +1621,7 @@ func (q *StoreWorkQueue) Admit(
 	h.writeTokens = h.writeBytes
 	h.writeTokens += estimates.atAdmitWorkByteAddition
 	info.WorkInfo.requestedCount = h.writeTokens
-	enabled, err := q.queues[workClass].Admit(ctx, info.WorkInfo)
+	enabled, err := q.queues[wc].Admit(ctx, info.WorkInfo)
 	if err != nil {
 		return StoreWorkHandle{}, err
 	}

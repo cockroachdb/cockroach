@@ -585,7 +585,8 @@ type kvStoreTokenChildGranter struct {
 }
 
 type storeWriteDoneState struct {
-	tokens                       int64
+	tokens int64
+	// TODO: following are 0 for experiments.
 	atAdmittedDoneAccountedBytes int64
 	atAdmittedDoneL0Bytes        int64
 }
@@ -614,7 +615,7 @@ func (cg *kvStoreTokenChildGranter) tookWithoutPermission(count int64) {
 }
 
 func (cg *kvStoreTokenChildGranter) continueGrantChain(grantChainID grantChainID) {
-	panic("grant chains are not used for store tokens")
+	// Ignore since grant chains are not used for store tokens.
 }
 
 func (cg *kvStoreTokenChildGranter) storeWriteDone(doneState storeWriteDoneState) {
@@ -634,11 +635,11 @@ func (sg *kvStoreTokenGranter) storeWriteDone(workClass workClass, doneState sto
 	}
 	wasExhausted := exhaustedFunc()
 	ioTokensAtAdmittedDone := doneState.atAdmittedDoneL0Bytes + sg.atAdmittedDoneL0ByteAddition
-	additionalIOTokensToGet := doneState.tokens - ioTokensAtAdmittedDone
-	sg.subtractTokens(additionalIOTokensToGet, false)
+	additionalIOTokensToGet := ioTokensAtAdmittedDone - doneState.tokens
+	sg.subtractL0IOTokens(additionalIOTokensToGet, false)
 	diskTokensAtAdmittedDone :=
 		doneState.atAdmittedDoneAccountedBytes + sg.atAdmittedDoneByteAddition
-	additionalDiskTokensToGet := doneState.tokens - diskTokensAtAdmittedDone
+	additionalDiskTokensToGet := diskTokensAtAdmittedDone - doneState.tokens
 	if workClass == elasticWorkClass {
 		sg.elasticDiskTokensAvailable -= additionalDiskTokensToGet
 	}
@@ -659,14 +660,14 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 	switch wc {
 	case regularWorkClass:
 		if sg.availableIOTokens > 0 {
-			sg.subtractTokens(count, false)
+			sg.subtractL0IOTokens(count, false)
 			sg.diskTokensUsed[wc] += count
 			return grantSuccess
 		}
 	case elasticWorkClass:
 		if sg.elasticDiskTokensAvailable > 0 && sg.availableIOTokens > 0 {
 			sg.elasticDiskTokensAvailable -= count
-			sg.subtractTokens(count, false)
+			sg.subtractL0IOTokens(count, false)
 			sg.diskTokensUsed[wc] += count
 			return grantSuccess
 		}
@@ -680,7 +681,7 @@ func (sg *kvStoreTokenGranter) returnGrant(workClass workClass, count int64) {
 
 func (sg *kvStoreTokenGranter) returnGrantLocked(count int64, demuxHandle int8) {
 	wc := workClass(demuxHandle)
-	sg.subtractTokens(-count, false)
+	sg.subtractL0IOTokens(-count, false)
 	if wc == elasticWorkClass {
 		sg.elasticDiskTokensAvailable += count
 	}
@@ -693,14 +694,14 @@ func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass workClass, count 
 
 func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
 	wc := workClass(demuxHandle)
-	sg.subtractTokens(count, false)
+	sg.subtractL0IOTokens(count, false)
 	if wc == elasticWorkClass {
 		sg.elasticDiskTokensAvailable -= count
 	}
 	sg.diskTokensUsed[wc] += count
 }
 
-func (sg *kvStoreTokenGranter) subtractTokens(count int64, forceTickMetric bool) {
+func (sg *kvStoreTokenGranter) subtractL0IOTokens(count int64, forceTickMetric bool) {
 	avail := sg.availableIOTokens
 	sg.availableIOTokens -= count
 	if count > 0 && avail > 0 && sg.availableIOTokens <= 0 {
@@ -756,7 +757,7 @@ func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensU
 	// tookWithoutPermission or because tryGet will satisfy requests until
 	// availableIOTokens become <= 0. We want to remember this previous
 	// over-allocation.
-	sg.subtractTokens(-tokens, true)
+	sg.subtractL0IOTokens(-tokens, true)
 	if sg.availableIOTokens > tokens {
 		// Clamp to tokens.
 		sg.availableIOTokens = tokens
@@ -958,9 +959,9 @@ func NewGrantCoordinators(
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
 	kvSlotAdjuster.granter = kvg
-	requester := makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
-	coord.queues[KVWork] = requester
-	kvg.requester = requester
+	req := makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
+	coord.queues[KVWork] = req
+	kvg.requester = req
 	coord.granters[KVWork] = kvg
 
 	tg := &tokenGranter{
@@ -970,10 +971,10 @@ func NewGrantCoordinators(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	requester = makeRequester(
+	req = makeRequester(
 		ambientCtx, SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
-	coord.queues[SQLKVResponseWork] = requester
-	tg.requester = requester
+	coord.queues[SQLKVResponseWork] = req
+	tg.requester = req
 	coord.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
@@ -983,10 +984,10 @@ func NewGrantCoordinators(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
-	coord.queues[SQLSQLResponseWork] = requester
-	tg.requester = requester
+	coord.queues[SQLSQLResponseWork] = req
+	tg.requester = req
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
@@ -996,10 +997,10 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
-	coord.queues[SQLStatementLeafStartWork] = requester
-	sg.requester = requester
+	coord.queues[SQLStatementLeafStartWork] = req
+	sg.requester = req
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
@@ -1009,10 +1010,10 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
-	coord.queues[SQLStatementRootStartWork] = requester
-	sg.requester = requester
+	coord.queues[SQLStatementRootStartWork] = req
+	sg.requester = req
 	coord.granters[SQLStatementRootStartWork] = sg
 
 	metricStructs = appendMetricStructsForQueues(metricStructs, coord)
@@ -1065,10 +1066,10 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	requester := makeRequester(ambientCtx,
+	req := makeRequester(ambientCtx, //lint:ignore
 		SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
-	coord.queues[SQLKVResponseWork] = requester
-	tg.requester = requester
+	coord.queues[SQLKVResponseWork] = req
+	tg.requester = req
 	coord.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
@@ -1078,10 +1079,10 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
-	coord.queues[SQLSQLResponseWork] = requester
-	tg.requester = requester
+	coord.queues[SQLSQLResponseWork] = req
+	tg.requester = req
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
@@ -1091,10 +1092,10 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
-	coord.queues[SQLStatementLeafStartWork] = requester
-	sg.requester = requester
+	coord.queues[SQLStatementLeafStartWork] = req
+	sg.requester = req
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
@@ -1104,10 +1105,10 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	requester = makeRequester(ambientCtx,
+	req = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
-	coord.queues[SQLStatementRootStartWork] = requester
-	sg.requester = requester
+	coord.queues[SQLStatementRootStartWork] = req
+	sg.requester = req
 	coord.granters[SQLStatementRootStartWork] = sg
 
 	return coord, appendMetricStructsForQueues(metricStructs, coord)
@@ -1568,6 +1569,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	kvg := &kvStoreTokenGranter{
 		coord:                           coord,
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
+		atAdmittedDoneByteAddition:      1,
+		atAdmittedDoneL0ByteAddition:    1,
 	}
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
@@ -1766,6 +1769,12 @@ type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
 }
 
+type DiskStats struct {
+	BytesRead            int64
+	BytesWritten         int64
+	ProvisionedBandwidth int64
+}
+
 // StoreMetrics are the metrics for a store.
 type StoreMetrics struct {
 	StoreID int32
@@ -1775,7 +1784,7 @@ type StoreMetrics struct {
 
 	// TODO: populate. IntervalCompactionInfo should be folded into
 	// pebble.InternalIntervalMetrics.
-	IntervalDiskLoadInfo   IntervalDiskLoadInfo
+	DiskStats              DiskStats
 	IntervalCompactionInfo IntervalCompactionInfo
 }
 
@@ -1809,6 +1818,8 @@ type granterWithIOTokens interface {
 type storeAdmissionStats struct {
 	// Total admission requests.
 	admittedCount uint64
+
+	// TODO: these will all be 0 for experiments.
 
 	// Bytes mentioned for the requests in admittedCount.
 	//
@@ -1851,7 +1862,10 @@ type ioLoadListenerState struct {
 	cumWriteStallCount int64
 	// Cumulative incoming bytes is flushed+ingested bytes into the LSM (any
 	// level).
-	cumIncomingBytes uint64
+	cumIncomingBytes        uint64
+	cumCompactionWriteBytes uint64
+
+	diskStats DiskStats
 
 	// Exponentially smoothed per interval values.
 
@@ -1880,7 +1894,7 @@ type ioLoadListenerState struct {
 	tokensUsed int64
 
 	// elasticDiskTokens represents the tokens to give out until the next call
-	// to adjustTokens. They are parceled out in snall intervals.
+	// to adjustTokens. They are parceled out in small intervals.
 	// elasticDiskTokensAllocated represents what has been given out.
 	elasticDiskTokens          int64
 	elasticDiskTokensAllocated int64
@@ -1972,11 +1986,13 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		io.ioLoadListenerState = ioLoadListenerState{
-			cumAdmissionStats:  io.kvRequester.getStoreAdmissionStats(),
-			cumL0AddedBytes:    m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
-			curL0Bytes:         m.Levels[0].Size,
-			cumWriteStallCount: metrics.WriteStallCount,
-			cumIncomingBytes:   cumIncomingBytes(m),
+			cumAdmissionStats:       io.kvRequester.getStoreAdmissionStats(),
+			cumL0AddedBytes:         m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
+			curL0Bytes:              m.Levels[0].Size,
+			cumWriteStallCount:      metrics.WriteStallCount,
+			cumIncomingBytes:        cumIncomingBytes(m),
+			cumCompactionWriteBytes: cumCompactionWriteBytes(m),
+			diskStats:               metrics.DiskStats,
 			// No initial limit, i.e, the first interval is unlimited.
 			totalNumByteTokens: unlimitedTokens,
 			elasticDiskTokens:  unlimitedTokens,
@@ -1990,6 +2006,14 @@ func cumIncomingBytes(m *pebble.Metrics) uint64 {
 	var result uint64
 	for i := range m.Levels {
 		result += m.Levels[i].BytesFlushed + m.Levels[i].BytesIngested
+	}
+	return result
+}
+
+func cumCompactionWriteBytes(m *pebble.Metrics) uint64 {
+	var result uint64
+	for i := range m.Levels {
+		result += m.Levels[i].BytesCompacted
 	}
 	return result
 }
@@ -2017,7 +2041,14 @@ func (io *ioLoadListener) allocateTokensTick() {
 	}
 	// INVARIANT: toAllocate* >= 0.
 	toAllocateIOTokens := allocateFunc(io.totalNumByteTokens, io.tokensAllocated)
+	if toAllocateIOTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateIOTokens is negative %d", toAllocateIOTokens))
+	}
 	toAllocateElasticDiskTokens := allocateFunc(io.elasticDiskTokens, io.elasticDiskTokensAllocated)
+	if toAllocateElasticDiskTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateElasticDiskTokens is negative %d",
+			toAllocateElasticDiskTokens))
+	}
 	io.mu.Lock()
 	defer io.mu.Unlock()
 	io.tokensAllocated += toAllocateIOTokens
@@ -2043,13 +2074,29 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.mu.Unlock()
 	intIncomingBytes := int64(cumIncomingBytes(metrics.Metrics)) -
 		int64(io.ioLoadListenerState.cumIncomingBytes)
-	intervalLSMInfo := intervalLSMInfo{
+	intLSMInfo := intervalLSMInfo{
 		incomingBytes:     intIncomingBytes,
 		regularTokensUsed: diskTokensUsed[regularWorkClass],
 		elasticTokensUsed: diskTokensUsed[elasticWorkClass],
 	}
+	cumCompactionWriteB := cumCompactionWriteBytes(metrics.Metrics)
+	intCompactionWriteBytes := int64(cumCompactionWriteB) -
+		int64(io.ioLoadListenerState.cumCompactionWriteBytes)
+	var intervalDiskLoadInfo IntervalDiskLoadInfo
+	intervalDiskLoadInfo.ProvisionedBandwidth = metrics.DiskStats.ProvisionedBandwidth
+	intervalDiskLoadInfo.ReadBandwidth =
+		(metrics.DiskStats.BytesRead - io.diskStats.BytesRead) / adjustmentInterval
+	intervalDiskLoadInfo.WriteBandwidth =
+		(metrics.DiskStats.BytesWritten - io.diskStats.BytesWritten) / adjustmentInterval
+	log.Infof(ctx, "Incoming LSM %s, tokens (regular, elastic): %s, %s, per-req: (%s,%s), compaction-w: %s",
+		humanizeutil.IBytes(intLSMInfo.incomingBytes),
+		humanizeutil.IBytes(intLSMInfo.regularTokensUsed), humanizeutil.IBytes(intLSMInfo.elasticTokensUsed),
+		humanizeutil.IBytes(int64(io.smoothedIntPerWorkAtAdmitUnaccountedBytes)),
+		humanizeutil.IBytes(int64(io.smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes)),
+		humanizeutil.IBytes(intCompactionWriteBytes))
+
 	elasticTokens := io.diskBandwidthLimiter.adjust(
-		metrics.IntervalDiskLoadInfo, metrics.IntervalCompactionInfo, intervalLSMInfo)
+		intervalDiskLoadInfo, metrics.IntervalCompactionInfo, intLSMInfo)
 
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(),
 		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
@@ -2059,13 +2106,16 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		MinFlushUtilizationPercentage.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
+	io.diskStats = metrics.DiskStats
 	io.elasticDiskTokens = elasticTokens
 	io.elasticDiskTokensAllocated = 0
+	io.cumCompactionWriteBytes = cumCompactionWriteB
 	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
 	io.mu.Lock()
 	io.mu.kvGranter.setAdmittedDoneByteAdditionLocked(
-		int64(res.smoothedIntPerWorkAtAdmitUnaccountedBytes),
-		int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes))
+		max(1, int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes)),
+		max(1, int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes)))
+	io.mu.Unlock()
 	if res.aux.shouldLog {
 		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
@@ -2088,6 +2138,8 @@ type adjustTokensAuxComputations struct {
 	intFlushUtilization float64
 	intWriteStalls      int64
 }
+
+var expectZeroHackForExperiments = true
 
 func (*ioLoadListener) adjustTokensInner(
 	ctx context.Context,
@@ -2139,6 +2191,12 @@ func (*ioLoadListener) adjustTokensInner(
 		intAtAdmittedDoneAccountedL0Bytes += cumAdmissionStats[i].atAdmittedDoneAccountedL0Bytes -
 			prev.cumAdmissionStats[i].atAdmittedDoneAccountedL0Bytes
 	}
+	// TODO: hack for experiments.
+	if expectZeroHackForExperiments &&
+		(intAtAdmitAccountedBytes != 0 || intAtAdmittedDoneAccountedBytes != 0 ||
+			intAtAdmittedDoneAccountedL0Bytes != 0) {
+		panic("broken accounting 0")
+	}
 	doLog := true
 	if intAdmittedCount <= 0 {
 		intAdmittedCount = 1
@@ -2182,7 +2240,7 @@ func (*ioLoadListener) adjustTokensInner(
 			// control computations than smoothing down to zero over time.
 			smoothedIntPerWorkUnaccountedBytes = prevSmoothedIntPerWorkUnaccountedBytes
 		}
-		return intAddedBytes, smoothedIntPerWorkUnaccountedBytes
+		return intUnaccountedBytes, smoothedIntPerWorkUnaccountedBytes
 	}
 	// Bytes that were added to the LSM or to L0 based on LSM stats, but we
 	// don't know where they came from.
@@ -2191,16 +2249,16 @@ func (*ioLoadListener) adjustTokensInner(
 	intAtAdmittedDoneUnaccountedL0Bytes := intL0AddedBytes -
 		int64(intAtAdmittedDoneAccountedL0Bytes)
 	var smoothedIntPerWorkAtAdmitUnaccountedBytes float64
-	intAtAdmitUnaccountedBytes, smoothedIntPerWorkAtAdmitUnaccountedBytes = unaccountedFunc(
+	_, smoothedIntPerWorkAtAdmitUnaccountedBytes = unaccountedFunc(
 		intAtAdmitUnaccountedBytes, prev.smoothedIntPerWorkAtAdmitUnaccountedBytes, intIncomingBytes)
 	var smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes float64
-	intAtAdmittedDoneUnaccountedBytes, smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes =
+	_, smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes =
 		unaccountedFunc(
 			intAtAdmittedDoneUnaccountedBytes,
 			prev.smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes,
 			intIncomingBytes)
 	var smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes float64
-	intAtAdmittedDoneUnaccountedL0Bytes, smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes =
+	_, smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes =
 		unaccountedFunc(
 			intAtAdmittedDoneUnaccountedL0Bytes,
 			prev.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes,
@@ -2288,12 +2346,18 @@ func (*ioLoadListener) adjustTokensInner(
 	// are stable). Another thing to note is that compactions out of L0 are
 	// typically the more persistent bottleneck than flushes for the following
 	// reason:
-	// There is a dedicated flush thread. In comparison, with a write amp of W
-	// and maximum compaction concurrency of C, only approximately C/W threads
-	// are working on reading from L0 to compact out of L0. Since W can be 20+
-	// and C defaults to 3 (we plan to dynamically adjust C but one can expect C
-	// to be <= 10), C/W < 1. So the main reason we are considering flush tokens
-	// is transient flush bottlenecks, and workloads where W is small.
+	// There is a dedicated flush thread. With a maximum compaction concurrency
+	// of C, we have up to C threads dedicated to handling the write-amp of W
+	// (caused by rewriting the same data). So C/(W-1) threads on average are
+	// reading the original data (that will be rewritten W-1 times). Since L0
+	// can have multiple overlapping files, and intra-L0 compactions are usually
+	// avoided, we can assume (at best) that the original data (in L0) is being
+	// read only when compacting to levels lower than L0. That is, C/(W-1)
+	// threads are reading from L0 to compact to levels lower than L0. Since W
+	// can be 20+ and C defaults to 3 (we plan to dynamically adjust C but one
+	// can expect C to be <= 10), C/(W-1) < 1. So the main reason we are
+	// considering flush tokens is transient flush bottlenecks, and workloads
+	// where W is small.
 
 	// Compute flush utilization for this interval. A very low flush utilization
 	// will cause flush tokens to be unlimited.

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -767,8 +768,29 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 	})
 }
 
+var provisionedBandwidthHack = settings.RegisterIntSetting(
+	settings.SystemOnly, "hack.provisioned_bandwidth",
+	"hack that configures provisioned bandwidth for experiments",
+	20<<30).WithPublic()
+
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
 func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+	driveStats, err := status.GetDriveStatsForAC(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	// TODO: this summing is a hack for experimentation since we only
+	// expect one real drive (may also have a boot drive but it will see
+	// little IO). Eventually we need a way to map DriveStats.Name to
+	// each store.
+	var diskStats admission.DiskStats
+	for i := 0; i < len(driveStats); i++ {
+		log.Infof(context.Background(), "driveStats: %s w: %s r: %s", driveStats[i].Name,
+			humanizeutil.IBytes(driveStats[i].BytesWritten), humanizeutil.IBytes(driveStats[i].BytesRead))
+		diskStats.BytesRead += driveStats[i].BytesRead
+		diskStats.BytesWritten += driveStats[i].BytesWritten
+	}
+	diskStats.ProvisionedBandwidth = provisionedBandwidthHack.Get(&n.storeCfg.Settings.SV)
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
@@ -777,7 +799,9 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 			StoreID:                 int32(store.StoreID()),
 			Metrics:                 m.Metrics,
 			WriteStallCount:         m.WriteStallCount,
-			InternalIntervalMetrics: im})
+			InternalIntervalMetrics: im,
+			DiskStats:               diskStats,
+		})
 		return nil
 	})
 	return metrics

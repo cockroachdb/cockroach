@@ -14,8 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -24,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -46,7 +43,12 @@ type testRequester struct {
 }
 
 var _ requester = &testRequester{}
-var _ storeRequester = &testRequester{}
+
+type storeTestRequester struct {
+	requesters [numWorkClasses]*testRequester
+}
+
+var _ storeRequester = &storeTestRequester{}
 
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
@@ -81,12 +83,22 @@ func (tr *testRequester) continueGrantChain() {
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
-func (tr *testRequester) getStoreAdmissionStats() storeAdmissionStats {
-	// Only used by ioLoadListener, so don't bother.
-	return storeAdmissionStats{}
+func (str *storeTestRequester) getRequesters() [numWorkClasses]requester {
+	var rv [numWorkClasses]requester
+	for i := range str.requesters {
+		rv[i] = str.requesters[i]
+	}
+	return rv
 }
 
-func (tr *testRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
+func (str *storeTestRequester) close() {}
+
+func (str *storeTestRequester) getStoreAdmissionStats() [numWorkClasses]storeAdmissionStats {
+	// Only used by ioLoadListener, so don't bother.
+	return [numWorkClasses]storeAdmissionStats{}
+}
+
+func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	// Only used by ioLoadListener, so don't bother.
 }
 
@@ -164,16 +176,21 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granter granter, settings *cluster.Settings,
-					opts workQueueOptions) storeRequester {
-					req := &testRequester{
-						workKind:               KVWork,
-						granter:                granter,
-						usesTokens:             true,
-						buf:                    &buf,
-						returnValueFromGranted: 0,
+					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+					settings *cluster.Settings, opts workQueueOptions) storeRequester {
+					makeTestRequester := func(workClass workClass) *testRequester {
+						return &testRequester{
+							workKind:               KVWork,
+							granter:                granters[workClass],
+							usesTokens:             true,
+							buf:                    &buf,
+							returnValueFromGranted: 0,
+						}
 					}
-					requesters[KVWork] = req
+					req := &storeTestRequester{}
+					req.requesters[regularWorkClass] = makeTestRequester(regularWorkClass)
+					req.requesters[elasticWorkClass] = makeTestRequester(elasticWorkClass)
+					requesters[KVWork] = req.requesters[regularWorkClass]
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
@@ -326,10 +343,13 @@ func TestStoreCoordinators(t *testing.T) {
 		Settings:          settings,
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granter granter, settings *cluster.Settings,
-			opts workQueueOptions) storeRequester {
-			req := makeRequesterFunc(ctx, KVWork, granter, settings, opts)
-			return req.(*testRequester)
+			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+			settings *cluster.Settings, opts workQueueOptions) storeRequester {
+			req := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, opts)
+			str := &storeTestRequester{}
+			str.requesters[regularWorkClass] = req.(*testRequester)
+			str.requesters[elasticWorkClass] = req.(*testRequester)
+			return str
 		},
 	}
 	coords, _ := NewGrantCoordinators(ambientCtx, opts)
@@ -378,24 +398,20 @@ type testRequesterForIOLL struct {
 
 var _ storeRequester = &testRequesterForIOLL{}
 
-func (r *testRequesterForIOLL) hasWaitingRequests() bool {
-	panic("unimplemented")
-}
-
-func (r *testRequesterForIOLL) granted(grantChainID grantChainID) int64 {
+func (r *testRequesterForIOLL) getRequesters() [numWorkClasses]requester {
 	panic("unimplemented")
 }
 
 func (r *testRequesterForIOLL) close() {}
 
-func (r *testRequesterForIOLL) getStoreAdmissionStats() storeAdmissionStats {
-	return r.stats
+func (r *testRequesterForIOLL) getStoreAdmissionStats() [numWorkClasses]storeAdmissionStats {
+	return [numWorkClasses]storeAdmissionStats{r.stats}
 }
 
 func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	fmt.Fprintf(&r.buf,
-		"store-request-estimates: fractionOfIngestIntoL0: %.2f, workByteAddition: %d",
-		estimates.fractionOfIngestIntoL0, estimates.workByteAddition)
+		"store-request-estimates: atAdmitWorkByteAddition: %d",
+		estimates.atAdmitWorkByteAddition)
 }
 
 type testGranterWithIOTokens struct {
@@ -403,12 +419,27 @@ type testGranterWithIOTokens struct {
 	allTokensUsed bool
 }
 
+var _ granterWithIOTokens = &testGranterWithIOTokens{}
+
 func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
 	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensForTokenTickDurationToString(tokens))
 	if g.allTokensUsed {
 		return tokens * 2
 	}
 	return 0
+}
+
+func (g *testGranterWithIOTokens) setAvailableElasticDiskTokensLocked(tokens int64) {
+	fmt.Fprintf(&g.buf, " setAvailableElasticDiskTokens: %s",
+		tokensForTokenTickDurationToString(tokens))
+}
+
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+	return [numWorkClasses]int64{}
+}
+
+func (g *testGranterWithIOTokens) setAdmittedDoneByteAdditionLocked(bytes int64, l0Bytes int64) {
+	fmt.Fprintf(&g.buf, "setAdmittedDoneByteAddition(bytes: %d, l0Bytes %d)", bytes, l0Bytes)
 }
 
 func tokensForTokenTickDurationToString(tokens int64) string {
@@ -425,6 +456,7 @@ type rawTokenResult adjustTokensResult
 // times to cause tokens to be set in the testGranterWithIOTokens:
 // set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int> ...
 func TestIOLoadListener(t *testing.T) {
+	expectZeroHackForExperiments = false
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
 	var ioll *ioLoadListener
@@ -448,21 +480,26 @@ func TestIOLoadListener(t *testing.T) {
 
 			case "prep-admission-stats":
 				req.stats = storeAdmissionStats{
-					admittedCount:            0,
-					admittedWithBytesCount:   0,
-					admittedAccountedBytes:   0,
-					ingestedAccountedBytes:   0,
-					ingestedAccountedL0Bytes: 0,
+					admittedCount:                  0,
+					atAdmitAccountedBytes:          0,
+					atAdmittedDoneAccountedBytes:   0,
+					atAdmittedDoneAccountedL0Bytes: 0,
 				}
 				d.ScanArgs(t, "admitted", &req.stats.admittedCount)
 				if d.HasArg("admitted-bytes") {
-					d.ScanArgs(t, "admitted-bytes", &req.stats.admittedAccountedBytes)
+					d.ScanArgs(t, "admitted-bytes", &req.stats.atAdmitAccountedBytes)
+					req.stats.atAdmittedDoneAccountedBytes = req.stats.atAdmitAccountedBytes
+					req.stats.atAdmittedDoneAccountedL0Bytes = req.stats.atAdmitAccountedBytes
 				}
 				if d.HasArg("ingested-bytes") {
-					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedAccountedBytes)
+					var ingestedBytes uint64
+					d.ScanArgs(t, "ingested-bytes", &ingestedBytes)
+					req.stats.atAdmittedDoneAccountedL0Bytes -= ingestedBytes
 				}
 				if d.HasArg("ingested-into-l0") {
-					d.ScanArgs(t, "ingested-into-l0", &req.stats.ingestedAccountedL0Bytes)
+					var ingestedIntoL0Bytes uint64
+					d.ScanArgs(t, "ingested-into-l0", &ingestedIntoL0Bytes)
+					req.stats.atAdmittedDoneAccountedL0Bytes += ingestedIntoL0Bytes
 				}
 				return fmt.Sprintf("%+v", req.stats)
 
@@ -518,6 +555,9 @@ func TestIOLoadListener(t *testing.T) {
 					Metrics:                 &metrics,
 					WriteStallCount:         int64(writeStallCount),
 					InternalIntervalMetrics: im,
+					DiskStats: DiskStats{
+						ProvisionedBandwidth: 1 << 30,
+					},
 				})
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
@@ -575,6 +615,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ioll.allocateTokensTick()
 }
 
+/*
 type testGranterNonNegativeTokens struct {
 	t *testing.T
 }
@@ -691,3 +732,6 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		}
 	}
 }
+
+*/
+// Ho

@@ -81,6 +81,7 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	useBackgroundTxnQoS                  bool
 }
 
 func init() {
@@ -143,6 +144,8 @@ var kvMeta = workload.Meta{
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
 			`Inject an enum column and use it`)
+		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
+			`Set default_transaction_quality_of_service session variable to "background".`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -353,6 +356,10 @@ func (w *kv) Ops(
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
+		if w.useBackgroundTxnQoS {
+			stmt := op.sr.Define(" SET default_transaction_quality_of_service = background")
+			op.qosStmt = &stmt
+		}
 		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -375,6 +382,7 @@ type kvOp struct {
 	hists           *histogram.Histograms
 	sr              workload.SQLRunner
 	mcp             *workload.MultiConnPool
+	qosStmt         *workload.StmtHandle
 	readStmt        workload.StmtHandle
 	writeStmt       workload.StmtHandle
 	spanStmt        workload.StmtHandle
@@ -384,6 +392,12 @@ type kvOp struct {
 }
 
 func (o *kvOp) run(ctx context.Context) (retErr error) {
+	if o.qosStmt != nil {
+		_, err := o.qosStmt.Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)

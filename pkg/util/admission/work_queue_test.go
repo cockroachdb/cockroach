@@ -60,7 +60,7 @@ type testGranter struct {
 	returnValueFromTryGet bool
 }
 
-var _ granter = &testGranter{}
+var _ granterWithStoreWriteDone = &testGranter{}
 
 func (tg *testGranter) grantKind() grantKind {
 	return slot
@@ -88,6 +88,11 @@ func (tg *testGranter) grant(grantChainID grantChainID) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	tg.buf.printf("granted: returned %d", rv)
+}
+
+func (tg *testGranter) storeWriteDone(doneState storeWriteDoneState) {
+	tg.buf.printf("storeWriteDone: tokens: %d ac: %d ac-L0: %d", doneState.tokens,
+		doneState.atAdmittedDoneAccountedBytes, doneState.atAdmittedDoneL0Bytes)
 }
 
 type testWork struct {
@@ -465,11 +470,12 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 	var wrkMap workMap
 	var buf builderWithMu
 	var st *cluster.Settings
+	// TODO: also exercise elasticWorkClass.
 	printQueue := func() string {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.regularQ.String(), q.mu.stats,
-			q.mu.estimates)
+		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.queues[regularWorkClass].String(),
+			q.mu.stats, q.mu.estimates)
 	}
 
 	datadriven.RunTest(t, testutils.TestDataPath(t, "store_work_queue"),
@@ -484,8 +490,8 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					tg, st, opts).(*StoreWorkQueue)
-				tg.r = q
+					[numWorkClasses]granterWithStoreWriteDone{tg, tg}, st, opts).(*StoreWorkQueue)
+				tg.r = &q.queues[regularWorkClass]
 				wrkMap.resetMap()
 				return ""
 
@@ -544,12 +550,9 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 
 			case "set-store-request-estimates":
 				var estimates storeRequestEstimates
-				var percentIngestedIntoL0 int
-				d.ScanArgs(t, "percent-ingested-into-l0", &percentIngestedIntoL0)
-				estimates.fractionOfIngestIntoL0 = float64(percentIngestedIntoL0) / 100
 				var workBytesAddition int
 				d.ScanArgs(t, "work-bytes-addition", &workBytesAddition)
-				estimates.workByteAddition = int64(workBytesAddition)
+				estimates.atAdmitWorkByteAddition = int64(workBytesAddition)
 				q.setStoreRequestEstimates(estimates)
 				return printQueue()
 
@@ -576,10 +579,6 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			case "work-done":
 				var id int
 				d.ScanArgs(t, "id", &id)
-				var ingestedIntoL0Bytes int
-				if d.HasArg("ingested-into-l0") {
-					d.ScanArgs(t, "ingested-into-l0", &ingestedIntoL0Bytes)
-				}
 				work, ok := wrkMap.get(id)
 				if !ok {
 					return fmt.Sprintf("unknown id: %d\n", id)
@@ -587,7 +586,16 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				if !work.admitted {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
-				require.NoError(t, q.AdmittedWorkDone(work.handle, int64(ingestedIntoL0Bytes)))
+				workDoneInfo := StoreWorkDoneInfo{
+					ActualBytes:       work.handle.writeBytes,
+					ActualBytesIntoL0: work.handle.writeBytes,
+				}
+				if d.HasArg("ingested-into-l0") {
+					var ingestedIntoL0Bytes int
+					d.ScanArgs(t, "ingested-into-l0", &ingestedIntoL0Bytes)
+					workDoneInfo.ActualBytesIntoL0 = int64(ingestedIntoL0Bytes)
+				}
+				require.NoError(t, q.AdmittedWorkDone(work.handle, workDoneInfo))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
