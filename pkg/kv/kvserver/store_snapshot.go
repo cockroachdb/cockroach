@@ -416,7 +416,7 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		// A failure to clean up the storage is benign except that it will leak
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
-		if err := kvSS.scratch.Clear(); err != nil {
+		if err := kvSS.scratch.Close(); err != nil {
 			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
