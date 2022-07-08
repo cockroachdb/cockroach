@@ -114,7 +114,7 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		// so it is important that they are cheap. Keeping them quiesced instead of
 		// letting them unquiesce and tick every 200ms indefinitely avoids a
 		// meaningful amount of periodic work for each uninitialized replica.
-		r.isInitializedRLocked() &&
+		r.IsInitialized() &&
 		// A replica's Raft group begins in a dormant state and is initialized
 		// lazily in response to any Raft traffic (see stepRaftGroup) or KV request
 		// traffic (see maybeInitializeRaftGroup). If it has yet to be initialized,

@@ -411,7 +411,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		repl.mu.RLock()
 		destroyed := repl.mu.destroyStatus
-		initialized := repl.isInitializedRLocked()
+		initialized := repl.IsInitialized()
 		repl.mu.RUnlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
 			break
