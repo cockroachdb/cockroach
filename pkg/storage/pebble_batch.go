@@ -416,7 +416,7 @@ func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.batch.Experimental().RangeKeyUnset(
+	return p.batch.RangeKeyUnset(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
@@ -455,7 +455,7 @@ func (p *pebbleBatch) ClearAllRangeKeys(start, end roachpb.Key) error {
 			return nil
 		}
 	}
-	return p.batch.Experimental().RangeKeyDelete(clearFrom, clearTo, nil)
+	return p.batch.RangeKeyDelete(clearFrom, clearTo, nil)
 }
 
 // PutMVCCRangeKey implements the Batch interface.
@@ -475,7 +475,7 @@ func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) er
 	if err != nil {
 		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
 	}
-	if err := p.batch.Experimental().RangeKeySet(
+	if err := p.batch.RangeKeySet(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
@@ -498,7 +498,7 @@ func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	if err := p.batch.Experimental().RangeKeySet(
+	if err := p.batch.RangeKeySet(
 		EngineKey{Key: start}.Encode(),
 		EngineKey{Key: end}.Encode(),
 		suffix,
