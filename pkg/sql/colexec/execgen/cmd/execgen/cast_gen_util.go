@@ -87,7 +87,17 @@ var nativeCastInfos = []supportedNativeCastInfo{
 
 	{types.String, types.Bool, stringToBool},
 	{types.String, types.Bytes, stringToBytes},
+	{types.String, types.Date, stringToDate},
+	{types.String, types.Decimal, stringToDecimal},
+	{types.String, types.Float, stringToFloat},
+	{types.String, types.Int2, getStringToIntCastFunc(16)},
+	{types.String, types.Int4, getStringToIntCastFunc(32)},
+	{types.String, types.Int, getStringToIntCastFunc(anyWidth)},
+	{types.String, types.Interval, stringToInterval},
+	{types.String, types.Jsonb, stringToJSON},
 	{types.String, types.String, stringToString},
+	{types.String, types.Timestamp, getStringToTimestampCastFunc(true /* withoutTimezone */)},
+	{types.String, types.TimestampTZ, getStringToTimestampCastFunc(false /* withoutTimezone */)},
 	{types.String, types.Uuid, stringToUUID},
 }
 
@@ -314,6 +324,109 @@ func stringToBytes(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
+func stringToDate(to, from, evalCtx, _ string) string {
+	convStr := `
+		_now := %[3]s.GetRelativeParseTime()
+		_dateStyle := %[3]s.GetDateStyle()
+		_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _d.UnixEpochDays()
+`
+	return fmt.Sprintf(convStr, to, from, evalCtx)
+}
+
+func stringToDecimal(to, from, _, toType string) string {
+	convStr := `
+		_s := strings.TrimSpace(string(%[2]s))
+		_, res, err := tree.ExactCtx.SetString(&%[1]s, _s)
+		if res != 0 || err != nil {
+			colexecerror.ExpectedError(tree.MakeParseError(_s, types.Decimal, err))
+		}
+		switch %[1]s.Form {
+		case apd.NaNSignaling:
+			%[1]s.Form = apd.NaN
+			%[1]s.Negative = false
+		case apd.NaN:
+			%[1]s.Negative = false
+		case apd.Finite:
+			if %[1]s.IsZero() && %[1]s.Negative {
+				%[1]s.Negative = false
+			}
+		}
+`
+	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
+}
+
+func stringToFloat(to, from, _, toType string) string {
+	convStr := `
+		_s := string(%[2]s)
+		var _err error
+		%[1]s, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+		if _err != nil {
+			colexecerror.ExpectedError(tree.MakeParseError(_s, %[3]s, _err))
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func getStringToIntCastFunc(toIntWidth int32) castFunc {
+	if toIntWidth == anyWidth {
+		toIntWidth = 64
+	}
+	return func(to, from, evalCtx, toType string) string {
+		// convStr is a format string expecting three arguments:
+		// 1. the code snippet that performs an assigment of int64 local
+		//    variable named '_i' to the result, possibly performing the bounds
+		//    checks
+		// 2. the original value variable name
+		// 3. the name of the global variable storing the type we're casting to.
+		convStr := `
+		{
+			_s := string(%[2]s)
+			_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+			if err != nil {
+				colexecerror.ExpectedError(tree.MakeParseError(_s, %[3]s, err))
+			}
+			%[1]s
+		}
+	`
+		return fmt.Sprintf(
+			convStr,
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType),
+			from,
+			toType,
+		)
+	}
+}
+
+func stringToInterval(to, from, evalCtx, toType string) string {
+	convStr := `
+		_itm, err := %[4]s.IntervalTypeMetadata()
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		_intervalStyle := %[3]s.GetIntervalStyle()
+		%[1]s, err = tree.ParseIntervalWithTypeMetadata(_intervalStyle, string(%[2]s), _itm)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+`
+	return fmt.Sprintf(convStr, to, from, evalCtx, toType)
+}
+
+func stringToJSON(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = json.ParseJSON(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON"))
+		}
+`
+	return fmt.Sprintf(convStr, to, from)
+}
+
 func stringToString(to, from, _, toType string) string {
 	convStr := `
 		if %[3]s.Oid() == oid.T_name {
@@ -343,6 +456,32 @@ func stringToString(to, from, _, toType string) string {
 		}
 	`
 	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func getStringToTimestampCastFunc(withoutTimezone bool) func(_, _, _, _ string) string {
+	return func(to, from, evalCtx, toType string) string {
+		var parseTimestampKind string
+		if withoutTimezone {
+			parseTimestampKind = "WithoutTimezone"
+		}
+		// TODO(yuzefovich): consider introducing "prologue" sections to the
+		// cast template so that we could do some operations (e.g. _roundTo
+		// value below) only once per batch.
+		convStr := `
+		_roundTo := tree.TimeFamilyPrecisionToRoundDuration(%[4]s.Precision())
+		_now := %[3]s.GetRelativeParseTime()
+		_dateStyle := %[3]s.GetDateStyle()
+		_t, _, err := pgdate.ParseTimestamp%[5]s(_now, _dateStyle, string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _t.Round(_roundTo)
+		if %[1]s.After(tree.MaxSupportedTime) || %[1]s.Before(tree.MinSupportedTime) {
+			colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(%[1]s))
+		}
+`
+		return fmt.Sprintf(convStr, to, from, evalCtx, toType, parseTimestampKind)
+	}
 }
 
 func stringToUUID(to, from, _, _ string) string {
