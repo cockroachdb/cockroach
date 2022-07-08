@@ -270,6 +270,9 @@ export const getValidOption = (
   currentScale: TimeScale,
   options: TimeScaleOptions,
 ): TimeScale => {
+  if (currentScale.key === "Custom") {
+    return currentScale;
+  }
   if (!(currentScale.key in options)) {
     const firstValidKey = Object.keys(options)[0];
     return {
