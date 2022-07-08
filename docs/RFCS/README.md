@@ -84,6 +84,29 @@ it forces bigger picture thinking which readers can then dissect. In
 this respect an RFC is complimentary to a prototype which forces details 
 to be considered.
 
+# Present a Narrative
+
+When writing your RFC, you should always keep the prospective reader
+in mind. We already mentioned above that one should do their best to
+[keep things concise](#keep-it-concise), but what more can you do to
+make the life of your reader easier?
+
+As engineers & scientists, it can be tempting to use a large pile of
+facts to state your case. After all, the facts don't lie, and if we
+present enough of them in support of our cause, it helps strengthen
+our argument. But is the reader going to enjoy reading a long laundry
+list of facts? Probably not. However, if you are able to weave these
+facts and technical designs together with a strong, singular narrative,
+your writing is more likely to resonate with the reader.
+
+Therefore, when writing your RFC, try to present your ideas with an
+overarching narrative. Be clear about the problem(s) you're trying to
+solve. Consider presenting some real-world examples to help make things
+more relatable. Do your best to structure your writing in an eloquent way. 
+Taking such steps will help keep the reader engaged. This will likely
+lead to your RFC being better received and gaining more attention, which 
+means you'll receive more feedback (a good thing!).
+
 # Prototyping
 
 There is a puzzle at the heart of writing an RFC: if you understand a
