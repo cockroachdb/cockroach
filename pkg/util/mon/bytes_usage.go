@@ -702,7 +702,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
 		log.Infof(ctx, "%s: now at %d bytes (+%d) - %s",
-			mm.nameWithPointer, mm.mu.curAllocated, x, util.GetSmallTrace(3))
+			mm.nameWithPointer, mm.mu.curAllocated, x, util.GetSmallTrace(2))
 	}
 	return nil
 }
@@ -728,7 +728,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
 		log.Infof(ctx, "%s: now at %d bytes (-%d) - %s",
-			mm.nameWithPointer, mm.mu.curAllocated, sz, util.GetSmallTrace(5))
+			mm.nameWithPointer, mm.mu.curAllocated, sz, util.GetSmallTrace(2))
 	}
 }
 
