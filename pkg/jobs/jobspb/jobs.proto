@@ -968,6 +968,12 @@ message RowLevelTTLProgress {
   int64 row_count = 1;
 }
 
+message SchemaTelemetryDetails {
+}
+
+message SchemaTelemetryProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -1015,6 +1021,7 @@ message Payload {
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
     StreamReplicationDetails streamReplication = 33;
     RowLevelTTLDetails row_level_ttl = 34 [(gogoproto.customname)="RowLevelTTL"];
+    SchemaTelemetryDetails schema_telemetry = 37;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1038,7 +1045,7 @@ message Payload {
   // to migrate or update the job.
   roachpb.Version creation_cluster_version = 36 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 37.
+  // NEXT ID: 38.
 }
 
 message Progress {
@@ -1065,9 +1072,12 @@ message Progress {
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
     StreamReplicationProgress streamReplication = 24;
     RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
+    SchemaTelemetryProgress schema_telemetry = 26;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+
+  // NEXT ID: 27.
 }
 
 enum Type {
@@ -1093,6 +1103,7 @@ enum Type {
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
+  AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
 }
 
 message Job {
