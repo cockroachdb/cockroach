@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // opReference represents one operation; an opGenerator reference as well as
@@ -206,11 +207,17 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, txn)
+	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, txn)
 	if err != nil {
+		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
+			// Update the txn's lock spans to account for this intent being written.
+			addKeyToLockSpans(txn, m.key)
+		}
 		return fmt.Sprintf("error: %s", err)
 	}
 
+	// Update the txn's lock spans to account for this intent being written.
 	addKeyToLockSpans(txn, m.key)
 	return "ok"
 }
@@ -230,11 +237,17 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 
 	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key,
-		txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, m.expVal, true, txn)
+		txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, m.expVal, true, txn)
 	if err != nil {
+		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
+			// Update the txn's lock spans to account for this intent being written.
+			addKeyToLockSpans(txn, m.key)
+		}
 		return fmt.Sprintf("error: %s", err)
 	}
 
+	// Update the txn's lock spans to account for this intent being written.
 	addKeyToLockSpans(txn, m.key)
 	return "ok"
 }
@@ -252,11 +265,17 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, m.value, false, txn)
+	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, false, txn)
 	if err != nil {
+		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
+			// Update the txn's lock spans to account for this intent being written.
+			addKeyToLockSpans(txn, m.key)
+		}
 		return fmt.Sprintf("error: %s", err)
 	}
 
+	// Update the txn's lock spans to account for this intent being written.
 	addKeyToLockSpans(txn, m.key)
 	return "ok"
 }
@@ -357,8 +376,13 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.WriteTimestamp, hlc.ClockTimestamp{}, txn)
+	err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn)
 	if err != nil {
+		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
+			// Update the txn's lock spans to account for this intent being written.
+			addKeyToLockSpans(txn, m.key)
+		}
 		return fmt.Sprintf("error: %s", err)
 	}
 
