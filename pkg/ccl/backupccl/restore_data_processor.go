@@ -408,6 +408,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
+	if err := rd.flowCtx.Cfg.JobRegistry.CheckPausepoint("restore.before_data_span_start"); err != nil {
+		return summary, err
+	}
+
 	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
 	if writeAtBatchTS && !evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
 		return roachpb.BulkOpSummary{}, errors.Newf(
@@ -502,6 +506,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
 			restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx)
 		}
+	}
+
+	if err := rd.flowCtx.Cfg.JobRegistry.CheckPausepoint("restore.before_data_span_end"); err != nil {
+		return summary, err
 	}
 
 	return batcher.GetSummary(), nil
