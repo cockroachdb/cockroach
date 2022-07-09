@@ -13,8 +13,6 @@ package colflow
 import (
 	"context"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/marusama/semaphore"
 )
 
@@ -725,11 +724,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 
 	// HashRouter memory monitor names are the concatenated output stream IDs.
-	streamIDs := make([]string, len(output.Streams))
+	var streamIDs redact.RedactableString
 	for i, s := range output.Streams {
-		streamIDs[i] = strconv.Itoa(int(s.StreamID))
+		if i > 0 {
+			streamIDs = streamIDs + ","
+		}
+		streamIDs = redact.Sprintf("%s%d", streamIDs, s.StreamID)
 	}
-	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
+	mmName := "hash-router-[" + streamIDs + "]"
 
 	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	allocators := make([]*colmem.Allocator, len(output.Streams))
@@ -742,7 +744,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
-		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
+		router.Run(logtags.AddTag(ctx, "hashRouterID", streamIDs))
 	}
 	s.accumulateAsyncComponent(runRouter)
 

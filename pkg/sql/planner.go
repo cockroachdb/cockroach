@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -300,6 +300,7 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
+	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
 	user security.SQLUsername,
@@ -368,7 +369,7 @@ func newInternalPlanner(
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
-	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
+	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		-1, /* increment */

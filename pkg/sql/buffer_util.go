@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/redact"
 )
 
 // rowContainerHelper is a wrapper around a disk-backed row container that
@@ -35,7 +35,7 @@ type rowContainerHelper struct {
 }
 
 func (c *rowContainerHelper) Init(
-	typs []*types.T, evalContext *extendedEvalContext, opName string,
+	typs []*types.T, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
 	c.initMonitors(evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
@@ -50,7 +50,7 @@ func (c *rowContainerHelper) Init(
 // InitWithDedup is a variant of init that is used if row deduplication
 // functionality is needed (see addRowWithDedup).
 func (c *rowContainerHelper) InitWithDedup(
-	typs []*types.T, evalContext *extendedEvalContext, opName string,
+	typs []*types.T, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
 	c.initMonitors(evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
@@ -71,14 +71,16 @@ func (c *rowContainerHelper) InitWithDedup(
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
 
-func (c *rowContainerHelper) initMonitors(evalContext *extendedEvalContext, opName string) {
+func (c *rowContainerHelper) initMonitors(
+	evalContext *extendedEvalContext, opName redact.RedactableString,
+) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
-		fmt.Sprintf("%s-limited", opName),
+		redact.Sprintf("%s-limited", opName),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName),
+		evalContext.Context, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
 	)
 }
 

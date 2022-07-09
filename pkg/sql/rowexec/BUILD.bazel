@@ -97,6 +97,7 @@ go_library(
         "@com_github_axiomhq_hyperloglog//:hyperloglog",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
