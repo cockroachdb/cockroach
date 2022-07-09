@@ -103,7 +103,7 @@ func (cfg *Config) WithWorkload(workloadName string, nodes install.Node, port in
 	} else {
 		sc.ScrapeNodes = append(sc.ScrapeNodes, sn)
 	}
-	return nil
+	return cfg
 }
 
 // MakeWorkloadScrapeConfig creates a scrape config for a workload.
