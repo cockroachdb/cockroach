@@ -356,10 +356,11 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc != nil {
-		f.spansAccountedFor = spans.MemUsage()
-		if err := f.acc.Grow(ctx, f.spansAccountedFor); err != nil {
+		newSpansAccountedFor := spans.MemUsage()
+		if err := f.acc.Grow(ctx, newSpansAccountedFor); err != nil {
 			return err
 		}
+		f.spansAccountedFor = newSpansAccountedFor
 	}
 
 	if spanIDs != nil && len(spans) != len(spanIDs) {
