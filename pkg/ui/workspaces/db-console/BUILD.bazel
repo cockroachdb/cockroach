@@ -157,7 +157,7 @@ DEPENDENCIES = [
 ] + DEV_DEPENDENCIES
 
 WEBPACK_DATA_COMMON = [
-    ".babelrc",
+    "babel.config.js",
     ".eslintrc.json",
     ".stylintrc",
     "assets",
@@ -344,17 +344,20 @@ JEST_DEPS = DEPENDENCIES + [
     # to avoid "cannot find module protobufjs/minimal" errors when Babel
     # attempts to transpile the protobuf client during testing.
     "@npm_protos//protobufjs",
-] + glob(["src/**", "ccl/**"])
+] + glob([
+    "src/**",
+    "ccl/**",
+])
 
 jest_test(
     name = "jest",
+    size = "enormous",
     data = JEST_DEPS,
     templated_args = [
         "--node_options=--max-old-space-size=8192",
         "-w 25%",
         "--ci",
         "--config",
-        "$(rootpath jest.config.js)"
+        "$(rootpath jest.config.js)",
     ],
-    size = "enormous",
 )
