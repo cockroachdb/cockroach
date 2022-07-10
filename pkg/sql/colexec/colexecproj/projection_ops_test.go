@@ -211,9 +211,10 @@ func TestGetProjectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = typ
 	inputTypes[col2Idx] = typ
 	outputIdx := 9
+	nullableArgs := false
 	op, err := GetProjectionOperator(
 		testAllocator, inputTypes, types.Int2, binOp, input, col1Idx, col2Idx,
-		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, nullableArgs,
 	)
 	if err != nil {
 		t.Error(err)
@@ -225,6 +226,7 @@ func TestGetProjectionOperator(t *testing.T) {
 			col1Idx:        col1Idx,
 			col2Idx:        col2Idx,
 			outputIdx:      outputIdx,
+			nullableArgs:   nullableArgs,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
