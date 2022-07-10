@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -108,10 +109,18 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 			}
 		}
 	}
+
+	referencedColumns, err := schemaexpr.ExtractColumnIDs(
+		w.desc.(catalog.TableDescriptor), e,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return &scpb.Expression{
-		Expr:            catpb.Expression(expr),
-		UsesTypeIDs:     typIDs.Ordered(),
-		UsesSequenceIDs: seqIDs.Ordered(),
+		Expr:                catpb.Expression(expr),
+		UsesTypeIDs:         typIDs.Ordered(),
+		UsesSequenceIDs:     seqIDs.Ordered(),
+		ReferencedColumnIDs: referencedColumns.Ordered(),
 	}, nil
 }
 
