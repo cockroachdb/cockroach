@@ -52,7 +52,7 @@ func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
 	}
 	undropped.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		b.CheckPrivilege(e, privilege.DROP)
-		dropElement(b, e)
+		dropElementWhenDroppingDescriptor(b, e)
 	})
 	return true
 }
@@ -125,8 +125,12 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 	return fmt.Sprintf("%s %q", typ, name)
 }
 
-func dropElement(b BuildCtx, e scpb.Element) {
-	// TODO(postamar): remove this dirty hack ASAP, see column/index dep rules.
+// dropElementWhenDroppingDescriptor is a helper to drop an element when
+// dropping a descriptor which sets the bit to indicate that the descriptor
+// is being dropped.
+//
+// TODO(postamar): remove this dirty hack ASAP, see column/index dep rules.
+func dropElementWhenDroppingDescriptor(b BuildCtx, e scpb.Element) {
 	switch t := e.(type) {
 	case *scpb.ColumnType:
 		t.IsRelationBeingDropped = true
@@ -183,7 +187,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			// Don't actually drop any elements of virtual schemas.
 			return
 		}
-		dropElement(b, e)
+		dropElementWhenDroppingDescriptor(b, e)
 		switch t := e.(type) {
 		case *scpb.EnumType:
 			dropCascadeDescriptor(next, t.ArrayTypeID)
@@ -217,7 +221,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ForeignKeyConstraint,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
-			dropElement(b, e)
+			dropElementWhenDroppingDescriptor(b, e)
 		}
 	})
 }

@@ -61,7 +61,21 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 
 	for _, index := range n.IndexList {
 		dropAnIndex(b, index, n.IfExists, n.DropBehavior)
+
+		// Increment subwork ID so we know exactly which portion in
+		// a `DROP INDEX index1, index2, ...` statement is responsible
+		// for the creation of the targets.
+		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("index")
+
 	}
+	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+		b,
+		errors.WithHint(
+			pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
+			"The reclamation delay can be customized in the zone configuration for the table.",
+		),
+	)
 }
 
 // dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
@@ -90,12 +104,10 @@ func dropAnIndex(
 	}
 
 	// TODO (Xiang): Check if requires CCL binary for eventual zone config removal.
-
 	_, _, sie := scpb.FindSecondaryIndex(toBeDroppedIndexElms)
 	if sie == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
-
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
@@ -104,7 +116,18 @@ func dropAnIndex(
 			"use CASCADE if you really want to drop it.",
 		))
 	}
+	dropSecondaryIndex(b, index, dropBehavior, sie, toBeDroppedIndexElms)
+}
 
+// dropSecondaryIndex is a helper to drop a secondary index which may be used
+// both in DROP INDEX and as a cascade from another operation.
+func dropSecondaryIndex(
+	b BuildCtx,
+	index *tree.TableIndexName,
+	dropBehavior tree.DropBehavior,
+	sie *scpb.SecondaryIndex,
+	toBeDroppedIndexElms ElementResultSet,
+) {
 	// Maybe drop dependent views.
 	// If CASCADE and there are "dependent" views (i.e. views that use this
 	// to-be-dropped index), then we will drop all dependent views and their
@@ -134,20 +157,6 @@ func dropAnIndex(
 			b.Drop(e)
 		}
 	})
-
-	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
-		b,
-		errors.WithHint(
-			pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
-			"The reclamation delay can be customized in the zone configuration for the table.",
-		),
-	)
-
-	// Increment subwork ID so we know exactly which portion in
-	// a `DROP INDEX index1, index2, ...` statement is responsible
-	// for the creation of the targets.
-	b.IncrementSubWorkID()
-	b.IncrementSchemaChangeDropCounter("index")
 }
 
 // maybeDropDependentViews attempts to drop all views that depend
