@@ -29,6 +29,7 @@ export function stubComponentInModule(
     }
     for (const name of exportedNames) {
       let candidate: unknown;
+      // eslint-disable-next-line no-prototype-builtins
       if (typeof orig === "object" && name && orig.hasOwnProperty(name)) {
         candidate = (orig as any)[name];
       } else {
