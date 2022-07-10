@@ -74,7 +74,9 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -153,7 +155,9 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -232,7 +236,9 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -311,7 +317,9 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -390,7 +398,9 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -469,7 +479,9 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -548,7 +560,9 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -627,7 +641,9 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -706,7 +722,9 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -787,7 +805,9 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -892,7 +912,9 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -971,7 +993,9 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1050,7 +1074,9 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1129,7 +1155,9 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1208,7 +1236,9 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1287,7 +1317,9 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1366,7 +1398,9 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1445,7 +1479,9 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1524,7 +1560,9 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1605,7 +1643,9 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1710,7 +1750,9 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1789,7 +1831,9 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1868,7 +1912,9 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1947,7 +1993,9 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2026,7 +2074,9 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2105,7 +2155,9 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2184,7 +2236,9 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2263,7 +2317,9 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2342,7 +2398,9 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2423,7 +2481,9 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2528,7 +2588,9 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2635,7 +2697,9 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2742,7 +2806,9 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2849,7 +2915,9 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2952,7 +3020,9 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3055,7 +3125,9 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3158,7 +3230,9 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3261,7 +3335,9 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3374,7 +3450,9 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3495,7 +3573,9 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3598,7 +3678,9 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3701,7 +3783,9 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3804,7 +3888,9 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3917,7 +4003,9 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4038,7 +4126,9 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4141,7 +4231,9 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4244,7 +4336,9 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4347,7 +4441,9 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4460,7 +4556,9 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4581,7 +4679,9 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4672,7 +4772,9 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4763,7 +4865,9 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4854,7 +4958,9 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4927,7 +5033,9 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5050,7 +5158,9 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5175,7 +5285,9 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5300,7 +5412,9 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5425,7 +5539,9 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5548,7 +5664,9 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5655,7 +5773,9 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5762,7 +5882,9 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5869,7 +5991,9 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5972,7 +6096,9 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6075,7 +6201,9 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6178,7 +6306,9 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6281,7 +6411,9 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6394,7 +6526,9 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6515,7 +6649,9 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6618,7 +6754,9 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6721,7 +6859,9 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6824,7 +6964,9 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6937,7 +7079,9 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7058,7 +7202,9 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7161,7 +7307,9 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7264,7 +7412,9 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7367,7 +7517,9 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7480,7 +7632,9 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7601,7 +7755,9 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7692,7 +7848,9 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7775,7 +7933,9 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7866,7 +8026,9 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7939,7 +8101,9 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8060,7 +8224,9 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8165,7 +8331,9 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8256,7 +8424,9 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8347,7 +8517,9 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8440,7 +8612,9 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8547,7 +8721,9 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8672,7 +8848,9 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8795,7 +8973,9 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8920,7 +9100,9 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9045,7 +9227,9 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9168,7 +9352,9 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9275,7 +9461,9 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9382,7 +9570,9 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9489,7 +9679,9 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9592,7 +9784,9 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9683,7 +9877,9 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9818,7 +10014,9 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9953,7 +10151,9 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10088,7 +10288,9 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10199,7 +10401,9 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10270,7 +10474,9 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10405,7 +10611,9 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10540,7 +10748,9 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10675,7 +10885,9 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10786,7 +10998,9 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10857,7 +11071,9 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10992,7 +11208,9 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11127,7 +11345,9 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11262,7 +11482,9 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11373,7 +11595,9 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11444,7 +11668,9 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11535,7 +11761,9 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11606,7 +11834,9 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11677,7 +11907,9 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11748,7 +11980,9 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11819,7 +12053,9 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11890,7 +12126,9 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11981,7 +12219,9 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12104,7 +12344,9 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12227,7 +12469,9 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12350,7 +12594,9 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12469,7 +12715,9 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12588,7 +12836,9 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12707,7 +12957,9 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12826,7 +13078,9 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12953,7 +13207,9 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13072,7 +13328,9 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13191,7 +13449,9 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13310,7 +13570,9 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13437,7 +13699,9 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13556,7 +13820,9 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13675,7 +13941,9 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13794,7 +14062,9 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13921,7 +14191,9 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14028,7 +14300,9 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14115,7 +14389,9 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14202,7 +14478,9 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14289,7 +14567,9 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14376,7 +14656,9 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14499,7 +14781,9 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14622,7 +14906,9 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14745,7 +15031,9 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14864,7 +15152,9 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14963,7 +15253,9 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15062,7 +15354,9 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15161,7 +15455,9 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15288,7 +15584,9 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15387,7 +15685,9 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15486,7 +15786,9 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15585,7 +15887,9 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15712,7 +16016,9 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15811,7 +16117,9 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15910,7 +16218,9 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16009,7 +16319,9 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16136,7 +16448,9 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16243,7 +16557,9 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16366,7 +16682,9 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16489,7 +16807,9 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16612,7 +16932,9 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16731,7 +17053,9 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16830,7 +17154,9 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16929,7 +17255,9 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17028,7 +17356,9 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17155,7 +17485,9 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17254,7 +17586,9 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17353,7 +17687,9 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17452,7 +17788,9 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17579,7 +17917,9 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17678,7 +18018,9 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17777,7 +18119,9 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17876,7 +18220,9 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18003,7 +18349,9 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18110,7 +18458,9 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18217,7 +18567,9 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18324,7 +18676,9 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18431,7 +18785,9 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18534,7 +18890,9 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18661,7 +19019,9 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18788,7 +19148,9 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18915,7 +19277,9 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19026,7 +19390,9 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19153,7 +19519,9 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19280,7 +19648,9 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19407,7 +19777,9 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19518,7 +19890,9 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19645,7 +20019,9 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19772,7 +20148,9 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19899,7 +20277,9 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20010,7 +20390,9 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20101,7 +20483,9 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20198,7 +20582,9 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20293,7 +20679,9 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20398,7 +20786,9 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20501,7 +20891,9 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20604,7 +20996,9 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20707,7 +21101,9 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20810,7 +21206,9 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20913,7 +21311,9 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21016,7 +21416,9 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21119,7 +21521,9 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21222,7 +21626,9 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21327,7 +21733,9 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21452,7 +21860,9 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21577,7 +21987,9 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21700,7 +22112,9 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21803,7 +22217,9 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21906,7 +22322,9 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22009,7 +22427,9 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22112,7 +22532,9 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22215,7 +22637,9 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22318,7 +22742,9 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22421,7 +22847,9 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22524,7 +22952,9 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22629,7 +23059,9 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22754,7 +23186,9 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22879,7 +23313,9 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23002,7 +23438,9 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23119,7 +23557,9 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23226,7 +23666,9 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23333,7 +23775,9 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23440,7 +23884,9 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23593,7 +24039,9 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23736,7 +24184,9 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23879,7 +24329,9 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24022,7 +24474,9 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24127,7 +24581,9 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24272,7 +24728,9 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24399,7 +24857,9 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24492,7 +24952,9 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24611,7 +25073,9 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24730,7 +25194,9 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24849,7 +25315,9 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24976,7 +25444,9 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25071,7 +25541,9 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25210,7 +25682,9 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25349,7 +25823,9 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25488,7 +25964,9 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25659,7 +26137,9 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25778,7 +26258,9 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25917,7 +26399,9 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26056,7 +26540,9 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26195,7 +26681,9 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26366,7 +26854,9 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26485,7 +26975,9 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26624,7 +27116,9 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26763,7 +27257,9 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26902,7 +27398,9 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27073,7 +27571,9 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27192,7 +27692,9 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27363,7 +27865,9 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27534,7 +28038,9 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27705,7 +28211,9 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27876,7 +28384,9 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28003,7 +28513,9 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28126,7 +28638,9 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28221,7 +28735,9 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28338,7 +28854,9 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28439,7 +28957,9 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28566,7 +29086,9 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28659,7 +29181,9 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28778,7 +29302,9 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28897,7 +29423,9 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29016,7 +29544,9 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29143,7 +29673,9 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29238,7 +29770,9 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29377,7 +29911,9 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29516,7 +30052,9 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29655,7 +30193,9 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29826,7 +30366,9 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29945,7 +30487,9 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30084,7 +30628,9 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30223,7 +30769,9 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30362,7 +30910,9 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30533,7 +31083,9 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30652,7 +31204,9 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30791,7 +31345,9 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30930,7 +31486,9 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31069,7 +31627,9 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31240,7 +31800,9 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31359,7 +31921,9 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31530,7 +32094,9 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31701,7 +32267,9 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31872,7 +32440,9 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32043,7 +32613,9 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32170,7 +32742,9 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32293,7 +32867,9 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32388,7 +32964,9 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32505,7 +33083,9 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32606,7 +33186,9 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32733,7 +33315,9 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32826,7 +33410,9 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32945,7 +33531,9 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33064,7 +33652,9 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33183,7 +33773,9 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33310,7 +33902,9 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33405,7 +33999,9 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33544,7 +34140,9 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33683,7 +34281,9 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33822,7 +34422,9 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33993,7 +34595,9 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34112,7 +34716,9 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34251,7 +34857,9 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34390,7 +34998,9 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34529,7 +35139,9 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34700,7 +35312,9 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34819,7 +35433,9 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34958,7 +35574,9 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35097,7 +35715,9 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35236,7 +35856,9 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35407,7 +36029,9 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35526,7 +36150,9 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35697,7 +36323,9 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35868,7 +36496,9 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36039,7 +36669,9 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36210,7 +36842,9 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36337,7 +36971,9 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36460,7 +37096,9 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36555,7 +37193,9 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36672,7 +37312,9 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36773,7 +37415,9 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36900,7 +37544,9 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36993,7 +37639,9 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37112,7 +37760,9 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37231,7 +37881,9 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37350,7 +38002,9 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37477,7 +38131,9 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37572,7 +38228,9 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37711,7 +38369,9 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37850,7 +38510,9 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37989,7 +38651,9 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38160,7 +38824,9 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38279,7 +38945,9 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38418,7 +39086,9 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38557,7 +39227,9 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38696,7 +39368,9 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38867,7 +39541,9 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38986,7 +39662,9 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39125,7 +39803,9 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39264,7 +39944,9 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39403,7 +40085,9 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39574,7 +40258,9 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39693,7 +40379,9 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39864,7 +40552,9 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40035,7 +40725,9 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40206,7 +40898,9 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40377,7 +41071,9 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40504,7 +41200,9 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40627,7 +41325,9 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40722,7 +41422,9 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40839,7 +41541,9 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40940,7 +41644,9 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41067,7 +41773,9 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41160,7 +41868,9 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41279,7 +41989,9 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41398,7 +42110,9 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41517,7 +42231,9 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41644,7 +42360,9 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41739,7 +42457,9 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41878,7 +42598,9 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42017,7 +42739,9 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42156,7 +42880,9 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42327,7 +43053,9 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42446,7 +43174,9 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42585,7 +43315,9 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42724,7 +43456,9 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42863,7 +43597,9 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43034,7 +43770,9 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43153,7 +43891,9 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43292,7 +44032,9 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43431,7 +44173,9 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43570,7 +44314,9 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43741,7 +44487,9 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43860,7 +44608,9 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44031,7 +44781,9 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44202,7 +44954,9 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44373,7 +45127,9 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44544,7 +45300,9 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44671,7 +45429,9 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44794,7 +45554,9 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44889,7 +45651,9 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45006,7 +45770,9 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45107,7 +45873,9 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45234,7 +46002,9 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45327,7 +46097,9 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45446,7 +46218,9 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45565,7 +46339,9 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45684,7 +46460,9 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45811,7 +46589,9 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45906,7 +46686,9 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46045,7 +46827,9 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46184,7 +46968,9 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46323,7 +47109,9 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46494,7 +47282,9 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46613,7 +47403,9 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46752,7 +47544,9 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46891,7 +47685,9 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47030,7 +47826,9 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47201,7 +47999,9 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47320,7 +48120,9 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47459,7 +48261,9 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47598,7 +48402,9 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47737,7 +48543,9 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47908,7 +48716,9 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48027,7 +48837,9 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48198,7 +49010,9 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48369,7 +49183,9 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48540,7 +49356,9 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48711,7 +49529,9 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48838,7 +49658,9 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48961,7 +49783,9 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49056,7 +49880,9 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49173,7 +49999,9 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49263,6 +50091,7 @@ func GetProjectionRConstOperator(
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -49270,6 +50099,7 @@ func GetProjectionRConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := inputTypes[colIdx], constType
