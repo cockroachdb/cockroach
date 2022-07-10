@@ -983,6 +983,25 @@ SELECT NULL::INT[] || NULL::INT[]
 ----
 NULL
 
+# The following test check for projection operators that can handle nullable arguments.
+statement ok
+CREATE TABLE t_bool (b BOOL[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+
+statement ok
+INSERT INTO t_bool VALUES (Array[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+{}
+
+statement ok
+DROP TABLE t_bool;
+
 # Array equality
 
 query B
