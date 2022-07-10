@@ -135,6 +135,9 @@ message Expression {
   string expr = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
   repeated uint32 uses_type_ids = 2 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_sequence_ids = 3 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+
+  // ReferencedColumnIDs stores the IDs of the columns referenced by the expression.
+  repeated uint32 referenced_column_ids = 4 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 }
 
 message Column {
