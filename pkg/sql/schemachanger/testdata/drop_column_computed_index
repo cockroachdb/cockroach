@@ -1,0 +1,1155 @@
+setup
+create table t (i int primary key, j int, index((j+1)));
+----
+...
++object {100 101 t} -> 104
+
+test
+alter table t drop column j cascade;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_column
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  -  - id: 2
+  -    name: j
+  -    nullable: true
+  -    type:
+  -      family: IntFamily
+  -      oid: 20
+  -      width: 64
+  -  - computeExpr: j + 1:::INT8
+  -    id: 3
+  -    inaccessible: true
+  -    name: crdb_internal_idx_expr
+  -    nullable: true
+  -    type:
+  -      family: IntFamily
+  -      oid: 20
+  -      width: 64
+  -    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+       columnNames:
+       - i
+  -    - j
+  +    - crdb_internal_column_2_name_placeholder
+       defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 3
+  -    keyColumnNames:
+  -    - crdb_internal_idx_expr
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: t_expr_idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    version: 3
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  indexes: []
+  +  modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
+  +  - column:
+  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  +      id: 3
+  +      inaccessible: true
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_column_3_name_placeholder
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      version: 3
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 3
+  +  nextIndexId: 5
+     nextMutationId: 1
+     parentId: 100
+  ...
+       - 2
+       storeColumnNames:
+  -    - j
+  +    - crdb_internal_column_2_name_placeholder
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+write *eventpb.AlterTable to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - PUBLIC
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - VALIDATED
+  +    - ABSENT
+  +    - PUBLIC
+  +    - BACKFILL_ONLY
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - PUBLIC
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+  +        statement: ALTER TABLE t DROP COLUMN j CASCADE
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    targets:
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          pgAttributeNum: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: j
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          isInaccessible: true
+  +          pgAttributeNum: 3
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: crdb_internal_idx_expr
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          computeExpr:
+  +            expr: j + 1:::INT8
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          isVirtual: true
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          kind: STORED
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            constraintId: 1
+  +            indexId: 1
+  +            isUnique: true
+  +            tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t_pkey
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          kind: KEY_SUFFIX
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        secondaryIndex:
+  +          embeddedIndex:
+  +            indexId: 2
+  +            tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: t_expr_idx
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 3
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            constraintId: 1
+  +            indexId: 3
+  +            isUnique: true
+  +            sourceIndexId: 1
+  +            tableId: 104
+  +            temporaryIndexId: 4
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 3
+  +          name: t_pkey
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        temporaryIndex:
+  +          embeddedIndex:
+  +            constraintId: 1
+  +            indexId: 4
+  +            isUnique: true
+  +            sourceIndexId: 1
+  +            tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 4
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+     families:
+     - columnIds:
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     mutations:
+     - column:
+  ...
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 7 with 3 MutationType ops
+upsert descriptor #104
+  ...
+       - BACKFILL_ONLY
+       - ABSENT
+  -    - DELETE_ONLY
+  +    - WRITE_ONLY
+       - PUBLIC
+       jobId: "1"
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: DELETE_AND_WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+backfill indexes [3] from index #1 in table #104
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+upsert descriptor #104
+  ...
+       - ABSENT
+       - PUBLIC
+  -    - BACKFILL_ONLY
+  +    - DELETE_ONLY
+       - ABSENT
+       - WRITE_ONLY
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+upsert descriptor #104
+  ...
+       - ABSENT
+       - PUBLIC
+  -    - DELETE_ONLY
+  +    - MERGE_ONLY
+       - ABSENT
+       - WRITE_ONLY
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000005"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: DELETE_AND_WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+merge temporary indexes [4] into backfilled indexes [3] in table #104
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 7 with 1 ValidationType op
+validate forward indexes [3] in table #104
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 7 with 6 MutationType ops
+upsert descriptor #104
+  ...
+       - PUBLIC
+       - PUBLIC
+  +    - VALIDATED
+  +    - ABSENT
+       - PUBLIC
+       - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+       - VALIDATED
+       - ABSENT
+       - PUBLIC
+  -    - MERGE_ONLY
+  -    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+       - WRITE_ONLY
+       - PUBLIC
+  ...
+           statement: ALTER TABLE t DROP COLUMN j CASCADE
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks:
+       - 0
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000006"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+     - direction: ADD
+       index:
+  -      constraintId: 2
+  +      constraintId: 3
+         createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 4
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_4_name_placeholder
+         partitioning: {}
+         sharded: {}
+         storeColumnNames: []
+         unique: true
+  +      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+       state: DELETE_AND_WRITE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 4
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_4_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+  -      storeColumnNames: []
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - crdb_internal_column_2_name_placeholder
+         unique: true
+  -      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  ...
+     parentId: 100
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 2
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 3
+       interleave: {}
+       keyColumnDirections:
+  ...
+       partitioning: {}
+       sharded: {}
+  -    storeColumnIds:
+  -    - 2
+  -    storeColumnNames:
+  -    - crdb_internal_column_2_name_placeholder
+  +    storeColumnNames: []
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #9
+begin transaction #10
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
+upsert descriptor #104
+  ...
+         userName: root
+       currentStatuses:
+  -    - WRITE_ONLY
+  +    - DELETE_ONLY
+       - ABSENT
+       - PUBLIC
+  -    - WRITE_ONLY
+  +    - DELETE_ONLY
+       - ABSENT
+       - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - VALIDATED
+       - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - VALIDATED
+       - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+       - PUBLIC
+       - PUBLIC
+       - PUBLIC
+  -    - WRITE_ONLY
+  +    - TRANSIENT_DELETE_ONLY
+       - PUBLIC
+       jobId: "1"
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000009"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
+         version: 3
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  -  - direction: ADD
+  +    state: DELETE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 9 MutationType ops pending"
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 2 with 11 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses:
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - PUBLIC
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - PUBLIC
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+  -        statement: ALTER TABLE t DROP COLUMN j CASCADE
+  -        statementTag: ALTER TABLE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
+  -    - 17
+  -    - 18
+  -    targets:
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          pgAttributeNum: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: j
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isNullable: true
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          isInaccessible: true
+  -          pgAttributeNum: 3
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: crdb_internal_idx_expr
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          computeExpr:
+  -            expr: j + 1:::INT8
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          isNullable: true
+  -          isVirtual: true
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          kind: STORED
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            constraintId: 1
+  -            indexId: 1
+  -            isUnique: true
+  -            tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t_pkey
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          kind: KEY_SUFFIX
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        secondaryIndex:
+  -          embeddedIndex:
+  -            indexId: 2
+  -            tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 2
+  -          name: t_expr_idx
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 3
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            constraintId: 1
+  -            indexId: 3
+  -            isUnique: true
+  -            sourceIndexId: 1
+  -            tableId: 104
+  -            temporaryIndexId: 4
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 3
+  -          name: t_pkey
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        temporaryIndex:
+  -          embeddedIndex:
+  -            constraintId: 1
+  -            indexId: 4
+  -            isUnique: true
+  -            sourceIndexId: 1
+  -            tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 4
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+     families:
+     - columnIds:
+       - 1
+  -    - 2
+       columnNames:
+       - i
+  -    - crdb_internal_column_2_name_placeholder
+       defaultColumnId: 2
+       name: primary
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000010"
+  -  mutations:
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_internal_column_3_name_placeholder
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      version: 3
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 4
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_4_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - crdb_internal_column_2_name_placeholder
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  modificationTime: {}
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+write *eventpb.DropIndex to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+commit transaction #11
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

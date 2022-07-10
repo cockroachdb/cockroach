@@ -94,15 +94,27 @@ SELECT * FROM [$num_ref_id(4,3,1) AS num_ref_alias]
 200  20  2
 300  30  3
 
+let $num_ref_bc
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $num_ref_id
+   AND index_name = 'bc';
+
+let $num_ref_pkey
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $num_ref_id
+   AND index_name = 'num_ref_pkey';
+
 query I rowsort
-SELECT * FROM [$num_ref_id(4) AS num_ref_alias]@[2]
+SELECT * FROM [$num_ref_id(4) AS num_ref_alias]@[$num_ref_bc]
 ----
 101
 200
 300
 
 query I rowsort
-SELECT * FROM [$num_ref_id(1) AS num_ref_alias]@[1]
+SELECT * FROM [$num_ref_id(1) AS num_ref_alias]@[$num_ref_pkey]
 ----
 1
 2
