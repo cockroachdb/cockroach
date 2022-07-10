@@ -304,15 +304,32 @@ func getSortedColumnIDsInIndex(
 	return keyColumnIDs, keySuffixColumnIDs, storingColumnIDs
 }
 
+func toPublicNotCurrentlyPublicFilter(
+	status scpb.Status, target scpb.TargetStatus, _ scpb.Element,
+) bool {
+	return status != scpb.Status_PUBLIC && target == scpb.ToPublic
+}
+
+func isColumnFilter(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	_, isColumn := e.(*scpb.Column)
+	return isColumn
+}
+
 func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
 	return target == scpb.ToPublic
 }
 
-func statusAbsentOrBackfillOnly(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target == scpb.ToAbsent
+}
+
+func statusAbsentOrBackfillOnlyFilter(
+	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
+) bool {
 	return status == scpb.Status_ABSENT || status == scpb.Status_BACKFILL_ONLY
 }
 
-func statusPublic(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return status == scpb.Status_PUBLIC
 }
 
@@ -331,8 +348,8 @@ func getPrimaryIndexes(
 	allTargets := b.QueryByID(tableID)
 	_, _, freshlyAdded = scpb.FindPrimaryIndex(allTargets.
 		Filter(publicTargetFilter).
-		Filter(statusAbsentOrBackfillOnly))
-	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(statusPublic))
+		Filter(statusAbsentOrBackfillOnlyFilter))
+	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(statusPublicFilter))
 	if existing == nil {
 		// TODO(postamar): can this even be possible?
 		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))

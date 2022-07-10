@@ -1792,7 +1792,11 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		// set of column/index descriptors at mutation creation time.
 		// Constraints to be dropped are dropped before column/index backfills.
 		case *descpb.DescriptorMutation_Column:
-			desc.RemoveColumnFromFamilyAndPrimaryIndex(t.Column.ID)
+			if desc.DeclarativeSchemaChangerState != nil {
+				desc.removeColumnFromFamily(t.Column.ID)
+			} else {
+				desc.RemoveColumnFromFamilyAndPrimaryIndex(t.Column.ID)
+			}
 		}
 	}
 	return nil
@@ -2259,6 +2263,8 @@ func (p mutationPublicationPolicy) shouldSkip(m *descpb.DescriptorMutation) bool
 		return p.includes(catalog.IgnorePKSwaps)
 	case m.GetConstraint() != nil:
 		return p.includes(catalog.IgnoreConstraints)
+	case m.GetColumn() != nil && m.Direction == descpb.DescriptorMutation_DROP:
+		return p.includes(catalog.IgnoreColumnDrops)
 	default:
 		return false
 	}
