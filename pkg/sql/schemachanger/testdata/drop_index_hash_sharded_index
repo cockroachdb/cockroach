@@ -12,7 +12,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 7 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -140,9 +140,9 @@ upsert descriptor #104
   +    - WRITE_ONLY
   +    - ABSENT
   +    - PUBLIC
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - VALIDATED
   +    - ABSENT
   +    - ABSENT
@@ -294,7 +294,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
 upsert descriptor #104
   ...
          userName: root
@@ -303,13 +303,19 @@ upsert descriptor #104
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
-  ...
-       - ABSENT
-       - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - VALIDATED
+       - ABSENT
+       - ABSENT
+       - ABSENT
   +    - DELETE_ONLY
-       - ABSENT
-       - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
   ...
      id: 104
      indexes: []
