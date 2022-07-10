@@ -70,6 +70,17 @@ func (et *depEdgeTree) insert(e *DepEdge) {
 	})
 }
 
+func (et *depEdgeTree) get(e *DepEdge) *DepEdge {
+	got, ok := et.t.Get(&edgeTreeEntry{
+		t:    et,
+		edge: e,
+	}).(*edgeTreeEntry)
+	if !ok {
+		return nil
+	}
+	return got.edge
+}
+
 func (et *depEdgeTree) iterateSourceNode(n *screl.Node, it DepEdgeIterator) (err error) {
 	e := &edgeTreeEntry{t: et, edge: &DepEdge{}}
 	if et.order == fromTo {

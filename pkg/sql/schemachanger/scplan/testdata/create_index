@@ -227,15 +227,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -471,15 +471,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after temp index exists
+  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
