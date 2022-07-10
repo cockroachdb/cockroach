@@ -225,7 +225,9 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			for _, de := range depEdges {
 				rn := en.Childf("%s dependency from %s %s",
 					de.Kind(), de.From().CurrentStatus, screl.ElementString(de.From().Element()))
-				rn.AddLine(fmt.Sprintf("rule: %q", de.Name()))
+				for _, r := range de.Rules() {
+					rn.AddLine(fmt.Sprintf("rule: %q", r.Name))
+				}
 			}
 			noOpEdges := noOpByElement[t.Element()]
 			for _, oe := range noOpEdges {

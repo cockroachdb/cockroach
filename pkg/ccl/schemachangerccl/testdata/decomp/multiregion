@@ -257,6 +257,7 @@ ElementState:
 - ColumnDefaultExpression:
     columnId: 2
     expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 110
     usesSequenceIds: []
     usesTypeIds: []
@@ -505,6 +506,7 @@ ElementState:
 - ColumnDefaultExpression:
     columnId: 2
     expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 109
     usesSequenceIds: []
     usesTypeIds: []
@@ -800,6 +802,7 @@ ElementState:
 - ColumnDefaultExpression:
     columnId: 3
     expr: default_to_database_primary_region(gateway_region())::@100105
+    referencedColumnIds: []
     tableId: 108
     usesSequenceIds: []
     usesTypeIds:

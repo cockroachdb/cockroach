@@ -709,7 +709,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -721,7 +721,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -729,7 +729,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
