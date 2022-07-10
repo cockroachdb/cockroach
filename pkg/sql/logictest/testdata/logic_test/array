@@ -983,6 +983,55 @@ SELECT NULL::INT[] || NULL::INT[]
 ----
 NULL
 
+# The following tests check for binary and comparison expression that can handle
+# nullable arguments.
+statement ok
+CREATE TABLE t_bool (b BOOL[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+
+statement ok
+INSERT INTO t_bool VALUES (Array[]);
+
+query T
+SELECT b || NULL FROM t_bool;
+----
+{}
+
+query T
+SELECT b || Array[]:::bool[] FROM t_bool;
+----
+{}
+
+query T
+SELECT b || Array[NULL]:::bool[] FROM t_bool;
+----
+{NULL}
+
+query T
+SELECT b || Array[true] FROM t_bool;
+----
+{t}
+
+query T
+SELECT b FROM t_bool WHERE b < ARRAY[]:::bool[];
+----
+
+query T
+SELECT b FROM t_bool WHERE b < ARRAY[NULL]:::bool[];
+----
+{}
+
+query T
+SELECT b FROM t_bool WHERE b < ARRAY[true];
+----
+{}
+
+statement ok
+DROP TABLE t_bool;
+
 # Array equality
 
 query B
