@@ -9,6 +9,7 @@ go_library(
         "descriptor.go",
         "descriptor_id_set.go",
         "errors.go",
+        "index_id_set.go",
         "post_derserialization_changes.go",
         "privilege_object.go",
         "schema.go",
