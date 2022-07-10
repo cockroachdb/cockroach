@@ -228,7 +228,7 @@ func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 			ge.Attr("fontsize", "9")
 		case *scgraph.DepEdge:
 			ge.Attr("color", "red")
-			ge.Attr("label", e.Name())
+			ge.Attr("label", e.RuleNames())
 			if e.Kind() == scgraph.SameStagePrecedence {
 				ge.Attr("arrowhead", "diamond")
 			}
