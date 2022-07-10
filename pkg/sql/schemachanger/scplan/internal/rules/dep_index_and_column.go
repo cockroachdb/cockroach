@@ -92,12 +92,11 @@ func init() {
 			}
 		})
 
-	// It's very important that columns are added to the descriptor's
-	// IndexDescriptor in the same mutation stage which adds that index
-	// to the TableDescriptor.
+	// This rule pairs with the rule which ensures that columns are added to
+	// the index before it receives writes.
 	registerDepRule(
-		"temp index exists right before columns, partitioning, and partial",
-		scgraph.SameStagePrecedence,
+		"temp index exists before columns, partitioning, and partial",
+		scgraph.Precedence,
 		"temp-index", "index-partitioning",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -160,20 +159,68 @@ func init() {
 	// do it once the index is definitely being dropped. The reason for
 	// this is roundabout: dropping a column from an index which is itself
 	// being dropped is treated as a no-op by the execution layer.
+	//
+	// TODO(ajwerner): This pair of rules really feels like it ought to be a
+	// same stage precedence sort of rule where we remove the columns from the
+	// index when we remove the index, but for some reason, that overconstrains
+	// the graph when dropping the table. Because of that, we allow the column
+	// to be removed from the index in DELETE_ONLY, and we no-op the removal.
 	registerDepRule(
-		"temp and secondary index columns removed just before removing the index",
-		scgraph.SameStagePrecedence,
-		"index", "index-column",
+		"secondary index columns removed before removing the index",
+		scgraph.Precedence,
+		"index-column", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.el.Type((*scpb.IndexColumn)(nil)),
-				to.el.Type(
-					(*scpb.SecondaryIndex)(nil),
-					(*scpb.TemporaryIndex)(nil),
-				),
+				to.el.Type((*scpb.SecondaryIndex)(nil)),
 				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
 				toAbsent(from.target, to.target),
 				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_ABSENT),
+			}
+		},
+	)
+	registerDepRule(
+		"secondary index in DELETE_ONLY before removing columns",
+		scgraph.Precedence,
+		"index", "index-column",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.SecondaryIndex)(nil)),
+				to.el.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_DELETE_ONLY),
+				currentStatus(to.node, scpb.Status_ABSENT),
+			}
+		},
+	)
+	registerDepRule(
+		"temp index columns removed before removing the index",
+		scgraph.Precedence,
+		"index-column", "index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.IndexColumn)(nil)),
+				to.el.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_TRANSIENT_ABSENT),
+			}
+		},
+	)
+	registerDepRule(
+		"temp index in DELETE_ONLY before removing columns",
+		scgraph.Precedence,
+		"index", "index-column",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.TemporaryIndex)(nil)),
+				to.el.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_TRANSIENT_DELETE_ONLY),
 				currentStatus(to.node, scpb.Status_ABSENT),
 			}
 		},
@@ -316,9 +363,10 @@ func init() {
 		},
 	)
 
+	// TODO(ajwerner): Understand this rule and why it needs to exist.
 	registerDepRule(
-		"column named right before column type becomes public",
-		scgraph.SameStagePrecedence,
+		"column named before column type becomes public",
+		scgraph.Precedence,
 		"column-name", "column-type",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -624,7 +672,7 @@ func init() {
 	registerDepRule(
 		"column name and type to public after all index column to public",
 		scgraph.Precedence,
-		"index-column", "column-name",
+		"column-name-or-type", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.el.Type((*scpb.ColumnName)(nil), (*scpb.ColumnType)(nil)),
