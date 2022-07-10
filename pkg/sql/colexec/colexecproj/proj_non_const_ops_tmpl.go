@@ -79,10 +79,11 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper
-	allocator *colmem.Allocator
-	col1Idx   int
-	col2Idx   int
-	outputIdx int
+	allocator    *colmem.Allocator
+	col1Idx      int
+	col2Idx      int
+	outputIdx    int
+	nullableArgs bool
 }
 
 // {{define "projOp"}}
@@ -115,12 +116,13 @@ func (p _OP_NAME) Next() coldata.Batch {
 		vec2 := batch.ColVec(p.col2Idx)
 		col1 := vec1._L_TYP()
 		col2 := vec2._R_TYP()
+		nullableArgs := p.nullableArgs
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+		if (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls()) && !nullableArgs {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -154,13 +156,18 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, false)
 		}
 	}
-	// _outNulls has been updated from within the _ASSIGN function to include
-	// any NULLs that resulted from the projection.
-	// If _HAS_NULLS is true, union _outNulls with the set of input Nulls.
-	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
-	// projVec.Nulls() so there is no need to call projVec.SetNulls().
+	// _outNulls has been updated from within the _ASSIGN function to include any
+	// NULLs that resulted from the projection.
+	// (1) _HAS_NULLS is true:
+	// If nullableArgs is false, union _outNulls with the set of input Nulls.
+	// If nullableArgs is true, the function’s definition can handle null
+	// arguments. So there is no need to call projVec.SetNulls().
+	// (2) _HAS_NULLS is false:
+	// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+	// need to call projVec.SetNulls().
 	// {{if _HAS_NULLS}}
 	projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+	
 	// {{end}}
 	// {{end}}
 	// {{end}}
@@ -178,7 +185,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 	// {{if _HAS_NULLS}}
 	if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 		// We only want to perform the projection operation if both values are not
-		// null.
+		// null or if the function can handle null arguments.
 		// {{end}}
 		// {{if and (.Left.Sliceable) (not _HAS_SEL)}}
 		//gcassert:bce
@@ -241,6 +248,7 @@ func GetProjectionOperator(
 	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -249,6 +257,7 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]

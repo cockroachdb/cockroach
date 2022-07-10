@@ -57,6 +57,7 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -70,13 +71,14 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -88,7 +90,8 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -97,11 +100,15 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -123,11 +130,15 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -145,6 +156,7 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -158,13 +170,14 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -176,7 +189,8 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -185,11 +199,15 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -211,11 +229,15 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -233,6 +255,7 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -246,13 +269,14 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -264,7 +288,8 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -273,11 +298,15 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -299,11 +328,15 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -321,6 +354,7 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -334,13 +368,14 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -352,7 +387,8 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -361,11 +397,15 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -387,11 +427,15 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -409,6 +453,7 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -422,13 +467,14 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -440,7 +486,8 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -449,11 +496,15 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -475,11 +526,15 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -497,6 +552,7 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -510,13 +566,14 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -528,7 +585,8 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -537,11 +595,15 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -563,11 +625,15 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -585,6 +651,7 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -598,13 +665,14 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -616,7 +684,8 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -625,11 +694,15 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -651,11 +724,15 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -673,6 +750,7 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -686,13 +764,14 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -704,7 +783,8 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -713,11 +793,15 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -739,11 +823,15 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -761,6 +849,7 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -774,13 +863,14 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -792,7 +882,8 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -801,11 +892,15 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -827,11 +922,15 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -851,6 +950,7 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -864,13 +964,14 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -889,7 +990,8 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -904,11 +1006,15 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -943,11 +1049,15 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -965,6 +1075,7 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -978,13 +1089,14 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -996,7 +1108,8 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1005,11 +1118,15 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1031,11 +1148,15 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1053,6 +1174,7 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1066,13 +1188,14 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1084,7 +1207,8 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1093,11 +1217,15 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1119,11 +1247,15 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1141,6 +1273,7 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1154,13 +1287,14 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1172,7 +1306,8 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1181,11 +1316,15 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1207,11 +1346,15 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1229,6 +1372,7 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1242,13 +1386,14 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1260,7 +1405,8 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1269,11 +1415,15 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1295,11 +1445,15 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1317,6 +1471,7 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1330,13 +1485,14 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1348,7 +1504,8 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1357,11 +1514,15 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1383,11 +1544,15 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1405,6 +1570,7 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1418,13 +1584,14 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1436,7 +1603,8 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1445,11 +1613,15 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1471,11 +1643,15 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1493,6 +1669,7 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1506,13 +1683,14 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1524,7 +1702,8 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1533,11 +1712,15 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1559,11 +1742,15 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1581,6 +1768,7 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1594,13 +1782,14 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1612,7 +1801,8 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1621,11 +1811,15 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1647,11 +1841,15 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1669,6 +1867,7 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1682,13 +1881,14 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1700,7 +1900,8 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1709,11 +1910,15 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1735,11 +1940,15 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1759,6 +1968,7 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1772,13 +1982,14 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -1797,7 +2008,8 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -1812,11 +2024,15 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1851,11 +2067,15 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1873,6 +2093,7 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1886,13 +2107,14 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -1904,7 +2126,8 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -1913,11 +2136,15 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1939,11 +2166,15 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1961,6 +2192,7 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -1974,13 +2206,14 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -1992,7 +2225,8 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2001,11 +2235,15 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2027,11 +2265,15 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2049,6 +2291,7 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2062,13 +2305,14 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2080,7 +2324,8 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2089,11 +2334,15 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2115,11 +2364,15 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2137,6 +2390,7 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2150,13 +2404,14 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2168,7 +2423,8 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2177,11 +2433,15 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2203,11 +2463,15 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2225,6 +2489,7 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2238,13 +2503,14 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2256,7 +2522,8 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2265,11 +2532,15 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2291,11 +2562,15 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2313,6 +2588,7 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2326,13 +2602,14 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2344,7 +2621,8 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2353,11 +2631,15 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2379,11 +2661,15 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2401,6 +2687,7 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2414,13 +2701,14 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2432,7 +2720,8 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2441,11 +2730,15 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2467,11 +2760,15 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2489,6 +2786,7 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2502,13 +2800,14 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2520,7 +2819,8 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2529,11 +2829,15 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2555,11 +2859,15 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2577,6 +2885,7 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2590,13 +2899,14 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2608,7 +2918,8 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2617,11 +2928,15 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2643,11 +2958,15 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2667,6 +2986,7 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2680,13 +3000,14 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -2705,7 +3026,8 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -2720,11 +3042,15 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2759,11 +3085,15 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2781,6 +3111,7 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2794,13 +3125,14 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -2819,7 +3151,8 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2835,11 +3168,15 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2875,11 +3212,15 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2897,6 +3238,7 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -2910,13 +3252,14 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -2935,7 +3278,8 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -2951,11 +3295,15 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2991,11 +3339,15 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3013,6 +3365,7 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3026,13 +3379,14 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3051,7 +3405,8 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3067,11 +3422,15 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3107,11 +3466,15 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3129,6 +3492,7 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3142,13 +3506,14 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3166,7 +3531,8 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3181,11 +3547,15 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3219,11 +3589,15 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3241,6 +3615,7 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3254,13 +3629,14 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3278,7 +3654,8 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3293,11 +3670,15 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3331,11 +3712,15 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3353,6 +3738,7 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3366,13 +3752,14 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3390,7 +3777,8 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3405,11 +3793,15 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3443,11 +3835,15 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3465,6 +3861,7 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3478,13 +3875,14 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3502,7 +3900,8 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3517,11 +3916,15 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3555,11 +3958,15 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3577,6 +3984,7 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3590,13 +3998,14 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3616,7 +4025,8 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3633,11 +4043,15 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3675,11 +4089,15 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3699,6 +4117,7 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3712,13 +4131,14 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -3741,7 +4161,8 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3761,11 +4182,15 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3809,11 +4234,15 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3831,6 +4260,7 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3844,13 +4274,14 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3868,7 +4299,8 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3883,11 +4315,15 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3921,11 +4357,15 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3943,6 +4383,7 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -3956,13 +4397,14 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -3980,7 +4422,8 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -3995,11 +4438,15 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4033,11 +4480,15 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4055,6 +4506,7 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4068,13 +4520,14 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4092,7 +4545,8 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4107,11 +4561,15 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4145,11 +4603,15 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4167,6 +4629,7 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4180,13 +4643,14 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4206,7 +4670,8 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4223,11 +4688,15 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4265,11 +4734,15 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4289,6 +4762,7 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4302,13 +4776,14 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -4331,7 +4806,8 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4351,11 +4827,15 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4399,11 +4879,15 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4421,6 +4905,7 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4434,13 +4919,14 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4458,7 +4944,8 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4473,11 +4960,15 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4511,11 +5002,15 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4533,6 +5028,7 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4546,13 +5042,14 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4570,7 +5067,8 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4585,11 +5083,15 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4623,11 +5125,15 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4645,6 +5151,7 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4658,13 +5165,14 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4682,7 +5190,8 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4697,11 +5206,15 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4735,11 +5248,15 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4757,6 +5274,7 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4770,13 +5288,14 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -4796,7 +5315,8 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4813,11 +5333,15 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4855,11 +5379,15 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4879,6 +5407,7 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -4892,13 +5421,14 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -4921,7 +5451,8 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -4941,11 +5472,15 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4989,11 +5524,15 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5011,6 +5550,7 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5024,13 +5564,14 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -5045,7 +5586,8 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -5057,11 +5599,15 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5089,11 +5635,15 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5111,6 +5661,7 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5124,13 +5675,14 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg)
 						rounded_res := t_res.Round(time.Microsecond)
@@ -5145,7 +5697,8 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg)
@@ -5157,11 +5710,15 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5189,11 +5746,15 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5211,6 +5772,7 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5224,13 +5786,14 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						t_res := duration.Add(arg, p.constArg)
 						rounded_res := t_res.Round(time.Microsecond)
@@ -5245,7 +5808,8 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						t_res := duration.Add(arg, p.constArg)
@@ -5257,11 +5821,15 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5289,11 +5857,15 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5311,6 +5883,7 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5324,13 +5897,14 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Add(arg)
 					}
@@ -5340,18 +5914,23 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Add(arg)
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5369,11 +5948,15 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.Add(arg)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5393,6 +5976,7 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5406,13 +5990,14 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -5435,7 +6020,8 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -5455,11 +6041,15 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5503,11 +6093,15 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5527,6 +6121,7 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5540,13 +6135,14 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: arg}
@@ -5569,7 +6165,8 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: arg}
@@ -5588,11 +6185,15 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5635,11 +6236,15 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5659,6 +6264,7 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5672,13 +6278,14 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5701,7 +6308,8 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5720,11 +6328,15 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5767,11 +6379,15 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5791,6 +6407,7 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5804,13 +6421,14 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5833,7 +6451,8 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5852,11 +6471,15 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5899,11 +6522,15 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5923,6 +6550,7 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -5936,13 +6564,14 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5965,7 +6594,8 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -5984,11 +6614,15 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6031,11 +6665,15 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6053,6 +6691,7 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6066,13 +6705,14 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6091,7 +6731,8 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6107,11 +6748,15 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6147,11 +6792,15 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6169,6 +6818,7 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6182,13 +6832,14 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6207,7 +6858,8 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6223,11 +6875,15 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6263,11 +6919,15 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6285,6 +6945,7 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6298,13 +6959,14 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6323,7 +6985,8 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6339,11 +7002,15 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6379,11 +7046,15 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6401,6 +7072,7 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6414,13 +7086,14 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6438,7 +7111,8 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6453,11 +7127,15 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6491,11 +7169,15 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6513,6 +7195,7 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6526,13 +7209,14 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6550,7 +7234,8 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6565,11 +7250,15 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6603,11 +7292,15 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6625,6 +7318,7 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6638,13 +7332,14 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6662,7 +7357,8 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6677,11 +7373,15 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6715,11 +7415,15 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6737,6 +7441,7 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6750,13 +7455,14 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6774,7 +7480,8 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6789,11 +7496,15 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6827,11 +7538,15 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6849,6 +7564,7 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6862,13 +7578,14 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -6888,7 +7605,8 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -6905,11 +7623,15 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6947,11 +7669,15 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6971,6 +7697,7 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -6984,13 +7711,14 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -7013,7 +7741,8 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7033,11 +7762,15 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7081,11 +7814,15 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7103,6 +7840,7 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7116,13 +7854,14 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7140,7 +7879,8 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7155,11 +7895,15 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7193,11 +7937,15 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7215,6 +7963,7 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7228,13 +7977,14 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7252,7 +8002,8 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7267,11 +8018,15 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7305,11 +8060,15 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7327,6 +8086,7 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7340,13 +8100,14 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7364,7 +8125,8 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7379,11 +8141,15 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7417,11 +8183,15 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7439,6 +8209,7 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7452,13 +8223,14 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7478,7 +8250,8 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7495,11 +8268,15 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7537,11 +8314,15 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7561,6 +8342,7 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7574,13 +8356,14 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -7603,7 +8386,8 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7623,11 +8407,15 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7671,11 +8459,15 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7693,6 +8485,7 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7706,13 +8499,14 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7730,7 +8524,8 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7745,11 +8540,15 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7783,11 +8582,15 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7805,6 +8608,7 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7818,13 +8622,14 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7842,7 +8647,8 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7857,11 +8663,15 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7895,11 +8705,15 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7917,6 +8731,7 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -7930,13 +8745,14 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -7954,7 +8770,8 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -7969,11 +8786,15 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8007,11 +8828,15 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8029,6 +8854,7 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8042,13 +8868,14 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -8068,7 +8895,8 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -8085,11 +8913,15 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8127,11 +8959,15 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8151,6 +8987,7 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8164,13 +9001,14 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -8193,7 +9031,8 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -8213,11 +9052,15 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8261,11 +9104,15 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8283,6 +9130,7 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8296,13 +9144,14 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -8317,7 +9166,8 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -8329,11 +9179,15 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8361,11 +9215,15 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8383,6 +9241,7 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8396,13 +9255,14 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						nanos := p.constArg.Sub(arg).Nanoseconds()
@@ -8415,7 +9275,8 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -8425,11 +9286,15 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8453,11 +9318,15 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8475,6 +9344,7 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8488,13 +9358,14 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg.Mul(-1))
 						rounded_res := t_res.Round(time.Microsecond)
@@ -8509,7 +9380,8 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg.Mul(-1))
@@ -8521,11 +9393,15 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8553,11 +9429,15 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8575,6 +9455,7 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8588,13 +9469,14 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Sub(arg)
 					}
@@ -8604,18 +9486,23 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Sub(arg)
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8633,11 +9520,15 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.Sub(arg)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8657,6 +9548,7 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8670,13 +9562,14 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -8699,7 +9592,8 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -8719,11 +9613,15 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8767,11 +9665,15 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8789,6 +9691,7 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8802,13 +9705,14 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -8827,7 +9731,8 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -8842,11 +9747,15 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8881,11 +9790,15 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8903,6 +9816,7 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -8916,13 +9830,14 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -8937,7 +9852,8 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -8948,11 +9864,15 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8979,11 +9899,15 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9001,6 +9925,7 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9014,13 +9939,14 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -9035,7 +9961,8 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -9046,11 +9973,15 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9077,11 +10008,15 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9099,6 +10034,7 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9112,13 +10048,14 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -9133,7 +10070,8 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _, _err := p.constArg.RemoveIndex(int(arg))
@@ -9144,11 +10082,15 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9175,11 +10117,15 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9199,6 +10145,7 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9212,13 +10159,14 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -9237,7 +10185,8 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -9252,11 +10201,15 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9291,11 +10244,15 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9315,6 +10272,7 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9328,13 +10286,14 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: arg}
@@ -9357,7 +10316,8 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: arg}
@@ -9376,11 +10336,15 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9423,11 +10387,15 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9447,6 +10415,7 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9460,13 +10429,14 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DString(arg)
@@ -9489,7 +10459,8 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DString(arg)
@@ -9508,11 +10479,15 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9555,11 +10530,15 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9579,6 +10558,7 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9592,13 +10572,14 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9621,7 +10602,8 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9640,11 +10622,15 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9687,11 +10673,15 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9711,6 +10701,7 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9724,13 +10715,14 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9753,7 +10745,8 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9772,11 +10765,15 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9819,11 +10816,15 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9843,6 +10844,7 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9856,13 +10858,14 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9885,7 +10888,8 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -9904,11 +10908,15 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9951,11 +10959,15 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9973,6 +10985,7 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -9986,13 +10999,14 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10011,7 +11025,8 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10027,11 +11042,15 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10067,11 +11086,15 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10089,6 +11112,7 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10102,13 +11126,14 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10127,7 +11152,8 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10143,11 +11169,15 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10183,11 +11213,15 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10205,6 +11239,7 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10218,13 +11253,14 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10243,7 +11279,8 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10259,11 +11296,15 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10299,11 +11340,15 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10321,6 +11366,7 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10334,13 +11380,14 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10358,7 +11405,8 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10373,11 +11421,15 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10411,11 +11463,15 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10433,6 +11489,7 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10446,13 +11503,14 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						f, err := p.constArg.Float64()
@@ -10467,7 +11525,8 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10479,11 +11538,15 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10511,11 +11574,15 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = arg.MulFloat(f)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10533,6 +11600,7 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10546,13 +11614,14 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10578,7 +11647,8 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10601,11 +11671,15 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10655,11 +11729,15 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10677,6 +11755,7 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10690,13 +11769,14 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10722,7 +11802,8 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10745,11 +11826,15 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10799,11 +11884,15 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10821,6 +11910,7 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10834,13 +11924,14 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -10866,7 +11957,8 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -10889,11 +11981,15 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10943,11 +12039,15 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10965,6 +12065,7 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -10978,13 +12079,14 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11004,7 +12106,8 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11021,11 +12124,15 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11063,11 +12170,15 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11085,6 +12196,7 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11098,13 +12210,14 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -11114,18 +12227,23 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11143,11 +12261,15 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11165,6 +12287,7 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11178,13 +12301,14 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11210,7 +12334,8 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11233,11 +12358,15 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11287,11 +12416,15 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11309,6 +12442,7 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11322,13 +12456,14 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11354,7 +12489,8 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11377,11 +12513,15 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11431,11 +12571,15 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11453,6 +12597,7 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11466,13 +12611,14 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11498,7 +12644,8 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11521,11 +12668,15 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11575,11 +12726,15 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11597,6 +12752,7 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11610,13 +12766,14 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11636,7 +12793,8 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11653,11 +12811,15 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11695,11 +12857,15 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11717,6 +12883,7 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11730,13 +12897,14 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -11746,18 +12914,23 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11775,11 +12948,15 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11797,6 +12974,7 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11810,13 +12988,14 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11842,7 +13021,8 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -11865,11 +13045,15 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11919,11 +13103,15 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11941,6 +13129,7 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -11954,13 +13143,14 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -11986,7 +13176,8 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -12009,11 +13200,15 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12063,11 +13258,15 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12085,6 +13284,7 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12098,13 +13298,14 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -12130,7 +13331,8 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -12153,11 +13355,15 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12207,11 +13413,15 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12229,6 +13439,7 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12242,13 +13453,14 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -12268,7 +13480,8 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -12285,11 +13498,15 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12327,11 +13544,15 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12349,6 +13570,7 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12362,13 +13584,14 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -12378,18 +13601,23 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12407,11 +13635,15 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12429,6 +13661,7 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12442,13 +13675,14 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -12463,7 +13697,8 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -12475,11 +13710,15 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12507,11 +13746,15 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12529,6 +13772,7 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12542,13 +13786,14 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = arg.MulFloat(float64(p.constArg))
 					}
@@ -12558,18 +13803,23 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.MulFloat(float64(p.constArg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12587,11 +13837,15 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12609,6 +13863,7 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12622,13 +13877,14 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -12638,18 +13894,23 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12667,11 +13928,15 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12689,6 +13954,7 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12702,13 +13968,14 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -12718,18 +13985,23 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12747,11 +14019,15 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12769,6 +14045,7 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12782,13 +14059,14 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -12798,18 +14076,23 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12827,11 +14110,15 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12849,6 +14136,7 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12862,13 +14150,14 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.MulFloat(float64(arg))
 					}
@@ -12878,18 +14167,23 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.MulFloat(float64(arg))
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12907,11 +14201,15 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12929,6 +14227,7 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -12942,13 +14241,14 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						f, err := arg.Float64()
@@ -12963,7 +14263,8 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -12975,11 +14276,15 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13007,11 +14312,15 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.MulFloat(f)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13029,6 +14338,7 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13042,13 +14352,14 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13071,7 +14382,8 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13091,11 +14403,15 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13139,11 +14455,15 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13161,6 +14481,7 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13174,13 +14495,14 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13203,7 +14525,8 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13223,11 +14546,15 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13271,11 +14598,15 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13293,6 +14624,7 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13306,13 +14638,14 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13335,7 +14668,8 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13355,11 +14689,15 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13403,11 +14741,15 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13425,6 +14767,7 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13438,13 +14781,14 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13466,7 +14810,8 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13485,11 +14830,15 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13531,11 +14880,15 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13553,6 +14906,7 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13566,13 +14920,14 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13594,7 +14949,8 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13613,11 +14969,15 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13659,11 +15019,15 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13681,6 +15045,7 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13694,13 +15059,14 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13722,7 +15088,8 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13741,11 +15108,15 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13787,11 +15158,15 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13809,6 +15184,7 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13822,13 +15198,14 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13850,7 +15227,8 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -13869,11 +15247,15 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13915,11 +15297,15 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13937,6 +15323,7 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -13950,13 +15337,14 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -13980,7 +15368,8 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14001,11 +15390,15 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14051,11 +15444,15 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14073,6 +15470,7 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14086,13 +15484,14 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14114,7 +15513,8 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14133,11 +15533,15 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14179,11 +15583,15 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14201,6 +15609,7 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14214,13 +15623,14 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14242,7 +15652,8 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14261,11 +15672,15 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14307,11 +15722,15 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14329,6 +15748,7 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14342,13 +15762,14 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14370,7 +15791,8 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14389,11 +15811,15 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14435,11 +15861,15 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14457,6 +15887,7 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14470,13 +15901,14 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14500,7 +15932,8 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14521,11 +15954,15 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14571,11 +16008,15 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14593,6 +16034,7 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14606,13 +16048,14 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14634,7 +16077,8 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14653,11 +16097,15 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14699,11 +16147,15 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14721,6 +16173,7 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14734,13 +16187,14 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14762,7 +16216,8 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14781,11 +16236,15 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14827,11 +16286,15 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14849,6 +16312,7 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14862,13 +16326,14 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -14890,7 +16355,8 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -14909,11 +16375,15 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14955,11 +16425,15 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14977,6 +16451,7 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -14990,13 +16465,14 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -15020,7 +16496,8 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15041,11 +16518,15 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15091,11 +16572,15 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15113,6 +16598,7 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15126,13 +16612,14 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -15151,7 +16638,8 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15167,11 +16655,15 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15207,11 +16699,15 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15229,6 +16725,7 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15242,13 +16739,14 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						if arg == 0 {
@@ -15262,7 +16760,8 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15273,11 +16772,15 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15303,11 +16806,15 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Div(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15325,6 +16832,7 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15338,13 +16846,14 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						if arg == 0 {
@@ -15358,7 +16867,8 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15369,11 +16879,15 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15399,11 +16913,15 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Div(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15421,6 +16939,7 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15434,13 +16953,14 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						if arg == 0 {
@@ -15454,7 +16974,8 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15465,11 +16986,15 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15495,11 +17020,15 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.Div(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15517,6 +17046,7 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15530,13 +17060,14 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						if arg == 0.0 {
@@ -15550,7 +17081,8 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15561,11 +17093,15 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15591,11 +17127,15 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 					projCol[i] = p.constArg.DivFloat(float64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15613,6 +17153,7 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15626,13 +17167,14 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -15655,7 +17197,8 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15675,11 +17218,15 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15723,11 +17270,15 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15745,6 +17296,7 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15758,13 +17310,14 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -15787,7 +17340,8 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15807,11 +17361,15 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15855,11 +17413,15 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15877,6 +17439,7 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -15890,13 +17453,14 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -15919,7 +17483,8 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -15939,11 +17504,15 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15987,11 +17556,15 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16009,6 +17582,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16022,13 +17596,14 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16050,7 +17625,8 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16069,11 +17645,15 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16115,11 +17695,15 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16137,6 +17721,7 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16150,13 +17735,14 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16173,7 +17759,8 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16187,11 +17774,15 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16223,11 +17814,15 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16245,6 +17840,7 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16258,13 +17854,14 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16281,7 +17878,8 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16295,11 +17893,15 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16331,11 +17933,15 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16353,6 +17959,7 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16366,13 +17973,14 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16389,7 +17997,8 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16403,11 +18012,15 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16439,11 +18052,15 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16461,6 +18078,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16474,13 +18092,14 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16504,7 +18123,8 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16525,11 +18145,15 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16575,11 +18199,15 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16597,6 +18225,7 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16610,13 +18239,14 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16633,7 +18263,8 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16647,11 +18278,15 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16683,11 +18318,15 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16705,6 +18344,7 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16718,13 +18358,14 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16741,7 +18382,8 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16755,11 +18397,15 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16791,11 +18437,15 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16813,6 +18463,7 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16826,13 +18477,14 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16849,7 +18501,8 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16863,11 +18516,15 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16899,11 +18556,15 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16921,6 +18582,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -16934,13 +18596,14 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -16964,7 +18627,8 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -16985,11 +18649,15 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17035,11 +18703,15 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17057,6 +18729,7 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17070,13 +18743,14 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17093,7 +18767,8 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17107,11 +18782,15 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17143,11 +18822,15 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17165,6 +18848,7 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17178,13 +18862,14 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17201,7 +18886,8 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17215,11 +18901,15 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17251,11 +18941,15 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17273,6 +18967,7 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17286,13 +18981,14 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17309,7 +19005,8 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17323,11 +19020,15 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17359,11 +19060,15 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17381,6 +19086,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17394,13 +19100,14 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17424,7 +19131,8 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17445,11 +19153,15 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17495,11 +19207,15 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17517,6 +19233,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17530,13 +19247,14 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17555,7 +19273,8 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17571,11 +19290,15 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17611,11 +19334,15 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17633,6 +19360,7 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17646,13 +19374,14 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17675,7 +19404,8 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17695,11 +19425,15 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17743,11 +19477,15 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17765,6 +19503,7 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17778,13 +19517,14 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17807,7 +19547,8 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17827,11 +19568,15 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17875,11 +19620,15 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17897,6 +19646,7 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -17910,13 +19660,14 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -17939,7 +19690,8 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -17959,11 +19711,15 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18007,11 +19763,15 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18029,6 +19789,7 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18042,13 +19803,14 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18070,7 +19832,8 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18089,11 +19852,15 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18135,11 +19902,15 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18157,6 +19928,7 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18170,13 +19942,14 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18193,7 +19966,8 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18207,11 +19981,15 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18243,11 +20021,15 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18265,6 +20047,7 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18278,13 +20061,14 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18301,7 +20085,8 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18315,11 +20100,15 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18351,11 +20140,15 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18373,6 +20166,7 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18386,13 +20180,14 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18409,7 +20204,8 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18423,11 +20219,15 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18459,11 +20259,15 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18481,6 +20285,7 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18494,13 +20299,14 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18524,7 +20330,8 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18545,11 +20352,15 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18595,11 +20406,15 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18617,6 +20432,7 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18630,13 +20446,14 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18653,7 +20470,8 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18667,11 +20485,15 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18703,11 +20525,15 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18725,6 +20551,7 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18738,13 +20565,14 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18761,7 +20589,8 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18775,11 +20604,15 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18811,11 +20644,15 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18833,6 +20670,7 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18846,13 +20684,14 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18869,7 +20708,8 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -18883,11 +20723,15 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18919,11 +20763,15 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18941,6 +20789,7 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -18954,13 +20803,14 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -18984,7 +20834,8 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19005,11 +20856,15 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19055,11 +20910,15 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19077,6 +20936,7 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19090,13 +20950,14 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19113,7 +20974,8 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19127,11 +20989,15 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19163,11 +21029,15 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19185,6 +21055,7 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19198,13 +21069,14 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19221,7 +21093,8 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19235,11 +21108,15 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19271,11 +21148,15 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19293,6 +21174,7 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19306,13 +21188,14 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19329,7 +21212,8 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19343,11 +21227,15 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19379,11 +21267,15 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19401,6 +21293,7 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19414,13 +21307,14 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19444,7 +21338,8 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19465,11 +21360,15 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19515,11 +21414,15 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19537,6 +21440,7 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19550,13 +21454,14 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19575,7 +21480,8 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19591,11 +21497,15 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19631,11 +21541,15 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19653,6 +21567,7 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19666,13 +21581,14 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19691,7 +21607,8 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19707,11 +21624,15 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19747,11 +21668,15 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19769,6 +21694,7 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19782,13 +21708,14 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19807,7 +21734,8 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19823,11 +21751,15 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19863,11 +21795,15 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19885,6 +21821,7 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -19898,13 +21835,14 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -19923,7 +21861,8 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -19939,11 +21878,15 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19979,11 +21922,15 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20001,6 +21948,7 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20014,13 +21962,14 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20038,7 +21987,8 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20053,11 +22003,15 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20091,11 +22045,15 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20113,6 +22071,7 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20126,13 +22085,14 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20156,7 +22116,8 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20177,11 +22138,15 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20227,11 +22192,15 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20249,6 +22218,7 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20262,13 +22232,14 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20292,7 +22263,8 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20313,11 +22285,15 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20363,11 +22339,15 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20385,6 +22365,7 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20398,13 +22379,14 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20428,7 +22410,8 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20449,11 +22432,15 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20499,11 +22486,15 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20521,6 +22512,7 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20534,13 +22526,14 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20560,7 +22553,8 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20577,11 +22571,15 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20619,11 +22617,15 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20641,6 +22643,7 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20654,13 +22657,14 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20684,7 +22688,8 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20705,11 +22710,15 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20755,11 +22764,15 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20777,6 +22790,7 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20790,13 +22804,14 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20820,7 +22835,8 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20841,11 +22857,15 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20891,11 +22911,15 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20913,6 +22937,7 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -20926,13 +22951,14 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -20956,7 +22982,8 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -20977,11 +23004,15 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21027,11 +23058,15 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21049,6 +23084,7 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21062,13 +23098,14 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21088,7 +23125,8 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21105,11 +23143,15 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21147,11 +23189,15 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21169,6 +23215,7 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21182,13 +23229,14 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21212,7 +23260,8 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21233,11 +23282,15 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21283,11 +23336,15 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21305,6 +23362,7 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21318,13 +23376,14 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21348,7 +23407,8 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21369,11 +23429,15 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21419,11 +23483,15 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21441,6 +23509,7 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21454,13 +23523,14 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21484,7 +23554,8 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21505,11 +23576,15 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21555,11 +23630,15 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21577,6 +23656,7 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21590,13 +23670,14 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21616,7 +23697,8 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21633,11 +23715,15 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21675,11 +23761,15 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21697,6 +23787,7 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21710,13 +23801,14 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21731,7 +23823,8 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -21743,11 +23836,15 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21775,11 +23872,15 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21797,6 +23898,7 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21810,13 +23912,14 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21833,7 +23936,8 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -21846,11 +23950,15 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21881,11 +23989,15 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21903,6 +24015,7 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.JSONs
 	col = vec.JSON()
 	projVec := batch.ColVec(p.outputIdx)
@@ -21916,13 +24029,14 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.Concat(arg)
@@ -21938,7 +24052,8 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.Concat(arg)
@@ -21950,11 +24065,15 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21983,11 +24102,15 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22007,6 +24130,7 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22020,13 +24144,14 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -22045,7 +24170,8 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
@@ -22060,11 +24186,15 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22099,11 +24229,15 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22121,6 +24255,7 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22134,13 +24269,14 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22158,7 +24294,8 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22173,11 +24310,15 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22211,11 +24352,15 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22233,6 +24378,7 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22246,13 +24392,14 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22270,7 +24417,8 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22285,11 +24433,15 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22323,11 +24475,15 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22345,6 +24501,7 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22358,13 +24515,14 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22382,7 +24540,8 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22397,11 +24556,15 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22435,11 +24598,15 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22457,6 +24624,7 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22470,13 +24638,14 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22494,7 +24663,8 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22509,11 +24679,15 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22547,11 +24721,15 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22569,6 +24747,7 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22582,13 +24761,14 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22606,7 +24786,8 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22621,11 +24802,15 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22659,11 +24844,15 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22681,6 +24870,7 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22694,13 +24884,14 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22718,7 +24909,8 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22733,11 +24925,15 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22771,11 +24967,15 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22793,6 +24993,7 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22806,13 +25007,14 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22830,7 +25032,8 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22845,11 +25048,15 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22883,11 +25090,15 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22905,6 +25116,7 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -22918,13 +25130,14 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -22942,7 +25155,8 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -22957,11 +25171,15 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22995,11 +25213,15 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23017,6 +25239,7 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23030,13 +25253,14 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -23054,7 +25278,8 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -23069,11 +25294,15 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23107,11 +25336,15 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23131,6 +25364,7 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23144,13 +25378,14 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23173,7 +25408,8 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23192,11 +25428,15 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23239,11 +25479,15 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23263,6 +25507,7 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23276,13 +25521,14 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23305,7 +25551,8 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23324,11 +25571,15 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23371,11 +25622,15 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23395,6 +25650,7 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23408,13 +25664,14 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23437,7 +25694,8 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -23456,11 +25714,15 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23503,11 +25765,15 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23525,6 +25791,7 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23538,13 +25805,14 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -23562,7 +25830,8 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -23577,11 +25846,15 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23615,11 +25888,15 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23637,6 +25914,7 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23650,13 +25928,14 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -23674,7 +25953,8 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -23689,11 +25969,15 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23727,11 +26011,15 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23749,6 +26037,7 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23762,13 +26051,14 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -23786,7 +26076,8 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -23801,11 +26092,15 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23839,11 +26134,15 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23861,6 +26160,7 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23874,13 +26174,14 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -23898,7 +26199,8 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -23913,11 +26215,15 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23951,11 +26257,15 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23973,6 +26283,7 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -23986,13 +26297,14 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -24010,7 +26322,8 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -24025,11 +26338,15 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24063,11 +26380,15 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24085,6 +26406,7 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24098,13 +26420,14 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -24122,7 +26445,8 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -24137,11 +26461,15 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24175,11 +26503,15 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24197,6 +26529,7 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24210,13 +26543,14 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -24234,7 +26568,8 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -24249,11 +26584,15 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24287,11 +26626,15 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24309,6 +26652,7 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24322,13 +26666,14 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -24346,7 +26691,8 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -24361,11 +26707,15 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24399,11 +26749,15 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24421,6 +26775,7 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24434,13 +26789,14 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						{
@@ -24458,7 +26814,8 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						//gcassert:bce
 						arg := col.Get(i)
 
@@ -24473,11 +26830,15 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24511,11 +26872,15 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24535,6 +26900,7 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24548,13 +26914,14 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24577,7 +26944,8 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24596,11 +26964,15 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24643,11 +27015,15 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24667,6 +27043,7 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24680,13 +27057,14 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24709,7 +27087,8 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24728,11 +27107,15 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24775,11 +27158,15 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24799,6 +27186,7 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24812,13 +27200,14 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24841,7 +27230,8 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(arg)
@@ -24860,11 +27250,15 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24907,11 +27301,15 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24929,6 +27327,7 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
@@ -24942,13 +27341,14 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -24970,7 +27370,8 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -24988,11 +27389,15 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25033,11 +27438,15 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25055,6 +27464,7 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25068,13 +27478,14 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25093,7 +27504,8 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25108,11 +27520,15 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25147,11 +27563,15 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25169,6 +27589,7 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25182,13 +27603,14 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25207,7 +27629,8 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25222,11 +27645,15 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25261,11 +27688,15 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25283,6 +27714,7 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25296,13 +27728,14 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25321,7 +27754,8 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25336,11 +27770,15 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25375,11 +27813,15 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25397,6 +27839,7 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25410,13 +27853,14 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -25447,7 +27891,8 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
@@ -25474,11 +27919,15 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25537,11 +27986,15 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25559,6 +28012,7 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25572,13 +28026,14 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25606,7 +28061,8 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25630,11 +28086,15 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25687,11 +28147,15 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25709,6 +28173,7 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25722,13 +28187,14 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25756,7 +28222,8 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25780,11 +28247,15 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25837,11 +28308,15 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25859,6 +28334,7 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
@@ -25872,13 +28348,14 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25906,7 +28383,8 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_j, _err := p.constArg.FetchValIdx(int(arg))
@@ -25930,11 +28408,15 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25987,11 +28469,15 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26009,6 +28495,7 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -26022,13 +28509,14 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_path, _err := tree.GetJSONPath(p.constArg, *tree.MustBeDArray(arg.(tree.Datum)))
@@ -26047,7 +28535,8 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_path, _err := tree.GetJSONPath(p.constArg, *tree.MustBeDArray(arg.(tree.Datum)))
@@ -26062,11 +28551,15 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26101,11 +28594,15 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26123,6 +28620,7 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	nullableArgs := p.nullableArgs
 	var col coldata.DatumVec
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
@@ -26136,13 +28634,14 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+		if vec.Nulls().MaybeHasNulls() && !nullableArgs {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_path, _err := tree.GetJSONPath(p.constArg, *tree.MustBeDArray(arg.(tree.Datum)))
@@ -26171,7 +28670,8 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
+						// We only want to perform the projection operation if the value is not null
+						// or if the function can handle null arguments.
 						arg := col.Get(i)
 
 						_path, _err := tree.GetJSONPath(p.constArg, *tree.MustBeDArray(arg.(tree.Datum)))
@@ -26196,11 +28696,15 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26255,11 +28759,15 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			// _outNulls has been updated from within the _ASSIGN function to include any
+			// NULLs that resulted from the projection.
+			// (1) $hasNulls is true:
+			// If nullableArgs is false, union _outNulls with the set of input Nulls.
+			// If nullableArgs is true, the function’s definition can handle null
+			// arguments. So there is no need to call projVec.SetNulls().
+			// (2) $hasNulls is false:
+			// Then there are no input Nulls. _outNulls is projVec.Nulls() so there is no
+			// need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26280,6 +28788,7 @@ func GetProjectionLConstOperator(
 	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -26287,6 +28796,7 @@ func GetProjectionLConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
