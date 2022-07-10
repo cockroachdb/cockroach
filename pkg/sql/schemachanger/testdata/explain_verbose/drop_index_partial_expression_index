@@ -160,9 +160,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 3}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
-        │   │         rule: "dependents removed before column"
-        │   │         rule: "column type removed right before column when not dropping relation"
+        │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │     rule: "column type removed right before column when not dropping relation"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │         rule: "indexes containing columns reach absent before column"
         │   │
         │   ├── • ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
         │   │   │ PUBLIC → ABSENT

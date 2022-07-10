@@ -45,20 +45,27 @@ func init() {
 				}),
 			),
 			to(scpb.Status_MERGE_ONLY,
-				emit(func(this *scpb.PrimaryIndex) *scop.MakeAddedIndexDeleteAndWriteOnly {
-					return &scop.MakeAddedIndexDeleteAndWriteOnly{
+				emit(func(this *scpb.PrimaryIndex) *scop.MakeBackfilledIndexMerging {
+					return &scop.MakeBackfilledIndexMerging{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
 			),
-			equiv(scpb.Status_WRITE_ONLY),
 			to(scpb.Status_MERGED,
 				emit(func(this *scpb.PrimaryIndex) *scop.MergeIndex {
 					return &scop.MergeIndex{
 						TableID:           this.TableID,
 						TemporaryIndexID:  this.TemporaryIndexID,
 						BackfilledIndexID: this.IndexID,
+					}
+				}),
+			),
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.PrimaryIndex) *scop.MakeMergedIndexWriteOnly {
+					return &scop.MakeMergedIndexWriteOnly{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
 					}
 				}),
 			),

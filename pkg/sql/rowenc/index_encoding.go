@@ -1038,7 +1038,9 @@ func EncodePrimaryIndex(
 	if containsNull {
 		return nil, MakeNullPKError(tableDesc, index, colMap, values)
 	}
-	indexedColumns := index.CollectKeyColumnIDs()
+
+	storedColumns := getStoredColumnsForPrimaryIndex(index, colMap)
+
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
 	var columnsToEncode []valueEncodedColumn
@@ -1073,7 +1075,7 @@ func EncodePrimaryIndex(
 		}
 
 		for _, colID := range family.ColumnIDs {
-			if !indexedColumns.Contains(colID) {
+			if storedColumns.Contains(colID) {
 				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
 				continue
 			}
@@ -1107,6 +1109,32 @@ func EncodePrimaryIndex(
 	}
 
 	return indexEntries, nil
+}
+
+// getStoredColumnsForPrimaryIndex computes the set of columns stored in this
+// primary index's value for encoding which are not composite columns. The
+// colMap is expected to include all columns in the table.
+func getStoredColumnsForPrimaryIndex(
+	index catalog.Index, colMap catalog.TableColMap,
+) catalog.TableColSet {
+
+	// It should be rare to never that we come across an index which is encoded
+	// as a primary index but with a version older than this version.
+	// Nevertheless, for safety, we assume at that version that the stored
+	// columns set is not populated and instead we defer to the colMap to compute
+	// the complete set before subtracting the key columns.
+	if index.GetVersion() < descpb.PrimaryIndexWithStoredColumnsVersion {
+		var allColumn catalog.TableColSet
+		colMap.ForEach(func(colID descpb.ColumnID, _ int) {
+			allColumn.Add(colID)
+		})
+		return allColumn.Difference(index.CollectKeyColumnIDs())
+	}
+
+	if !index.Primary() {
+		return index.CollectSecondaryStoredColumnIDs()
+	}
+	return index.CollectPrimaryStoredColumnIDs()
 }
 
 // MakeNullPKError generates an error when the value for a primary key column is

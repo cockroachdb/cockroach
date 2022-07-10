@@ -2697,12 +2697,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			dropColumn = feed(t, f, `CREATE CHANGEFEED FOR drop_column `+
 				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
 			defer closeFeed(t, dropColumn)
-			// NB: You might expect to only see the new row here but we'll see them
-			// all because we cannot distinguish between the index backfill and
-			// foreground writes. See #35738.
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [0]->{"after": {"a": 0}}`,
-				`drop_column: [1]->{"after": {"a": 1}}`,
 				`drop_column: [2]->{"after": {"a": 2}}`,
 			})
 		})

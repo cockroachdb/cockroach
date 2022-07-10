@@ -16,11 +16,12 @@ func _() {
 	_ = x[tableEventPrimaryKeyChange-5]
 	_ = x[tableEventLocalityRegionalByRowChange-6]
 	_ = x[tableEventAddHiddenColumn-7]
+	_ = x[tableEventNoOpPrimaryKeyChange-8]
 }
 
-const _tableEventType_name = "UnknownAddColumnNoBackfillAddColumnWithBackfillDropColumnTruncatePrimaryKeyChangeLocalityRegionalByRowChangeAddHiddenColumn"
+const _tableEventType_name = "UnknownAddColumnNoBackfillAddColumnWithBackfillDropColumnTruncatePrimaryKeyChangeLocalityRegionalByRowChangeAddHiddenColumnNoOpPrimaryKeyChange"
 
-var _tableEventType_index = [...]uint8{0, 7, 26, 47, 57, 65, 81, 108, 123}
+var _tableEventType_index = [...]uint8{0, 7, 26, 47, 57, 65, 81, 108, 123, 143}
 
 func (i tableEventType) String() string {
 	if i >= tableEventType(len(_tableEventType_index)-1) {
