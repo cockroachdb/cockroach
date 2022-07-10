@@ -15,7 +15,9 @@ import { DatabaseDetailsPage } from "@cockroachlabs/cluster-ui";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 
 const connected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps, null, { context: ReactReduxContext })(DatabaseDetailsPage),
+  connect(mapStateToProps, mapDispatchToProps, null, {
+    context: ReactReduxContext,
+  })(DatabaseDetailsPage),
 );
 
 export { connected as DatabaseDetailsPage };

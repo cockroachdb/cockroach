@@ -11,7 +11,7 @@
 import Enzyme from "enzyme";
 import Adapter from "enzyme-adapter-react-16";
 // import * as v8 from "v8";
-// 
+//
 // if (process.env.BAZEL_TARGET) {
 //   // TODO(barag): set Error.stackTraceLimit to be not 100 like it is now. Paths are *horridly* long under Bazel, and 100
 //   // stack frames is a ton of data.
@@ -46,7 +46,7 @@ Object.defineProperty(window, "fetch", {
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
-  value: (query) => ({
+  value: query => ({
     matches: false,
     media: query,
     onchange: null,
