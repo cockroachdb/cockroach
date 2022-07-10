@@ -134,7 +134,23 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 		// of a projection is Null.
 		// */}}
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		// {{/*
+		// If nullableArgs is true, the function’s definition can handle null
+		// arguments. We would still want to perform the projection, and there is no
+		// need to call projVec.SetNulls(). The behaviour will just be the same as
+		// _HAS_NULLS is false. Since currently only ConcatDatumDatum needs this
+		// nullableArgs == true behaviour, logic for nullableArgs is only added to
+		// the if statement for function with Datum, Datum. If we later introduce
+		// another projection operation that has nullableArgs == true, we should
+		// update this code accordingly.
+		// */}}
+		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		// {{else}}
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		// {{end}}
+		if hasNullsAndNotNullable {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -270,6 +286,7 @@ func GetProjection_CONST_SIDEConstOperator(
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -277,6 +294,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}

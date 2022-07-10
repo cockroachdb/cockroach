@@ -43,7 +43,9 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -112,7 +114,9 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -181,7 +185,9 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -250,7 +256,9 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -319,7 +327,9 @@ func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -388,7 +398,9 @@ func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -457,7 +469,9 @@ func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -526,7 +540,9 @@ func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		if hasNullsAndNotNullable {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]

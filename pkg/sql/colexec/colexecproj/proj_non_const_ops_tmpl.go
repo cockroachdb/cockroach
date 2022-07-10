@@ -83,18 +83,20 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // around the problem we specify it here.
 type projConstOpBase struct {
 	colexecop.OneInputHelper
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
+	allocator    *colmem.Allocator
+	colIdx       int
+	outputIdx    int
+	nullableArgs bool
 }
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper
-	allocator *colmem.Allocator
-	col1Idx   int
-	col2Idx   int
-	outputIdx int
+	allocator    *colmem.Allocator
+	col1Idx      int
+	col2Idx      int
+	outputIdx    int
+	nullableArgs bool
 }
 
 // {{define "projOp"}}
@@ -139,7 +141,23 @@ func (p _OP_NAME) Next() coldata.Batch {
 		// of a projection is Null.
 		// */}}
 		_outNulls := projVec.Nulls()
-		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+
+		// {{/*
+		// If nullableArgs is true, the function’s definition can handle null
+		// arguments. We would still want to perform the projection, and there is no
+		// need to call projVec.SetNulls(). The behaviour will just be the same as
+		// _HAS_NULLS is false. Since currently only ConcatDatumDatum needs this
+		// nullableArgs == true behaviour, logic for nullableArgs is only added to
+		// the if statement for function with Datum, Datum. If we later introduce
+		// another projection operation that has nullableArgs == true, we should
+		// update this code accordingly.
+		// */}}
+		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
+		hasNullsAndNotNullable := (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls()) && !p.nullableArgs
+		// {{else}}
+		hasNullsAndNotNullable := (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls())
+		// {{end}}
+		if hasNullsAndNotNullable {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -262,6 +280,7 @@ func GetProjectionOperator(
 	evalCtx *tree.EvalContext,
 	binFn tree.TwoArgFn,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -270,6 +289,7 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
