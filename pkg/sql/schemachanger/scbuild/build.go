@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -62,12 +63,18 @@ func Build(
 		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
 	defer func() {
-		if recErr := recover(); recErr != nil {
-			if errObj, ok := recErr.(error); ok {
-				err = errObj
-			} else {
-				err = errors.Errorf("unexpected error encountered while building schema change plan %s", recErr)
-			}
+		switch recErr := recover().(type) {
+		case nil:
+			// No error.
+		case runtime.Error:
+			err = errors.WithAssertionFailure(recErr)
+		case error:
+			err = recErr
+		default:
+			err = errors.AssertionFailedf(
+				"unexpected error encountered while building schema change plan %s",
+				recErr,
+			)
 		}
 	}()
 	scbuildstmt.Process(b, an.GetStatement())
@@ -83,7 +90,7 @@ func Build(
 	for _, e := range bs.output {
 		if e.metadata.Size() == 0 {
 			// Exclude targets which weren't explicitly set.
-			// Explicity-set targets have non-zero values in the target metadata.
+			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
 		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
