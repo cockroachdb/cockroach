@@ -1989,7 +1989,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables,
+			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables, t.Op.NullableArgs,
 		)
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
@@ -2141,7 +2141,7 @@ func planProjectionOperators(
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
+			columnTypes, input, acc, factory, nil /* binFn */, t, releasables, t.Op.NullableArgs,
 		)
 	case tree.Datum:
 		op, err = projectDatum(t)
@@ -2308,6 +2308,7 @@ func planProjectionExpr(
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 	releasables *[]execreleasable.Releasable,
+	nullableArgs bool,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	if err := checkSupportedProjectionExpr(left, right); err != nil {
 		return nil, resultIdx, typs, err
@@ -2344,7 +2345,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 		)
 	} else {
 		var leftIdx int
@@ -2421,7 +2422,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 				)
 			}
 		} else {
@@ -2436,7 +2437,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = colexecproj.GetProjectionOperator(
 				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
-				resultIdx, evalCtx, binOp, cmpExpr,
+				resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 			)
 		}
 	}
