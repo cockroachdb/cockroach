@@ -538,6 +538,26 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 	return ret
 }
 
+func (b *builderState) ParseExpressionColumnIDs(
+	tableID catid.DescID, expression catpb.Expression,
+) catalog.TableColSet {
+	b.ensureDescriptor(tableID)
+	desc := b.descCache[tableID].desc
+	tableDesc, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		panic(errors.AssertionFailedf("descriptor %d is a %T, not a table", tableID, tableDesc))
+	}
+	p, err := parser.ParseExpr(string(expression))
+	if err != nil {
+		panic(err)
+	}
+	cols, err := schemaexpr.ExtractColumnIDs(tableDesc, p)
+	if err != nil {
+		panic(err)
+	}
+	return cols
+}
+
 var _ scbuildstmt.NameResolver = (*builderState)(nil)
 
 // NamePrefix implements the scbuildstmt.NameResolver interface.

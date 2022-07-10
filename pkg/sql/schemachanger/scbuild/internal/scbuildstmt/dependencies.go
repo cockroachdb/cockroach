@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -216,6 +217,10 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+
+	// ParseExpressionColumnIDs parses the expression string and extracts the
+	// column IDs of the table used in the expression.
+	ParseExpressionColumnIDs(tableID catid.DescID, expression catpb.Expression) catalog.TableColSet
 }
 
 // ElementResultSet wraps the results of an element query.
