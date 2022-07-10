@@ -20,7 +20,7 @@ describe("<JobTable>", () => {
     };
     const jobTableProps: JobTableProps = {
       sort: { columnTitle: null, ascending: true },
-      setSort: () => { },
+      setSort: () => {},
       jobs: {
         jobs: [{}, {}, {}, {}],
         earliest_retained_time: earliestRetainedTime,
