@@ -299,3 +299,39 @@ func getSortedColumnIDsInIndex(
 	}
 	return keyColumnIDs, keySuffixColumnIDs, storingColumnIDs
 }
+
+func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target == scpb.ToPublic
+}
+
+func statusAbsentOrBackfillOnly(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_ABSENT || status == scpb.Status_BACKFILL_ONLY
+}
+
+func statusPublic(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_PUBLIC
+}
+
+// getPrimaryIndexes returns the primary indexes of the current table.
+// Note that it assumes that there are at most two primary indexes and at
+// least one. The existing primary index is the primary index which is
+// currently public. The freshlyAdded primary index is one which is targeting
+// public.
+//
+// TODO(ajwerner): This will not be true at some point in the near future when
+// we need an intermediate primary index to support adding and dropping columns
+// in the same transaction.
+func getPrimaryIndexes(
+	b BuildCtx, tableID catid.DescID,
+) (existing, freshlyAdded *scpb.PrimaryIndex) {
+	allTargets := b.QueryByID(tableID)
+	_, _, freshlyAdded = scpb.FindPrimaryIndex(allTargets.
+		Filter(publicTargetFilter).
+		Filter(statusAbsentOrBackfillOnly))
+	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(statusPublic))
+	if existing == nil {
+		// TODO(postamar): can this even be possible?
+		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
+	}
+	return existing, freshlyAdded
+}
