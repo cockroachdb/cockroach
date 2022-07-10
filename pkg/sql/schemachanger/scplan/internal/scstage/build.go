@@ -353,7 +353,7 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	}
 	// The dependency constraint is somehow unsatisfiable.
 	panic(errors.AssertionFailedf("failed to satisfy %s rule %q",
-		de.String(), de.Name()))
+		de.String(), de.RuleNames()))
 }
 
 // hasUnmeetableOutboundDeps returns true iff the candidate node has outbound

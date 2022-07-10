@@ -109,11 +109,11 @@ DROP INDEX idx1 CASCADE
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
@@ -294,15 +294,15 @@ DROP INDEX idx2 CASCADE
 - from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type removed right before column when not dropping relation
+  rule: [dependents removed before column; column type removed right before column when not dropping relation]
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: Precedence
@@ -334,7 +334,7 @@ DROP INDEX idx2 CASCADE
 - from: [SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: SameStagePrecedence
-  rule: partial predicate removed right before secondary index when not dropping relation
+  rule: [dependents removed before index; partial predicate removed right before secondary index when not dropping relation]
 
 ops
 DROP INDEX idx3 CASCADE
@@ -506,19 +506,19 @@ DROP INDEX idx3 CASCADE
 - from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type removed right before column when not dropping relation
+  rule: [dependents removed before column; column type removed right before column when not dropping relation]
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
@@ -803,11 +803,11 @@ DROP INDEX idx4 CASCADE
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 9}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 9}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rule: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 9}, ABSENT]
   kind: Precedence

@@ -254,13 +254,21 @@ func (g *Graph) AddDepEdge(
 	toTarget *scpb.Target,
 	toStatus scpb.Status,
 ) (err error) {
-	de := &DepEdge{rule: rule, kind: kind}
+	de := &DepEdge{kind: kind}
 	if de.from, err = g.getOrCreateNode(fromTarget, fromStatus); err != nil {
 		return err
 	}
 	if de.to, err = g.getOrCreateNode(toTarget, toStatus); err != nil {
 		return err
 	}
+	if got := g.depEdgesFrom.get(de); got != nil {
+		if got.kind == Precedence && kind == SameStagePrecedence {
+			got.kind = SameStagePrecedence
+		}
+		got.rules = append(got.rules, rule)
+		return
+	}
+	de.rules = RuleNames{rule}
 	g.edges = append(g.edges, de)
 	g.depEdgesFrom.insert(de)
 	g.depEdgesTo.insert(de)
@@ -363,7 +371,8 @@ func cycleErrorDetail(target *screl.Node, edge Edge, pred map[*screl.Node]Edge) 
 		sb.WriteString(screl.NodeString(e.From()))
 		sb.WriteString(" --> ")
 		if de, ok := e.(*DepEdge); ok {
-			sb.WriteString(string(de.rule))
+			sb.WriteString(de.rules.String())
+
 		} else {
 			sb.WriteString("op edge")
 		}

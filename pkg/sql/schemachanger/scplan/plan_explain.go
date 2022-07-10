@@ -14,6 +14,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -225,7 +226,15 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			for _, de := range depEdges {
 				rn := en.Childf("%s dependency from %s %s",
 					de.Kind(), de.From().CurrentStatus, screl.ElementString(de.From().Element()))
-				rn.AddLine(fmt.Sprintf("rule: %q", de.Name()))
+				if rulesNames := de.RuleNames(); len(rulesNames) == 1 {
+					rn.AddLine(fmt.Sprintf("rule: %q", rulesNames))
+				} else {
+					var rules []string
+					for _, rule := range rulesNames {
+						rules = append(rules, strconv.Quote(string(rule)))
+					}
+					rn.AddLine(fmt.Sprintf("rules: [%s]", strings.Join(rules, ", ")))
+				}
 			}
 			noOpEdges := noOpByElement[t.Element()]
 			for _, oe := range noOpEdges {

@@ -29,8 +29,8 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │         rule: "column existence precedes column dependents"
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rules: ["column name set right after column existence", "column existence precedes column dependents"]
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -172,6 +172,8 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
+
 
 
 statement ok
