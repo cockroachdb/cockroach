@@ -477,6 +477,8 @@ ElementState:
     expr: id > 0:::INT8
     indexId: 2
     isRelationBeingDropped: false
+    referencedColumnIds:
+    - 1
     tableId: 105
     usesSequenceIds: []
     usesTypeIds: []
@@ -911,6 +913,7 @@ ElementState:
     columnId: 1
     computeExpr:
       expr: x'80':::@100106::STRING
+      referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 106
@@ -1018,6 +1021,7 @@ ElementState:
 - ColumnDefaultExpression:
     columnId: 2
     expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 108
     usesSequenceIds: []
     usesTypeIds: []

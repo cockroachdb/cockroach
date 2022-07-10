@@ -177,6 +177,9 @@ ElementState:
     - 5
     constraintId: 2
     expr: s::STRING = name
+    referencedColumnIds:
+    - 3
+    - 5
     tableId: 108
     usesSequenceIds: []
     usesTypeIds: []
@@ -223,6 +226,7 @@ ElementState:
     columnId: 2
     computeExpr:
       expr: x'80':::@100104
+      referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 104
@@ -301,6 +305,7 @@ ElementState:
     columnId: 3
     computeExpr:
       expr: x'80':::@100106
+      referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 106
@@ -446,6 +451,8 @@ ElementState:
     expr: g::STRING = 'hi':::STRING
     indexId: 2
     isRelationBeingDropped: false
+    referencedColumnIds:
+    - 2
     tableId: 108
     usesSequenceIds: []
     usesTypeIds: []

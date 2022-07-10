@@ -280,6 +280,7 @@ ElementState:
 - ColumnDefaultExpression:
     columnId: 2
     expr: nextval(104:::REGCLASS)
+    referencedColumnIds: []
     tableId: 105
     usesSequenceIds:
     - 104
@@ -288,6 +289,7 @@ ElementState:
 - ColumnOnUpdateExpression:
     columnId: 2
     expr: 123:::INT8
+    referencedColumnIds: []
     tableId: 105
     usesSequenceIds: []
     usesTypeIds: []
