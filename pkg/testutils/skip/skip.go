@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,6 +27,26 @@ type SkippableTest interface {
 	Helper()
 	Skip(...interface{})
 	Skipf(string, ...interface{})
+}
+
+var maxSkipDuration = 30 * 24 * time.Hour
+
+func WithIssueUntil(t SkippableTest, githubIssueID int, expiration time.Time, args ...interface{}) {
+	t.Helper()
+	if time.Until(expiration) > maxSkipDuration {
+		panic("skip expiration too far in the future")
+	}
+	if time.Since(expiration) < 0 {
+		WithIssue(t, githubIssueID, args...)
+	}
+}
+
+func Expiration(exp string) time.Time {
+	t, err := time.Parse("2006-01-02", exp)
+	if err != nil {
+		panic(fmt.Sprintf("skip expiration must be in YYYY-MM-DD format: %q", exp))
+	}
+	return t
 }
 
 // WithIssue skips this test, logging the given issue ID as the reason.

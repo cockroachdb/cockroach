@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "skip",
@@ -14,5 +14,15 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "skip_test",
+    srcs = ["skip_test.go"],
+    deps = [
+        ":skip",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

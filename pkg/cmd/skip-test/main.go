@@ -24,7 +24,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
@@ -36,6 +38,7 @@ var (
 	flags          = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flagIssueNum   = flags.Int("issue_num", 0, "issue to link the skip to; if unset skip-test will\ntry to search for existing issues based on the test name")
 	flagReason     = flags.String("reason", "flaky test", "reason to put under skip")
+	flagDuration   = flags.Int("duration", 21, "number of days before the skip expires")
 	flagUnderRace  = flags.Bool("under_race", false, "if true, only skip under race")
 	flagUnderBazel = flags.Bool("under_bazel", false, "if true, only skip under bazel")
 )
@@ -251,9 +254,10 @@ func replaceFile(fileName, testName string, issueNum int) {
 			fmt.Sprintf(`skip.UnderBazelWithIssue(t, %d, "%s")`, issueNum, *flagReason),
 		)
 	} else {
+		duration := timeutil.Now().Add(time.Duration(*flagDuration) * 24 * time.Hour).Format("2006-01-02")
 		newLines = append(
 			newLines,
-			fmt.Sprintf(`skip.WithIssue(t, %d, "%s")`, issueNum, *flagReason),
+			fmt.Sprintf(`skip.WithIssueUntil(t, %d, skip.Expiration("%s"), "%s")`, issueNum, duration, *flagReason),
 		)
 	}
 	newLines = append(
