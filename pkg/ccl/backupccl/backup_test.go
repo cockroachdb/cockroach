@@ -7846,12 +7846,22 @@ CREATE TABLE d.sc.tb (x d.sc.typ);
 		//
 		// The table descriptor undergoing a restore is offline is are owned
 		// by the restore job, it cannot undergo a schema change (see #84137).
+		//
+		// Exercises both legacy and declarative schema changes.
 		{
-			const re = `type .* is offline|relation .* is offline|cannot drop a database or a schema with OFFLINE`
-			sqlDB.ExpectErr(t, re, `DROP TYPE newdb.sc.typ`)
-			sqlDB.ExpectErr(t, re, `DROP TABLE newdb.sc.tb`)
-			sqlDB.ExpectErr(t, re, `DROP DATABASE newdb CASCADE`)
-			sqlDB.ExpectErr(t, re, `DROP SCHEMA newdb.sc CASCADE`)
+			sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+			const reLegacy = `type .* is offline|relation .* is offline|cannot drop a database or a schema with OFFLINE`
+			sqlDB.ExpectErr(t, reLegacy, `DROP TYPE newdb.sc.typ`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP TABLE newdb.sc.tb`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP DATABASE newdb CASCADE`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP SCHEMA newdb.sc CASCADE`)
+
+			sqlDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+			const reDecl = `type .* is offline|relation .* is offline|object state is not PUBLIC, cannot be targeted by DROP`
+			sqlDB.ExpectErr(t, reDecl, `DROP TYPE newdb.sc.typ`)
+			sqlDB.ExpectErr(t, reDecl, `DROP TABLE newdb.sc.tb`)
+			sqlDB.ExpectErr(t, reDecl, `DROP DATABASE newdb CASCADE`)
+			sqlDB.ExpectErr(t, reDecl, `DROP SCHEMA newdb.sc CASCADE`)
 		}
 
 		// Wrap up the test.

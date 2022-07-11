@@ -15,11 +15,14 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/errors"
 )
 
 func qualifiedName(b BuildCtx, id catid.DescID) string {
@@ -43,8 +46,8 @@ func simpleName(b BuildCtx, id catid.DescID) string {
 // dropRestrictDescriptor contains the common logic for dropping something with
 // RESTRICT.
 func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
-	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-		if target == scpb.ToAbsent {
+	undroppedElements(b, id).ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if target == scpb.ToAbsent || target == scpb.Transient {
 			return
 		}
 		b.CheckPrivilege(e, privilege.DROP)
@@ -52,6 +55,49 @@ func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
 		hasChanged = true
 	})
 	return hasChanged
+}
+
+func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
+	return b.QueryByID(id).Filter(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+		if target == scpb.InvalidTarget {
+			switch e.(type) {
+			case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.EnumType, *scpb.AliasType:
+				panic(errors.Wrapf(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"object state is not PUBLIC, cannot be targeted by DROP"),
+					"%s", errMsgPrefix(b, id)))
+			}
+		}
+		return target == scpb.ToPublic
+	})
+}
+
+func errMsgPrefix(b BuildCtx, id catid.DescID) string {
+	typ := "descriptor"
+	var name string
+	b.QueryByID(id).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.Database:
+			typ = "database"
+		case *scpb.Schema:
+			typ = "schema"
+		case *scpb.Table:
+			typ = "table"
+		case *scpb.Sequence:
+			typ = "sequence"
+		case *scpb.View:
+			typ = "view"
+		case *scpb.EnumType, *scpb.AliasType:
+			typ = "type"
+		case *scpb.Namespace:
+			if name == "" || target != scpb.ToPublic {
+				name = t.Name
+			}
+		}
+	})
+	if name == "" {
+		return fmt.Sprintf("%s #%d", typ, id)
+	}
+	return fmt.Sprintf("%s %q", typ, name)
 }
 
 func dropElement(b BuildCtx, e scpb.Element) {
@@ -68,16 +114,14 @@ func dropElement(b BuildCtx, e scpb.Element) {
 // dropCascadeDescriptor contains the common logic for dropping something with
 // CASCADE.
 func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
-	undropped := b.QueryByID(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
-		return target == scpb.ToPublic
-	})
+	undropped := undroppedElements(b, id)
 	// Exit early if all elements already have ABSENT targets.
 	if undropped.IsEmpty() {
 		return
 	}
 	// Check privileges and decide which actions to take or not.
 	var isVirtualSchema bool
-	undropped.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	undropped.ForEachElementStatus(func(current scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Database:
 			break
@@ -100,8 +144,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary view"))
 			}
-		case *scpb.EnumType:
-		case *scpb.AliasType:
+		case *scpb.EnumType, *scpb.AliasType:
 			break
 		default:
 			return
