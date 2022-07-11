@@ -100,10 +100,14 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	// NB: We want 1000 replicas per store, so the number of ranges required
 	// will be 1/3 of the total replicas.
 	ranges := (replicasPerStore * stores) / replsPerRange
+	// NB: In this test we are using a uniform workload and expect to see at
+	// most 3 splits occur due to range size, therefore the keyspace need not
+	// be larger than 3 keys per range.
+	keyspace := 3 * ranges
 
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
-		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(ranges))
+		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
 		exchange := state.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
@@ -120,7 +124,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStateReplDistribution(ranges, replicaDistribution, replsPerRange)
+		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
 		testPreGossipStores(s, exchange, preGossipStart)
 		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
 

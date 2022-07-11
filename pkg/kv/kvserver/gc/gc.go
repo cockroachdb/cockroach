@@ -379,6 +379,10 @@ func processReplicatedKeyRange(
 		}
 		if affected := isNewest && (sentBatchForThisKey || haveGarbageForThisKey); affected {
 			info.NumKeysAffected++
+			// If we reached newest timestamp for the key then we should reset sent
+			// batch to ensure subsequent keys are not included in affected keys if
+			// they don't have garbage.
+			sentBatchForThisKey = false
 		}
 		shouldSendBatch := batchGCKeysBytes >= KeyVersionChunkBytes
 		if shouldSendBatch || isNewest && haveGarbageForThisKey {

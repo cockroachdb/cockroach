@@ -152,13 +152,28 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	// We make the resulting token positions match the returned string.
 	lval.pos = 0
 	tokens = append(tokens, lval)
+	var preValID int32
+	// This is used to track the degree of nested `BEGIN ATOMIC ... END` function
+	// body context. When greater than zero, it means that we're scanning through
+	// the function body of a `CREATE FUNCTION` statement. ';' character is only
+	// a separator of sql statements within the body instead of a finishing line
+	// of the `CREATE FUNCTION` statement.
+	curFuncBodyCnt := 0
 	for {
 		if lval.id == ERROR {
 			return p.scanner.In()[startPos:], tokens, true
 		}
+		preValID = lval.id
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
-		if lval.id == 0 || lval.id == ';' {
+
+		if preValID == BEGIN && lval.id == ATOMIC {
+			curFuncBodyCnt++
+		}
+		if curFuncBodyCnt > 0 && lval.id == END {
+			curFuncBodyCnt--
+		}
+		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
 			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos

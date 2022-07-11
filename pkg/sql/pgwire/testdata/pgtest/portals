@@ -1460,3 +1460,29 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"CommandComplete","CommandTag":"FETCH 2"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT * FROM generate_series(1, 4)"}
+Describe
+Bind
+Execute
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"invalid DESCRIBE message subtype 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

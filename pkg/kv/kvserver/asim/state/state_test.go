@@ -31,7 +31,7 @@ func TestStateUpdates(t *testing.T) {
 // the post-split keys are correct.
 func TestRangeSplit(t *testing.T) {
 	s := newState()
-	k1 := minKey
+	k1 := MinKey
 	r1 := s.rangeFor(k1)
 
 	n1 := s.AddNode()
@@ -64,10 +64,10 @@ func TestRangeMap(t *testing.T) {
 	require.Len(t, s.ranges.rangeMap, 1)
 	require.Equal(t, s.ranges.rangeTree.Max(), s.ranges.rangeTree.Min())
 	firstRange := s.ranges.rangeMap[1]
-	require.Equal(t, s.rangeFor(minKey), firstRange)
-	require.Equal(t, firstRange.startKey, minKey)
-	require.Equal(t, firstRange.desc.StartKey, minKey.ToRKey())
-	require.Equal(t, firstRange.desc.EndKey, maxKey.ToRKey())
+	require.Equal(t, s.rangeFor(MinKey), firstRange)
+	require.Equal(t, firstRange.startKey, MinKey)
+	require.Equal(t, firstRange.desc.StartKey, MinKey.ToRKey())
+	require.Equal(t, firstRange.desc.EndKey, MaxKey.ToRKey())
 	require.Equal(t, defaultSpanConfig, firstRange.SpanConfig())
 
 	k2 := Key(1)
@@ -81,7 +81,7 @@ func TestRangeMap(t *testing.T) {
 	_, r4, ok := s.SplitRange(k4)
 	require.True(t, ok)
 
-	// Assert that the range is segmented into [minKey, EndKey) intervals.
+	// Assert that the range is segmented into [MinKey, EndKey) intervals.
 	require.Equal(t, k2.ToRKey(), r1.Descriptor().EndKey)
 	require.Equal(t, k3.ToRKey(), r2.Descriptor().EndKey)
 	require.Equal(t, k4.ToRKey(), r3.Descriptor().EndKey)
