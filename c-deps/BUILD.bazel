@@ -41,8 +41,14 @@ configure_make(
         "//conditions:default": [],
     }),
     env = select({
-        "//build/toolchains:dev": {"AR": ""},
-        "//conditions:default": {},
+        "//build/toolchains:dev": {
+            "AR": "",
+            # NOTE: we disable MADV_FREE; see https://github.com/cockroachdb/cockroach/issues/83790
+            "je_cv_madv_free": "no",
+        },
+        "//conditions:default": {
+            "je_cv_madv_free": "no",
+        },
     }),
     lib_source = "@jemalloc//:all",
     out_static_libs = select({

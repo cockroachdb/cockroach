@@ -233,7 +233,7 @@ func (q *byIDLookupContext) lookupUncommitted(id descpb.ID) (_ catalog.Descripto
 	// Hydrate any types in the descriptor if necessary, for uncomitted
 	// descriptors we are going to include offline and get non-cached view.
 	if tableDesc, isTableDesc := ud.(catalog.TableDescriptor); isTableDesc {
-		ud, err = q.tc.hydrateTypesInTableDescWitOptions(q.ctx, q.txn, tableDesc, true, true)
+		ud, err = q.tc.hydrateTypesInTableDescWithOptions(q.ctx, q.txn, tableDesc, true, true)
 		if err != nil {
 			return nil, err
 		}

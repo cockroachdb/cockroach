@@ -14,7 +14,6 @@ package tree
 type StreamIngestion struct {
 	Targets  TargetList
 	From     StringOrPlaceholderOptList
-	AsOf     AsOfClause
 	AsTenant TenantID
 }
 
@@ -27,10 +26,6 @@ func (node *StreamIngestion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString("FROM REPLICATION STREAM FROM ")
 	ctx.FormatNode(&node.From)
-	if node.AsOf.Expr != nil {
-		ctx.WriteString(" ")
-		ctx.FormatNode(&node.AsOf)
-	}
 	if node.AsTenant.Specified {
 		ctx.WriteString(" AS TENANT ")
 		ctx.FormatNode(&node.AsTenant)

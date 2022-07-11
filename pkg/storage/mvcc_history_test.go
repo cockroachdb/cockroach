@@ -89,6 +89,7 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // iter_seek_intent_ge k=<key> txn=<name>
 // iter_next
 // iter_next_ignoring_time
+// iter_next_key_ignoring_time
 // iter_next_key
 // iter_prev
 // iter_scan      [reverse]
@@ -667,16 +668,17 @@ var commands = map[string]cmd{
 	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
 	"scan":           {typReadOnly, cmdScan},
 
-	"iter_new":                {typReadOnly, cmdIterNew},
-	"iter_new_incremental":    {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
-	"iter_seek_ge":            {typReadOnly, cmdIterSeekGE},
-	"iter_seek_lt":            {typReadOnly, cmdIterSeekLT},
-	"iter_seek_intent_ge":     {typReadOnly, cmdIterSeekIntentGE},
-	"iter_next":               {typReadOnly, cmdIterNext},
-	"iter_next_ignoring_time": {typReadOnly, cmdIterNextIgnoringTime}, // MVCCIncrementalIterator
-	"iter_next_key":           {typReadOnly, cmdIterNextKey},
-	"iter_prev":               {typReadOnly, cmdIterPrev},
-	"iter_scan":               {typReadOnly, cmdIterScan},
+	"iter_new":                    {typReadOnly, cmdIterNew},
+	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
+	"iter_seek_ge":                {typReadOnly, cmdIterSeekGE},
+	"iter_seek_lt":                {typReadOnly, cmdIterSeekLT},
+	"iter_seek_intent_ge":         {typReadOnly, cmdIterSeekIntentGE},
+	"iter_next":                   {typReadOnly, cmdIterNext},
+	"iter_next_ignoring_time":     {typReadOnly, cmdIterNextIgnoringTime},    // MVCCIncrementalIterator
+	"iter_next_key_ignoring_time": {typReadOnly, cmdIterNextKeyIgnoringTime}, // MVCCIncrementalIterator
+	"iter_next_key":               {typReadOnly, cmdIterNextKey},
+	"iter_prev":                   {typReadOnly, cmdIterPrev},
+	"iter_scan":                   {typReadOnly, cmdIterScan},
 
 	"sst_put":            {typDataUpdate, cmdSSTPut},
 	"sst_put_rangekey":   {typDataUpdate, cmdSSTPutRangeKey},
@@ -1428,6 +1430,12 @@ func cmdIterNext(e *evalCtx) error {
 
 func cmdIterNextIgnoringTime(e *evalCtx) error {
 	e.mvccIncrementalIter().NextIgnoringTime()
+	printIter(e)
+	return nil
+}
+
+func cmdIterNextKeyIgnoringTime(e *evalCtx) error {
+	e.mvccIncrementalIter().NextKeyIgnoringTime()
 	printIter(e)
 	return nil
 }

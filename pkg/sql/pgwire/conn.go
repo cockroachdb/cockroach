@@ -466,11 +466,6 @@ func (c *conn) serveImpl(
 					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
 				authDone = true
-
-				// We count the connection establish latency until we are ready to
-				// serve a SQL query. It includes the time it takes to authenticate.
-				duration := timeutil.Since(c.startTime).Nanoseconds()
-				c.metrics.ConnLatency.RecordValue(duration)
 			}
 
 			switch typ {
@@ -714,6 +709,14 @@ func (c *conn) processCommandsAsync(
 		}
 		// Signal the connection was established to the authenticator.
 		ac.AuthOK(ctx)
+		ac.LogAuthOK(ctx)
+
+		// We count the connection establish latency until we are ready to
+		// serve a SQL query. It includes the time it takes to authenticate and
+		// send the initial ReadyForQuery message.
+		duration := timeutil.Since(c.startTime).Nanoseconds()
+		c.metrics.ConnLatency.RecordValue(duration)
+
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.

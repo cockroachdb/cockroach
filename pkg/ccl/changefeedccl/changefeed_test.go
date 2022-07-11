@@ -5241,7 +5241,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 			`foo: [1]->{"after": {"a": 1}}`,
 			`foo: [2]->{"after": {"a": 2}}`,
 		}
-		msgs, err := readNextMessages(foo, len(expected))
+		msgs, err := readNextMessages(context.Background(), foo, len(expected))
 		require.NoError(t, err)
 
 		var msgsFormatted []string
@@ -6781,4 +6781,35 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		require.Equal(t, failLogs[0].SinkType, `gcpubsub`)
 		require.Equal(t, failLogs[0].NumTables, int32(1))
 	}, feedTestForceSink("pubsub"))
+}
+
+func TestChangefeedTestTimesOut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		nada := feed(t, f, "CREATE CHANGEFEED FOR foo WITH resolved='100ms'")
+		defer closeFeed(t, nada)
+
+		expectResolvedTimestamp(t, nada) // Make sure feed is running.
+
+		const expectTimeout = 500 * time.Millisecond
+		var observedError error
+		require.NoError(t,
+			testutils.SucceedsWithinError(func() error {
+				observedError = withTimeout(
+					nada, expectTimeout,
+					func(ctx context.Context) error {
+						return assertPayloadsBaseErr(
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+					})
+				return nil
+			}, 20*expectTimeout))
+
+		require.Error(t, observedError)
+	}
+
+	cdcTest(t, testFn)
 }

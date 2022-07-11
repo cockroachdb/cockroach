@@ -100,6 +100,9 @@ func getTopologicallySortedTableIDs(
 		}
 
 		dependsOnIDs[tid] = refs
+		if err := it.Close(); err != nil {
+			return nil, err
+		}
 	}
 
 	// First sort by ids to guarantee stable output.
@@ -149,7 +152,7 @@ func getTopologicallySortedTableIDs(
 // crdb_internal.show_create_all_tables for a specified database.
 func getTableIDs(
 	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
-) ([]int64, error) {
+) (tableIDs []int64, retErr error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
 		FROM %s.crdb_internal.create_statements
@@ -167,8 +170,9 @@ func getTableIDs(
 	if err != nil {
 		return nil, err
 	}
-
-	var tableIDs []int64
+	defer func() {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}()
 
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {

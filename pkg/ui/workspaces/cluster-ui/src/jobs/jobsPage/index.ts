@@ -11,3 +11,4 @@
 export * from "./jobDescriptionCell";
 export * from "./jobsPage";
 export * from "./jobTable";
+export * from "./jobsPageConnected";

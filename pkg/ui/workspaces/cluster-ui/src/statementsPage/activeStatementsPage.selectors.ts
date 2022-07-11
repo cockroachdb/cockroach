@@ -10,7 +10,7 @@
 
 import { createSelector } from "reselect";
 import { getActiveStatementsFromSessions } from "../activeExecutions/activeStatementUtils";
-import { localStorageSelector } from "./statementsPage.selectors";
+import { localStorageSelector } from "../store/utils/selectors";
 import {
   ActiveStatementFilters,
   ActiveStatementsViewDispatchProps,
@@ -28,6 +28,14 @@ export const selectActiveStatements = createSelector(
     if (!response.data) return [];
 
     return getActiveStatementsFromSessions(response.data, response.lastUpdated);
+  },
+);
+
+export const selectAppName = createSelector(
+  (state: AppState) => state.adminUI.sessions,
+  response => {
+    if (!response.data) return null;
+    return response.data.internal_app_name_prefix;
   },
 );
 
@@ -59,6 +67,7 @@ export const mapStateToActiveStatementsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
+  internalAppNamePrefix: selectAppName(state),
 });
 
 export const mapDispatchToActiveStatementsPageProps = (

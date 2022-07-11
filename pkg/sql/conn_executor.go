@@ -395,17 +395,20 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	sqlStatsInternalExecutorMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
-		Settings:         s.cfg.Settings,
-		InternalExecutor: &sqlStatsInternalExecutor,
-		KvDB:             cfg.DB,
-		SQLIDContainer:   cfg.NodeID,
-		JobRegistry:      s.cfg.JobRegistry,
-		Knobs:            cfg.SQLStatsTestingKnobs,
-		FlushCounter:     serverMetrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:   serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:    serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		Settings:                s.cfg.Settings,
+		InternalExecutor:        &sqlStatsInternalExecutor,
+		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
+		KvDB:                    cfg.DB,
+		SQLIDContainer:          cfg.NodeID,
+		JobRegistry:             s.cfg.JobRegistry,
+		Knobs:                   cfg.SQLStatsTestingKnobs,
+		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -642,6 +645,11 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 // GetExecutorConfig returns this server's executor config.
 func (s *Server) GetExecutorConfig() *ExecutorConfig {
 	return s.cfg
+}
+
+// GetBytesMonitor returns this server's BytesMonitor.
+func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
+	return s.pool
 }
 
 // SetupConn creates a connExecutor for the client connection.
@@ -1112,12 +1120,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}); err != nil {
-		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
-	}
-
+	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon.StartNoReserved(ctx, ex.server.GetBytesMonitor())
+		defer ieMon.Stop(ctx)
+		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
@@ -1658,7 +1666,7 @@ func (ns *prepStmtNamespace) resetTo(
 // finishes execution (either commits, rollbacks or restarts). Based on the
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -1700,8 +1708,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
 	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
 	// savepoints, or it's a rewind which also deals with them.
-
-	return nil
 }
 
 // Ctx returns the transaction's ctx, if we're inside a transaction, or the
@@ -2394,8 +2400,8 @@ func (ex *connExecutor) execCopyIn(
 		}
 	} else {
 		txnOpt = copyTxnOpt{
-			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
+			resetExtraTxnState: func(ctx context.Context) {
+				ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
 			},
 		}
 	}
@@ -2986,9 +2992,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
-			return advanceInfo{}, err
-		}
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
