@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -852,16 +854,22 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 		return hasAdmin, err
 	}
 	if !hasAdmin {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
-		if err != nil {
-			return hasViewActivity, err
+		hasView := false
+		hasViewRedacted := false
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
+			hasViewRedacted = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
 		}
-		if !hasViewActivity {
-			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+		if !hasView && !hasViewRedacted {
+			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
 			if err != nil {
-				return hasViewActivityRedacted, err
+				return hasView, err
 			}
-			if !hasViewActivityRedacted {
+			hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return hasViewRedacted, err
+			}
+			if !hasView && !hasViewRedacted {
 				return false, nil
 			}
 		}

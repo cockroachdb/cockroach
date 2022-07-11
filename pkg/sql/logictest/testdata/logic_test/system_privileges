@@ -1,6 +1,7 @@
+# test MODIFYCLUSTERSETTING
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
 SELECT * FROM crdb_internal.cluster_settings;
 
 statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
@@ -53,7 +54,7 @@ REVOKE SYSTEM EXTERNALCONNECTION FROM testuser
 
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
 SELECT * FROM crdb_internal.cluster_settings;
 
 statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
@@ -118,4 +119,121 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWCLUSTERSETTING
+user testuser
+
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWCLUSTERSETTING}    {}
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
+
+user testuser
+
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING system privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWACTIVITY
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root 
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWACTIVITY}          {}
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+
+# test VIEWACTIVITYREDACTED
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root 
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root     /global/  {MODIFYCLUSTERSETTING}  {}
+testuser /global/  {VIEWACTIVITYREDACTED}   {}
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_statement_statistics;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}

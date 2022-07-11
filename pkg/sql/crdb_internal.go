@@ -1568,28 +1568,26 @@ CREATE TABLE crdb_internal.cluster_settings (
 			return err
 		}
 		if !hasAdmin {
-			hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-			if err != nil {
-				return err
+			hasModify := false
+			hasView := false
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
+				hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
 			}
-			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-			if err != nil {
-				return err
-			}
-			if !hasModify && !hasView {
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-					// We check for EITHER the MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING
-					// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
-					// We return the error for "system cluster privilege" due to
-					// the long term goal of moving away from coarse-grained role options.
-					if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
-						return err
-					}
-				} else {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
 
-						"only users with either %s or %s privileges are allowed to read "+
-							"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+			if !hasModify && !hasView {
+				hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+				if err != nil {
+					return err
+				}
+				hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+				if err != nil {
+					return err
+				}
+				if !hasModify && !hasView {
+					return pgerror.Newf(pgcode.InsufficientPrivilege,
+						"only users with either %s or %s system privileges are allowed to read "+
+							"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 				}
 			}
 		}

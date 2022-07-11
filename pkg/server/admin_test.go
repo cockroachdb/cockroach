@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2748,7 +2750,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DisableDefaultTestTenant: true,
@@ -2767,8 +2769,26 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
 	sqlDB.Exec(t, "CREATE USER withoutprivs")
 
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	plannerFn := func(opName string) (interface{}, func()) {
+		// This is a hack to get around a Go package dependency cycle. See comment
+		// in sql/jobs/registry.go on planHookMaker.
+		txn := kvDB.NewTxn(ctx, "test")
+		return sql.NewInternalPlanner(
+			opName,
+			txn,
+			username.RootUserName(),
+			&sql.MemoryMetrics{},
+			&execCfg,
+			sessiondatapb.SessionData{},
+		)
+	}
+
 	underTest := &adminPrivilegeChecker{
-		ie: s.InternalExecutor().(*sql.InternalExecutor),
+		ie:          s.InternalExecutor().(*sql.InternalExecutor),
+		st:          s.ClusterSettings(),
+		makePlanner: plannerFn,
 	}
 
 	withAdmin, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
@@ -2808,6 +2828,31 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
 			},
 		},
+	}
+	// test system privileges if valid version
+	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		sqlDB.Exec(t, "CREATE USER withvasystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvasystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedsystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
+
+		withVaSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvasystemprivilege")
+		withVaRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedsystemprivilege")
+		withVaAndRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedsystemprivilege")
+
+		tests[0].usernameWantErr[withVaSystemPrivilege] = false
+		tests[1].usernameWantErr[withVaSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaSystemPrivilege] = false
+		tests[0].usernameWantErr[withVaRedactedSystemPrivilege] = true
+		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
+		tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
+		tests[1].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaAndRedactedSystemPrivilege] = true
+
 	}
 	for _, tt := range tests {
 		for userName, wantErr := range tt.usernameWantErr {
