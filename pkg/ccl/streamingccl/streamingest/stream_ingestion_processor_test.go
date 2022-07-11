@@ -260,8 +260,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		processEventCh := make(chan struct{})
 		defer close(processEventCh)
-		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) {
+		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) error {
 			processEventCh <- struct{}{}
+			return nil
 		}}
 		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
 			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */, streamingTestingKnob)
