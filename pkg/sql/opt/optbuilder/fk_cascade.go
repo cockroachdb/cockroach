@@ -239,6 +239,13 @@ func tryNewOnDeleteFastCascadeBuilder(
 		default:
 			tab = resolveTable(ctx, catalog, tabID)
 		}
+		// If the table could not be resolved, then we cannot confirm that FK
+		// references form a simple tree, so we return false. This is possible
+		// when resolveTable returns nil above because the table is in the
+		// process of being added.
+		if tab == nil {
+			return false
+		}
 		for i, n := 0, tab.InboundForeignKeyCount(); i < n; i++ {
 			if !checkPaths(tab.InboundForeignKey(i).OriginTableID()) {
 				return false
