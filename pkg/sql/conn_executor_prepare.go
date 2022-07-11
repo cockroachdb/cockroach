@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,6 +41,10 @@ func (ex *connExecutor) execPrepare(
 	// the Sync message is handled.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, parseCmd.AST)
+	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
+		if !ex.isAllowedInAbortedTxn(parseCmd.AST) {
+			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
+		}
 	}
 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
@@ -310,6 +315,10 @@ func (ex *connExecutor) execBind(
 	// handled separately in conn_executor_exec.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, ps.AST)
+	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
+		if !ex.isAllowedInAbortedTxn(ps.AST) {
+			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
+		}
 	}
 
 	portalName := bindCmd.PortalName
@@ -550,6 +559,7 @@ func (ex *connExecutor) execDescribe(
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
+	_, isAbortedTxn := ex.machine.CurState().(stateAborted)
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
@@ -559,8 +569,6 @@ func (ex *connExecutor) execDescribe(
 				pgcode.InvalidSQLStatementName,
 				"unknown prepared statement %q", descCmd.Name))
 		}
-
-		res.SetInferredTypes(ps.InferredTypes)
 
 		ast := ps.AST
 		if execute, ok := ast.(*tree.Execute); ok {
@@ -575,6 +583,10 @@ func (ex *connExecutor) execDescribe(
 			}
 			ast = innerPs.AST
 		}
+		if isAbortedTxn && !ex.isAllowedInAbortedTxn(ast) {
+			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
+		}
+		res.SetInferredTypes(ps.InferredTypes)
 		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
@@ -589,13 +601,20 @@ func (ex *connExecutor) execDescribe(
 				return retErr(pgerror.Newf(
 					pgcode.InvalidCursorName, "unknown portal %q", descCmd.Name))
 			}
+			if isAbortedTxn {
+				return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
+			}
 			// Sending a nil formatCodes is equivalent to sending all text format
 			// codes.
 			res.SetPortalOutput(ctx, cursor.InternalRows.Types(), nil /* formatCodes */)
 			return nil, nil
 		}
 
-		if stmtHasNoData(portal.Stmt.AST) {
+		ast := portal.Stmt.AST
+		if isAbortedTxn && !ex.isAllowedInAbortedTxn(ast) {
+			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
+		}
+		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
@@ -607,4 +626,20 @@ func (ex *connExecutor) execDescribe(
 		))
 	}
 	return nil, nil
+}
+
+// isAllowedInAbortedTxn returns true if the statement is allowed to be
+// prepared and executed inside of an aborted transaction.
+func (ex *connExecutor) isAllowedInAbortedTxn(ast tree.Statement) bool {
+	switch s := ast.(type) {
+	case *tree.CommitTransaction, *tree.RollbackTransaction, *tree.RollbackToSavepoint:
+		return true
+	case *tree.Savepoint:
+		if ex.isCommitOnReleaseSavepoint(s.Name) {
+			return true
+		}
+		return false
+	default:
+		return false
+	}
 }
