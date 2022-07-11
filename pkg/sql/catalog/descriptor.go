@@ -56,13 +56,10 @@ const (
 	// table descriptor returned should not include newly added constraints, which
 	// is useful when passing the returned table descriptor to be used in
 	// validating constraints to be added.
-	IgnoreConstraints MutationPublicationFilter = 1
-	// IgnoreConstraintsAndPKSwaps is used in MakeFirstMutationPublic to indicate that the
+	IgnoreConstraints MutationPublicationFilter = iota
+	// IgnorePKSwaps is used in MakeFirstMutationPublic to indicate that the
 	// table descriptor returned should include newly added constraints.
-	IgnoreConstraintsAndPKSwaps = 2
-	// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
-	// table descriptor returned should include newly added constraints.
-	IncludeConstraints = 0
+	IgnorePKSwaps
 )
 
 // DescriptorBuilder interfaces are used to build catalog.Descriptor
@@ -589,7 +586,7 @@ type TableDescriptor interface {
 	// This is super valuable when trying to run SQL over data associated
 	// with a schema mutation that is still not yet public: Data validation,
 	// error reporting.
-	MakeFirstMutationPublic(includeConstraints MutationPublicationFilter) (TableDescriptor, error)
+	MakeFirstMutationPublic(...MutationPublicationFilter) (TableDescriptor, error)
 	// MakePublic creates a Mutable from the immutable by making the it public.
 	MakePublic() TableDescriptor
 	// AllMutations returns all of the table descriptor's mutations.
