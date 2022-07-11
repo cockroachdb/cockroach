@@ -1171,7 +1171,7 @@ func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.Experimental().RangeKeyUnset(
+	return p.db.RangeKeyUnset(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
@@ -1199,7 +1199,7 @@ func (p *Pebble) ClearAllRangeKeys(start, end roachpb.Key) error {
 	} else if clearFrom == nil || clearTo == nil {
 		return nil
 	}
-	return p.db.Experimental().RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
+	return p.db.RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
 }
 
 // PutMVCCRangeKey implements the Engine interface.
@@ -1219,7 +1219,7 @@ func (p *Pebble) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
 	}
-	return p.db.Experimental().RangeKeySet(
+	return p.db.RangeKeySet(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
@@ -1293,7 +1293,7 @@ func (p *Pebble) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.Experimental().RangeKeySet(
+	return p.db.RangeKeySet(
 		EngineKey{Key: start}.Encode(),
 		EngineKey{Key: end}.Encode(),
 		suffix,

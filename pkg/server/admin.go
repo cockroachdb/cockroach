@@ -186,7 +186,7 @@ func (s *adminServer) RegisterGateway(
 // serverError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func serverError(ctx context.Context, err error) error {
-	log.ErrorfDepth(ctx, 1, "%+s", err)
+	log.ErrorfDepth(ctx, 1, "%+v", err)
 	return errAdminAPIError
 }
 

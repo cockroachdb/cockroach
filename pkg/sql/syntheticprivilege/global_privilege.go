@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // GlobalPrivilege represents privileges granted via
@@ -73,7 +74,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	ctx context.Context,
 	planner eval.Planner,
 	systemTablePrivilegeObject catalog.SyntheticPrivilegeObject,
-) (*catpb.PrivilegeDescriptor, error) {
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
 	query := fmt.Sprintf(
 		`SELECT username, privileges FROM system.%s WHERE path='%s'`,
 		catconstants.SystemPrivilegeTableName,
@@ -86,8 +87,11 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}()
 
-	privileges := catpb.PrivilegeDescriptor{}
+	privileges = &catpb.PrivilegeDescriptor{}
 	for {
 		ok, err := it.Next(ctx)
 		if err != nil {
@@ -121,5 +125,5 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		return nil, err
 	}
 
-	return &privileges, nil
+	return privileges, nil
 }

@@ -1479,8 +1479,9 @@ func (a *Allocator) ValidLeaseTargets(
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	replDescs := roachpb.MakeReplicaSet(existing)
+	lhRemovalAllowed := a.StorePool.St.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
 	for i := range existing {
-		if err := roachpb.CheckCanReceiveLease(existing[i], replDescs); err != nil {
+		if err := roachpb.CheckCanReceiveLease(existing[i], replDescs, lhRemovalAllowed); err != nil {
 			continue
 		}
 		// If we're not allowed to include the current replica, remove it from
