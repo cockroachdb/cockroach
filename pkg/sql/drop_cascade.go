@@ -108,14 +108,13 @@ func (d *dropCascadeState) resolveCollectedObjects(
 					objName.Object(),
 				)
 			}
-			if db != nil {
-				if tbDesc.State == descpb.DescriptorState_OFFLINE {
-					dbName := db.GetName()
-					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-						"cannot drop a database with OFFLINE tables, ensure %s is"+
-							" dropped or made public before dropping database %s",
-						objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
-				}
+			if tbDesc.State == descpb.DescriptorState_OFFLINE {
+				return pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot drop a database or a schema with OFFLINE tables, ensure %s is"+
+						" dropped or made public before dropping",
+					objName.FQString(),
+				)
 			}
 			checkOwnership := true
 			// If the object we are trying to drop as part of this DROP DATABASE
@@ -165,6 +164,14 @@ func (d *dropCascadeState) resolveCollectedObjects(
 				return errors.AssertionFailedf(
 					"descriptor for %q is not Mutable",
 					objName.Object(),
+				)
+			}
+			if typDesc.State == descpb.DescriptorState_OFFLINE {
+				return pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot drop a database or a schema with OFFLINE types, ensure %s is"+
+						" dropped or made public before dropping",
+					objName.FQString(),
 				)
 			}
 			// Types can only depend on objects within this database, so we don't
