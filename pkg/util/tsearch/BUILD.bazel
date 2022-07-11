@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tsearch",
     srcs = [
+        "eval.go",
         "lex.go",
         "tsquery.go",
         "tsvector.go",
@@ -13,12 +14,14 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "tsearch_test",
     srcs = [
+        "eval_test.go",
         "tsquery_test.go",
         "tsvector_test.go",
     ],
