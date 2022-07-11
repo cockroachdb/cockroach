@@ -21,13 +21,21 @@ export interface BadgeProps {
   status?: BadgeStatus;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
+  forceUpperCase: boolean;
 }
 
 const cx = classNames.bind(styles);
 
 export function Badge(props: BadgeProps) {
-  const { size, status, icon, iconPosition, text } = props;
-  const classes = cx("badge", `badge--size-${size}`, `badge--status-${status}`);
+  const { size, status, icon, iconPosition, text, forceUpperCase } = props;
+  const classes = cx(
+    "badge",
+    `badge--size-${size}`,
+    `badge--status-${status}`,
+    {
+      "badge--uppercase": forceUpperCase,
+    },
+  );
   const iconClasses = cx(
     "badge__icon",
     `badge__icon--position-${iconPosition || "left"}`,
@@ -43,4 +51,5 @@ export function Badge(props: BadgeProps) {
 Badge.defaultProps = {
   size: "medium",
   status: "default",
+  forceUpperCase: true,
 };

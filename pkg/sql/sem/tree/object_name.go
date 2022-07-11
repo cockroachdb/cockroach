@@ -205,13 +205,11 @@ func (u *UnresolvedObjectName) Format(ctx *FmtCtx) {
 
 func (u *UnresolvedObjectName) String() string { return AsString(u) }
 
-// ToTableName converts the unresolved name to a table name.
-//
 // TODO(radu): the schema and catalog names might not be in the right places; we
 // would only figure that out during name resolution. This method is temporary,
 // while we change all the code paths to only use TableName after resolution.
-func (u *UnresolvedObjectName) ToTableName() TableName {
-	return TableName{objName{
+func (u *UnresolvedObjectName) toObjName() objName {
+	return objName{
 		ObjectName: Name(u.Parts[0]),
 		ObjectNamePrefix: ObjectNamePrefix{
 			SchemaName:      Name(u.Parts[1]),
@@ -219,7 +217,17 @@ func (u *UnresolvedObjectName) ToTableName() TableName {
 			ExplicitSchema:  u.NumParts >= 2,
 			ExplicitCatalog: u.NumParts >= 3,
 		},
-	}}
+	}
+}
+
+// ToTableName converts the unresolved name to a table name.
+func (u *UnresolvedObjectName) ToTableName() TableName {
+	return TableName{u.toObjName()}
+}
+
+// ToFunctionName converts the unresolved name to a function name.
+func (u *UnresolvedObjectName) ToFunctionName() FunctionName {
+	return FunctionName{u.toObjName()}
 }
 
 // ToUnresolvedName converts the unresolved object name to the more general

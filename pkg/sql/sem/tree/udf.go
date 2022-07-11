@@ -1,0 +1,291 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package tree
+
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
+)
+
+// FunctionName represent a function name in a UDF relevant statement, either
+// DDL or DML statement. Similar to TableName, it is constructed for incoming
+// SQL queries from an UnresolvedObjectName.
+type FunctionName struct {
+	objName
+}
+
+// Format implements the NodeFormatter interface.
+func (f *FunctionName) Format(ctx *FmtCtx) {
+	f.ObjectNamePrefix.Format(ctx)
+	if f.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&f.ObjectName)
+}
+
+// CreateFunction represents a CREATE FUNCTION statement.
+type CreateFunction struct {
+	IsProcedure bool
+	Replace     bool
+	FuncName    FunctionName
+	Args        FuncArgs
+	ReturnType  FuncReturnType
+	Options     FunctionOptions
+	RoutineBody *RoutineBody
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE ")
+	if node.Replace {
+		ctx.WriteString("OR REPLACE ")
+	}
+	ctx.WriteString("FUNCTION ")
+	ctx.FormatNode(&node.FuncName)
+	ctx.WriteString("(")
+	ctx.FormatNode(node.Args)
+	ctx.WriteString(") ")
+	ctx.WriteString("RETURNS ")
+	if node.ReturnType.IsSet {
+		ctx.WriteString("SETOF ")
+	}
+	ctx.WriteString(node.ReturnType.Type.SQLString())
+	ctx.WriteString(" ")
+	var funcBody FunctionBodyStr
+	for _, option := range node.Options {
+		switch t := option.(type) {
+		case FunctionBodyStr:
+			funcBody = t
+			continue
+		}
+		ctx.FormatNode(option)
+		ctx.WriteString(" ")
+	}
+	if len(funcBody) > 0 {
+		ctx.FormatNode(funcBody)
+	}
+	if node.RoutineBody != nil {
+		ctx.WriteString("BEGIN ATOMIC ")
+		for _, stmt := range node.RoutineBody.Stmts {
+			ctx.FormatNode(stmt)
+			ctx.WriteString("; ")
+		}
+		ctx.WriteString("END")
+	}
+}
+
+// RoutineBody represent a list of statements in a UDF body.
+type RoutineBody struct {
+	Stmts Statements
+}
+
+// RoutineReturn represent a RETURN statement in a UDF body.
+type RoutineReturn struct {
+	ReturnVal Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RoutineReturn) Format(ctx *FmtCtx) {
+	ctx.WriteString("RETURN ")
+	ctx.FormatNode(node.ReturnVal)
+}
+
+// FunctionOptions represent a list of function options.
+type FunctionOptions []FunctionOption
+
+// FunctionOption is an interface representing UDF properties.
+type FunctionOption interface {
+	functionOption()
+	NodeFormatter
+}
+
+func (FunctionNullInputBehavior) functionOption() {}
+func (FunctionVolatility) functionOption()        {}
+func (FunctionLeakProof) functionOption()         {}
+func (FunctionBodyStr) functionOption()           {}
+func (FunctionLanguage) functionOption()          {}
+
+// FunctionNullInputBehavior represent the UDF property on null parameters.
+type FunctionNullInputBehavior int
+
+const (
+	// FunctionCalledOnNullInput indicates that the function will be given the
+	// chance to execute when presented with NULL input.
+	FunctionCalledOnNullInput FunctionNullInputBehavior = iota
+	// FunctionReturnsNullOnNullInput indicates that the function will result in
+	// NULL given any NULL parameter.
+	FunctionReturnsNullOnNullInput
+	// FunctionStrict is the same as FunctionReturnsNullOnNullInput
+	FunctionStrict
+)
+
+// Format implements the NodeFormatter interface.
+func (node FunctionNullInputBehavior) Format(ctx *FmtCtx) {
+	switch node {
+	case FunctionCalledOnNullInput:
+		ctx.WriteString("CALLED ON NULL INPUT")
+	case FunctionReturnsNullOnNullInput:
+		ctx.WriteString("RETURNS NULL ON NULL INPUT")
+	case FunctionStrict:
+		ctx.WriteString("STRICT")
+	default:
+		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+	}
+}
+
+// FunctionVolatility represent UDF volatility property.
+type FunctionVolatility int
+
+const (
+	// FunctionVolatile see volatility.Volatile
+	FunctionVolatile FunctionVolatility = iota
+	// FunctionImmutable see volatility.Immutable
+	FunctionImmutable
+	// FunctionStable see volatility.Stable
+	FunctionStable
+)
+
+// Format implements the NodeFormatter interface.
+func (node FunctionVolatility) Format(ctx *FmtCtx) {
+	switch node {
+	case FunctionVolatile:
+		ctx.WriteString("VOLATILE")
+	case FunctionImmutable:
+		ctx.WriteString("IMMUTABLE")
+	case FunctionStable:
+		ctx.WriteString("STABLE")
+	default:
+		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+	}
+}
+
+// FunctionLeakProof indicates whether if a UDF is leakproof or not.
+type FunctionLeakProof bool
+
+// Format implements the NodeFormatter interface.
+func (node FunctionLeakProof) Format(ctx *FmtCtx) {
+	if !node {
+		ctx.WriteString("NOT ")
+	}
+	ctx.WriteString("LEAKPROOF")
+}
+
+// FunctionLanguage indicates the language of the statements in the UDF function
+// body.
+type FunctionLanguage int
+
+const (
+	_ FunctionLanguage = iota
+	// FunctionLangSQL represent SQL language.
+	FunctionLangSQL
+)
+
+// Format implements the NodeFormatter interface.
+func (node FunctionLanguage) Format(ctx *FmtCtx) {
+	ctx.WriteString("LANGUAGE ")
+	switch node {
+	case FunctionLangSQL:
+		ctx.WriteString("SQL")
+	default:
+		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+	}
+}
+
+// AsFunctionLanguage converts a string to a FunctionLanguage if applicable.
+// Error is returned if string does not represent a valid UDF language.
+func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
+	switch strings.ToLower(lang) {
+	case "sql":
+		return FunctionLangSQL, nil
+	}
+	return 0, errors.Newf("language %q does not exist", lang)
+}
+
+// FunctionBodyStr is a string containing all statements in a UDF body.
+type FunctionBodyStr string
+
+// Format implements the NodeFormatter interface.
+func (node FunctionBodyStr) Format(ctx *FmtCtx) {
+	ctx.WriteString("AS ")
+	ctx.WriteString("$$")
+	ctx.WriteString(string(node))
+	ctx.WriteString("$$")
+}
+
+// FuncArgs represents a list of FuncArg.
+type FuncArgs []FuncArg
+
+// Format implements the NodeFormatter interface.
+func (node FuncArgs) Format(ctx *FmtCtx) {
+	for i, arg := range node {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&arg)
+	}
+}
+
+// FuncArg represents an argument from a UDF signature.
+type FuncArg struct {
+	Name       Name
+	Type       ResolvableTypeReference
+	Class      FuncArgClass
+	DefaultVal Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *FuncArg) Format(ctx *FmtCtx) {
+	switch node.Class {
+	case FunctionArgIn:
+		ctx.WriteString("IN")
+	case FunctionArgOut:
+		ctx.WriteString("OUT")
+	case FunctionArgInOut:
+		ctx.WriteString("INOUT")
+	case FunctionArgVariadic:
+		ctx.WriteString("VARIADIC")
+	default:
+		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+	}
+	ctx.WriteString(" ")
+	if node.Name != "" {
+		ctx.FormatNode(&node.Name)
+		ctx.WriteString(" ")
+	}
+	ctx.WriteString(node.Type.SQLString())
+	if node.DefaultVal != nil {
+		ctx.WriteString(" DEFAULT ")
+		ctx.FormatNode(node.DefaultVal)
+	}
+}
+
+// FuncArgClass indicates what type of argument an arg is.
+type FuncArgClass int
+
+const (
+	// FunctionArgIn args can only be used as input.
+	FunctionArgIn FuncArgClass = iota
+	// FunctionArgOut args can only be used as output.
+	FunctionArgOut
+	// FunctionArgInOut args can be used as both input and output.
+	FunctionArgInOut
+	// FunctionArgVariadic args are variadic.
+	FunctionArgVariadic
+)
+
+// FuncReturnType represent the return type of UDF.
+type FuncReturnType struct {
+	Type  ResolvableTypeReference
+	IsSet bool
+}

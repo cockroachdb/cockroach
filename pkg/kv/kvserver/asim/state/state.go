@@ -239,11 +239,11 @@ func (m *ManualSimClock) Set(tsNanos int64) {
 // Key is a single slot in the keyspace.
 type Key int64
 
-// minKey is the minimum key in the keyspace.
-const minKey Key = -1
+// MinKey is the minimum key in the keyspace.
+const MinKey Key = -1
 
-// maxKey is the maximum key in the keyspace.
-const maxKey Key = 9999999999
+// MaxKey is the maximum key in the keyspace.
+const MaxKey Key = 9999999999
 
 // InvalidKey is a placeholder key that does not exist in the keyspace.
 const InvalidKey Key = -2

@@ -26,8 +26,10 @@ import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
+import { Text, TextTypes, Tooltip } from "src/components";
 import {
+  Badge,
+  BadgeProps,
   ColumnsConfig,
   Table,
   SortSetting,

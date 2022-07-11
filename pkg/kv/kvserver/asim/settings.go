@@ -16,7 +16,7 @@ const (
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
 	defaultReplicaAddDelayFactor   = 16
 	defaultSplitQueueDelay         = 100 * time.Millisecond
-	defaultRangeSizeSplitThreshold = 512
+	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
 	defaultRangeRebalanceThreshold = 0.05
 	defaultPacerLoopInterval       = 10 * time.Minute
 	defaultPacerMinIterInterval    = 10 * time.Millisecond
