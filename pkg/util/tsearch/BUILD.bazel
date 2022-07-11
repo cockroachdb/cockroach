@@ -1,0 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tsearch",
+    srcs = [
+        "lex.go",
+        "tsvector.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tsearch",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+    ],
+)
+
+go_test(
+    name = "tsearch_test",
+    srcs = ["tsvector_test.go"],
+    embed = [":tsearch"],
+    deps = [
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
