@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,6 +41,8 @@ func (ex *connExecutor) execPrepare(
 	// the Sync message is handled.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, parseCmd.AST)
+	} else if _, isErrTxn := ex.machine.CurState().(stateAborted); isErrTxn {
+		return retErr(sqlerrors.NewTransactionAbortedError(""))
 	}
 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
@@ -305,6 +308,8 @@ func (ex *connExecutor) execBind(
 	// handled separately in conn_executor_exec.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		return ex.beginImplicitTxn(ctx, ps.AST)
+	} else if _, isErrTxn := ex.machine.CurState().(stateAborted); isErrTxn {
+		return retErr(sqlerrors.NewTransactionAbortedError(""))
 	}
 
 	portalName := bindCmd.PortalName
@@ -544,6 +549,9 @@ func (ex *connExecutor) execDescribe(
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+	}
+	if _, isErrTxn := ex.machine.CurState().(stateAborted); isErrTxn {
+		return retErr(sqlerrors.NewTransactionAbortedError(""))
 	}
 
 	switch descCmd.Type {
