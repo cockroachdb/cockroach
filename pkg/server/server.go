@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -67,8 +68,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
-	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"          // register jobs declared outside of pkg/sql
-	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule"     // register schedules declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -715,7 +717,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
+	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor, st: st}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
 
 	// These callbacks help us avoid a dependency on gossip in httpServer.
@@ -813,6 +815,30 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// p, cleanup := sql.NewInternalPlanner(
+	// 	"admin-privilege-checker",
+	// 	db.NewTxn(ctx, "admin-privilege-checker"),
+	// 	username.RootUserName(),
+	// 	&sql.MemoryMetrics{},
+	// 	sqlServer.execCfg,
+	// 	sessiondatapb.SessionData{},
+	// )
+	// defer cleanup()
+	// adminAuthzCheck.aa = p.(sql.AuthorizationAccessor)
+
+	adminAuthzCheck.makePlanner = func(opName string, user username.SQLUsername) (interface{}, func()) {
+		// This is a hack to get around a Go package dependency cycle. See comment
+		// in sql/jobs/registry.go on planHookMaker.
+		return sql.NewInternalPlanner(
+			opName,
+			db.NewTxn(ctx, "admin-privilege-checker"),
+			user,
+			&sql.MemoryMetrics{},
+			sqlServer.execCfg,
+			sessiondatapb.SessionData{},
+		)
 	}
 
 	sAuth := newAuthenticationServer(cfg.Config, sqlServer)

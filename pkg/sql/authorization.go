@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -856,12 +858,20 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 		if err != nil {
 			return hasViewActivity, err
 		}
-		if !hasViewActivity {
-			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return hasViewActivityRedacted, err
-			}
-			if !hasViewActivityRedacted {
+		hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return hasViewActivityRedacted, err
+		}
+		if !hasViewActivity && !hasViewActivityRedacted {
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				noViewActivityErr := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY)
+				noViewActivityRedactedErr := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED)
+				if noViewActivityErr != nil && noViewActivityRedactedErr != nil {
+					// a number of tests fail if an error is returned here.
+					// nolint:returnerrcheck
+					return false, nil
+				}
+			} else {
 				return false, nil
 			}
 		}

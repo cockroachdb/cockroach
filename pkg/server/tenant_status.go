@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -1152,6 +1154,9 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 			t.privilegeChecker.hasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
 		if err != nil {
 			return nil, serverError(ctx, err)
+		}
+		if !shouldRedactContendingKey && t.privilegeChecker.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			shouldRedactContendingKey = t.privilegeChecker.checkHasSystemPrivilege(ctx, user, privilege.VIEWACTIVITYREDACTED)
 		}
 	}
 
