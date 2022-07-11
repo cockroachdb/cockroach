@@ -12,7 +12,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -117,13 +120,14 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 type serverCfg struct {
-	name          string
-	iodir         string
-	nodes         int
-	splits        int
-	ioConf        base.ExternalIODirConfig
-	localities    string
-	beforeVersion string
+	name           string
+	iodir          string
+	nodes          int
+	splits         int
+	ioConf         base.ExternalIODirConfig
+	localities     string
+	beforeVersion  string
+	testingKnobCfg string
 }
 
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
@@ -170,6 +174,18 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 			serverArgsPerNode[i] = param
 		}
 		params.ServerArgsPerNode = serverArgsPerNode
+	}
+	if cfg.testingKnobCfg != "" {
+		switch cfg.testingKnobCfg {
+		case "RecoverFromIterPanic":
+			params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+					RecoverFromIterPanic: true,
+				},
+			}
+		default:
+			t.Fatalf("TestingKnobCfg %s not found", cfg.testingKnobCfg)
+		}
 	}
 	if cfg.iodir == "" {
 		tc, _, cfg.iodir, cleanup = backupRestoreTestSetupWithParams(t, clusterSize, cfg.splits,
@@ -255,9 +271,13 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   version before the passed in <beforeVersion> key. See cockroach_versions.go
 //   for possible values.
 //
+//   + testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
+//
+//
 // - "upgrade-server version=<version>"
 //    Upgrade the cluster version of the active server to the passed in
 //    clusterVersion key. See cockroach_versions.go for possible values.
+//
 //
 // - "exec-sql [server=<name>] [user=<name>] [args]"
 //   Executes the input SQL query on the target server. By default, server is
@@ -347,6 +367,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   + target: SQL target. Currently, only table names are supported.
 //
+//
+// - "corrupt-backup" uri=<collectionUri>
+//   Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -375,7 +398,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 
 			case "new-server":
-				var name, shareDirWith, iodir, localities, beforeVersion string
+				var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 				var splits int
 				nodes := singleNode
 				var io base.ExternalIODirConfig
@@ -404,16 +427,20 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("beforeVersion") {
 					d.ScanArgs(t, "beforeVersion", &beforeVersion)
 				}
+				if d.HasArg("testingKnobCfg") {
+					d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
+				}
 
 				lastCreatedServer = name
 				cfg := serverCfg{
-					name:          name,
-					iodir:         iodir,
-					nodes:         nodes,
-					splits:        splits,
-					ioConf:        io,
-					localities:    localities,
-					beforeVersion: beforeVersion,
+					name:           name,
+					iodir:          iodir,
+					nodes:          nodes,
+					splits:         splits,
+					ioConf:         io,
+					localities:     localities,
+					beforeVersion:  beforeVersion,
+					testingKnobCfg: testingKnobCfg,
 				}
 				err := ds.addServer(t, cfg)
 				if err != nil {
@@ -816,6 +843,28 @@ func TestDataDriven(t *testing.T) {
 				})
 				require.NoError(t, err)
 				return ""
+
+			case "corrupt-backup":
+				server := lastCreatedServer
+				user := "root"
+				var uri string
+				d.ScanArgs(t, "uri", &uri)
+				parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
+				require.NoError(t, err)
+				var filePath string
+				filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN %s] LIMIT 1", uri)
+				err = ds.getSQLDB(t, server, user).QueryRow(filePathQuery).Scan(&filePath)
+				require.NoError(t, err)
+				fullPath := filepath.Join(ds.getIODir(t, server), parsedURI.Path, filePath)
+				print(fullPath)
+				data, err := ioutil.ReadFile(fullPath)
+				require.NoError(t, err)
+				data[20] ^= 1
+				if err := ioutil.WriteFile(fullPath, data, 0644 /* perm */); err != nil {
+					t.Fatal(err)
+				}
+				return ""
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

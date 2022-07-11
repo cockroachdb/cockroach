@@ -42,7 +42,9 @@ type splitAndScatterer interface {
 	scatter(ctx context.Context, codec keys.SQLCodec, scatterKey roachpb.Key) (roachpb.NodeID, error)
 }
 
-type noopSplitAndScatterer struct{}
+type noopSplitAndScatterer struct {
+	scatterNode roachpb.NodeID
+}
 
 var _ splitAndScatterer = noopSplitAndScatterer{}
 
@@ -55,7 +57,7 @@ func (n noopSplitAndScatterer) split(_ context.Context, _ keys.SQLCodec, _ roach
 func (n noopSplitAndScatterer) scatter(
 	_ context.Context, _ keys.SQLCodec, _ roachpb.Key,
 ) (roachpb.NodeID, error) {
-	return 0, nil
+	return n.scatterNode, nil
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -225,6 +227,10 @@ func newSplitAndScatterProcessor(
 	}
 
 	scatterer := makeSplitAndScatterer(db, kr)
+	if spec.ValidateOnly {
+		nodeID, _ := flowCtx.NodeID.OptionalNodeID()
+		scatterer = noopSplitAndScatterer{nodeID}
+	}
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,
