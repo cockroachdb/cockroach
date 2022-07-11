@@ -12,9 +12,11 @@ package sql
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,10 +96,14 @@ func TestTelemetryLogging(t *testing.T) {
 
 	var sessionID string
 	var databaseName string
+	var dbID uint32
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	conn := db.DB.(*gosql.DB)
+
 	db.QueryRow(t, `SHOW session_id`).Scan(&sessionID)
 	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
+	dbID = sqlutils.QueryDatabaseID(t, conn, databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, "CREATE TABLE t();")
@@ -262,6 +268,9 @@ func TestTelemetryLogging(t *testing.T) {
 				}
 				if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
 					t.Errorf("expected to find Database: %s", databaseName)
+				}
+				if !strings.Contains(e.Message, "\"DatabaseID\":"+strconv.Itoa(int(dbID))) {
+					t.Errorf("expected to find DatabaseID: %v", dbID)
 				}
 			}
 		}
