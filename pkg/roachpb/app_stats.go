@@ -19,16 +19,6 @@ import (
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
 
-// FingerprintID returns the FingerprintID of the StatementStatisticsKey.
-func (m *StatementStatisticsKey) FingerprintID() StmtFingerprintID {
-	return ConstructStatementFingerprintID(
-		m.Query,
-		m.Failed,
-		m.ImplicitTxn,
-		m.Database,
-	)
-}
-
 // ConstructStatementFingerprintID constructs an ID by hashing an anonymized query, its database
 // and failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
