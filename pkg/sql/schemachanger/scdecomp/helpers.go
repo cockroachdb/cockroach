@@ -32,7 +32,7 @@ func descriptorStatus(desc catalog.Descriptor) scpb.Status {
 		return scpb.Status_DROPPED
 	}
 	if desc.Offline() {
-		return scpb.Status_UNKNOWN
+		return scpb.Status_OFFLINE
 	}
 	return scpb.Status_PUBLIC
 }
