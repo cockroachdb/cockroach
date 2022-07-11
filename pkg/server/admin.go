@@ -2002,8 +2002,8 @@ func (s *adminServer) jobsHelper(
               when ` + retryRevertingCondition + ` then 'retry-reverting' 
               else status
             end as status, running_status, created, started, finished, modified, fraction_completed,
-            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string::bytes,
-            coordinator_id
+            high_water_timestamp, error, last_run, next_run, num_runs, 
+            replace(execution_events::string, '\"', '\\"')::bytes, coordinator_id
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -2178,7 +2178,7 @@ func (s *adminServer) jobHelper(
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 	  						 running_status, created, started, finished, modified,
 	  						 fraction_completed, high_water_timestamp, error, last_run,
-								 next_run, num_runs, execution_events::string::bytes,
+								 next_run, num_runs, replace(execution_events::string, '\"', '\\"')::bytes,
                  coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
