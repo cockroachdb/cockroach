@@ -204,7 +204,6 @@ func (c *conn) handleAuthentication(
 		}
 	}
 
-	ac.LogAuthOK(ctx)
 	return connClose, nil
 }
 
