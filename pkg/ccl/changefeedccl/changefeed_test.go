@@ -2056,12 +2056,7 @@ func TestChangefeedAuthorization(t *testing.T) {
 		},
 		{name: `cloud`,
 			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'nodelocal://12/nope/'`,
-			// Ideally, this should be returning "connecting to node 12", but
-			// since (with #76582) we're using a local-only blob client by
-			// default for tenants, we get a different error message. This
-			// error message should be reverted when we generalize the blob
-			// client creation in tenants. Tracked with #76378.
-			errMsg: `connecting to remote node not supported`,
+			errMsg:    `connecting to node 12`,
 		},
 		{name: `sinkless`,
 			statement: `EXPERIMENTAL CHANGEFEED FOR d.table_a WITH resolved='1'`,
