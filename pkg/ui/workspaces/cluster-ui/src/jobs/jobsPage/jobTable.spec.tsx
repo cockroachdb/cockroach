@@ -11,7 +11,6 @@ import React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import { earliestRetainedTime } from "./jobsPage.fixture";
-
 import { JobTable, JobTableProps } from "./jobTable";
 
 describe("<JobTable>", () => {

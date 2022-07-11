@@ -94,12 +94,12 @@ bazel test //pkg/ui:lint --test_output all
 exec
 dev ui test
 ----
-bazel test //pkg/ui/workspaces/db-console:karma //pkg/ui/workspaces/cluster-ui:jest --test_output errors
+bazel test //pkg/ui/workspaces/db-console:jest //pkg/ui/workspaces/cluster-ui:jest --test_output errors
 
 exec
 dev ui test --verbose
 ----
-bazel test //pkg/ui/workspaces/db-console:karma //pkg/ui/workspaces/cluster-ui:jest --test_output all
+bazel test //pkg/ui/workspaces/db-console:jest //pkg/ui/workspaces/cluster-ui:jest --test_output all
 
 exec
 dev ui test test --watch
@@ -114,7 +114,7 @@ cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 bazel info workspace --color=no
-bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console karma:watch
+bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console
 bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui jest --watch
 
 exec
