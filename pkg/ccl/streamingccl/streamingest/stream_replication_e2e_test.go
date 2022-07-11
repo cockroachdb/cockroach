@@ -82,6 +82,7 @@ type tenantStreamingClusters struct {
 	srcSysSQL    *sqlutils.SQLRunner
 	srcTenantSQL *sqlutils.SQLRunner
 	srcURL       url.URL
+	srcCleanup   func()
 
 	destCluster   *testcluster.TestCluster
 	destSysSQL    *sqlutils.SQLRunner
@@ -181,6 +182,7 @@ func createTenantStreamingClusters(
 		srcSysSQL:     sqlutils.MakeSQLRunner(srcCluster.ServerConn(0)),
 		srcTenantSQL:  sqlutils.MakeSQLRunner(srcTenantDB),
 		srcURL:        srcURL,
+		srcCleanup:    srcCleanup,
 		destCluster:   destCluster,
 		destSysSQL:    sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
 		destTenantSQL: sqlutils.MakeSQLRunner(destTenantDB),
@@ -431,4 +433,48 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	// Confirm this new run resumed from the empty checkpoint.
 	require.True(t,
 		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime.IsEmpty())
+}
+
+func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): now this has the same race issue with
+	// TestPartitionedStreamReplicationClient, please fix them together in the future.
+	skip.UnderRace(t, "disabled under race")
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Pause ingestion.
+	c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	pausedCheckpoint := streamIngestionStats(t, c.destSysSQL, ingestionJobID).
+		ReplicationLagInfo.MinIngestedTimestamp
+	// Check we paused at a timestamp greater than the previously reached high watermark
+	require.True(t, srcTime.LessEq(pausedCheckpoint))
+
+	// Destroy the source cluster
+	c.srcCleanup()
+
+	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, pausedCheckpoint.GoTime())
+
+	// Resume ingestion.
+	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
+
+	// Ingestion job should succeed despite source failure due to the successful cutover
+	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 }
