@@ -37,6 +37,8 @@ const (
 	expectingPosDelimiter
 )
 
+// tsVectorLexer is a lexing state machine for the TSVector and TSQuery input
+// formats. See the comment above lex() for more details.
 type tsVectorLexer struct {
 	input   string
 	lastLen int
@@ -44,7 +46,7 @@ type tsVectorLexer struct {
 	state   tsVectorParseState
 
 	// If true, we're in "TSQuery lexing mode"
-	tsquery bool
+	tsQuery bool
 }
 
 func (p *tsVectorLexer) back() {
@@ -59,7 +61,8 @@ func (p *tsVectorLexer) advance() rune {
 	return r
 }
 
-// lex lexes the input in the receiver according to the TSVector "grammar".
+// lex lexes the input in the receiver according to the TSVector "grammar", or
+// according the TSQuery "grammar" if tsQuery is set to true.
 //
 // A simple TSVector input could look like this:
 //
@@ -73,18 +76,27 @@ func (p *tsVectorLexer) advance() rune {
 // without any whitespace in between (if there is no position list on the word).
 // In a single-quote wrapped word, the word must terminate with a single quote.
 // All other characters are treated as literals. Backlashes can be used to
-// escape single quotes, and are otherwise no-ops.
+// escape single quotes, and are otherwise skipped, allowing the following
+// character to be included as a literal.
 //
 // If a word is not single-quote wrapped, the next term will begin if there is
 // whitespace after the word. Whitespace and colons may be entered by escaping
-// them with backslashes. All other uses of backslashes are no-ops.
+// them with backslashes. All other uses of backslashes are skipped, allowing
+// the following character to be included as a literal.
 //
 // A word is delimited from its position list with a colon.
 //
 // A position list is made up of a comma-delimited list of numbers, each
 // of which may have an optional "strength" which is a letter from A-D.
 //
-// See examples in tsvector_test.go.
+// In TSQuery mode, there are a few differences:
+//   - Terms must be separated with tsOperators (!, <->, |, &), not just spaces.
+//   - Terms may be surrounded by the ( ) grouping tokens.
+//   - Terms cannot include multiple positions.
+//   - Terms can include more than one "strength", as well as the * prefix search
+//     operator. For example, foo:3AC*
+//
+// See examples in tsvector_test.go and tsquery_test.go.
 func (p tsVectorLexer) lex() (TSVector, error) {
 	// termBuf will be reused as a temporary buffer to assemble each term before
 	// copying into the vector.
@@ -104,7 +116,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				continue
 			}
 
-			if p.tsquery {
+			if p.tsQuery {
 				// Check for &, |, !, and <-> (or <number>)
 				switch r {
 				case '&':
@@ -171,7 +183,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				p.state = expectingTerm
 			} else if r == ':' {
 				lastTerm := &ret[len(ret)-1]
-				lastTerm.positions = append(lastTerm.positions, tsposition{})
+				lastTerm.positions = append(lastTerm.positions, tsPosition{})
 				p.state = expectingPosList
 			} else {
 				p.state = expectingTerm
@@ -185,7 +197,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				continue
 			}
 
-			if p.tsquery {
+			if p.tsQuery {
 				switch r {
 				case '&', '!', '|', '<', '(', ')':
 					// These are all "operators" in the TSQuery language. End the current
@@ -205,7 +217,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				// Copy the termBuf into the vector, resize the termBuf, continue on.
 				term := tsTerm{lexeme: string(termBuf)}
 				if r == ':' {
-					term.positions = append(term.positions, tsposition{})
+					term.positions = append(term.positions, tsPosition{})
 				}
 				ret = append(ret, term)
 				termBuf = termBuf[:0]
@@ -216,13 +228,13 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				}
 				continue
 			}
-			if p.tsquery && r == ':' {
+			if p.tsQuery && r == ':' {
 				return p.syntaxError()
 			}
 			termBuf = append(termBuf, r)
 		case expectingPosList:
 			var pos int
-			if !p.tsquery {
+			if !p.tsQuery {
 				// If we have nothing in our termBuf, we need to see at least one number.
 				if unicode.IsNumber(r) {
 					termBuf = append(termBuf, r)
@@ -251,37 +263,41 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 			}
 			switch r {
 			case ',':
-				if p.tsquery {
+				if p.tsQuery {
 					// Not valid! No , allowed in position lists in tsqueries.
 					return ret, pgerror.Newf(pgcode.Syntax, "syntax error in TSVector: %s", p.input)
 				}
-				lastTerm.positions = append(lastTerm.positions, tsposition{})
+				lastTerm.positions = append(lastTerm.positions, tsPosition{})
 				// Expecting another number next.
 				continue
 			case '*':
-				if p.tsquery {
+				if p.tsQuery {
 					lastTerm.positions[lastTermPos].weight |= weightStar
 				} else {
 					p.state = expectingPosDelimiter
 					lastTerm.positions[lastTermPos].weight |= weightA
 				}
 			case 'a', 'A':
-				if !p.tsquery {
+				if !p.tsQuery {
 					p.state = expectingPosDelimiter
 				}
 				lastTerm.positions[lastTermPos].weight |= weightA
 			case 'b', 'B':
-				if !p.tsquery {
+				if !p.tsQuery {
 					p.state = expectingPosDelimiter
 				}
 				lastTerm.positions[lastTermPos].weight |= weightB
 			case 'c', 'C':
-				if !p.tsquery {
+				if !p.tsQuery {
 					p.state = expectingPosDelimiter
 				}
 				lastTerm.positions[lastTermPos].weight |= weightC
 			case 'd', 'D':
-				if p.tsquery {
+				// Weight D is handled differently in TSQuery parsing than TSVector. In
+				// TSVector parsing, the default is already D - so we don't record any
+				// weight at all. This matches Postgres behavior - a default D weight is
+				// not printed or stored. In TSQuery, we have to record it explicitly.
+				if p.tsQuery {
 					lastTerm.positions[lastTermPos].weight |= weightD
 				} else {
 					p.state = expectingPosDelimiter
@@ -293,7 +309,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 			if r == ',' {
 				p.state = expectingPosList
 				lastTerm := &ret[len(ret)-1]
-				lastTerm.positions = append(lastTerm.positions, tsposition{})
+				lastTerm.positions = append(lastTerm.positions, tsPosition{})
 			} else if unicode.IsSpace(r) {
 				p.state = expectingTerm
 			} else {
@@ -313,7 +329,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 		ret = append(ret, tsTerm{lexeme: string(termBuf)})
 	case expectingPosList:
 		// Finish number.
-		if !p.tsquery {
+		if !p.tsQuery {
 			if len(termBuf) == 0 {
 				return p.syntaxError()
 			}
@@ -344,7 +360,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 
 func (p *tsVectorLexer) syntaxError() (TSVector, error) {
 	typ := "TSVector"
-	if p.tsquery {
+	if p.tsQuery {
 		typ = "TSQuery"
 	}
 	return TSVector{}, pgerror.Newf(pgcode.Syntax, "syntax error in %s: %s", typ, p.input)

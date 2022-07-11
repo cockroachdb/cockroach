@@ -12,6 +12,7 @@ package tsearch
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -47,6 +48,7 @@ bar   `, `'foo' 'bar'`},
 		{`'\:'`, `':'`},
 		{`'\ '`, `' '`},
 		{`\ `, `' '`},
+		{`\\`, `'\'`},
 
 		{`blah'blah`, `'blah''blah'`},
 		{`blah'`, `'blah'''`},
@@ -145,6 +147,7 @@ func TestParseTSQuery(t *testing.T) {
 		{`'\:'`, `':'`},
 		{`'\ '`, `' '`},
 		{`\ `, `' '`},
+		{`\\`, `'\'`},
 
 		{`blah'blah`, `'blah''blah'`},
 		{`blah'`, `'blah'''`},
@@ -195,6 +198,10 @@ func TestParseTSQuery(t *testing.T) {
 	}
 
 	t.Run("ComparePG", func(t *testing.T) {
+		// This test can be manually run by pointing it to a local Postgres. There
+		// are no requirements for the contents of the local Postgres - it just runs
+		// expressions. The test validates that all of the test cases in this test
+		// file work the same in Postgres as they do this package.
 		skip.IgnoreLint(t, "need to manually enable")
 		conn, err := pgx.Connect(context.Background(), "postgresql://jordan@localhost:5432")
 		require.NoError(t, err)
@@ -204,6 +211,11 @@ func TestParseTSQuery(t *testing.T) {
 			var actual string
 			row := conn.QueryRow(context.Background(), "SELECT $1::TSQuery", tc.input)
 			require.NoError(t, row.Scan(&actual))
+			// To make sure that our tests behave as expected, we need to remove
+			// doubled backslashes from Postgres's output. Confusingly, even in the
+			// protocol that pgx uses, the actual text returned for a string
+			// containing a backslash doubles all backslash literals.
+			actual = strings.ReplaceAll(actual, `\\`, `\`)
 			assert.Equal(t, tc.expectedStr, actual)
 		}
 	})

@@ -16,11 +16,58 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
+
+// tsoperator is an enum that represents the different operators within a
+// TSQuery.
+type tsoperator int
+
+const (
+	// Parentheses can be used to control nesting of the TSQuery operators.
+	// Without parentheses, | binds least tightly,
+	// then &, then <->, and ! most tightly.
+
+	invalid tsoperator = iota
+	// and is the & operator, which requires both of its operands to exist in
+	// the searched document.
+	and
+	// or is the | operator, which requires one or more of its operands to exist
+	// in the searched document.
+	or
+	// not is the ! operator, which requires that its single operand doesn't exist
+	// in the searched document.
+	not
+	// followedby is the <-> operator. It can also be specified with a number like
+	// <1> or <2> or <3>. It requires that the left operand is next to the right
+	// operand. The <-> and <1> forms mean that they should be right next to each
+	// other. A number indicates how many terms away the operands should be.
+	followedby
+	// lparen and rparen are grouping operators. They're just used in parsing and
+	// don't appear in the TSQuery tree.
+	lparen
+	rparen
+)
+
+// precedence returns the parsing precedence of the receiver. A higher
+// precedence means that the operator binds more tightly.
+func (o tsoperator) precedence() int {
+	switch o {
+	case not:
+		return 4
+	case followedby:
+		return 3
+	case and:
+		return 2
+	case or:
+		return 1
+	}
+	panic(errors.AssertionFailedf("no precedence for operator %d", o))
+}
 
 // tsNode represents a single AST node within the tree of a TSQuery.
 type tsNode struct {
-	// Only one of term, op, or paren will be set.
+	// Only one of term or op will be set.
 	// If term is set, this is a leaf node containing a lexeme.
 	term tsTerm
 	// If op is set, this is an operator node: either not, and, or, or followedby.
@@ -79,8 +126,8 @@ func (n tsNode) UnambiguousString() string {
 	return fmt.Sprintf("[%s%s%s]", n.l.UnambiguousString(), tsTerm{operator: n.op, followedN: n.followedN}, n.r.UnambiguousString())
 }
 
-// TSQuery represents a tsquery AST root. A tsquery is a tree of text search
-// operators that can be run against a tsvector to produce a predicate of
+// TSQuery represents a tsNode AST root. A TSQuery is a tree of text search
+// operators that can be run against a TSVector to produce a predicate of
 // whether the query matched.
 type TSQuery struct {
 	root *tsNode
@@ -97,7 +144,7 @@ func lexTSQuery(input string) (TSVector, error) {
 	parser := tsVectorLexer{
 		input:   input,
 		state:   expectingTerm,
-		tsquery: true,
+		tsQuery: true,
 	}
 
 	return parser.lex()
@@ -115,6 +162,8 @@ func ParseTSQuery(input string) (TSQuery, error) {
 	return queryParser.parse()
 }
 
+// tsQueryParser is a parser that operates on a set of lexed tokens, represented
+// as the tsTerms in a TSVector.
 type tsQueryParser struct {
 	input string
 	terms TSVector
@@ -148,6 +197,10 @@ func (p *tsQueryParser) parse() (TSQuery, error) {
 	return TSQuery{root: expr}, nil
 }
 
+// parseTSExpr is a "Pratt parser" which constructs a query tree out of the
+// lexed tsTerms, respecting the precedence of the tsOperators.
+// See this nice article about Pratt parsing, which this parser was adapted from:
+// https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 func (p *tsQueryParser) parseTSExpr(minBindingPower int) (*tsNode, error) {
 	t, ok := p.nextTerm()
 	if !ok {
