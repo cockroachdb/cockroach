@@ -89,7 +89,7 @@ func NewServer(
 			cfg.Settings,
 		),
 	}
-	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
 	// We have to initialize the flow scheduler at the same time we're creating
 	// the DistSQLServer because the latter will be registered as a gRPC service
 	// right away, so the RPCs might start coming in pretty much right after the
@@ -277,7 +277,7 @@ func (ds *ServerImpl) setupFlow(
 		noteworthyMemoryUsageBytes,
 		ds.Settings,
 	)
-	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
+	monitor.StartNoReserved(ctx, parentMonitor)
 
 	makeLeaf := func() (*kv.Txn, error) {
 		tis := req.LeafTxnInputState

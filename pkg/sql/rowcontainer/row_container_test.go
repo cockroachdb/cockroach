@@ -237,9 +237,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	// halfway through, keeps on adding rows, and then verifies that all rows
 	// were properly added to the DiskBackedRowContainer.
 	t.Run("NormalRun", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
 
 		defer func() {
@@ -285,9 +285,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfMem", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
 		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
 
 		defer func() {
@@ -311,9 +311,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfDisk", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
 		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
 		defer diskMonitor.Stop(ctx)
 
 		defer func() {
@@ -363,7 +363,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 	)
 	diskMonitor := newTestDiskMonitor(ctx, st)
 
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
 
@@ -497,9 +497,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	newOrdering := colinfo.ColumnOrdering{{ColIdx: 1, Direction: encoding.Ascending}}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	// SpillingHalfway adds half of all rows into DiskBackedIndexedRowContainer,
@@ -662,9 +662,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 				sortedRows.rows = append(sortedRows.rows, IndexedRow{Idx: len(sortedRows.rows), Row: row})
 			}
 
-			memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
+			memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 			defer memoryMonitor.Stop(ctx)
-			diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+			diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 			defer diskMonitor.Stop(ctx)
 
 			sorter := rowsSorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
@@ -933,9 +933,9 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 		st,
 	)
 	rows := randgen.MakeIntRows(numRows, numCols)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	accessPattern := generateAccessPattern(numRows)

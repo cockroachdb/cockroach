@@ -118,7 +118,8 @@ func init() {
 // on the current range key state, and does not depend on write history.
 // Stacking allows easy access to all range keys overlapping a point key.
 //
-// TODO(erikgrinaker): Write a tech note on range keys and link it here.
+// For more information on MVCC range keys, see this tech note:
+// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
@@ -171,7 +172,8 @@ type SimpleMVCCIterator interface {
 	// key position, or an empty list if there are none. When at a point key, it
 	// will return all range keys overlapping that point key. The keys are only
 	// valid until the next iterator operation. For details on range keys, see
-	// comment on SimpleMVCCIterator.
+	// comment on SimpleMVCCIterator, or this tech note:
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	RangeKeys() []MVCCRangeKeyValue
 }
 
@@ -710,7 +712,8 @@ type Writer interface {
 	// Range keys must be accessed using special iterator options and methods,
 	// see SimpleMVCCIterator.RangeKeys() for details.
 	//
-	// TODO(erikgrinaker): Write a tech note on range keys and link it here.
+	// For more information on MVCC range keys, see this tech note:
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
 	// PutEngineRangeKey sets the given range key to the values provided. This is

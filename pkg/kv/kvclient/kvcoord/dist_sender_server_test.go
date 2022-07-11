@@ -196,9 +196,9 @@ func checkResumeSpanScanResults(
 	for i, res := range results {
 		// Check that satisfied scans don't have resume spans.
 		if _, satisfied := expSatisfied[i]; satisfied {
-			require.Nil(t, res.ResumeSpan, "satisfied scan %d (%s) has ResumeSpan: %v",
+			require.Nilf(t, res.ResumeSpan, "satisfied scan %d (%s) has ResumeSpan: %v",
 				i, spans[i], res.ResumeSpan)
-			require.Zero(t, res.ResumeReason, "satisfied scan %d (%s) has ResumeReason: %v",
+			require.Zerof(t, res.ResumeReason, "satisfied scan %d (%s) has ResumeReason: %v",
 				i, spans[i], res.ResumeReason)
 			continue
 		}
@@ -207,36 +207,36 @@ func checkResumeSpanScanResults(
 		// The resume span should be identical to the original request if no
 		// results have been produced, or should continue after the last result
 		// otherwise.
-		require.NotNil(t, res.ResumeSpan, "scan %d (%s): no resume span", i, spans[i])
-		require.NotZero(t, res.ResumeReason, "scan %d (%s): no resume reason. resume span: %+v",
+		require.NotNilf(t, res.ResumeSpan, "scan %d (%s): no resume span", i, spans[i])
+		require.NotZerof(t, res.ResumeReason, "scan %d (%s): no resume reason. resume span: %+v",
 			i, spans[i], res.ResumeSpan)
-		require.Equal(t, expReason, res.ResumeReason,
+		require.Equalf(t, expReason, res.ResumeReason,
 			"scan %d (%s): unexpected resume reason", i, spans[i])
 
 		if !reverse {
 			if len(res.Rows) == 0 {
-				require.GreaterOrEqual(t, string(res.ResumeSpan.Key), spans[i][0],
+				require.GreaterOrEqualf(t, string(res.ResumeSpan.Key), spans[i][0],
 					"scan %d (%s): expected resume span %s to be at or above scan start", i, spans[i], res.ResumeSpan)
-				require.Less(t, string(res.ResumeSpan.Key), spans[i][1],
+				require.Lessf(t, string(res.ResumeSpan.Key), spans[i][1],
 					"scan %d (%s): expected resume span %s to be below scan end", i, spans[i], res.ResumeSpan)
 			} else {
-				require.Greater(t, string(res.ResumeSpan.Key), expResults[i][len(res.Rows)-1],
+				require.Greaterf(t, string(res.ResumeSpan.Key), expResults[i][len(res.Rows)-1],
 					"scan %d (%s): expected resume span %s to be above last result", i, spans[i], res.ResumeSpan)
 			}
-			require.Equal(t, spans[i][1], string(res.ResumeSpan.EndKey),
+			require.Equalf(t, spans[i][1], string(res.ResumeSpan.EndKey),
 				"scan %d (%s): expected resume span %s to have same end key", i, spans[i], res.ResumeSpan)
 
 		} else {
 			if len(res.Rows) == 0 {
-				require.Greater(t, string(res.ResumeSpan.EndKey), spans[i][0],
+				require.Greaterf(t, string(res.ResumeSpan.EndKey), spans[i][0],
 					"scan %d (%s): expected resume span %s to be above scan start", i, spans[i], res.ResumeSpan)
-				require.LessOrEqual(t, string(res.ResumeSpan.EndKey), spans[i][1],
+				require.LessOrEqualf(t, string(res.ResumeSpan.EndKey), spans[i][1],
 					"scan %d (%s): expected resume span %s to be at or below scan end", i, spans[i], res.ResumeSpan)
 			} else {
-				require.Less(t, string(res.ResumeSpan.EndKey), expResults[i][len(res.Rows)-1],
+				require.Lessf(t, string(res.ResumeSpan.EndKey), expResults[i][len(res.Rows)-1],
 					"scan %d (%s): expected resume span %s to be below last result", i, spans[i], res.ResumeSpan)
 			}
-			require.Equal(t, spans[i][0], string(res.ResumeSpan.Key),
+			require.Equalf(t, spans[i][0], string(res.ResumeSpan.Key),
 				"scan %d (%s): expected resume span %s to have same start key", i, spans[i], res.ResumeSpan)
 		}
 	}
@@ -349,6 +349,11 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		{"f2"},
 	}
 	var expResultsReverse [][]string
+	// reverseProcessOrder contains indices into expResultsReverse ordered with
+	// the descending direction on the first key in each slice (this is the
+	// order in which the DistSender will process the corresponding ReverseScan
+	// requests).
+	reverseProcessOrder := []int{2, 3, 1, 0}
 	for _, res := range expResults {
 		var rres []string
 		for i := len(res) - 1; i >= 0; i-- {
@@ -412,7 +417,8 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		// The split contains keys [lastK..firstK].
 		firstK := sort.SearchStrings(keys, splits[s]) - 1
 		lastK := sort.SearchStrings(keys, splits[s-1])
-		for j, res := range expResultsReverse {
+		for _, j := range reverseProcessOrder {
+			res := expResultsReverse[j]
 			for expIdx := len(res) - 1; expIdx >= 0; expIdx-- {
 				expK := res[expIdx]
 				for k := firstK; k >= lastK; k-- {
@@ -559,22 +565,22 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	}{
 		{
 			name:  "unsorted, non-overlapping, neither satisfied",
-			bound: 6,
+			bound: 3,
 			spans: [][]string{
 				{"b1", "d"}, {"a", "b1"},
 			},
 			expResults: [][]string{
-				{"b1", "b2", "b3"}, {"a1", "a2", "a3"},
+				{}, {"a1", "a2", "a3"},
 			},
 		},
 		{
 			name:  "unsorted, non-overlapping, first satisfied",
-			bound: 6,
+			bound: 9,
 			spans: [][]string{
-				{"b1", "c"}, {"a", "b1"},
+				{"b1", "c"}, {"a", "d"},
 			},
 			expResults: [][]string{
-				{"b1", "b2", "b3"}, {"a1", "a2", "a3"},
+				{"b1", "b2", "b3"}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 			expSatisfied: []int{0},
 		},
@@ -650,17 +656,17 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 				{"b", "g"}, {"a", "d"},
 			},
 			expResults: [][]string{
-				{"b1", "b2", "b3"}, {"a1", "a2", "a3", "b1"},
+				{"b1"}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 		},
 		{
 			name:  "unsorted, overlapping, first satisfied",
-			bound: 7,
+			bound: 9,
 			spans: [][]string{
 				{"b", "c"}, {"a", "d"},
 			},
 			expResults: [][]string{
-				{"b1", "b2", "b3"}, {"a1", "a2", "a3", "b1"},
+				{"b1", "b2", "b3"}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 			expSatisfied: []int{0},
 		},
@@ -693,7 +699,7 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 				{"b", "g"}, {"c", "f"}, {"a", "d"},
 			},
 			expResults: [][]string{
-				{"b1", "b2", "b3"}, {}, {"a1", "a2", "a3", "b1"},
+				{"b1"}, {}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 		},
 		{

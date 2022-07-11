@@ -14,6 +14,8 @@ import { all, fork } from "redux-saga/effects";
 import { localStorageSaga } from "./localStorage";
 import { statementsDiagnosticsSagas } from "./statementDiagnostics";
 import { nodesSaga } from "./nodes";
+import { jobsSaga } from "./jobs";
+import { jobSaga } from "./jobDetails";
 import { livenessSaga } from "./liveness";
 import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
@@ -28,6 +30,8 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
+    fork(jobsSaga),
+    fork(jobSaga),
     fork(sessionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),

@@ -150,6 +150,7 @@ sequence req=req4
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: waiting in lock wait-queues
 [5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
+[5] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4: pushing timestamp of txn 00000003 above 10.000000000,0
 [5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -176,6 +177,7 @@ sequence req=req2
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
 [7] sequence req2: lock wait-queue event: wait for txn 00000003 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 2)
+[7] sequence req2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req2: pushing timestamp of txn 00000003 above 10.000000000,0
 [7] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 

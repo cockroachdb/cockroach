@@ -98,7 +98,7 @@ type Optimizer struct {
 	// JoinOrderBuilder adds new join orderings to the memo.
 	jb JoinOrderBuilder
 
-	// rng is used to deterministically perturb costs.
+	// rng is used to deterministically perturb costs and/or disable rules.
 	rng *rand.Rand
 }
 
@@ -125,19 +125,28 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	seed := evalCtx.SessionData().TestingOptimizerRandomCostSeed
-	if seed != 0 {
+
+	if seed := evalCtx.SessionData().TestingOptimizerRandomSeed; seed != 0 {
 		o.rng = rand.New(rand.NewSource(seed))
-		// If we've been initialized with a random seed but not an explicit
-		// perturbation value, use the max perturbation. This is used for tests
-		// that set the seed with testing_optimizer_random_cost_seed, and will allow
-		// the coster to hop directly into its random costing mode.
-		evalCtx.TestingKnobs.OptimizerCostPerturbation = 1.0
 	}
-	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation, o.rng)
+	costPerturbation := evalCtx.TestingKnobs.OptimizerCostPerturbation
+	if p := evalCtx.SessionData().TestingOptimizerCostPerturbation; p != 0 {
+		// If non-zero, the setting TestingOptimizerCostPerturbation should
+		// override the equivalent testing knob. This is needed for use by the
+		// costfuzz roachtest.
+		costPerturbation = p
+	}
+	disableRuleProbability := evalCtx.TestingKnobs.DisableOptimizerRuleProbability
+	if p := evalCtx.SessionData().TestingOptimizerDisableRuleProbability; p != 0 {
+		// If non-zero, the setting TestingOptimizerDisableRuleProbability should
+		// override the equivalent testing knob. This is needed for use by the
+		// unoptimized-query-oracle roachtest.
+		disableRuleProbability = p
+	}
+	o.defaultCoster.Init(evalCtx, o.mem, costPerturbation, o.rng)
 	o.coster = &o.defaultCoster
-	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
-		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
+	if disableRuleProbability > 0 {
+		o.disableRules(disableRuleProbability)
 	}
 }
 
@@ -974,7 +983,13 @@ func (o *Optimizer) disableRules(probability float64) {
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
-		if o.rng.Float64() < probability && !essentialRules.Contains(int(i)) {
+		var r float64
+		if o.rng == nil {
+			r = rand.Float64()
+		} else {
+			r = o.rng.Float64()
+		}
+		if r < probability && !essentialRules.Contains(int(i)) {
 			o.disabledRules.Add(int(i))
 		}
 	}

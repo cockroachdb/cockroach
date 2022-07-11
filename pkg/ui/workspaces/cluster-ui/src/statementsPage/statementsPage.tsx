@@ -165,6 +165,12 @@ export function filterBySearchQuery(
   search: string,
 ): boolean {
   const matchString = statement.label.toLowerCase();
+  // If search term is wrapped by quotes, do the exact search term.
+  if (search.startsWith('"') && search.endsWith('"')) {
+    search = search.substring(1, search.length - 1);
+    return matchString.includes(search);
+  }
+
   return search
     .toLowerCase()
     .split(" ")

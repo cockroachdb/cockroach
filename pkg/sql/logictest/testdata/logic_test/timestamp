@@ -539,3 +539,14 @@ query T
 SELECT to_timestamp(NULL)
 ----
 NULL
+
+# Regression test for #83094 (vectorized engine incorrectly formatting an
+# interval).
+statement ok
+CREATE TABLE t (t1 timestamptz, t2 timestamptz);
+INSERT INTO t VALUES ('2022-01-01 00:00:00.000000+00:00', '2022-01-02 00:00:00.000000+00:00');
+
+query T
+SELECT (t2 - t1) FROM t
+----
+1 day

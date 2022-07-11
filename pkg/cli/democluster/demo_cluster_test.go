@@ -301,7 +301,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
 		return s.RunLocalSQL(ctx,
 			func(ctx context.Context, ie *sql.InternalExecutor) error {
-				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", adminUser,
+				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", adminUser,
 					adminPassword))
 				return err
 			})

@@ -74,7 +74,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec("CREATE TABLE testdb.testtable (id INTEGER PRIMARY KEY, value STRING);")
 	require.NoError(t, err)
-	_, err = conn.Exec("CREATE USER testuser WITH PASSWORD testpassword;")
+	_, err = conn.Exec("CREATE USER testuser WITH PASSWORD 'testpassword';")
 	require.NoError(t, err)
 	_, err = conn.Exec("GRANT ALL ON DATABASE testdb TO testuser;")
 	require.NoError(t, err)

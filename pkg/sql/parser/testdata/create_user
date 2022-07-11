@@ -95,8 +95,17 @@ CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- fully parenthesized
 CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- literals removed
 CREATE ROLE IF NOT EXISTS _ WITH CREATEROLE -- identifiers removed
 
-parse
+error
 CREATE USER foo PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo PASSWORD bar
+                         ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo PASSWORD 'bar'
 ----
 CREATE USER foo WITH PASSWORD '*****' -- normalized!
 CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
@@ -104,8 +113,17 @@ CREATE USER foo WITH PASSWORD '*****' -- literals removed
 CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
 CREATE USER foo WITH PASSWORD 'bar' -- passwords exposed
 
-parse
+error
 CREATE USER foo ENCRYPTED PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo ENCRYPTED PASSWORD bar
+                                   ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo ENCRYPTED PASSWORD 'bar'
 ----
 CREATE USER foo WITH PASSWORD '*****' -- normalized!
 CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
@@ -122,8 +140,17 @@ CREATE USER foo WITH PASSWORD '*****' -- literals removed
 CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
 CREATE USER foo WITH PASSWORD NULL -- passwords exposed
 
-parse
+error
 CREATE USER foo WITH ENCRYPTED PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo WITH ENCRYPTED PASSWORD bar
+                                        ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo WITH ENCRYPTED PASSWORD 'bar'
 ----
 CREATE USER foo WITH PASSWORD '*****' -- normalized!
 CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized

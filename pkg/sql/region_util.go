@@ -825,6 +825,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
@@ -833,7 +834,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
 	return err
 }
 
@@ -845,6 +846,7 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	regionConfig multiregion.RegionConfig,
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
+	descriptors *descs.Collection,
 ) error {
 	// Build a zone config based on the RegionConfig information.
 	dbZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
@@ -857,13 +859,18 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 		dbZoneConfig,
 		txn,
 		execConfig,
+		descriptors,
 	)
 }
 
 // discardMultiRegionFieldsForDatabaseZoneConfig resets the multi-region zone
 // config fields for a multi-region database.
 func discardMultiRegionFieldsForDatabaseZoneConfig(
-	ctx context.Context, dbID descpb.ID, txn *kv.Txn, execConfig *ExecutorConfig,
+	ctx context.Context,
+	dbID descpb.ID,
+	txn *kv.Txn,
+	execConfig *ExecutorConfig,
+	descriptors *descs.Collection,
 ) error {
 	// Merge with an empty zone config.
 	return applyZoneConfigForMultiRegionDatabase(
@@ -872,6 +879,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 		*zonepb.NewZoneConfig(),
 		txn,
 		execConfig,
+		descriptors,
 	)
 }
 
@@ -881,6 +889,7 @@ func applyZoneConfigForMultiRegionDatabase(
 	mergeZoneConfig zonepb.ZoneConfig,
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
+	descriptors *descs.Collection,
 ) error {
 	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, execConfig.Settings, dbID)
 	if err != nil {
@@ -912,6 +921,7 @@ func applyZoneConfigForMultiRegionDatabase(
 		nil, /* table */
 		&newZoneConfig,
 		execConfig,
+		descriptors,
 		false, /* hasNewSubzones */
 	); err != nil {
 		return err
@@ -951,6 +961,7 @@ func (p *planner) refreshZoneConfigsForTables(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.Descriptors(),
 					regionConfig,
 					tbDesc,
 					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -1014,7 +1025,8 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		desc.ID,
 		*regionConfig,
 		p.txn,
-		p.execCfg); err != nil {
+		p.execCfg,
+		p.Descriptors()); err != nil {
 		return err
 	}
 
@@ -1053,6 +1065,11 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if err != nil {
 		return err
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return err
+	}
+
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
@@ -1085,6 +1102,11 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 	if err != nil {
 		return errors.Wrapf(err, "error resolving referenced table ID %d", id)
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, desc); err != nil {
+		return err
+	}
+
 	// If the table is not a multi-region table, there's no work to be done
 	// here.
 	if desc.LocalityConfig == nil {
@@ -1099,6 +1121,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 		ctx,
 		p.txn,
 		p.ExecCfg(),
+		p.Descriptors(),
 		regionConfig,
 		desc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -1121,6 +1144,11 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 	if err != nil {
 		return err
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return err
+	}
+
 	if !dbDesc.IsMultiRegion() {
 		// Nothing to do.
 		return nil
@@ -1138,6 +1166,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 		regionConfig,
 		p.txn,
 		p.execCfg,
+		p.Descriptors(),
 	); err != nil {
 		return err
 	}

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -157,6 +158,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRaceWithIssue(t, 83867)
+
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
@@ -257,8 +260,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		processEventCh := make(chan struct{})
 		defer close(processEventCh)
-		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) {
+		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) error {
 			processEventCh <- struct{}{}
+			return nil
 		}}
 		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
 			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */, streamingTestingKnob)
@@ -408,6 +412,8 @@ func (n noCutover) cutoverReached(context.Context) (bool, error) { return false,
 func TestRandomClientGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
 
 	ctx := context.Background()
 

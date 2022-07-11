@@ -609,7 +609,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.ExecCfg().InternalExecutorFactory(
 							params.ctx, params.SessionData(),
-						), n.tableDesc, params.p.Txn(), name,
+						), n.tableDesc, params.p.Txn(), params.p.User(), name,
 					); err != nil {
 						return err
 					}
@@ -698,6 +698,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					params.ctx,
 					params.p.txn,
 					n.tableDesc,
+					params.p.Descriptors(),
 					n.tableDesc.GetPrimaryIndexID(),
 					oldPartitioning,
 					n.tableDesc.GetPrimaryIndex().GetPartitioning(),
@@ -733,7 +734,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := storageparam.Set(
-				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
@@ -767,7 +767,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := storageparam.Reset(
-				params.ctx,
 				params.EvalContext(),
 				t.Params,
 				tablestorageparam.NewSetter(n.tableDesc),

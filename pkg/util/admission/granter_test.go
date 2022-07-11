@@ -22,9 +22,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -90,19 +92,28 @@ func (tr *testRequester) setStoreRequestEstimates(estimates storeRequestEstimate
 	// Only used by ioLoadListener, so don't bother.
 }
 
+// setModerateSlotsClamp is used in testing to force a value for kvsa.moderateSlotsClamp.
+func (kvsa *kvSlotAdjuster) setModerateSlotsClamp(val int) {
+	kvsa.moderateSlotsClampOverride = val
+	kvsa.moderateSlotsClamp = val
+}
+
 // TestGranterBasic is a datadriven test with the following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
-//   sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// enabled-soft-slot-granting=<bool>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
 // return-grant work=<kind> [v=<int>]
 // took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
 // init-store-grant-coordinator
 // set-io-tokens tokens=<int>
+// try-get-soft-slots slots=<int>
+// return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -110,6 +121,7 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
+	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -154,8 +166,20 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
+			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
 			coords, _ := NewGrantCoordinators(ambientCtx, opts)
 			coord = coords.Regular
+			var err error
+			ssg, err = MakeSoftSlotGranter(coord)
+			require.NoError(t, err)
+			if d.HasArg("enabled-soft-slot-granting") {
+				var enabledSoftSlotGranting bool
+				d.ScanArgs(t, "enabled-soft-slot-granting", &enabledSoftSlotGranting)
+				if !enabledSoftSlotGranting {
+					EnabledSoftSlotGranting.Override(context.Background(), &settings.SV, false)
+				}
+			}
+
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -182,7 +206,7 @@ func TestGranterBasic(t *testing.T) {
 			}
 			var testMetricsProvider testMetricsProvider
 			testMetricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
-			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &testMetricsProvider)
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &testMetricsProvider, &testMetricsProvider)
 			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
 			require.True(t, ok)
 			coord = (*GrantCoordinator)(unsafeGranter)
@@ -236,6 +260,13 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("infrequent") {
 				d.ScanArgs(t, "infrequent", &infrequent)
 			}
+			if d.HasArg("clamp") {
+				var clamp int
+				d.ScanArgs(t, "clamp", &clamp)
+				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+				kvsa.setModerateSlotsClamp(clamp)
+			}
+
 			samplePeriod := time.Millisecond
 			if infrequent {
 				samplePeriod = 250 * time.Millisecond
@@ -252,6 +283,19 @@ func TestGranterBasic(t *testing.T) {
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "try-get-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			granted := ssg.TryGetSlots(slots)
+			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
+			return flushAndReset()
+
+		case "return-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
@@ -284,6 +328,11 @@ type testMetricsProvider struct {
 
 func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
+}
+
+func (m *testMetricsProvider) UpdateIOThreshold(
+	id roachpb.StoreID, threshold *admissionpb.IOThreshold,
+) {
 }
 
 func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble.Metrics) {
@@ -342,7 +391,7 @@ func TestStoreCoordinators(t *testing.T) {
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
 	// Now we have 1+2 = 3 KVWork requesters.
 	require.Equal(t, 3, len(requesters))
 	// Confirm that the store IDs are as expected.
@@ -477,11 +526,13 @@ func TestIOLoadListener(t *testing.T) {
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
+				var buf strings.Builder
 				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
-				var buf strings.Builder
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&ioll.adjustTokensResult))
-				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(ioll.adjustTokensResult))
+				res := ioll.adjustTokensResult
+				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
+				res.ioThreshold = nil // avoid nondeterminism
+				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(res))
 				if req.buf.Len() > 0 {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()

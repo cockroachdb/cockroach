@@ -468,9 +468,9 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			}
 
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-				if streamingKnobs != nil {
-					if streamingKnobs.RunAfterReceivingEvent != nil {
-						streamingKnobs.RunAfterReceivingEvent(sip.Ctx)
+				if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
+					if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx); err != nil {
+						return nil, err
 					}
 				}
 			}
@@ -591,7 +591,7 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	log.Infof(sip.Ctx, "got checkpoint %v", event.GetResolved())
+	log.VInfof(sip.Ctx, 3, "got checkpoint %v", event.GetResolved())
 	resolvedTimePtr := event.GetResolved()
 	if resolvedTimePtr == nil {
 		return errors.New("checkpoint event expected to have a resolved timestamp")

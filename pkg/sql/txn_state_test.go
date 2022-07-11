@@ -92,7 +92,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	txnStateMon.Start(tc.ctx, tc.mon, mon.BoundAccount{})
+	txnStateMon.StartNoReserved(tc.ctx, tc.mon)
 
 	ts := txnState{
 		Ctx:           ctx,

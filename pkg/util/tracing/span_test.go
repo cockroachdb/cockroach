@@ -301,7 +301,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
-	val, ok := rec[0].FindTagGroup("").FindTag("_dropped")
+	val, ok := rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped")
 	require.True(t, ok)
 	require.Equal(t, "1", val)
 
@@ -352,7 +352,7 @@ func TestSpanRecordLimit(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Logs, numLogs)
-	val, ok := rec[0].FindTagGroup("").FindTag("_dropped")
+	val, ok := rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped")
 	require.True(t, ok)
 	require.Equal(t, val, "1")
 
@@ -612,7 +612,7 @@ func TestSpanTags(t *testing.T) {
 
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 
-	anonTagGroup := rec[0].FindTagGroup("")
+	anonTagGroup := rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName)
 	_, ok = anonTagGroup.FindTag("tag")
 	require.True(t, ok)
 
@@ -657,8 +657,8 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.Len(t, rec, 1)
 
 	require.Len(t, rec[0].TagGroups, 1)
-	anonTagGroup := rec[0].FindTagGroup("")
-	require.Len(t, anonTagGroup.Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
+	anonTagGroup := rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName)
+	require.Len(t, anonTagGroup.Tags, 5) // foo:tagbar foo1:1 foor2:bar2 _unfinished:1 _verbose:1
 
 	_, ok := anonTagGroup.FindTag("foo")
 	require.True(t, ok)
@@ -674,7 +674,7 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.Len(t, rec, 1)
 
 	require.Len(t, rec[0].TagGroups, 1)
-	anonTagGroup = rec[0].FindTagGroup("")
+	anonTagGroup = rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName)
 	require.Len(t, anonTagGroup.Tags, 6)
 
 	_, ok = anonTagGroup.FindTag("foo3")
@@ -692,10 +692,10 @@ func TestVerboseTag(t *testing.T) {
 
 	sp.SetRecordingType(tracingpb.RecordingStructured)
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
-	anonymousTagGroup := rec[0].FindTagGroup("")
-	ok := anonymousTagGroup != nil
+	anonTagGroup := rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName)
+	ok := anonTagGroup != nil
 	if ok {
-		_, ok = anonymousTagGroup.FindTag("_verbose")
+		_, ok = anonTagGroup.FindTag("_verbose")
 	}
 	require.False(t, ok)
 
@@ -703,16 +703,16 @@ func TestVerboseTag(t *testing.T) {
 	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 
-	_, ok = rec[0].FindTagGroup("").FindTag("_verbose")
+	_, ok = rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_verbose")
 	require.True(t, ok)
 
 	// After we stop recording, the tag goes away.
 	sp.SetRecordingType(tracingpb.RecordingStructured)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
-	anonymousTagGroup = rec[0].FindTagGroup("")
-	ok = anonymousTagGroup != nil
+	anonTagGroup = rec[0].FindTagGroup(tracingpb.AnonymousTagGroupName)
+	ok = anonTagGroup != nil
 	if ok {
-		_, ok = anonymousTagGroup.FindTag("_verbose")
+		_, ok = anonTagGroup.FindTag("_verbose")
 	}
 	require.False(t, ok)
 }

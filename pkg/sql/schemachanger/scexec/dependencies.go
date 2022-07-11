@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -351,6 +352,15 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
+
+	// UpsertZoneConfig sets the zone config for a given descriptor. If necessary,
+	// the subzone spans will be recomputed as part of this call.
+	UpsertZoneConfig(
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+	) (numAffected int, err error)
+
+	// DeleteZoneConfig deletes a zone config for a given descriptor.
+	DeleteZoneConfig(ctx context.Context, id descpb.ID) (numAffected int, err error)
 }
 
 // StatsRefreshQueue queues table for stats refreshes.

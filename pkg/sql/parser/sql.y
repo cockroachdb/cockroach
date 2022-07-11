@@ -3181,13 +3181,12 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause opt_as_tenant_clause
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_tenant_clause
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
-     AsOf: $8.asOfClause(),
-     AsTenant: $9.asTenantClause(),
+     AsTenant: $8.asTenantClause(),
    }
   }
 | RESTORE error // SHOW HELP: RESTORE
@@ -8228,13 +8227,13 @@ truncate_stmt:
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
 password_clause:
-  ENCRYPTED PASSWORD string_or_placeholder
+  ENCRYPTED PASSWORD sconst_or_placeholder
   {
     /* SKIP DOC */
     // This is a legacy postgres syntax.
     $$.val = tree.KVOption{Key: tree.Name($2), Value: $3.expr()}
   }
-| PASSWORD string_or_placeholder
+| PASSWORD sconst_or_placeholder
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: $2.expr()}
   }

@@ -62,7 +62,7 @@ type OnReorderRuleParam struct {
 // the base relations of the left and right inputs of the join, the set of all
 // base relations currently being considered, the base relations referenced by
 // the join's ON condition, and the type of join.
-type OnAddJoinFunc func(left, right, all, refs []memo.RelExpr, op opt.Operator)
+type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator)
 
 // JoinOrderBuilder is used to add valid orderings of a given join tree to the
 // memo during exploration.
@@ -689,7 +689,7 @@ func (jb *JoinOrderBuilder) addJoin(
 	}
 	if jb.onAddJoinFunc != nil {
 		// Hook for testing purposes.
-		jb.callOnAddJoinFunc(s1, s2, joinFilters, op)
+		jb.callOnAddJoinFunc(s1, s2, joinFilters, selectFilters, op)
 	}
 
 	left := jb.plans[s1]
@@ -715,7 +715,7 @@ func (jb *JoinOrderBuilder) addJoin(
 
 		if jb.onAddJoinFunc != nil {
 			// Hook for testing purposes.
-			jb.callOnAddJoinFunc(s2, s1, joinFilters, op)
+			jb.callOnAddJoinFunc(s2, s1, joinFilters, selectFilters, op)
 		}
 	}
 }
@@ -754,6 +754,12 @@ func (jb *JoinOrderBuilder) addToGroup(
 ) {
 	if len(selectFilters) > 0 {
 		joinExpr := jb.memoize(op, left, right, on, nil)
+		if joinExpr.FirstExpr() == grp.FirstExpr() {
+			// In rare cases, the select filters may be redundant. In this case,
+			// adding a select to the group with the redundant filters would create a
+			// memo cycle (see #80901).
+			return
+		}
 		selectExpr := &memo.SelectExpr{
 			Input:   joinExpr,
 			Filters: selectFilters,
@@ -950,13 +956,14 @@ func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 // callOnAddJoinFunc calls the onAddJoinFunc callback function. Panics if the
 // function is nil.
 func (jb *JoinOrderBuilder) callOnAddJoinFunc(
-	s1, s2 vertexSet, edges memo.FiltersExpr, op opt.Operator,
+	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator,
 ) {
 	jb.onAddJoinFunc(
 		jb.getRelationSlice(s1),
 		jb.getRelationSlice(s2),
 		jb.getRelationSlice(s1.union(s2)),
-		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(edges))),
+		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(joinFilters))),
+		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(selectFilters))),
 		op,
 	)
 }
@@ -1269,6 +1276,22 @@ func (e *edge) checkNonInnerJoin(s1, s2 vertexSet) bool {
 	//      assoc(left-join, inner-join) is false.
 	//   3. The TES now includes all three relations, meaning that the inner join
 	//      cannot join any two relations together (including xy and uv).
+	//
+	// Note that checking that the TES intersects both s1 and s2 diverges slightly
+	// from the paper. This makes explicit the fact that we forbid the
+	// introduction of cross joins that did not exist in the original normalized
+	// plan. (The paper checks if the left and right tables intersect s1 and s2
+	// respectively). However, the check is exactly equivalent to that given in
+	// the paper for the following reasons:
+	//   1. For degenerate predicates (one or both inputs not referenced) we add
+	//      all base relations from the unreferenced input(s) to the TES
+	//      (see calcTES).
+	//   2. (1) ensures that (TES ∩ S != ∅) implies (TABLES(input) ∩ S != ∅).
+	//   3. Since we discard join orders that introduce new cross-products anyway,
+	//      we always filter out cases where (TABLES(input) ∩ S != ∅) but
+	//      (TES ∩ S == ∅).
+	// Therefore, the check we use here prevents exactly the same reorderings as
+	// the check used in the paper.
 	return e.tes.intersection(e.op.leftVertexes).isSubsetOf(s1) &&
 		e.tes.intersection(e.op.rightVertexes).isSubsetOf(s2) &&
 		e.tes.intersects(s1) && e.tes.intersects(s2)
@@ -1277,29 +1300,6 @@ func (e *edge) checkNonInnerJoin(s1, s2 vertexSet) bool {
 // checkInnerJoin performs an applicability check for an inner join between the
 // two given sets of base relations. If it returns true, an inner join can be
 // constructed using the filters from this edge and the two given relation sets.
-//
-// Why is the inner join check different from the non-inner join check?
-// In effect, the difference between the inner and non-inner edge checks is that
-// for inner joins, relations can be moved 'across' the join relative to their
-// positions in the original join tree. This is necessary in order to allow
-// inner join conjuncts from different joins to be combined into new join
-// operators. For example, take this perfectly valid (and desirable)
-// transformation:
-//
-//    SELECT * FROM xy
-//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
-//    ON x = a AND x = u
-//    =>
-//    SELECT * FROM ab
-//    INNER JOIN (SELECT * FROM xy INNER JOIN uv ON x = u)
-//    ON x = a AND a = u
-//
-// Note that, from the perspective of the x = a edge, it looks like the join has
-// been commuted (the xy and ab relations switched sides). From the perspective
-// of the a = u edge, however, all relations that were previously on the left
-// are still on the left, and all relations that were on the right are still on
-// the right. The stricter requirements of checkNonInnerJoin would not allow
-// this transformation to take place.
 func (e *edge) checkInnerJoin(s1, s2 vertexSet) bool {
 	if !e.checkRules(s1, s2) {
 		// The conflict rules for this edge are not satisfied for a join between s1
@@ -1310,6 +1310,32 @@ func (e *edge) checkInnerJoin(s1, s2 vertexSet) bool {
 	// The TES must be a subset of the relations of the candidate join inputs. In
 	// addition, the TES must intersect both s1 and s2 (the edge must connect the
 	// two vertex sets).
+	//
+	// Why is the inner join check different from the non-inner join check?
+	// In effect, the difference between the inner and non-inner edge checks is
+	// that for inner joins, relations can be moved 'across' the join relative to
+	// their positions in the original join tree. This is necessary in order to
+	// allow inner join conjuncts from different joins to be combined into new
+	// join operators. For example, take this perfectly valid (and desirable)
+	// transformation:
+	//
+	//    SELECT * FROM xy
+	//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
+	//    ON x = a AND x = u
+	//    =>
+	//    SELECT * FROM ab
+	//    INNER JOIN (SELECT * FROM xy INNER JOIN uv ON x = u)
+	//    ON x = a AND a = u
+	//
+	// Note that, from the perspective of the x = a edge, it looks like the join
+	// has been commuted (the xy and ab relations switched sides). From the
+	// perspective of the a = u edge, however, all relations that were previously
+	// on the left are still on the left, and all relations that were on the right
+	// are still on the right. The stricter requirements of checkNonInnerJoin
+	// would not allow this transformation to take place.
+	//
+	// See the checkNonInnerJoin comments for an explanation of why the
+	// intersection checks differ from those shown in the paper.
 	return e.tes.isSubsetOf(s1.union(s2)) && e.tes.intersects(s1) && e.tes.intersects(s2)
 }
 

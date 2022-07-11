@@ -1101,7 +1101,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   full_scan           BOOL NOT NULL,
   sample_plan         JSONB,
   database_name       STRING NOT NULL,
-  exec_node_ids       INT[] NOT NULL
+  exec_node_ids       INT[] NOT NULL,
+  txn_fingerprint_id  STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -1148,6 +1149,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				}
 			}
 
+			txnFingerprintID := tree.DNull
+			if stats.Key.TransactionFingerprintID != roachpb.InvalidTransactionFingerprintID {
+				txnFingerprintID = tree.NewDString(strconv.FormatUint(uint64(stats.Key.TransactionFingerprintID), 10))
+
+			}
+
 			err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),                           // node_id
 				tree.NewDString(stats.Key.App),                            // application_name
@@ -1190,6 +1197,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDJSON(samplePlan),           // sample_plan
 				tree.NewDString(stats.Key.Database), // database_name
 				execNodeIDs,                         // exec_node_ids
+				txnFingerprintID,                    // txn_fingerprint_id
 			)
 			if err != nil {
 				return err
@@ -6203,9 +6211,9 @@ CREATE TABLE crdb_internal.node_execution_outliers (
 			ctx context.Context, o *outliers.Outlier,
 		) {
 			err = errors.CombineErrors(err, addRow(
-				tree.NewDString(hex.EncodeToString(o.Session.ID)),
-				tree.NewDUuid(tree.DUuid{UUID: *o.Transaction.ID}),
-				tree.NewDString(hex.EncodeToString(o.Statement.ID)),
+				tree.NewDString(hex.EncodeToString(o.Session.ID.GetBytes())),
+				tree.NewDUuid(tree.DUuid{UUID: o.Transaction.ID}),
+				tree.NewDString(hex.EncodeToString(o.Statement.ID.GetBytes())),
 				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(o.Statement.FingerprintID)))),
 			))
 		})

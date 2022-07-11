@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "detector.go",
         "outliers.go",
+        "registry.go",
     ],
     embed = [":outliers_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
@@ -20,8 +21,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/quantile",
         "//pkg/util/syncutil",
-        "//pkg/util/uint128",
-        "//pkg/util/uuid",
         "@com_github_prometheus_client_model//go",
     ],
 )
@@ -56,5 +55,8 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
     proto = ":outliers_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/util/uuid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )

@@ -78,7 +78,7 @@ PREPARE pcu AS CREATE USER foo WITH PASSWORD $1;
   EXECUTE pcu('bar')
 
 statement ok
-ALTER USER foo WITH PASSWORD somepass
+ALTER USER foo WITH PASSWORD 'somepass'
 
 statement ok
 PREPARE chpw AS ALTER USER foo WITH PASSWORD $1;

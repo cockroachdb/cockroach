@@ -176,6 +176,12 @@ type SQLServer struct {
 	// connection management tools learning this status from health checks.
 	// This is set to true when the server has started accepting client conns.
 	isReady syncutil.AtomicBool
+
+	// internalExecutorFactoryMemMonitor is the memory monitor corresponding to the
+	// InternalExecutorFactory singleton. It only gets closed when
+	// Server is closed. Every InternalExecutor created via the factory
+	// uses this memory monitor.
+	internalExecutorFactoryMemMonitor *mon.BytesMonitor
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -368,7 +374,7 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	// serves as a parent for a memory monitor that accounts for memory used in
 	// the KV layer at the same node.
 	rootSQLMemoryMonitor.Start(
-		context.Background(), nil, mon.MakeStandaloneBudget(opts.memoryPoolSize))
+		context.Background(), nil, mon.NewStandaloneBudget(opts.memoryPoolSize))
 	return monitorAndMetrics{
 		rootSQLMemoryMonitor: rootSQLMemoryMonitor,
 		rootSQLMetrics:       rootSQLMetrics,
@@ -404,9 +410,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.AmbientCtx,
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
 	)
-	cfg.sqlInstanceProvider = instanceprovider.New(
-		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
-	)
+	// If the node id is already populated, we only need to create a placeholder
+	// instance provider without initializing the instance, since this is not a
+	// SQL pod server.
+	_, isNotSQLPod := cfg.nodeIDContainer.OptionalNodeID()
+	if isNotSQLPod {
+		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
+	} else {
+		cfg.sqlInstanceProvider = instanceprovider.New(
+			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
+		)
+	}
 
 	if !codec.ForSystemTenant() {
 		// In a multi-tenant environment, use the sqlInstanceProvider to resolve
@@ -496,7 +510,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
+	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
@@ -504,7 +518,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor,
 	)
-	serverCacheMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
+	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	// Set up the DistSQL temp engine.
 
@@ -901,6 +915,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
+	// We use one BytesMonitor for all InternalExecutor's created by the
+	// ieFactory, this BytesMonitor is never closed.
+	ieFactoryMonitor := mon.NewMonitor(
+		"internal executor factory",
+		mon.MemoryResource,
+		internalMemMetrics.CurBytesCount,
+		internalMemMetrics.MaxBytesHist,
+		-1,            /* use default increment */
+		math.MaxInt64, /* noteworthy */
+		cfg.Settings,
+	)
+	ieFactoryMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
+	cfg.stopper.AddCloser(stop.CloserFn(func() { ieFactoryMonitor.Stop(ctx) }))
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
@@ -908,12 +935,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
 	) sqlutil.InternalExecutor {
-		ie := sql.MakeInternalExecutor(
-			ctx,
-			pgServer.SQLServer,
-			internalMemMetrics,
-			cfg.Settings,
-		)
+		ie := sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
@@ -938,14 +960,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
-	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
-		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
-	)
+	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
-		cfg.gossip,
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
@@ -1075,36 +1094,37 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
-		ambientCtx:                     cfg.BaseConfig.AmbientCtx,
-		stopper:                        cfg.stopper,
-		sqlIDContainer:                 cfg.nodeIDContainer,
-		pgServer:                       pgServer,
-		distSQLServer:                  distSQLServer,
-		execCfg:                        execCfg,
-		internalExecutor:               cfg.circularInternalExecutor,
-		leaseMgr:                       leaseMgr,
-		blobService:                    blobService,
-		tracingService:                 tracingService,
-		tenantConnect:                  cfg.tenantConnect,
-		sessionRegistry:                cfg.sessionRegistry,
-		closedSessionCache:             cfg.closedSessionCache,
-		jobRegistry:                    jobRegistry,
-		statsRefresher:                 statsRefresher,
-		temporaryObjectCleaner:         temporaryObjectCleaner,
-		internalMemMetrics:             internalMemMetrics,
-		sqlMemMetrics:                  sqlMemMetrics,
-		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
-		sqlLivenessProvider:            cfg.sqlLivenessProvider,
-		sqlInstanceProvider:            cfg.sqlInstanceProvider,
-		metricsRegistry:                cfg.registry,
-		diagnosticsReporter:            reporter,
-		spanconfigMgr:                  spanConfig.manager,
-		spanconfigSQLTranslatorFactory: spanConfig.sqlTranslatorFactory,
-		spanconfigSQLWatcher:           spanConfig.sqlWatcher,
-		settingsWatcher:                settingsWatcher,
-		systemConfigWatcher:            cfg.systemConfigWatcher,
-		isMeta1Leaseholder:             cfg.isMeta1Leaseholder,
-		cfg:                            cfg.BaseConfig,
+		ambientCtx:                        cfg.BaseConfig.AmbientCtx,
+		stopper:                           cfg.stopper,
+		sqlIDContainer:                    cfg.nodeIDContainer,
+		pgServer:                          pgServer,
+		distSQLServer:                     distSQLServer,
+		execCfg:                           execCfg,
+		internalExecutor:                  cfg.circularInternalExecutor,
+		leaseMgr:                          leaseMgr,
+		blobService:                       blobService,
+		tracingService:                    tracingService,
+		tenantConnect:                     cfg.tenantConnect,
+		sessionRegistry:                   cfg.sessionRegistry,
+		closedSessionCache:                cfg.closedSessionCache,
+		jobRegistry:                       jobRegistry,
+		statsRefresher:                    statsRefresher,
+		temporaryObjectCleaner:            temporaryObjectCleaner,
+		internalMemMetrics:                internalMemMetrics,
+		sqlMemMetrics:                     sqlMemMetrics,
+		stmtDiagnosticsRegistry:           stmtDiagnosticsRegistry,
+		sqlLivenessProvider:               cfg.sqlLivenessProvider,
+		sqlInstanceProvider:               cfg.sqlInstanceProvider,
+		metricsRegistry:                   cfg.registry,
+		diagnosticsReporter:               reporter,
+		spanconfigMgr:                     spanConfig.manager,
+		spanconfigSQLTranslatorFactory:    spanConfig.sqlTranslatorFactory,
+		spanconfigSQLWatcher:              spanConfig.sqlWatcher,
+		settingsWatcher:                   settingsWatcher,
+		systemConfigWatcher:               cfg.systemConfigWatcher,
+		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
+		cfg:                               cfg.BaseConfig,
+		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
 	}, nil
 }
 
@@ -1150,7 +1170,7 @@ func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) er
 	return nil
 }
 
-func (s *SQLServer) initInstanceID(ctx context.Context) error {
+func (s *SQLServer) setInstanceID(ctx context.Context) error {
 	if _, ok := s.sqlIDContainer.OptionalNodeID(); ok {
 		// sqlIDContainer has already been initialized with a node ID,
 		// we don't need to initialize a SQL instance ID in this case
@@ -1179,8 +1199,8 @@ func (s *SQLServer) preStart(
 	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-	// The sqlliveness and sqlinstance subsystem should be started first to ensure instance ID is
-	// initialized prior to any other systems that need it.
+	// The sqlliveness and sqlinstance subsystem should be started first to ensure
+	// the instance ID is initialized prior to any other systems that need it.
 	if err := s.startSQLLivenessAndInstanceProviders(ctx); err != nil {
 		return err
 	}
@@ -1191,7 +1211,7 @@ func (s *SQLServer) preStart(
 	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
 		return err
 	}
-	if err := s.initInstanceID(ctx); err != nil {
+	if err := s.setInstanceID(ctx); err != nil {
 		return err
 	}
 	s.connManager = connManager
@@ -1217,8 +1237,10 @@ func (s *SQLServer) preStart(
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
-	migrationsExecutor := sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
+	ieMon.StartNoReserved(ctx, s.pgServer.SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	migrationsExecutor := sql.MakeInternalExecutor(s.pgServer.SQLServer, s.internalMemMetrics, ieMon)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{

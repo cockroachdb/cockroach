@@ -13,8 +13,6 @@
 package storageparam
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -31,7 +29,7 @@ import (
 type Setter interface {
 	// Set is called during CREATE [TABLE | INDEX] ... WITH (...) or
 	// ALTER [TABLE | INDEX] ... WITH (...).
-	Set(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
+	Set(semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	// Reset is called during ALTER [TABLE | INDEX] ... RESET (...)
 	Reset(evalCtx *eval.Context, key string) error
 	// RunPostChecks is called after all storage parameters have been set.
@@ -43,11 +41,7 @@ type Setter interface {
 // Set sets the given storage parameters using the
 // given observer.
 func Set(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	params tree.StorageParams,
-	setter Setter,
+	semaCtx *tree.SemaContext, evalCtx *eval.Context, params tree.StorageParams, setter Setter,
 ) error {
 	for _, sp := range params {
 		key := string(sp.Key)
@@ -61,7 +55,7 @@ func Set(
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
 		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
+		typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, semaCtx, types.Any)
 		if err != nil {
 			return err
 		}
@@ -73,7 +67,7 @@ func Set(
 			return err
 		}
 
-		if err := setter.Set(ctx, semaCtx, evalCtx, key, datum); err != nil {
+		if err := setter.Set(semaCtx, evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
@@ -82,9 +76,7 @@ func Set(
 
 // Reset sets the given storage parameters using the
 // given observer.
-func Reset(
-	ctx context.Context, evalCtx *eval.Context, params tree.NameList, paramObserver Setter,
-) error {
+func Reset(evalCtx *eval.Context, params tree.NameList, paramObserver Setter) error {
 	for _, p := range params {
 		telemetry.Inc(sqltelemetry.ResetTableStorageParameter(string(p)))
 		if err := paramObserver.Reset(evalCtx, string(p)); err != nil {

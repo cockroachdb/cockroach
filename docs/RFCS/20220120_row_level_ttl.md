@@ -3,13 +3,16 @@
 * Status: in-progress
 * Start Date: 2021-12-14
 * Authors: Oliver Tan
-* RFC PR: [#75189](#75189)
-* Cockroach Issue: [#20239](#20239)
+* RFC PR: [#75189]
+* Cockroach Issue: [#20239]
+
+# Changelog
+* 2022-07-07: Removed `ttl_automatic_column` to simplify configuration - [PR][#83908]
 
 # Summary
 Row-level "time to live" (TTL) is a mechanism in which rows from a table
 automatically get deleted once the row surpasses an expiration time (the "TTL").
-This has been a [feature commonly asked for](#20239).
+This has been a [feature commonly asked for][#20239].
 
 This RFC proposes a CockroachDB level mechanism to support row-level TTL, where
 rows will be deleted after a certain period of time. As a further extension in a
@@ -29,7 +32,7 @@ CREATE TABLE tbl (
    text TEXT,
    expiration TIMESTAMPTZ,
    should_delete BOOL,
-) WITH (ttl = 'on', ttl_expiration_expression = 'if(should_delete, expiration, NULL)');
+) WITH (ttl_expiration_expression = 'if(should_delete, expiration, NULL)');
 ```
 
 By implementing row-level TTL, we are saving developers from writing a complex
@@ -44,7 +47,7 @@ Today, developers who need row-level TTL need to roll out their own mechanism
 for deleting rows as well as adding application logic to filter out the expired
 rows.
 
-The deletion job itself can get complex to write. We have a [guide](cockroach TTL advice)
+The deletion job itself can get complex to write. We have a [guide][cockroach TTL advice]
 which was difficult to perfect - when we implemented it ourselves,
 we found there were multiple issues related to performance. Developers have to
 implement and manage several knobs to balance deletion time and performance on
@@ -84,7 +87,7 @@ CREATE TABLE tbl (
 
 This automatically creates a repeating scheduled job for the given table, as
 well as adding the HIDDEN column `crdb_internal_expiration` to symbolize the
-TTL and implicitly adds the `ttl` and `ttl_automatic_column` parameters:
+TTL and implicitly adds the `ttl` parameter:
 
 ```sql
 CREATE TABLE tbl (
@@ -95,7 +98,7 @@ CREATE TABLE tbl (
       NOT NULL
       DEFAULT current_timestamp() + '5 minutes'
       ON UPDATE current_timestamp() + '5 minutes'
-) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '5 minutes')
+) WITH (ttl = 'on', ttl_expire_after = '5 minutes')
 ```
 
 Users can also opt to use their own expression which evaluates to a NULLABLE
@@ -127,7 +130,7 @@ CREATE TABLE tbl (
    id INT PRIMARY KEY,
    text TEXT,
    should_delete BOOL,
-) WITH (ttl = 'on', ttl_expiration_expression = 'if(should_delete, crdb_internal_expiration, NULL)', ttl_expire_after = '10 mins');
+) WITH (ttl_expiration_expression = 'if(should_delete, crdb_internal_expiration, NULL)', ttl_expire_after = '10 mins');
 ```
 
 TTL metadata is stored on the TableDescriptor:
@@ -135,22 +138,29 @@ TTL metadata is stored on the TableDescriptor:
 message TableDescriptor {
   message RowLevelTTL {
     // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
-    optional string duration_expr = 1 [(gogoproto.nullable)=false];
-    // DeletionCron is the cron-syntax scheduling of the deletion job.
-    optional string deletion_cron = 2 [(gogoproto.nullable)=false];
-    // DeletionPause is true if the TTL job should not run.
-    // Intended to be a temporary pause.
-    optional bool deletion_pause = 3 [(gogoproto.nullable)=false];
-    // DeleteBatchSize is the number of rows to delete in each batch.
-    optional int64 delete_batch_size = 4;
-    // SelectBatchSize is the number of rows to select at a time.
-    optional int64 select_batch_size = 5;
-    // MaximumRowsDeletedPerSecond controls the amount of rows to delete per second.
-    // At zero, it will not impose any limit.
-    optional int64 max_rows_deleted_per_second = 6;
-    // RangeConcurrency controls the amount of ranges to delete at a time.
-    // Defaults to 0 (number of CPU cores).
-    optional int64 range_concurrency = 7;
+    optional string duration_expr = 1 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
+    // SelectBatchSize is the amount of rows that should be fetched at a time
+    optional int64 select_batch_size = 2 [(gogoproto.nullable)=false];
+    // DeleteBatchSize is the amount of rows that should be deleted at a time.
+    optional int64 delete_batch_size = 3 [(gogoproto.nullable)=false];
+    // DeletionCron signifies how often the TTL deletion job runs in a cron format.
+    optional string deletion_cron = 4 [(gogoproto.nullable)=false];
+    // ScheduleID is the ID of the row-level TTL job schedules.
+    optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
+    // RangeConcurrency is the number of ranges to process at a time.
+    optional int64 range_concurrency = 6 [(gogoproto.nullable)=false];
+    // DeleteRateLimit is the maximum amount of rows to delete per second.
+    optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
+    // Pause is set if the TTL job should not run.
+    optional bool pause = 8 [(gogoproto.nullable)=false];
+    // RowStatsPollInterval is the interval to report row statistics (number of rows on table, number of expired
+    // rows on table) during row level TTL. If zero, no statistics are reported.
+    optional int64 row_stats_poll_interval = 9 [(gogoproto.nullable)=false, (gogoproto.casttype)="time.Duration"];
+    // LabelMetrics is true if metrics for the TTL job should add a label containing
+    // the relation name.
+    optional bool label_metrics = 10 [(gogoproto.nullable) = false];
+    // ExpirationExpr is the custom assigned expression for calculating when the TTL should apply to a row.
+    optional string expiration_expr = 11 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
   }
 
   // ...
@@ -163,19 +173,18 @@ message TableDescriptor {
 As part of the `(option = value, …)` storage parameter syntax, we will support
 the following options to control the TTL job:
 
-Option | Description
---- | ---
-`ttl` | Automatically set option. Signifies if a TTL is active.  Not used for the job.
-`ttl_automatic_column` | Automatically set option if automatic connection is enabled. Not used for the job.
-`ttl_expire_after` | When a TTL would expire. Accepts any interval. Defaults to ''30 days''. Minimum of `'5 minutes'`.
-`ttl_expiration_expression` | If set, uses the expression specified as the TTL expiration. Defaults to just using the `crdb_internal_expiration` column.
-`ttl_select_batch_size` | How many rows to fetch from the range that have expired at a given time. Defaults to 500. Must be at least `1`.
-`ttl_delete_batch_size` | How many rows to delete at a time. Defaults to 100. Must be at least `1`.
-`ttl_range_concurrency` | How many concurrent ranges are being worked on at a time. Defaults to `cpu_core_count`. Must be at least `1`.
-`ttl_delete_rate_limit` | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).
-`ttl_row_stats_poll_interval` | Whilst the TTL job is running, counts rows and expired rows on the table to report as prometheus metrics. By default unset, meaning no stats are fetched.
-`ttl_pause` | Stops the TTL job from executing.
-`ttl_job_cron` | Frequency the job runs, specified using the CRON syntax.
+| Option                        | Description                                                                                                                                               |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ttl`                         | Automatically set option. Signifies if a TTL is active.  Not used for the job.                                                                            |
+| `ttl_expire_after`            | When a TTL would expire. Accepts any interval. Defaults to ''30 days''. Minimum of `'5 minutes'`.                                                         |
+| `ttl_expiration_expression`   | If set, uses the expression specified as the TTL expiration. Defaults to just using the `crdb_internal_expiration` column.                                |
+| `ttl_select_batch_size`       | How many rows to fetch from the range that have expired at a given time. Defaults to 500. Must be at least `1`.                                           |
+| `ttl_delete_batch_size`       | How many rows to delete at a time. Defaults to 100. Must be at least `1`.                                                                                 |
+| `ttl_range_concurrency`       | How many concurrent ranges are being worked on at a time. Defaults to `cpu_core_count`. Must be at least `1`.                                             |
+| `ttl_delete_rate_limit`       | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).                                                |
+| `ttl_row_stats_poll_interval` | Whilst the TTL job is running, counts rows and expired rows on the table to report as prometheus metrics. By default unset, meaning no stats are fetched. |
+| `ttl_pause`                   | Stops the TTL job from executing.                                                                                                                         |
+| `ttl_job_cron`                | Frequency the job runs, specified using the CRON syntax.                                                                                                  |
 
 ### Applying or Altering TTL for a table
 TTL can be configured using `ALTER TABLE`:
@@ -196,16 +205,16 @@ will not apply whilst the deletion job is running; the user must
 restart the job for the settings to take effect. A HINT will be displayed to the
 user if this is required.
 
-### Converting between `ttl_automatic_column` and `ttl_expiration_expression`
+### Converting between `ttl_expire_after` and `ttl_expiration_expression`
 
 Users can convert from using the automatic column to the expiration expression
 by re-using the `SET` syntax:
 
 ```sql
 ALTER TABLE tbl SET (ttl_expiration_expression = 'other_column');
--- Resetting the ttl_automatic_column will drop the TTL column.
+-- Resetting ttl_expire_after will drop the TTL column.
 -- This step is optional in case the automatic column is still used.
-ALTER TABLE tbl RESET (ttl_automatic_column);
+ALTER TABLE tbl RESET (ttl_expire_after);
 ```
 
 To go the other way:
@@ -287,7 +296,7 @@ performs:
 
 ### Admission Control
 To ensure the deletion job does not affect foreground traffic, we plan on using
-[admission control](admission control) on a SQL transaction at a low value
+[admission control] on a SQL transaction at a low value
 (`-100`). This leaves room for lower values in future.
 
 From previous experimentation, this largely regulates the amount of knob
@@ -378,7 +387,7 @@ a few problems:
   process. This adds further complexity to CDC.
 
 As row-level TTL is a "SQL level" feature, it makes sense that something in the
-SQL layer would be most appropriate to handle it. See [comparison doc](comparison doc)
+SQL layer would be most appropriate to handle it. See [comparison doc]
 for other observations.
 
 ### Alternative TTL columns
@@ -440,7 +449,7 @@ ELSE max(crdb_internal_expiration, current_timestamp() + 'table ttl value')
 
 However, due to the limitation that `ON UPDATE` cannot reference a table
 expression, this cannot yet be implemented. We may choose to use
-this as a later default when we implement [triggers](#28296).
+this as a later default when we implement [triggers][#28296].
 
 ## Future Improvements
 
@@ -475,6 +484,7 @@ N/A
 [#20239]: https://github.com/cockroachdb/cockroach/issues/20239
 [#75189]: https://github.com/cockroachdb/cockroach/pull/75189
 [#28296]: https://github.com/cockroachdb/cockroach/issues/28296
+[#83908]: https://github.com/cockroachdb/cockroach/issues/83908
 [cockroach TTL advice]: https://www.cockroachlabs.com/docs/stable/bulk-delete-data.html
 [admission control]: https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/admission_control.md
 [comparison doc]: https://docs.google.com/document/d/1HkFg3S-k3s2PahPRQhTgUkCR4WIAtjkSNVylarMC-gY/edit#heading=h.o6cn5faoiokv

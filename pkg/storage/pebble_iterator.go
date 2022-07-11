@@ -106,7 +106,7 @@ func newPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (*pebb
 
 	var err error
 	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files); err != nil {
-		p.destroy()
+		p.Close()
 		return nil, err
 	}
 	return p, nil

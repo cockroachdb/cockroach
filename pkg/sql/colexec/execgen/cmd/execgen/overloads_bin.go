@@ -599,7 +599,7 @@ func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
 		case treebin.Minus:
 			return fmt.Sprintf(`
 		  nanos := %[2]s.Sub(%[3]s).Nanoseconds()
-		  %[1]s = duration.MakeDuration(nanos, 0, 0)
+		  %[1]s = duration.MakeDurationJustifyHours(nanos, 0, 0)
 		  `,
 				targetElem, leftElem, rightElem)
 		default:

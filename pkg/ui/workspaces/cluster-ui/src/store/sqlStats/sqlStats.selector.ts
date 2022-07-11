@@ -9,12 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { AppState } from "../reducers";
-
-const adminUISelector = createSelector(
-  (state: AppState) => state.adminUI,
-  adminUiState => adminUiState,
-);
+import { adminUISelector } from "../utils/selectors";
 
 export const sqlStatsSelector = createSelector(
   adminUISelector,

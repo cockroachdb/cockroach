@@ -395,17 +395,20 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	sqlStatsInternalExecutorMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
-		Settings:         s.cfg.Settings,
-		InternalExecutor: &sqlStatsInternalExecutor,
-		KvDB:             cfg.DB,
-		SQLIDContainer:   cfg.NodeID,
-		JobRegistry:      s.cfg.JobRegistry,
-		Knobs:            cfg.SQLStatsTestingKnobs,
-		FlushCounter:     serverMetrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:   serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:    serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		Settings:                s.cfg.Settings,
+		InternalExecutor:        &sqlStatsInternalExecutor,
+		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
+		KvDB:                    cfg.DB,
+		SQLIDContainer:          cfg.NodeID,
+		JobRegistry:             s.cfg.JobRegistry,
+		Knobs:                   cfg.SQLStatsTestingKnobs,
+		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -644,6 +647,11 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 	return s.cfg
 }
 
+// GetBytesMonitor returns this server's BytesMonitor.
+func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
+	return s.pool
+}
+
 // SetupConn creates a connExecutor for the client connection.
 //
 // When this method returns there are no resources allocated yet that
@@ -753,14 +761,20 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 // embedded in the ConnHandler.
 //
 // If not nil, reserved represents memory reserved for the connection. The
-// connExecutor takes ownership of this memory.
+// connExecutor takes ownership of this memory and will close the account before
+// exiting.
 func (s *Server) ServeConn(
-	ctx context.Context, h ConnectionHandler, reserved mon.BoundAccount, cancel context.CancelFunc,
+	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
 ) error {
-	defer func() {
+	// Make sure to close the reserved account even if closeWrapper below
+	// panics: so we do it in a defer that is guaranteed to execute. We also
+	// cannot close it before closeWrapper since we need to close the internal
+	// monitors of the connExecutor first.
+	defer reserved.Close(ctx)
+	defer func(ctx context.Context, h ConnectionHandler) {
 		r := recover()
 		h.ex.closeWrapper(ctx, r)
-	}()
+	}(ctx, h)
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
@@ -996,7 +1010,7 @@ func (s *Server) newConnExecutorWithTxn(
 
 	// The new transaction stuff below requires active monitors and traces, so
 	// we need to activate the executor now.
-	ex.activate(ctx, parentMon, mon.BoundAccount{})
+	ex.activate(ctx, parentMon, &mon.BoundAccount{})
 
 	// Perform some surgery on the executor - replace its state machine and
 	// initialize the state.
@@ -1106,12 +1120,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}); err != nil {
-		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
-	}
-
+	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon.StartNoReserved(ctx, ex.server.GetBytesMonitor())
+		defer ieMon.Stop(ctx)
+		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
@@ -1652,7 +1666,7 @@ func (ns *prepStmtNamespace) resetTo(
 // finishes execution (either commits, rollbacks or restarts). Based on the
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -1694,8 +1708,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
 	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
 	// savepoints, or it's a rewind which also deals with them.
-
-	return nil
 }
 
 // Ctx returns the transaction's ctx, if we're inside a transaction, or the
@@ -1731,7 +1743,7 @@ func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 // reserved: Memory reserved for the connection. The connExecutor takes
 //   ownership of this memory.
 func (ex *connExecutor) activate(
-	ctx context.Context, parentMon *mon.BytesMonitor, reserved mon.BoundAccount,
+	ctx context.Context, parentMon *mon.BytesMonitor, reserved *mon.BoundAccount,
 ) {
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
 	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
@@ -1739,7 +1751,7 @@ func (ex *connExecutor) activate(
 	// soon as the first allocation. This is acceptable because the session is
 	// single threaded, and the point of buffering is just to avoid contention.
 	ex.mon.Start(ctx, parentMon, reserved)
-	ex.sessionMon.Start(ctx, ex.mon, mon.BoundAccount{})
+	ex.sessionMon.StartNoReserved(ctx, ex.mon)
 
 	// Enable the trace if configured.
 	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
@@ -1794,7 +1806,7 @@ func (ex *connExecutor) activate(
 func (ex *connExecutor) run(
 	ctx context.Context,
 	parentMon *mon.BytesMonitor,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	onCancel context.CancelFunc,
 ) (err error) {
 	if !ex.activated {
@@ -2388,8 +2400,8 @@ func (ex *connExecutor) execCopyIn(
 		}
 	} else {
 		txnOpt = copyTxnOpt{
-			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
+			resetExtraTxnState: func(ctx context.Context) {
+				ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
 			},
 		}
 	}
@@ -2404,7 +2416,7 @@ func (ex *connExecutor) execCopyIn(
 		// HACK: We're reaching inside ex.state and starting the monitor. Normally
 		// that's driven by the state machine, but we're bypassing the state machine
 		// here.
-		ex.state.mon.Start(ctx, ex.sessionMon, mon.BoundAccount{} /* reserved */)
+		ex.state.mon.StartNoReserved(ctx, ex.sessionMon)
 		monToStop = ex.state.mon
 	}
 	txnOpt.resetPlanner = func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
@@ -2884,6 +2896,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
+
+			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+				ex.extraTxnState.txnFinishClosure.implicit = false
+				if err = ex.statsCollector.UpgradeImplicitTxn(ex.Ctx()); err != nil {
+					return advanceInfo{}, err
+				}
+			}
+
 		}
 	case txnStart:
 		ex.extraTxnState.firstStmtExecuted = false
@@ -2972,9 +2992,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
-			return advanceInfo{}, err
-		}
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))

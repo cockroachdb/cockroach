@@ -14,15 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	prometheus "github.com/prometheus/client_model/go"
 )
 
@@ -121,114 +116,26 @@ func NewMetrics() Metrics {
 	}
 }
 
-// maxCacheSize is the number of detected outliers we will retain in memory.
-// We choose a small value for the time being to allow us to iterate without
-// worrying about memory usage. See #79450.
-const (
-	maxCacheSize = 10
-)
+// Reader offers read-only access to the currently retained set of outliers.
+type Reader interface {
+	// IterateOutliers calls visitor with each of the currently retained set of outliers.
+	IterateOutliers(context.Context, func(context.Context, *Outlier))
+}
 
 // Registry is the central object in the outliers subsystem. It observes
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained outliers.
-type Registry struct {
-	detector detector
+type Registry interface {
+	// ObserveStatement notifies the registry of a statement execution.
+	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
-	// Note that this single mutex places unnecessary constraints on outlier
-	// detection and reporting. We will develop a higher-throughput system
-	// before enabling the outliers subsystem by default.
-	mu struct {
-		syncutil.RWMutex
-		statements map[clusterunique.ID][]*Outlier_Statement
-		outliers   *cache.UnorderedCache
-	}
+	// ObserveTransaction notifies the registry of the end of a transaction.
+	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
+
+	Reader
 }
 
 // New builds a new Registry.
-func New(st *cluster.Settings, metrics Metrics) *Registry {
-	config := cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, key, value interface{}) bool {
-			return size > maxCacheSize
-		},
-	}
-	r := &Registry{
-		detector: anyDetector{detectors: []detector{
-			latencyThresholdDetector{st: st},
-			newLatencyQuantileDetector(st, metrics),
-		}}}
-	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
-	r.mu.outliers = cache.NewUnorderedCache(config)
-	return r
-}
-
-// ObserveStatement notifies the registry of a statement execution.
-func (r *Registry) ObserveStatement(
-	sessionID clusterunique.ID,
-	statementID clusterunique.ID,
-	statementFingerprintID roachpb.StmtFingerprintID,
-	latencyInSeconds float64,
-) {
-	if !r.enabled() {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], &Outlier_Statement{
-		ID:               statementID.GetBytes(),
-		FingerprintID:    statementFingerprintID,
-		LatencyInSeconds: latencyInSeconds,
-	})
-}
-
-// ObserveTransaction notifies the registry of the end of a transaction.
-func (r *Registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUID) {
-	if !r.enabled() {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	statements := r.mu.statements[sessionID]
-	delete(r.mu.statements, sessionID)
-
-	hasOutlier := false
-	for _, s := range statements {
-		if r.detector.isOutlier(s) {
-			hasOutlier = true
-		}
-	}
-
-	if hasOutlier {
-		for _, s := range statements {
-			r.mu.outliers.Add(uint128.FromBytes(s.ID), &Outlier{
-				Session:     &Outlier_Session{ID: sessionID.GetBytes()},
-				Transaction: &Outlier_Transaction{ID: &txnID},
-				Statement:   s,
-			})
-		}
-	}
-}
-
-// TODO(todd):
-//   Once we can handle sufficient throughput to live on the hot
-//   execution path in #81021, we can probably get rid of this external
-//   concept of "enabled" and let the detectors just decide for themselves
-//   internally.
-func (r *Registry) enabled() bool {
-	return r.detector.enabled()
-}
-
-// Reader offers read-only access to the currently retained set of outliers.
-type Reader interface {
-	IterateOutliers(context.Context, func(context.Context, *Outlier))
-}
-
-// IterateOutliers calls visitor with each of the currently retained set of
-// outliers.
-func (r *Registry) IterateOutliers(ctx context.Context, visitor func(context.Context, *Outlier)) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	r.mu.outliers.Do(func(e *cache.Entry) {
-		visitor(ctx, e.Value.(*Outlier))
-	})
+func New(st *cluster.Settings, metrics Metrics) Registry {
+	return newRegistry(st, metrics)
 }

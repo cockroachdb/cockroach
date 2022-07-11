@@ -438,7 +438,7 @@ func (c *transientCluster) Start(
 					// Set up the demo username and password on each tenant.
 					ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
 					_, err = ie.Exec(ctx, "tenant-password", nil,
-						fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", demoUsername, demoPassword))
+						fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
 					if err != nil {
 						return err
 					}

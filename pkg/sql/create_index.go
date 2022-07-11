@@ -280,7 +280,6 @@ func makeIndexDescriptor(
 	}
 
 	if err := storageparam.Set(
-		params.ctx,
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,
@@ -913,6 +912,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
+			p.Descriptors(),
 			regionConfig,
 			tableDesc,
 			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),

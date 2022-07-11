@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -102,6 +104,9 @@ func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
 
 // CommentOnColumn implements COMMENT ON COLUMN xxx IS xxx statement.
 func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
+	if n.ColumnItem.TableName == nil {
+		panic(pgerror.New(pgcode.Syntax, "column name must be qualified"))
+	}
 	tableElements := b.ResolveTable(n.ColumnItem.TableName, commentResolveParams)
 	_, _, table := scpb.FindTable(tableElements)
 	columnElements := b.ResolveColumn(table.TableID, n.ColumnItem.ColumnName, commentResolveParams)

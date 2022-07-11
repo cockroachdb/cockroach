@@ -34,13 +34,16 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		Long:    `Generate the specified files.`,
 		Example: `
         dev generate
-        dev generate bazel     # DEPS.bzl and BUILD.bazel files
-        dev generate cgo       # files that help non-Bazel systems (IDEs, go) link to our C dependencies
-        dev generate docs      # generates documentation
-        dev generate go        # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
-        dev generate go_nocgo  # generates go code (execgen, stringer, protobufs, etc.)
-        dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
-        dev generate parser    # sql.go and parser dependencies (subset of 'dev generate go')
+        dev generate bazel         # DEPS.bzl and BUILD.bazel files
+        dev generate cgo           # files that help non-Bazel systems (IDEs, go) link to our C dependencies
+        dev generate docs          # generates documentation
+        dev generate go            # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
+        dev generate go_nocgo      # generates go code (execgen, stringer, protobufs, etc.)
+        dev generate protobuf      # *.pb.go files (subset of 'dev generate go')
+        dev generate parser        # sql.go and parser dependencies (subset of 'dev generate go')
+        dev generate optgen        # optgen targets (subset of 'dev generate go')
+        dev generate execgen       # execgen targets (subset of 'dev generate go')
+        dev generate schemachanger # schemachanger targets (subset of 'dev generate go')
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -60,13 +63,16 @@ type configuration struct {
 
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
-		"bazel":    d.generateBazel,
-		"cgo":      d.generateCgo,
-		"docs":     d.generateDocs,
-		"go":       d.generateGo,
-		"go_nocgo": d.generateGoNoCgo,
-		"protobuf": d.generateProtobuf,
-		"parser":   d.generateParser,
+		"bazel":         d.generateBazel,
+		"cgo":           d.generateCgo,
+		"docs":          d.generateDocs,
+		"execgen":       d.generateExecgen,
+		"go":            d.generateGo,
+		"go_nocgo":      d.generateGoNoCgo,
+		"protobuf":      d.generateProtobuf,
+		"parser":        d.generateParser,
+		"optgen":        d.generateOptGen,
+		"schemachanger": d.generateSchemaChanger,
 	}
 
 	if len(targets) == 0 {
@@ -154,6 +160,10 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 	return d.generateRedactSafe(ctx)
 }
 
+func (d *dev) generateExecgen(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:execgen")
+}
+
 func (d *dev) generateGoAndDocs(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	if err := d.generateTarget(ctx, "//pkg/gen"); err != nil {
@@ -179,6 +189,14 @@ func (d *dev) generateProtobuf(cmd *cobra.Command) error {
 
 func (d *dev) generateParser(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:parser")
+}
+
+func (d *dev) generateOptGen(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:optgen")
+}
+
+func (d *dev) generateSchemaChanger(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:schemachanger")
 }
 
 func (d *dev) generateTarget(ctx context.Context, target string) error {

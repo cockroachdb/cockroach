@@ -63,6 +63,7 @@ sequence req=reqWaiter
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: waiting in lock wait-queues
 [4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence reqWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
 

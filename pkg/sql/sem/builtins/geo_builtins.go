@@ -1187,7 +1187,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		},
 	),
 	"st_box2dfromgeohash": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true},
+		defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"geohash", types.String},
@@ -1217,7 +1217,8 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with supplied precision.",
 			}.String(),
-			Volatility: volatility.Immutable,
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1239,7 +1240,8 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with max precision.",
 			}.String(),
-			Volatility: volatility.Immutable,
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 
@@ -6076,7 +6078,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		),
 	),
 	"st_combinebbox": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
@@ -6102,7 +6104,8 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Combines the current bounding box with the bounding box of the Geometry.",
 			}.String(),
-			Volatility: volatility.Immutable,
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 	"st_expand": makeBuiltin(
@@ -7674,7 +7677,6 @@ func applyGeoindexConfigStorageParams(
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := storageparam.Set(
-		evalCtx.Context,
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,

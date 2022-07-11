@@ -322,16 +322,6 @@ func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (Replica
 	return r.Replicas().GetReplicaDescriptorByID(replicaID)
 }
 
-// ContainsVoterIncoming returns true if the descriptor contains a VOTER_INCOMING replica.
-func (r *RangeDescriptor) ContainsVoterIncoming() bool {
-	for _, repDesc := range r.Replicas().Descriptors() {
-		if repDesc.GetType() == VOTER_INCOMING {
-			return true
-		}
-	}
-	return false
-}
-
 // IsInitialized returns false if this descriptor represents an
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().
@@ -577,11 +567,11 @@ func (sc StoreCapacity) String() string {
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
-		"l0Sublevels=%d, bytesPerReplica={%s}, writesPerReplica={%s}",
+		"l0Sublevels=%d, ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
-		sc.L0Sublevels, sc.BytesPerReplica, sc.WritesPerReplica)
+		sc.L0Sublevels, sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.

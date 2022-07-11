@@ -1,5 +1,3 @@
-# gazelle:exclude string_test.go
-
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -80,6 +78,7 @@ go_test(
         "metadata_test.go",
         "replica_unavailable_error_test.go",
         "span_group_test.go",
+        "string_test.go",
         "tenant_test.go",
         "version_test.go",
     ],
@@ -88,8 +87,10 @@ go_test(
     tags = ["no-remote"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/echotest",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
@@ -120,27 +121,6 @@ go_test(
     ],
 )
 
-# keep
-go_test(
-    name = "string_test",
-    size = "small",
-    srcs = ["string_test.go"],
-    data = glob(["testdata/**"]),
-    deps = [
-        ":roachpb",  # keep
-        "//pkg/cli/exit",
-        "//pkg/keys",
-        "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/storage/enginepb",
-        "//pkg/testutils/echotest",
-        "//pkg/util/hlc",
-        "//pkg/util/uuid",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_stretchr_testify//require",
-    ],
-)
-
 proto_library(
     name = "roachpb_proto",
     srcs = [
@@ -163,6 +143,7 @@ proto_library(
         "//pkg/settings:settings_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util:util_proto",
+        "//pkg/util/admission/admissionpb:admissionpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
@@ -184,6 +165,7 @@ go_proto_library(
         "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//errorspb",
