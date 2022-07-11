@@ -384,7 +384,8 @@ func (p *planner) maybeLogStatementInternal(
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
-			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
+			databaseName := p.CurrentDatabase()
+			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails: execDetails,
 				SkippedQueries:       skippedQueries,
 				CostEstimate:         p.curPlan.instrumentation.costEstimate,
@@ -394,7 +395,12 @@ func (p *planner) maybeLogStatementInternal(
 				Database:             p.CurrentDatabase(),
 				StatementID:          p.stmt.QueryID.String(),
 				TransactionID:        p.txn.ID().String(),
-			}})
+			}
+			db, _ := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, databaseName, tree.DatabaseLookupFlags{Required: true})
+			if db != nil {
+				sampledQuery.DatabaseID = uint32(db.GetID())
+			}
+			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
 		}
