@@ -215,7 +215,6 @@ func (c *conn) handleAuthentication(
 		}
 	}
 
-	ac.LogAuthOK(ctx)
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
 	return connClose, c.msgBuilder.finishMsg(c.conn)
