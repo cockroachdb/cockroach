@@ -1222,8 +1222,13 @@ COPY public.t (a, b) FROM stdin;
 					return
 				}
 				dbName := fmt.Sprintf("d%d", i)
+				if saveRejected {
+					dbName = dbName + "_save"
+				}
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+				defer func() {
+					_, _ = db.Exec(fmt.Sprintf("DROP DATABASE %s", dbName))
+				}()
 				var q string
 				if tc.create != "" {
 					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, tc.create))
