@@ -87,9 +87,8 @@ func TestDropDatabaseCascadeDuringImportsFails(t *testing.T) {
 	}
 
 	_, err := db.Exec(`DROP DATABASE "fooBarBaz" CASCADE`)
-	require.Regexp(t, `cannot drop a database with OFFLINE tables, ensure `+
-		dbName+`\.public\.`+tableName+` is dropped or made public before dropping`+
-		` database `+dbName, err)
+	require.Regexp(t, `cannot drop a database or a schema with OFFLINE tables, ensure `+
+		dbName+`\.public\.`+tableName+` is dropped or made public before dropping`, err)
 	pgErr := new(pq.Error)
 	require.True(t, errors.As(err, &pgErr))
 	require.Equal(t, pgcode.ObjectNotInPrerequisiteState, pgcode.MakeCode(string(pgErr.Code)))

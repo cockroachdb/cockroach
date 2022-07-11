@@ -1222,8 +1222,19 @@ COPY public.t (a, b) FROM stdin;
 					return
 				}
 				dbName := fmt.Sprintf("d%d", i)
+				if saveRejected {
+					dbName = dbName + "_save"
+				}
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+				defer func() {
+					sqlDB.CheckQueryResultsRetry(t,
+						fmt.Sprintf(`SELECT count(*) FROM %s.crdb_internal.invalid_objects`, dbName),
+						[][]string{{"0"}},
+					)
+					// This DROP may fail in the face of OFFLINE descriptors,
+					// proceed on a best-effort basis.
+					_, _ = db.Exec(fmt.Sprintf("DROP DATABASE %s", dbName))
+				}()
 				var q string
 				if tc.create != "" {
 					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, tc.create))
