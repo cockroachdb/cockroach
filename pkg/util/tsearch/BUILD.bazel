@@ -5,6 +5,7 @@ go_library(
     name = "tsearch",
     srcs = [
         "lex.go",
+        "tsquery.go",
         "tsvector.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tsearch",
@@ -17,10 +18,15 @@ go_library(
 
 go_test(
     name = "tsearch_test",
-    srcs = ["tsvector_test.go"],
+    srcs = [
+        "tsquery_test.go",
+        "tsvector_test.go",
+    ],
     embed = [":tsearch"],
     deps = [
+        "//pkg/testutils/skip",
         "//pkg/util/randutil",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
