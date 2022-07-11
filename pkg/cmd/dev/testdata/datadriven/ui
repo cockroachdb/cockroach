@@ -114,7 +114,7 @@ cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 bazel info workspace --color=no
-bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console jest --watch
+bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console
 bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui jest --watch
 
 exec
