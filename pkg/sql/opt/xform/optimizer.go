@@ -980,6 +980,10 @@ func (o *Optimizer) disableRules(probability float64) {
 		// supports distinct on an empty column set.
 		int(opt.EliminateDistinctNoColumns),
 		int(opt.EliminateEnsureDistinctNoColumns),
+		// TODO(#84191): Needed to remove the same column and direction
+		// appearing consecutively in ordering columns, which can cause
+		// incorrect results until #84191 is addressed.
+		int(opt.SimplifyRootOrdering),
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
