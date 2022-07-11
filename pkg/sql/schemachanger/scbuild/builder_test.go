@@ -122,7 +122,7 @@ func run(
 				var tableID descpb.ID
 				tdb.QueryRow(t, fmt.Sprintf(`SELECT '%s'::REGCLASS::INT`, tableName)).Scan(&tableID)
 				if tableID == 0 {
-					t.Fatalf("failed to read ID of new table %s", tableName)
+					d.Fatalf(t, "failed to read ID of new table %s", tableName)
 				}
 				t.Logf("created relation with id %d", tableID)
 			}
@@ -142,7 +142,7 @@ func run(
 			require.NoError(t, err)
 			for i := range stmts {
 				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST)
-				require.NoErrorf(t, err, "%s", stmts[i].SQL)
+				require.NoErrorf(t, err, "%s: %s", d.Pos, stmts[i].SQL)
 			}
 		})
 		return marshalState(t, output)
