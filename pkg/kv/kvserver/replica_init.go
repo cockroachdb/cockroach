@@ -364,19 +364,6 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		}
 	}
 
-	// Determine if a new replica was added. This is true if the new max replica
-	// ID is greater than the old max replica ID.
-	oldMaxID := maxReplicaIDOfAny(r.mu.state.Desc)
-	newMaxID := maxReplicaIDOfAny(desc)
-	if newMaxID > oldMaxID {
-		r.mu.lastReplicaAdded = newMaxID
-		r.mu.lastReplicaAddedTime = timeutil.Now()
-	} else if r.mu.lastReplicaAdded > newMaxID {
-		// The last replica added was removed.
-		r.mu.lastReplicaAdded = 0
-		r.mu.lastReplicaAddedTime = time.Time{}
-	}
-
 	r.rangeStr.store(r.replicaID, desc)
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)

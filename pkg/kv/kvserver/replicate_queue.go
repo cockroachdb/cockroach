@@ -983,7 +983,6 @@ func (rq *replicateQueue) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
 		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
-		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1005,16 +1004,12 @@ func (rq *replicateQueue) findRemoveVoter(
 	var candidates []roachpb.ReplicaDescriptor
 	deadline := timeutil.Now().Add(2 * base.NetworkTimeout)
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next() && timeutil.Now().Before(deadline); {
-		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
-		if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
-			lastReplAdded = 0
-		}
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicationTarget{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}
-		candidates = allocatorimpl.FilterUnremovableReplicas(ctx, raftStatus, existingVoters, lastReplAdded)
+		candidates = allocatorimpl.FilterUnremovableReplicas(ctx, raftStatus, existingVoters)
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
 			existingVoters, candidates, rangeRaftProgress(raftStatus, existingVoters))
 		if len(candidates) > 0 {

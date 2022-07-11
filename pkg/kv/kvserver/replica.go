@@ -540,12 +540,6 @@ type Replica struct {
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
-		// The most recently added replica for the range and when it was added.
-		// Used to determine whether a replica is new enough that we shouldn't
-		// penalize it for being slightly behind. These field gets cleared out once
-		// we know that the replica has caught up.
-		lastReplicaAdded     roachpb.ReplicaID
-		lastReplicaAddedTime time.Time
 
 		// The most recently updated time for each follower of this range. This is updated
 		// every time a Raft message is received from a peer.
@@ -1053,29 +1047,6 @@ func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
 	}
 
 	return r.mu.conf.GCPolicy.IgnoreStrictEnforcement
-}
-
-// maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
-// voters and learners.
-func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
-	if desc == nil || !desc.IsInitialized() {
-		return 0
-	}
-	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().Descriptors() {
-		if repl.ReplicaID > maxID {
-			maxID = repl.ReplicaID
-		}
-	}
-	return maxID
-}
-
-// LastReplicaAdded returns the ID of the most recently added replica and the
-// time at which it was added.
-func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.lastReplicaAdded, r.mu.lastReplicaAddedTime
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range

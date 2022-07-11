@@ -136,9 +136,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
-	// commitIndex is used to determine whether a newly added replica has fully
-	// caught up.
-	commitIndex := status.Commit
 	// Initialize minIndex to the currently applied index. The below progress
 	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
 	// cannot correspond to values beyond the applied index there's no reason
@@ -209,13 +206,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 		if progress.Match > 0 && progress.Match < minIndex {
 			minIndex = progress.Match
-		}
-		// If this is the most recently added replica and it has caught up, clear
-		// our state that was tracking it. This is unrelated to managing proposal
-		// quota, but this is a convenient place to do so.
-		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
-			r.mu.lastReplicaAdded = 0
-			r.mu.lastReplicaAddedTime = time.Time{}
 		}
 	})
 
