@@ -10105,7 +10105,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						nanos := arg1.Sub(arg2).Nanoseconds()
-						projCol[i] = duration.MakeDuration(nanos, 0, 0)
+						projCol[i] = duration.MakeDurationJustifyHours(nanos, 0, 0)
 
 					}
 				}
@@ -10123,7 +10123,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						nanos := arg1.Sub(arg2).Nanoseconds()
-						projCol[i] = duration.MakeDuration(nanos, 0, 0)
+						projCol[i] = duration.MakeDurationJustifyHours(nanos, 0, 0)
 
 					}
 				}
@@ -10142,7 +10142,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					nanos := arg1.Sub(arg2).Nanoseconds()
-					projCol[i] = duration.MakeDuration(nanos, 0, 0)
+					projCol[i] = duration.MakeDurationJustifyHours(nanos, 0, 0)
 
 				}
 			} else {
@@ -10156,7 +10156,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					nanos := arg1.Sub(arg2).Nanoseconds()
-					projCol[i] = duration.MakeDuration(nanos, 0, 0)
+					projCol[i] = duration.MakeDurationJustifyHours(nanos, 0, 0)
 
 				}
 			}
