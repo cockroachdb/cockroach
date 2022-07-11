@@ -2,11 +2,18 @@
   "name": "@cockroachlabs/e2e-tests",
   "version": "1.0.0",
   "description": "End-to-end tests for the CockroachDB UI",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
+  "scripts": {
+    "movr": "../../../../cockroach demo movr --nodes 4 --insecure",
+    "test": "server-test 'yarn run movr' :8084 'yarn test:run'",
+    "test:run": "cypress run",
+    "test:debug": "cypress open"
+  },
   "devDependencies": {
     "@testing-library/cypress": "^8.0.2",
     "cypress": "^10.3.0",
+    "start-server-and-test": "^1.14.0",
     "typescript": "^4.6.3"
   }
 }
