@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1839,9 +1841,27 @@ func (s *adminServer) Settings(
 		}
 
 		if !hasModify && !hasView {
-			return nil, status.Errorf(
-				codes.PermissionDenied, "this operation requires either %s or %s role options",
-				roleoption.VIEWCLUSTERSETTING, roleoption.MODIFYCLUSTERSETTING)
+			if s.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				hasViewSystemPrivilege, err := s.checkHasSystemPrivilege(ctx, user, "VIEWCLUSTERSETTING")
+				if err != nil {
+					return nil, err
+				}
+
+				hasModifystemPrivilege, err := s.checkHasSystemPrivilege(ctx, user, "MODIFYCLUSTERSETTING")
+				if err != nil {
+					return nil, err
+				}
+
+				if !hasViewSystemPrivilege && !hasModifystemPrivilege {
+					return nil, status.Errorf(
+						codes.PermissionDenied, "this operation requires either %s or %s system privileges",
+						privilege.VIEWCLUSTERSETTING, privilege.MODIFYCLUSTERSETTING)
+				}
+			} else {
+				return nil, status.Errorf(
+					codes.PermissionDenied, "this operation requires either %s or %s role options",
+					roleoption.VIEWCLUSTERSETTING, roleoption.MODIFYCLUSTERSETTING)
+			}
 		}
 	}
 
@@ -3411,6 +3431,7 @@ func (s *adminServer) dialNode(
 // have admin privileges.
 type adminPrivilegeChecker struct {
 	ie *sql.InternalExecutor
+	st *cluster.Settings
 }
 
 // requireAdminUser's error return is a gRPC error.
@@ -3440,9 +3461,21 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 		}
 
 		if !hasViewActivity {
-			return status.Errorf(
-				codes.PermissionDenied, "this operation requires the %s role option",
-				roleoption.VIEWACTIVITY)
+			hasSystemPrivilege, err := c.checkHasSystemPrivilege(ctx, userName, "VIEWACTIVITY")
+			if err != nil {
+				return err
+			}
+			if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				if !hasSystemPrivilege {
+					return status.Errorf(
+						codes.PermissionDenied, "this operation requires the %s system privilege",
+						privilege.VIEWACTIVITY)
+				}
+			} else {
+				return status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s role option",
+					roleoption.VIEWACTIVITY)
+			}
 		}
 	}
 	return nil
@@ -3462,13 +3495,29 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 			return serverError(ctx, err)
 		}
 
-		if !hasViewActivity {
-			hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return serverError(ctx, err)
-			}
+		hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return serverError(ctx, err)
+		}
 
-			if !hasViewActivityRedacted {
+		if !hasViewActivity && !hasViewActivityRedacted {
+			if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				hasVASystemPrivilege, err := c.checkHasSystemPrivilege(ctx, userName, "VIEWACTIVITY")
+				if err != nil {
+					return err
+				}
+
+				hasVARSystemPrivilege, err := c.checkHasSystemPrivilege(ctx, userName, "VIEWACTIVITYREDACTED")
+				if err != nil {
+					return err
+				}
+
+				if !hasVASystemPrivilege && !hasVARSystemPrivilege {
+					return status.Errorf(
+						codes.PermissionDenied, "this operation requires the %s or %s system privilege",
+						privilege.VIEWACTIVITY, privilege.VIEWACTIVITYREDACTED)
+				}
+			} else {
 				return status.Errorf(
 					codes.PermissionDenied, "this operation requires the %s or %s role options",
 					roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
@@ -3498,6 +3547,17 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 			return status.Errorf(
 				codes.PermissionDenied, "this operation requires %s role option and is not allowed for %s role option",
 				roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+		}
+		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			hasVARSystemPrivilege, err := c.checkHasSystemPrivilege(ctx, userName, "VIEWACTIVITYREDACTED")
+			if err != nil {
+				return err
+			}
+			if hasVARSystemPrivilege {
+				return status.Errorf(
+					codes.PermissionDenied, "this operation requires %s system privilege and is not allowed for %s system privilege",
+					privilege.VIEWACTIVITY, privilege.VIEWACTIVITYREDACTED)
+			}
 		}
 		return c.requireViewActivityPermission(ctx)
 	}
@@ -3573,6 +3633,26 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
 	}
 	return bool(dbDatum), nil
+}
+
+// checkHasSystemPrivilege is a helper function which executes
+// a query to see if rows return non-nil based on the
+// privilege provided.
+func (c *adminPrivilegeChecker) checkHasSystemPrivilege(
+	ctx context.Context, user username.SQLUsername, privilege string,
+) (bool, error) {
+	row, err := c.ie.QueryRowEx(
+		ctx, "check-has-system-privilege", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		`SELECT * FROM system.privileges WHERE username = $1 AND privileges @> ARRAY[$2]`,
+		user, privilege)
+	if err != nil {
+		return false, err
+	}
+	if row == nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 var errRequiresAdmin = status.Error(codes.PermissionDenied, "this operation requires admin privilege")

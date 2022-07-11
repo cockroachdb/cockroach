@@ -46,6 +46,9 @@ const (
 	CONNECT              Kind = 11
 	RULE                 Kind = 12
 	MODIFYCLUSTERSETTING Kind = 13
+	VIEWACTIVITY         Kind = 14
+	VIEWACTIVITYREDACTED Kind = 15
+	VIEWCLUSTERSETTING   Kind = 16
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -102,7 +105,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	SystemPrivileges   = List{ALL, MODIFYCLUSTERSETTING}
+	SystemPrivileges   = List{ALL, MODIFYCLUSTERSETTING, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -117,7 +120,7 @@ func (k Kind) IsSetIn(bits uint32) bool {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE, MODIFYCLUSTERSETTING,
+	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE, MODIFYCLUSTERSETTING, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING,
 }
 
 // ByName is a map of string -> kind value.
@@ -134,6 +137,9 @@ var ByName = map[string]Kind{
 	"USAGE":                USAGE,
 	"RULE":                 RULE,
 	"MODIFYCLUSTERSETTING": MODIFYCLUSTERSETTING,
+	"VIEWACTIVITY":         VIEWACTIVITY,
+	"VIEWACTIVITYREDACTED": VIEWACTIVITYREDACTED,
+	"VIEWCLUSTERSETTING":   VIEWCLUSTERSETTING,
 }
 
 // List is a list of privileges.
