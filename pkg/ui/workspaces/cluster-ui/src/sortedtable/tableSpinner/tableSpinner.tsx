@@ -9,10 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Spinner } from "@cockroachlabs/icons";
-import { Spin, Icon } from "antd";
-import "antd/lib/spin/style";
-import "antd/lib/icon/style";
+import { Spinner } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import styles from "./tableSpinner.module.scss";
 
@@ -29,10 +26,7 @@ export const TableSpinner = ({ loadingLabel }: TableSpinnerProps) => {
 
   return (
     <div className={tableSpinnerClass}>
-      <Spin
-        className={spinClass}
-        indicator={<Icon component={Spinner} spin />}
-      />
+      <Spinner className={spinClass} />
       {loadingLabel && (
         <span className={loadingLabelClass}>{loadingLabel}</span>
       )}

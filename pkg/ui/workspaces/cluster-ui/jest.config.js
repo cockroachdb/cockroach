@@ -11,7 +11,6 @@
 const path = require("path");
 const isBazel = !!process.env.BAZEL_TARGET;
 
-
 const bazelOnlySettings = {
   haste: {
     // Platforms that include a POSIX-compatible `find` binary default to using it for test file
@@ -27,8 +26,6 @@ const bazelOnlySettings = {
 };
 
 module.exports = {
-  haste: isBazel ? {
-  } : undefined,
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   moduleNameMapper: {
     "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "identity-obj-proxy",

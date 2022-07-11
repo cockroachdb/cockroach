@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { emptyLoginState } from "src/redux/login";
-import { LoginPageProps } from "./loginPage";
+import type { LoginPageProps } from "./loginPage";
 import { createMemoryHistory } from "history";
 import { RouteComponentProps } from "react-router-dom";
 

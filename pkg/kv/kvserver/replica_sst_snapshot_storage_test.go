@@ -12,6 +12,8 @@ package kvserver
 import (
 	"context"
 	"io/ioutil"
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -93,11 +95,17 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
 
-	// Check that Clear removes the directory.
-	require.NoError(t, scratch.Clear())
+	// Check that Close removes the snapshot directory as well as the range
+	// directory.
+	require.NoError(t, scratch.Close())
 	_, err = eng.Stat(scratch.snapDir)
 	if !oserror.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
+	}
+	rangeDir := filepath.Join(sstSnapshotStorage.dir, strconv.Itoa(int(scratch.rangeID)))
+	_, err = eng.Stat(rangeDir)
+	if !oserror.IsNotExist(err) {
+		t.Fatalf("expected %s to not exist", rangeDir)
 	}
 	require.NoError(t, sstSnapshotStorage.Clear())
 	_, err = eng.Stat(sstSnapshotStorage.dir)
