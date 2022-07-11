@@ -1,0 +1,106 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import moment from "moment";
+import { executeSql, SqlExecutionRequest } from "./sqlApi";
+
+export type ClusterLockState = {
+  databaseName?: string;
+  schemaName?: string;
+  tableName?: string;
+  indexName?: string;
+  lockHolderTxnID?: string; // Excecution ID of txn holding this lock.
+  holdTime: moment.Duration;
+  waiters?: LockWaiter[]; // List of waiting transaction execution IDs.
+};
+
+export type LockWaiter = {
+  id: string; // Txn execution ID.
+  waitTime: moment.Duration;
+};
+
+export type ClusterLocksResponse = ClusterLockState[];
+
+type ClusterLockColumns = {
+  lock_key_pretty: string;
+  database_name: string;
+  schema_name: string;
+  table_name: string;
+  index_name: string;
+  txn_id: string;
+  duration: string;
+  granted: boolean;
+};
+
+/**
+ * getClusterLocksState returns information from crdb_internal.cluster_locks
+ * regarding the state of range locks in the cluster.
+ */
+export function getClusterLocksState(): Promise<ClusterLocksResponse> {
+  const request: SqlExecutionRequest = {
+    statements: [
+      {
+        sql: `
+SELECT
+  lock_key_pretty,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  txn_id,
+  duration,
+  granted
+FROM
+  crdb_internal.cluster_locks
+WHERE
+  contended = true
+`,
+      },
+    ],
+    execute: true,
+  };
+  return executeSql<ClusterLockColumns>(request).then(result => {
+    if (
+      result.execution.txn_results.length === 0 ||
+      !result.execution.txn_results[0].rows
+    ) {
+      // No data.
+      return [];
+    }
+
+    const locks: Record<string, ClusterLockState> = {};
+    result.execution.txn_results[0].rows.forEach(row => {
+      const key = row.lock_key_pretty;
+      if (!locks[key]) {
+        locks[key] = {
+          databaseName: row.database_name,
+          schemaName: row.schema_name,
+          tableName: row.table_name,
+          indexName: row.index_name,
+          waiters: [],
+          holdTime: moment.duration(),
+        };
+      }
+
+      const duration = moment.duration(row.duration);
+      if (row.granted) {
+        locks[key].lockHolderTxnID = row.txn_id;
+        locks[key].holdTime = duration;
+      } else {
+        locks[key].waiters.push({
+          id: row.txn_id,
+          waitTime: duration,
+        });
+      }
+    });
+
+    return Object.values(locks);
+  });
+}
