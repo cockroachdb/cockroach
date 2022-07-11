@@ -44,9 +44,6 @@ func TestBackendDialTLS(t *testing.T) {
 		defer sql.Stopper().Stop(ctx)
 
 		conn, err := BackendDial(startupMsg, sql.ServingSQLAddr(), tlsConfig)
-		defer func() {
-			_ = conn.Close()
-		}()
 
 		require.NoError(t, err)
 		require.NotNil(t, conn)
