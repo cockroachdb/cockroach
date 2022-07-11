@@ -383,7 +383,9 @@ message RestoreDetails {
   // SchemaOnly determines whether to only restore the schema in the backup.
   bool schema_only = 25;
 
-  // NEXT ID: 26.
+  bool VerifyData = 26;
+
+  // NEXT ID: 27.
 }
 
 

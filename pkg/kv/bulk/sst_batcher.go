@@ -139,6 +139,10 @@ type SSTBatcher struct {
 	stats         ingestionPerformanceStats
 	disableSplits bool
 
+	// noop indicates that the SSTBatcher will not actually write any data to disk or manipulate
+	// any database state. All public operations immediately noop.
+	noop bool
+
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
 	sstWriter         storage.SSTWriter
@@ -183,7 +187,11 @@ func MakeSSTBatcher(
 	splitFilledRanges bool,
 	mem mon.BoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
+	noop bool,
 ) (*SSTBatcher, error) {
+	if noop && splitFilledRanges {
+		return nil, errors.New("Cannot create noop SSTBatcher and allow range splits")
+	}
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
@@ -193,6 +201,7 @@ func MakeSSTBatcher(
 		disableSplits:          !splitFilledRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
+		noop:                   noop,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -645,6 +654,9 @@ func (b *SSTBatcher) addSSTable(
 	stats enginepb.MVCCStats,
 	updatesLastRange bool,
 ) error {
+	if b.noop {
+		return nil
+	}
 	sendStart := timeutil.Now()
 
 	// Currently, the SSTBatcher cannot ingest range keys, so it is safe to
