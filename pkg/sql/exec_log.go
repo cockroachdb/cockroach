@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -383,17 +384,20 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			database := p.CurrentDatabase()
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+			stmtFingerprintID := roachpb.ConstructStatementFingerprintID(p.stmt.StmtNoConstants, err != nil, p.curPlan.flags.IsSet(planFlagImplicitTxn), database)
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
-				CommonSQLExecDetails: execDetails,
-				SkippedQueries:       skippedQueries,
-				CostEstimate:         p.curPlan.instrumentation.costEstimate,
-				Distribution:         p.curPlan.instrumentation.distribution.String(),
-				PlanGist:             p.curPlan.instrumentation.planGist.String(),
-				SessionID:            p.extendedEvalCtx.SessionID.String(),
-				Database:             p.CurrentDatabase(),
-				StatementID:          p.stmt.QueryID.String(),
-				TransactionID:        p.txn.ID().String(),
+				CommonSQLExecDetails:   execDetails,
+				SkippedQueries:         skippedQueries,
+				CostEstimate:           p.curPlan.instrumentation.costEstimate,
+				Distribution:           p.curPlan.instrumentation.distribution.String(),
+				PlanGist:               p.curPlan.instrumentation.planGist.String(),
+				SessionID:              p.extendedEvalCtx.SessionID.String(),
+				Database:               database,
+				StatementID:            p.stmt.QueryID.String(),
+				TransactionID:          p.txn.ID().String(),
+				StatementFingerprintID: uint64(stmtFingerprintID),
 			}})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
