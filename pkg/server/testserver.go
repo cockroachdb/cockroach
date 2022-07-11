@@ -817,11 +817,14 @@ func (ts *TestServer) StartTenant(
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 
-	// TODO(ajstorm): Temporarily use a local-only blob client to get things
-	//  working for the common multi-tenant case. Will need to revisit this
-	//  to enable tests which require remote blob access. Tracked with #76378.
+	localNodeIDContainer := &base.NodeIDContainer{}
+	localNodeIDContainer.Set(ctx, ts.NodeID())
+	blobClientFactory := blobs.NewBlobClientFactory(
+		localNodeIDContainer,
+		ts.Server.nodeDialer,
+		params.ExternalIODir,
+	)
 	tk := &baseCfg.TestingKnobs
-	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(params.ExternalIODir)
 	if serverKnobs, ok := tk.Server.(*TestingKnobs); ok {
 		serverKnobs.BlobClientFactory = blobClientFactory
 	} else {
