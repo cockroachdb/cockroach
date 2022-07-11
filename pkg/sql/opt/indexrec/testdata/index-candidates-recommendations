@@ -1208,7 +1208,7 @@ project
  ├── immutable
  ├── cost: 807.393333
  └── index-join t4
-      ├── columns: t4.k:1 f:3 j:4
+      ├── columns: k:1 f:3 j:4
       ├── immutable
       ├── cost: 806.262222
       └── scan t4@_hyp_1
@@ -1237,7 +1237,7 @@ project
  ├── immutable
  ├── cost: 805.048889
  └── index-join t4
-      ├── columns: t4.k:1 f:3 j:4!null
+      ├── columns: k:1 f:3 j:4!null
       ├── immutable
       ├── cost: 803.928889
       └── scan t4@_hyp_1
@@ -1266,11 +1266,11 @@ project
  ├── immutable
  ├── cost: 816.998889
  └── select
-      ├── columns: t4.k:1 f:3 j:4
+      ├── columns: k:1 f:3 j:4
       ├── immutable
       ├── cost: 813.645556
       ├── index-join t4
-      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── columns: k:1 f:3 j:4
       │    ├── cost: 812.504444
       │    └── inverted-filter
       │         ├── columns: rowid:6!null
@@ -1282,7 +1282,7 @@ project
       │         ├── cost: 134.706667
       │         ├── key: (6)
       │         └── scan t4@_hyp_1
-      │              ├── columns: rowid:6!null k:9!null
+      │              ├── columns: rowid:6!null j_inverted_key:9!null
       │              ├── inverted constraint: /9/6
       │              │    └── spans
       │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -1345,12 +1345,12 @@ project
  ├── cost: 22.1100001
  ├── fd: ()-->(1)
  └── select
-      ├── columns: t4.k:1!null f:3 j:4
+      ├── columns: k:1!null f:3 j:4
       ├── immutable
       ├── cost: 22.0566667
       ├── fd: ()-->(1)
       ├── index-join t4
-      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── columns: k:1 f:3 j:4
       │    ├── cost: 22.0155556
       │    └── inverted-filter
       │         ├── columns: rowid:6!null
@@ -1362,7 +1362,7 @@ project
       │         ├── cost: 15.2177778
       │         ├── key: (6)
       │         └── scan t4@_hyp_3
-      │              ├── columns: rowid:6!null k:10!null
+      │              ├── columns: rowid:6!null j_inverted_key:10!null
       │              ├── constraint: /1: [/1 - /1]
       │              ├── inverted constraint: /10/6
       │              │    └── spans
@@ -1402,7 +1402,7 @@ project
  ├── cost: 10.7379279
  ├── fd: ()-->(1)
  └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
-      ├── columns: t4.k:1!null i:2!null f:3 j:4
+      ├── columns: k:1!null i:2!null f:3 j:4
       ├── eq columns: [6] = [6]
       ├── left fixed columns: [1] = [1]
       ├── right fixed columns: [2] = [2]
@@ -1411,7 +1411,7 @@ project
       ├── fd: ()-->(1,2)
       └── filters
            ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
-           ├── t4.k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
            └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
 
 index-candidates
@@ -1431,12 +1431,12 @@ project
  ├── immutable
  ├── cost: 1125.07
  └── select
-      ├── columns: t4.k:1 f:3 j:4
+      ├── columns: k:1 f:3 j:4
       ├── immutable
       ├── cost: 1124.95
       ├── fd: ()-->(4)
       ├── scan t4
-      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── columns: k:1 f:3 j:4
       │    └── cost: 1114.92
       └── filters
            └── j:4 IS NULL [outer=(4), immutable, constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
@@ -1457,11 +1457,11 @@ project
  ├── columns: k:1 f:3
  ├── cost: 1125.07
  └── select
-      ├── columns: t4.k:1 f:3 a:5
+      ├── columns: k:1 f:3 a:5
       ├── cost: 1124.95
       ├── fd: ()-->(5)
       ├── scan t4
-      │    ├── columns: t4.k:1 f:3 a:5
+      │    ├── columns: k:1 f:3 a:5
       │    └── cost: 1114.92
       └── filters
            └── a:5 IS NULL [outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
@@ -1485,7 +1485,7 @@ project
  ├── immutable
  ├── cost: 805.048889
  └── index-join t4
-      ├── columns: t4.k:1 f:3 a:5!null
+      ├── columns: k:1 f:3 a:5!null
       ├── immutable
       ├── cost: 803.928889
       └── scan t4@_hyp_1
@@ -1511,11 +1511,11 @@ project
  ├── columns: k:1 f:3
  ├── cost: 1125.07
  └── select
-      ├── columns: t4.k:1 f:3 a:5!null
+      ├── columns: k:1 f:3 a:5!null
       ├── cost: 1124.95
       ├── fd: ()-->(5)
       ├── scan t4
-      │    ├── columns: t4.k:1 f:3 a:5
+      │    ├── columns: k:1 f:3 a:5
       │    └── cost: 1114.92
       └── filters
            └── a:5 = ARRAY[1] [outer=(5), constraints=(/5: [/ARRAY[1] - /ARRAY[1]]; tight), fd=()-->(5)]
@@ -1541,7 +1541,7 @@ project
  ├── immutable
  ├── cost: 21.9920001
  └── index-join t4
-      ├── columns: t4.k:1 i:2!null f:3 a:5!null
+      ├── columns: k:1 i:2!null f:3 a:5!null
       ├── immutable
       ├── cost: 21.9610001
       ├── fd: ()-->(2)
@@ -1573,11 +1573,11 @@ project
  ├── immutable
  ├── cost: 381.103333
  └── select
-      ├── columns: t4.k:1 f:3!null a:5!null
+      ├── columns: k:1 f:3!null a:5!null
       ├── immutable
       ├── cost: 380.716667
       ├── scan t4@_hyp_1
-      │    ├── columns: t4.k:1 f:3!null a:5
+      │    ├── columns: k:1 f:3!null a:5
       │    ├── constraint: /3/6: [/3.0000000000000004 - ]
       │    └── cost: 377.353333
       └── filters
@@ -1775,3 +1775,82 @@ project
 exec-ddl
 DROP INDEX t1@expr
 ----
+
+# Regression test for #83965.
+exec-ddl
+CREATE TABLE t83965a (c INT);
+----
+
+exec-ddl
+CREATE TABLE t83965b (c INT);
+----
+
+exec-ddl
+CREATE TABLE t83965c (c INT);
+----
+
+exec-ddl
+CREATE TABLE t83965d (c INT);
+----
+
+exec-ddl
+CREATE TABLE t83965e (c VARBIT(1)[]);
+----
+
+exec-ddl
+CREATE TABLE t83965f (c INT);
+----
+
+index-recommendations
+SELECT bool_and(t83965e.c < t83965e.c) FROM t83965f, t83965a, t83965c, t83965b, t83965d, t83965e
+----
+No index recommendations.
+--
+Optimal Plan.
+scalar-group-by
+ ├── columns: bool_and:26
+ ├── cardinality: [1 - 1]
+ ├── cost: 4.00225225e+16
+ ├── key: ()
+ ├── fd: ()-->(26)
+ ├── project
+ │    ├── columns: column25:25
+ │    ├── cost: 3.00225225e+16
+ │    ├── inner-join (cross)
+ │    │    ├── columns: t83965e.c:21
+ │    │    ├── cost: 1.00225225e+16
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: t83965e.c:21
+ │    │    │    ├── cost: 1.00225225e+13
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: t83965e.c:21
+ │    │    │    │    ├── cost: 1.00225268e+10
+ │    │    │    │    ├── inner-join (cross)
+ │    │    │    │    │    ├── columns: t83965e.c:21
+ │    │    │    │    │    ├── cost: 10025690.6
+ │    │    │    │    │    ├── inner-join (cross)
+ │    │    │    │    │    │    ├── columns: t83965e.c:21
+ │    │    │    │    │    │    ├── cost: 12128.7063
+ │    │    │    │    │    │    ├── scan t83965d
+ │    │    │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    │    │    ├── scan t83965e
+ │    │    │    │    │    │    │    ├── columns: t83965e.c:21
+ │    │    │    │    │    │    │    └── cost: 1054.32
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    ├── scan t83965b
+ │    │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    │    └── filters (true)
+ │    │    │    │    ├── scan t83965c
+ │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    └── filters (true)
+ │    │    │    ├── scan t83965a
+ │    │    │    │    └── cost: 1044.22
+ │    │    │    └── filters (true)
+ │    │    ├── scan t83965f
+ │    │    │    └── cost: 1044.22
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── (t83965e.c:21 IS NOT DISTINCT FROM CAST(NULL AS VARBIT(1)[])) AND CAST(NULL AS BOOL) [as=column25:25, outer=(21)]
+ └── aggregations
+      └── bool-and [as=bool_and:26, outer=(25)]
+           └── column25:25
