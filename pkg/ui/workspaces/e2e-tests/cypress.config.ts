@@ -2,9 +2,9 @@ import { defineConfig } from "cypress";
 
 export default defineConfig({
   e2e: {
+    baseUrl: "http://localhost:8084",
     setupNodeEvents(on, config) {
-      config.baseUrl = "http://localhost:8084";
-      // implement node event listeners here
+      // Implement custom node event listeners here
     },
   },
 });
