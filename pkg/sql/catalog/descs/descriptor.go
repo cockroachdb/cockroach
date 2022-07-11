@@ -253,7 +253,7 @@ func (q *byIDLookupContext) lookupLeased(id descpb.ID) (catalog.Descriptor, erro
 	//
 	// TODO(ajwerner): More generally leverage this set of kv descriptors on
 	// the resolution path.
-	if q.tc.kv.idDefinitelyDoesNotExist(id) {
+	if q.tc.idDefinitelyDoesNotExist(id) {
 		return nil, catalog.ErrDescriptorNotFound
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)

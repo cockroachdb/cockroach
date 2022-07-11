@@ -357,6 +357,22 @@ func (ud *uncommittedDescriptors) getUncommittedDescriptorsForValidation() (
 	return descs
 }
 
+// iterateMutableDescriptors applies a function to immutable copies of mutable
+// descriptors. This is useful to avoid invalidating the kvDescriptors cache,
+// because a collection can use these latest modifications to amend a stale
+// descriptors cache.
+func (ud *uncommittedDescriptors) iterateMutableDescriptors(
+	f func(catalog.Descriptor) error,
+) error {
+	return ud.descs.IterateByID(func(entry catalog.NameEntry) error {
+		mut := entry.(*uncommittedDescriptor).mutable
+		if mut == nil {
+			return nil
+		}
+		return f(mut.ImmutableCopy())
+	})
+}
+
 func (ud *uncommittedDescriptors) hasUncommittedTables() (has bool) {
 	_ = ud.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		if _, has = desc.(catalog.TableDescriptor); has {

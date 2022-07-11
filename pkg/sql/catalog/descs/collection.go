@@ -206,9 +206,6 @@ func (tc *Collection) HasUncommittedTypes() bool {
 // immutably will return a copy of the descriptor in the current state. A deep
 // copy is performed in this call.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
-	// Invalidate all the cached descriptors since a stale copy of this may be
-	// included.
-	tc.kv.releaseAllDescriptors()
 	return tc.uncommitted.checkIn(desc)
 }
 
@@ -281,7 +278,22 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return tc.kv.getAllDescriptors(ctx, txn, tc.version)
+	cat, err := tc.kv.getAllDescriptors(ctx, txn, tc.version)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	mutCat := nstree.MutableCatalog{Catalog: cat}
+	err = tc.uncommitted.iterateMutableDescriptors(func(desc catalog.Descriptor) error {
+		if tableDesc, isTableDesc := desc.(catalog.TableDescriptor); isTableDesc {
+			desc, err = tc.hydrateTypesInTableDesc(ctx, txn, tableDesc)
+			if err != nil {
+				return err
+			}
+		}
+		mutCat.UpsertDescriptorEntry(desc)
+		return nil
+	})
+	return mutCat.Catalog, err
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
@@ -294,7 +306,25 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
 	vd := tc.newValidationDereferencer(txn)
-	return tc.kv.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
+	dbDescs, err := tc.kv.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
+	if err != nil {
+		return nil, err
+	}
+	err = tc.uncommitted.iterateMutableDescriptors(func(desc catalog.Descriptor) error {
+		d, ok := desc.(catalog.DatabaseDescriptor)
+		if !ok {
+			return nil
+		}
+		for i, dbDesc := range dbDescs {
+			if dbDesc.GetID() == d.GetID() {
+				dbDescs[i] = d
+				return nil
+			}
+		}
+		dbDescs = append(dbDescs, d)
+		return nil
+	})
+	return dbDescs, err
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
@@ -335,7 +365,21 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 func (tc *Collection) GetSchemasForDatabase(
 	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	return tc.kv.getSchemasForDatabase(ctx, txn, dbDesc)
+	schemas, err := tc.kv.getSchemasForDatabase(ctx, txn, dbDesc)
+	if err != nil {
+		return nil, err
+	}
+	err = tc.uncommitted.iterateMutableDescriptors(func(desc catalog.Descriptor) error {
+		d, ok := desc.(catalog.SchemaDescriptor)
+		if !ok {
+			return nil
+		}
+		if d.GetParentID() == dbDesc.GetID() {
+			schemas[d.GetID()] = d.GetName()
+		}
+		return nil
+	})
+	return schemas, err
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
@@ -434,4 +478,11 @@ func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
 // should only be called in a multi-tenant environment.
 func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
+}
+
+func (tc *Collection) idDefinitelyDoesNotExist(id descpb.ID) bool {
+	if tc.kv.allDescriptors.isUnset() {
+		return false
+	}
+	return !tc.kv.allDescriptors.contains(id) && tc.uncommitted.descs.GetByID(id) == nil
 }

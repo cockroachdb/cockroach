@@ -39,8 +39,10 @@ type kvDescriptors struct {
 	// allDescriptors is a slice of all available descriptors. The descriptors
 	// are cached to avoid repeated lookups by users like virtual tables. The
 	// cache is purged whenever events would cause a scan of all descriptors to
-	// return different values, such as when the txn timestamp changes or when
-	// new descriptors are written in the txn.
+	// return different values, such as when the txn timestamp changes. However,
+	// when descriptors are written in the transaction, the cache is not purged.
+	// Users of allDescriptors are responsible for checking uncommitted
+	// descriptors for such changes.
 	//
 	// TODO(ajwerner): This cache may be problematic in clusters with very large
 	// numbers of descriptors.
@@ -106,9 +108,6 @@ func (kd *kvDescriptors) reset(ctx context.Context) {
 
 // releaseAllDescriptors releases the cached slice of all descriptors
 // held by Collection.
-//
-// TODO(ajwerner): Make this unnecessary by ensuring that all writes properly
-// interact with this layer.
 func (kd *kvDescriptors) releaseAllDescriptors() {
 	kd.allDescriptors.clear()
 	kd.allDatabaseDescriptors = nil
@@ -335,11 +334,4 @@ func (kd *kvDescriptors) getSchemasForDatabase(
 		}
 	}
 	return kd.allSchemasForDatabase[db.GetID()], nil
-}
-
-func (kd *kvDescriptors) idDefinitelyDoesNotExist(id descpb.ID) bool {
-	if kd.allDescriptors.isUnset() {
-		return false
-	}
-	return !kd.allDescriptors.contains(id)
 }
