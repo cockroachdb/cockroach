@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,24 +67,38 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	if settings.AdminOnly(name) {
 		return p.RequireAdminRole(ctx, fmt.Sprintf("%s cluster setting '%s'", action, name))
 	}
+
+	// logic for system privileges.
+	var hasModifyPrivilegeErr error
+	var hasViewPrivilegeErr error
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		hasModifyPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING)
+		hasViewPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING)
+	}
+
 	hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return err
 	}
-	if action == "set" && !hasModify {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the %s privilege are allowed to %s cluster setting '%s'",
-			roleoption.MODIFYCLUSTERSETTING, action, name)
+
+	if action == "set" && hasModifyPrivilegeErr != nil {
+		if !hasModify {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the %s privilege are allowed to %s cluster setting '%s'",
+				roleoption.MODIFYCLUSTERSETTING, action, name)
+		}
 	}
 	hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
 	if err != nil {
 		return err
 	}
 	// check that for "show" action user has either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
-	if action == "show" && !(hasModify || hasView) {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
-			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING, action, name)
+	if action == "show" && !(hasModifyPrivilegeErr == nil || hasViewPrivilegeErr == nil) {
+		if !(hasModify || hasView) {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
+				roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING, action, name)
+		}
 	}
 	return nil
 }
