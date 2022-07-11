@@ -42,35 +42,10 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Int4, boolToIntOrFloat},
 	{types.Bool, types.Int, boolToIntOrFloat},
 
-	{types.Decimal, types.Bool, decimalToBool},
-	{types.Decimal, types.Int2, getDecimalToIntCastFunc(16)},
-	{types.Decimal, types.Int4, getDecimalToIntCastFunc(32)},
-	{types.Decimal, types.Int, getDecimalToIntCastFunc(anyWidth)},
-	{types.Decimal, types.Float, decimalToFloat},
-	{types.Decimal, types.Decimal, decimalToDecimal},
+	{types.Bytes, types.Uuid, bytesToUUID},
 
-	{types.Int2, types.Int4, getIntToIntCastFunc(16, 32)},
-	{types.Int2, types.Int, getIntToIntCastFunc(16, anyWidth)},
-	{types.Int2, types.Bool, numToBool},
-	{types.Int2, types.Decimal, intToDecimal},
-	{types.Int2, types.Float, intToFloat},
-	{types.Int4, types.Int2, getIntToIntCastFunc(32, 16)},
-	{types.Int4, types.Int, getIntToIntCastFunc(32, anyWidth)},
-	{types.Int4, types.Bool, numToBool},
-	{types.Int4, types.Decimal, intToDecimal},
-	{types.Int4, types.Float, intToFloat},
-	{types.Int, types.Int2, getIntToIntCastFunc(anyWidth, 16)},
-	{types.Int, types.Int4, getIntToIntCastFunc(anyWidth, 32)},
-	{types.Int, types.Bool, numToBool},
-	{types.Int, types.Decimal, intToDecimal},
-	{types.Int, types.Float, intToFloat},
-
-	{types.Float, types.Bool, numToBool},
-	{types.Float, types.Decimal, floatToDecimal},
-	{types.Float, types.Int2, floatToInt(16, 64 /* floatWidth */)},
-	{types.Float, types.Int4, floatToInt(32, 64 /* floatWidth */)},
-	{types.Float, types.Int, floatToInt(anyWidth, 64 /* floatWidth */)},
-
+	{types.Date, types.Decimal, intToDecimal},
+	{types.Date, types.Float, intToFloat},
 	// Dates are represented as int64, and we currently mistakenly support dates
 	// outside of the range (#40354), so the casts from dates and from ints turn
 	// out to be the same.
@@ -78,17 +53,52 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Date, types.Int2, getIntToIntCastFunc(64 /* fromWidth */, 16 /* toWidth */)},
 	{types.Date, types.Int4, getIntToIntCastFunc(64 /* fromWidth */, 32 /* toWidth */)},
 	{types.Date, types.Int, getIntToIntCastFunc(64 /* fromWidth */, anyWidth)},
-	{types.Date, types.Float, intToFloat},
-	{types.Date, types.Decimal, intToDecimal},
 
-	{types.Bytes, types.Uuid, bytesToUUID},
+	{types.Decimal, types.Bool, decimalToBool},
+	{types.Decimal, types.Decimal, decimalToDecimal},
+	{types.Decimal, types.Float, decimalToFloat},
+	{types.Decimal, types.Int2, getDecimalToIntCastFunc(16)},
+	{types.Decimal, types.Int4, getDecimalToIntCastFunc(32)},
+	{types.Decimal, types.Int, getDecimalToIntCastFunc(anyWidth)},
+
+	{types.Float, types.Bool, numToBool},
+	{types.Float, types.Decimal, floatToDecimal},
+	{types.Float, types.Int2, floatToInt(16, 64 /* floatWidth */)},
+	{types.Float, types.Int4, floatToInt(32, 64 /* floatWidth */)},
+	{types.Float, types.Int, floatToInt(anyWidth, 64 /* floatWidth */)},
+
+	{types.Int2, types.Bool, numToBool},
+	{types.Int2, types.Decimal, intToDecimal},
+	{types.Int2, types.Float, intToFloat},
+	{types.Int2, types.Int4, getIntToIntCastFunc(16, 32)},
+	{types.Int2, types.Int, getIntToIntCastFunc(16, anyWidth)},
+	{types.Int4, types.Bool, numToBool},
+	{types.Int4, types.Decimal, intToDecimal},
+	{types.Int4, types.Float, intToFloat},
+	{types.Int4, types.Int2, getIntToIntCastFunc(32, 16)},
+	{types.Int4, types.Int, getIntToIntCastFunc(32, anyWidth)},
+	{types.Int, types.Bool, numToBool},
+	{types.Int, types.Decimal, intToDecimal},
+	{types.Int, types.Float, intToFloat},
+	{types.Int, types.Int2, getIntToIntCastFunc(anyWidth, 16)},
+	{types.Int, types.Int4, getIntToIntCastFunc(anyWidth, 32)},
+
+	{types.Jsonb, types.String, jsonToString},
 
 	{types.String, types.Bool, stringToBool},
 	{types.String, types.Bytes, stringToBytes},
+	{types.String, types.Date, stringToDate},
+	{types.String, types.Decimal, stringToDecimal},
+	{types.String, types.Float, stringToFloat},
+	{types.String, types.Int2, getStringToIntCastFunc(16)},
+	{types.String, types.Int4, getStringToIntCastFunc(32)},
+	{types.String, types.Int, getStringToIntCastFunc(anyWidth)},
+	{types.String, types.Interval, stringToInterval},
+	{types.String, types.Jsonb, stringToJSON},
 	{types.String, types.String, stringToString},
+	{types.String, types.Timestamp, getStringToTimestampCastFunc(true /* withoutTimezone */)},
+	{types.String, types.TimestampTZ, getStringToTimestampCastFunc(false /* withoutTimezone */)},
 	{types.String, types.Uuid, stringToUUID},
-
-	{types.Jsonb, types.String, jsonToString},
 }
 
 type supportedNativeCastInfo struct {
@@ -107,8 +117,36 @@ func boolToIntOrFloat(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
+func bytesToUUID(to, from, _, _ string) string {
+	convStr := `
+		_uuid, err := uuid.FromBytes(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _uuid.GetBytes()
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
 func decimalToBool(to, from, _, _ string) string {
 	return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
+}
+
+func decimalToDecimal(to, from, _, toType string) string {
+	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
+}
+
+func decimalToFloat(to, from, _, _ string) string {
+	convStr := `
+		{
+			f, err := %[2]s.Float64()
+			if err != nil {
+				colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+			}
+			%[1]s = f
+		}
+`
+	return fmt.Sprintf(convStr, to, from)
 }
 
 func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
@@ -153,23 +191,6 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 	}
 }
 
-func decimalToFloat(to, from, _, _ string) string {
-	convStr := `
-		{
-			f, err := %[2]s.Float64()
-			if err != nil {
-				colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
-			}
-			%[1]s = f
-		}
-`
-	return fmt.Sprintf(convStr, to, from)
-}
-
-func decimalToDecimal(to, from, _, toType string) string {
-	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
-}
-
 // toDecimal returns the templated code that performs the cast to a decimal. It
 // first will execute whatever is passed in 'conv' (the main conversion) and
 // then will perform the rounding of 'to' variable according to 'toType'.
@@ -181,6 +202,51 @@ func toDecimal(conv, to, toType string) string {
 		}
 	`
 	return fmt.Sprintf(convStr, conv, to, toType)
+}
+
+func numToBool(to, from, _, _ string) string {
+	convStr := `
+		%[1]s = %[2]s != 0
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func floatToDecimal(to, from, _, toType string) string {
+	convStr := `
+		if _, err := %[1]s.SetFloat64(float64(%[2]s)); err != nil {
+			colexecerror.ExpectedError(err)
+		}
+	`
+	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
+}
+
+func floatToInt(intWidth, floatWidth int32) func(string, string, string, string) string {
+	return func(to, from, _, _ string) string {
+		convStr := `
+			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
+				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+			}
+			%[1]s = int%[3]d(%[2]s)
+		`
+		if intWidth == anyWidth {
+			intWidth = 64
+		}
+		return fmt.Sprintf(convStr, to, from, intWidth, floatWidth)
+	}
+}
+
+func intToDecimal(to, from, _, toType string) string {
+	conv := `
+		%[1]s.SetInt64(int64(%[2]s))
+	`
+	return toDecimal(fmt.Sprintf(conv, to, from), to, toType)
+}
+
+func intToFloat(to, from, _, _ string) string {
+	convStr := `
+		%[1]s = float64(%[2]s)
+	`
+	return fmt.Sprintf(convStr, to, from)
 }
 
 // getIntToIntCastFunc returns a castFunc between integers of any widths.
@@ -220,60 +286,20 @@ func getIntToIntCastFunc(fromWidth, toWidth int32) castFunc {
 	}
 }
 
-func numToBool(to, from, _, _ string) string {
+func jsonToString(to, from, _, toType string) string {
 	convStr := `
-		%[1]s = %[2]s != 0
-	`
-	return fmt.Sprintf(convStr, to, from)
-}
-
-func intToDecimal(to, from, _, toType string) string {
-	conv := `
-		%[1]s.SetInt64(int64(%[2]s))
-	`
-	return toDecimal(fmt.Sprintf(conv, to, from), to, toType)
-}
-
-func intToFloat(to, from, _, _ string) string {
-	convStr := `
-		%[1]s = float64(%[2]s)
-	`
-	return fmt.Sprintf(convStr, to, from)
-}
-
-func floatToDecimal(to, from, _, toType string) string {
-	convStr := `
-		if _, err := %[1]s.SetFloat64(float64(%[2]s)); err != nil {
-			colexecerror.ExpectedError(err)
+		_string := %[2]s.String()
+		switch %[3]s.Oid() {
+		case oid.T_char:
+			// "char" is supposed to truncate long values.
+			_string = util.TruncateString(_string, 1)
+		case oid.T_bpchar:
+			// bpchar types truncate trailing whitespace.
+			_string = strings.TrimRight(_string, " ")
 		}
+		%[1]s = []byte(_string)
 	`
-	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
-}
-
-func floatToInt(intWidth, floatWidth int32) func(string, string, string, string) string {
-	return func(to, from, _, _ string) string {
-		convStr := `
-			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
-				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-			}
-			%[1]s = int%[3]d(%[2]s)
-		`
-		if intWidth == anyWidth {
-			intWidth = 64
-		}
-		return fmt.Sprintf(convStr, to, from, intWidth, floatWidth)
-	}
-}
-
-func bytesToUUID(to, from, _, _ string) string {
-	convStr := `
-		_uuid, err := uuid.FromBytes(%[2]s)
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		%[1]s = _uuid.GetBytes()
-	`
-	return fmt.Sprintf(convStr, to, from)
+	return fmt.Sprintf(convStr, to, from, toType)
 }
 
 func stringToBool(to, from, _, _ string) string {
@@ -295,6 +321,109 @@ func stringToBytes(to, from, _, _ string) string {
 			colexecerror.ExpectedError(err)
 		}
 	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func stringToDate(to, from, evalCtx, _ string) string {
+	convStr := `
+		_now := %[3]s.GetRelativeParseTime()
+		_dateStyle := %[3]s.GetDateStyle()
+		_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _d.UnixEpochDays()
+`
+	return fmt.Sprintf(convStr, to, from, evalCtx)
+}
+
+func stringToDecimal(to, from, _, toType string) string {
+	convStr := `
+		_s := strings.TrimSpace(string(%[2]s))
+		_, res, err := tree.ExactCtx.SetString(&%[1]s, _s)
+		if res != 0 || err != nil {
+			colexecerror.ExpectedError(tree.MakeParseError(_s, types.Decimal, err))
+		}
+		switch %[1]s.Form {
+		case apd.NaNSignaling:
+			%[1]s.Form = apd.NaN
+			%[1]s.Negative = false
+		case apd.NaN:
+			%[1]s.Negative = false
+		case apd.Finite:
+			if %[1]s.IsZero() && %[1]s.Negative {
+				%[1]s.Negative = false
+			}
+		}
+`
+	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
+}
+
+func stringToFloat(to, from, _, toType string) string {
+	convStr := `
+		_s := string(%[2]s)
+		var _err error
+		%[1]s, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
+		if _err != nil {
+			colexecerror.ExpectedError(tree.MakeParseError(_s, %[3]s, _err))
+		}
+	`
+	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func getStringToIntCastFunc(toIntWidth int32) castFunc {
+	if toIntWidth == anyWidth {
+		toIntWidth = 64
+	}
+	return func(to, from, evalCtx, toType string) string {
+		// convStr is a format string expecting three arguments:
+		// 1. the code snippet that performs an assigment of int64 local
+		//    variable named '_i' to the result, possibly performing the bounds
+		//    checks
+		// 2. the original value variable name
+		// 3. the name of the global variable storing the type we're casting to.
+		convStr := `
+		{
+			_s := string(%[2]s)
+			_i, err := strconv.ParseInt(strings.TrimSpace(_s), 0, 64)
+			if err != nil {
+				colexecerror.ExpectedError(tree.MakeParseError(_s, %[3]s, err))
+			}
+			%[1]s
+		}
+	`
+		return fmt.Sprintf(
+			convStr,
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType),
+			from,
+			toType,
+		)
+	}
+}
+
+func stringToInterval(to, from, evalCtx, toType string) string {
+	convStr := `
+		_itm, err := %[4]s.IntervalTypeMetadata()
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		_intervalStyle := %[3]s.GetIntervalStyle()
+		%[1]s, err = tree.ParseIntervalWithTypeMetadata(_intervalStyle, string(%[2]s), _itm)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+`
+	return fmt.Sprintf(convStr, to, from, evalCtx, toType)
+}
+
+func stringToJSON(to, from, _, _ string) string {
+	convStr := `
+		var err error
+		%[1]s, err = json.ParseJSON(string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON"))
+		}
+`
 	return fmt.Sprintf(convStr, to, from)
 }
 
@@ -329,6 +458,32 @@ func stringToString(to, from, _, toType string) string {
 	return fmt.Sprintf(convStr, to, from, toType)
 }
 
+func getStringToTimestampCastFunc(withoutTimezone bool) func(_, _, _, _ string) string {
+	return func(to, from, evalCtx, toType string) string {
+		var parseTimestampKind string
+		if withoutTimezone {
+			parseTimestampKind = "WithoutTimezone"
+		}
+		// TODO(yuzefovich): consider introducing "prologue" sections to the
+		// cast template so that we could do some operations (e.g. _roundTo
+		// value below) only once per batch.
+		convStr := `
+		_roundTo := tree.TimeFamilyPrecisionToRoundDuration(%[4]s.Precision())
+		_now := %[3]s.GetRelativeParseTime()
+		_dateStyle := %[3]s.GetDateStyle()
+		_t, _, err := pgdate.ParseTimestamp%[5]s(_now, _dateStyle, string(%[2]s))
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = _t.Round(_roundTo)
+		if %[1]s.After(tree.MaxSupportedTime) || %[1]s.Before(tree.MinSupportedTime) {
+			colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(%[1]s))
+		}
+`
+		return fmt.Sprintf(convStr, to, from, evalCtx, toType, parseTimestampKind)
+	}
+}
+
 func stringToUUID(to, from, _, _ string) string {
 	convStr := `
 		_uuid, err := uuid.FromString(string(%[2]s))
@@ -338,22 +493,6 @@ func stringToUUID(to, from, _, _ string) string {
 		%[1]s = _uuid.GetBytes()
 	`
 	return fmt.Sprintf(convStr, to, from)
-}
-
-func jsonToString(to, from, _, toType string) string {
-	convStr := `
-		_string := %[2]s.String()
-		switch %[3]s.Oid() {
-		case oid.T_char:
-			// "char" is supposed to truncate long values.
-			_string = util.TruncateString(_string, 1)
-		case oid.T_bpchar:
-			// bpchar types truncate trailing whitespace.
-			_string = strings.TrimRight(_string, " ")
-		}
-		%[1]s = []byte(_string)
-	`
-	return fmt.Sprintf(convStr, to, from, toType)
 }
 
 // getDatumToNativeCastFunc returns a castFunc for casting datum-backed value

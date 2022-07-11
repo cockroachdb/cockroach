@@ -157,8 +157,12 @@ func (ex *connExecutor) makePreparedPortal(
 func (p PreparedPortal) accountForCopy(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) error {
+	if err := prepStmtsNamespaceMemAcc.Grow(ctx, p.size(portalName)); err != nil {
+		return err
+	}
+	// Only increment the reference if we're going to keep it.
 	p.Stmt.incRef(ctx)
-	return prepStmtsNamespaceMemAcc.Grow(ctx, p.size(portalName))
+	return nil
 }
 
 // close closes this portal.

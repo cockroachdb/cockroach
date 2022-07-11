@@ -610,14 +610,15 @@ func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog ca
 // TableMeta instance stores.
 func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
 	for i := range md.tables {
-		if tab, ok := tables[md.tables[i].Table.ID()]; ok {
+		oldTable := md.tables[i].Table
+		if newTable, ok := tables[oldTable.ID()]; ok {
 			// If there are any inverted hypothetical indexes, the hypothetical table
 			// will have extra inverted columns added. Add any new inverted columns to
 			// the metadata.
-			for j, n := md.tables[i].Table.ColumnCount(), tab.ColumnCount(); j < n; j++ {
-				md.AddColumn(string(tab.Column(i).ColName()), types.Bytes)
+			for j, n := oldTable.ColumnCount(), newTable.ColumnCount(); j < n; j++ {
+				md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
 			}
-			md.tables[i].Table = tab
+			md.tables[i].Table = newTable
 		}
 	}
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -4374,13 +4373,16 @@ func TestFindSplitKey(t *testing.T) {
 	}
 }
 
+// Injected via `external_helpers_test.go`.
+var TestingUserDescID func(offset uint32) uint32
+
 // TestFindValidSplitKeys verifies split keys are located such that
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	userID := bootstrap.TestingUserDescID(0)
+	userID := TestingUserDescID(0)
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
 	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
@@ -4574,7 +4576,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(userID, "b"), 1),
 				addColFam(tablePrefix(userID, "c"), 1),
 			},
-			rangeStart: keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)),
+			rangeStart: keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0)),
 			expSplit:   tablePrefix(userID, "b"),
 			expError:   false,
 		},
@@ -5014,6 +5016,9 @@ func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
 	it.MVCCIterator.SeekLT(k)
 }
 
+// Injected via `external_helpers_test.go`.
+var TestingUserTableDataMin func() roachpb.Key
+
 // TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage
 // collection only utilizes SeekLT if there are enough undeleted versions.
 func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
@@ -5037,7 +5042,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 		batch := engine.NewBatch()
 		defer batch.Close()
 		it := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			UpperBound: bootstrap.TestingUserTableDataMin(),
+			UpperBound: TestingUserTableDataMin(),
 			LowerBound: keys.MaxKey,
 		})
 		defer it.Close()
