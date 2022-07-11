@@ -8,7 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./jobDescriptionCell";
-export * from "./jobsPage";
-export * from "./jobTable";
-export * from "./jobsPageConnected";
+import { createSelector } from "reselect";
+import { AppState } from "../reducers";
+
+export const adminUISelector = createSelector(
+  (state: AppState) => state.adminUI,
+  adminUiState => adminUiState,
+);
+
+export const localStorageSelector = createSelector(
+  adminUISelector,
+  adminUiState => adminUiState.localStorage,
+);

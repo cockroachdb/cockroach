@@ -26,20 +26,11 @@ import {
 import { Dispatch } from "redux";
 import { Filters } from "../queryFilter";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import { localStorageSelector } from "../store/utils/selectors";
 
 export const selectSessionsData = createSelector(
   sqlStatsSelector,
   sessionsState => (sessionsState.valid ? sessionsState.data : null),
-);
-
-export const adminUISelector = createSelector(
-  (state: AppState) => state.adminUI,
-  adminUiState => adminUiState,
-);
-
-export const localStorageSelector = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.localStorage,
 );
 
 export const selectSessions = createSelector(
