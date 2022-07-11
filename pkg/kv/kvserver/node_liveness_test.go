@@ -1065,7 +1065,6 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 
 	errorsToTest := []error{
 		roachpb.NewAmbiguousResultErrorf("test"),
-		roachpb.NewTransactionStatusError(roachpb.TransactionStatusError_REASON_UNKNOWN, "foo"),
 		kv.OnePCNotAllowedError{},
 	}
 
