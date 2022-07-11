@@ -189,6 +189,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmtFingerprintID, err :=
 		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
+	ex.extraTxnState.currentStatementFingerprintID = stmtFingerprintID
 
 	if err != nil {
 		if log.V(1) {

@@ -58,6 +58,9 @@ message SampledQuery {
 
   // Transaction ID of the query.
   string transaction_id = 11 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Statement fingerprint ID of the query.
+  uint64 statement_fingerprint_id = 12 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty'];
 }
 
 // CapturedIndexUsageStats

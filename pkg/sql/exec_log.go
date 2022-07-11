@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -155,8 +156,9 @@ func (p *planner) maybeLogStatement(
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
+	stmtFingerprintID roachpb.StmtFingerprintID,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -167,6 +169,7 @@ func (p *planner) maybeLogStatementInternal(
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
+	stmtFingerprintID roachpb.StmtFingerprintID,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -383,17 +386,19 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			database := p.CurrentDatabase()
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
-				CommonSQLExecDetails: execDetails,
-				SkippedQueries:       skippedQueries,
-				CostEstimate:         p.curPlan.instrumentation.costEstimate,
-				Distribution:         p.curPlan.instrumentation.distribution.String(),
-				PlanGist:             p.curPlan.instrumentation.planGist.String(),
-				SessionID:            p.extendedEvalCtx.SessionID.String(),
-				Database:             p.CurrentDatabase(),
-				StatementID:          p.stmt.QueryID.String(),
-				TransactionID:        p.txn.ID().String(),
+				CommonSQLExecDetails:   execDetails,
+				SkippedQueries:         skippedQueries,
+				CostEstimate:           p.curPlan.instrumentation.costEstimate,
+				Distribution:           p.curPlan.instrumentation.distribution.String(),
+				PlanGist:               p.curPlan.instrumentation.planGist.String(),
+				SessionID:              p.extendedEvalCtx.SessionID.String(),
+				Database:               database,
+				StatementID:            p.stmt.QueryID.String(),
+				TransactionID:          p.txn.ID().String(),
+				StatementFingerprintID: uint64(stmtFingerprintID),
 			}})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()

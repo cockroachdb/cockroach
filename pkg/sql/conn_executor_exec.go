@@ -1071,6 +1071,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
+			ex.extraTxnState.currentStatementFingerprintID,
 		)
 	}()
 

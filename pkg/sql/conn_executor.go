@@ -1366,6 +1366,10 @@ type connExecutor struct {
 			sessionDataStack *sessiondata.Stack
 		}
 
+		// currentStatementFingerprintID is the statement fingerprint ID of the last statement
+		// dispatched to the execution engine.
+		currentStatementFingerprintID roachpb.StmtFingerprintID
+
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
 		// cluster setting.
