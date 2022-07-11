@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -148,6 +150,15 @@ func alterTableAddColumn(
 				"cross database type references are not supported: %s",
 				typeName.String()))
 		}
+	}
+	// Block unique indexes on unsupported types.
+	if d.Unique.IsUnique &&
+		!d.Unique.WithoutIndex &&
+		!colinfo.ColumnTypeIsIndexable(spec.colType.Type) {
+		msg := "column %s is of type %s and thus is not indexable"
+		typInfo := spec.colType.Type.DebugString()
+		msg = fmt.Sprintf(msg, d.Name, spec.colType.Type.Name())
+		panic(unimplemented.NewWithIssueDetailf(35730, typInfo, "%s", msg))
 	}
 	// Block unsupported types.
 	switch spec.colType.Type.Oid() {
