@@ -220,36 +220,11 @@ func (r *Replica) updateTimestampCache(
 				addToTSCache(start, end, ts, txnID)
 			}
 		case *roachpb.GetRequest:
-			if resume := resp.(*roachpb.GetResponse).ResumeSpan; resume != nil {
-				// The request did not evaluate. Ignore it.
-				continue
-			}
 			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ScanRequest:
-			if resume := resp.(*roachpb.ScanResponse).ResumeSpan; resume != nil {
-				if start.Equal(resume.Key) {
-					// The request did not evaluate. Ignore it.
-					continue
-				}
-				// Note that for forward scan, the resume span will start at
-				// the (last key read).Next(), which is actually the correct
-				// end key for the span to update the timestamp cache.
-				end = resume.Key
-			}
-			addToTSCache(start, end, ts, txnID)
+			addToTSCache(req.Header().Key, req.Header().EndKey, ts, txnID)
 		case *roachpb.ReverseScanRequest:
-			if resume := resp.(*roachpb.ReverseScanResponse).ResumeSpan; resume != nil {
-				if end.Equal(resume.EndKey) {
-					// The request did not evaluate. Ignore it.
-					continue
-				}
-				// Note that for reverse scans, the resume span's end key is
-				// an open interval. That means it was read as part of this op
-				// and won't be read on resume. It is the correct start key for
-				// the span to update the timestamp cache.
-				start = resume.EndKey
-			}
-			addToTSCache(start, end, ts, txnID)
+			addToTSCache(req.Header().Key, req.Header().EndKey, ts, txnID)
 		case *roachpb.QueryIntentRequest:
 			missing := false
 			if pErr != nil {

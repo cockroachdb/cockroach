@@ -2001,6 +2001,112 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	require.Equal(t, makeTS(t2.UnixNano(), 0), rTS)
 }
 
+// TestTimestampCacheLimitScanBumpEntireSpan verifies that we bump the timestamp
+// cache over the entire span supplied to the limited scan.
+func TestTimestampCacheLimitScanBumpEntireSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	for _, tc := range []struct {
+		name        string
+		reqs        []roachpb.Request
+		limit       int64
+		expKeysResp []string
+	}{
+		{
+			name:        "scan",
+			reqs:        []roachpb.Request{scanArgsString("a", "g")},
+			limit:       3,
+			expKeysResp: []string{"a", "c", "d"},
+		},
+		{
+			name:        "scan-split",
+			reqs:        []roachpb.Request{scanArgsString("a", "d"), scanArgsString("d", "g")},
+			limit:       2,
+			expKeysResp: []string{"a", "c"},
+		},
+		{
+			name:        "revscan",
+			reqs:        []roachpb.Request{revScanArgsString("a", "g")},
+			limit:       3,
+			expKeysResp: []string{"e", "d", "c"}},
+		{
+			name:        "revscan-split",
+			reqs:        []roachpb.Request{revScanArgsString("d", "g"), revScanArgsString("a", "d")},
+			limit:       2,
+			expKeysResp: []string{"e", "d"},
+		},
+		{
+			name:        "scan-pessimistic",
+			reqs:        []roachpb.Request{scanArgsString("a", "g")},
+			limit:       0,
+			expKeysResp: []string{"a", "c", "d", "e"},
+		},
+		{
+			name:        "revscan-pessimistic",
+			reqs:        []roachpb.Request{revScanArgsString("a", "g")},
+			limit:       0,
+			expKeysResp: []string{"e", "d", "c", "a"},
+		},
+		{
+			name: "gets",
+			reqs: []roachpb.Request{
+				getArgsString("a"), getArgsString("b"), getArgsString("c"),
+				getArgsString("d"), getArgsString("e"), getArgsString("f"),
+			},
+			limit:       2,
+			expKeysResp: []string{"a", "c"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			store, manualClock := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+
+			// Write three keys at time t0.
+			t0 := timeutil.Unix(1, 0)
+			manualClock.MustAdvanceTo(t0)
+			h := roachpb.Header{Timestamp: makeTS(t0.UnixNano(), 0)}
+			for _, keyStr := range []string{"a", "c", "d", "e", "g", "h"} {
+				putArgs := putArgs(roachpb.Key(keyStr), []byte("value"))
+				_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &putArgs)
+				require.Nil(t, pErr)
+			}
+
+			// Read the span at t2.
+			t2 := timeutil.Unix(3, 0)
+			manualClock.MustAdvanceTo(t2)
+			ba := roachpb.BatchRequest{}
+			ba.Timestamp = makeTS(t2.UnixNano(), 0)
+			ba.MaxSpanRequestKeys = tc.limit
+			ba.Add(tc.reqs...)
+			br, pErr := store.TestSender().Send(ctx, ba)
+			require.Nil(t, pErr)
+
+			// Validate the response keys. The locked key should not be included.
+			var respKeys []string
+			for i, ru := range br.Responses {
+				req, resp := ba.Requests[i].GetInner(), ru.GetInner()
+				require.NoError(t, roachpb.ResponseKeyIterate(req, resp, func(k roachpb.Key) {
+					respKeys = append(respKeys, string(k))
+				}))
+			}
+			require.Equal(t, tc.expKeysResp, respKeys)
+
+			// Verify the timestamp cache has been set for "a", "c", "d", "e", and "f".
+			// However, it shouldn't be set for "g" and "h".
+			t2TS := makeTS(t2.UnixNano(), 0)
+			for _, keyStr := range []string{"a", "b", "c", "d", "e", "f"} {
+				rTS, _ := store.tsCache.GetMax(roachpb.Key(keyStr), nil)
+				require.True(t, rTS.EqOrdering(t2TS), "keyStr: %s", keyStr)
+			}
+			rTS, _ := store.tsCache.GetMax(roachpb.Key("g"), nil)
+			require.True(t, rTS.Less(t2TS))
+			rTS, _ = store.tsCache.GetMax(roachpb.Key("h"), nil)
+			require.True(t, rTS.Less(t2TS))
+		})
+	}
+}
+
 // TestStoreSkipLockedTSCache verifies that the timestamp cache is properly
 // updated when get, scan, and reverse scan requests use the SkipLocked wait
 // policy.
