@@ -49,6 +49,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
+        "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
