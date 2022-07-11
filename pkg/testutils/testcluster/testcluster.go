@@ -119,6 +119,12 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
+	for _, c := range tc.Conns {
+		if err := c.Close(); err != nil {
+			tc.t.Log(err)
+		}
+	}
+
 	// Quiesce the servers in parallel to avoid deadlocks. If we stop servers
 	// serially when we lose quorum (2 out of 3 servers have stopped) the last
 	// server may never finish due to waiting for a Raft command that can't

@@ -916,7 +916,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
 	// We use one BytesMonitor for all InternalExecutor's created by the
-	// ieFactory, this BytesMonitor is never closed.
+	// ieFactory.
 	ieFactoryMonitor := mon.NewMonitor(
 		"internal executor factory",
 		mon.MemoryResource,
@@ -928,20 +928,33 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	ieFactoryMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	cfg.stopper.AddCloser(stop.CloserFn(func() { ieFactoryMonitor.Stop(ctx) }))
+
+	// systemIeMonitor is used for the jobsIeFactory and for the
+	// circularInternalExecutor.
+	// The schema changer may still be executing jobs queries.
+	// This is a race condition if we call Stop instead of EmergencyStop.
+	systemIeMonitor := sql.MakeInternalExecutorMemMonitor(internalMemMetrics, cfg.Settings)
+	systemIeMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
+	cfg.stopper.AddCloser(stop.CloserFn(func() { systemIeMonitor.EmergencyStop(ctx) }))
+
+	makeIEFactory := func(mon *mon.BytesMonitor) sqlutil.SessionBoundInternalExecutorFactory {
+		return func(
+			ctx context.Context, sessionData *sessiondata.SessionData,
+		) sqlutil.InternalExecutor {
+			ie := sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, mon)
+			ie.SetSessionData(sessionData)
+			return &ie
+		}
+	}
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
-	ieFactory := func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
-	) sqlutil.InternalExecutor {
-		ie := sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
-		ie.SetSessionData(sessionData)
-		return &ie
-	}
+	ieFactory := makeIEFactory(ieFactoryMonitor)
+	jobsIeFactory := makeIEFactory(systemIeMonitor)
 
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
-	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
+	jobRegistry.SetSessionBoundInternalExecutorFactory(jobsIeFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
 	execCfg.IndexValidator = scdeps.NewIndexValidator(
@@ -960,7 +973,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
-	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
+	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, systemIeMonitor)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
