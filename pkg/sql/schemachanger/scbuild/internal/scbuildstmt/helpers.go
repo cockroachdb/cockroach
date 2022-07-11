@@ -63,7 +63,7 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			switch e.(type) {
 			case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.EnumType, *scpb.AliasType:
 				panic(errors.Wrapf(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"object state is not PUBLIC, cannot be targeted by DROP"),
+					"object state is %s instead of PUBLIC, cannot be targeted by DROP", current),
 					"%s", errMsgPrefix(b, id)))
 			}
 		}

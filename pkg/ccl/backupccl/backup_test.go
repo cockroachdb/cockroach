@@ -7857,7 +7857,7 @@ CREATE TABLE d.sc.tb (x d.sc.typ);
 			sqlDB.ExpectErr(t, reLegacy, `DROP SCHEMA newdb.sc CASCADE`)
 
 			sqlDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
-			const reDecl = `type .* is offline|relation .* is offline|object state is not PUBLIC, cannot be targeted by DROP`
+			const reDecl = `type .* is offline|relation .* is offline|object state is OFFLINE instead of PUBLIC, cannot be targeted by DROP`
 			sqlDB.ExpectErr(t, reDecl, `DROP TYPE newdb.sc.typ`)
 			sqlDB.ExpectErr(t, reDecl, `DROP TABLE newdb.sc.tb`)
 			sqlDB.ExpectErr(t, reDecl, `DROP DATABASE newdb CASCADE`)
