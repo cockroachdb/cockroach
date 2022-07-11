@@ -85,6 +85,7 @@ type tenantStreamingClusters struct {
 	srcSysSQL    *sqlutils.SQLRunner
 	srcTenantSQL *sqlutils.SQLRunner
 	srcURL       url.URL
+	srcCleanup   func()
 
 	destCluster   *testcluster.TestCluster
 	destSysServer serverutils.TestServerInterface
@@ -189,6 +190,7 @@ func createTenantStreamingClusters(
 		srcTenantSQL:  sqlutils.MakeSQLRunner(srcTenantConn),
 		srcSysServer:  srcCluster.Server(0),
 		srcURL:        srcURL,
+		srcCleanup:    srcCleanup,
 		destCluster:   destCluster,
 		destSysSQL:    sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
 		destSysServer: destCluster.Server(0),
@@ -550,4 +552,44 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.srcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
+
+	cutoverTime := c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Pause ingestion.
+	c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Destroy the source cluster
+	c.srcCleanup()
+
+	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime.GoTime())
+
+	// Resume ingestion.
+	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
+
+	// Ingestion job should succeed despite source failure due to the successful cutover
+	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 }
