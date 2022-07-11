@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2769,6 +2770,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 
 	underTest := &adminPrivilegeChecker{
 		ie: s.InternalExecutor().(*sql.InternalExecutor),
+		st: s.ClusterSettings(),
 	}
 
 	withAdmin, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
@@ -2808,6 +2810,34 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
 			},
 		},
+	}
+	// test system privileges if valid version
+	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		sqlDB.Exec(t, "CREATE USER withvasystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvasystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedsystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
+
+		withVaSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvasystemprivilege")
+		require.NoError(t, err)
+		withVaRedactedSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredactedsystemprivilege")
+		require.NoError(t, err)
+		withVaAndRedactedSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredactedsystemprivilege")
+		require.NoError(t, err)
+
+		tests[0].usernameWantErr[withVaSystemPrivilege] = false
+		tests[1].usernameWantErr[withVaSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaSystemPrivilege] = false
+		tests[0].usernameWantErr[withVaRedactedSystemPrivilege] = true
+		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
+		tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
+		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
+		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
+
 	}
 	for _, tt := range tests {
 		for userName, wantErr := range tt.usernameWantErr {

@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -327,7 +329,18 @@ func (b *baseStatusServer) checkCancelPrivilege(
 				return serverError(ctx, err)
 			}
 			if !ok {
-				return errRequiresRoleOption(roleoption.CANCELQUERY)
+				if b.privilegeChecker.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+					hasCancelQuery, err := b.privilegeChecker.checkHasSystemPrivilege(ctx, reqUser, "CANCELQUERY")
+					if err != nil {
+						return serverError(ctx, err)
+					}
+					if !hasCancelQuery {
+						return status.Errorf(
+							codes.PermissionDenied, "this operation requires %s privilege", privilege.CANCELQUERY)
+					}
+				} else {
+					return errRequiresRoleOption(roleoption.CANCELQUERY)
+				}
 			}
 			// Non-admins cannot cancel admins' sessions/queries.
 			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, sessionUser)

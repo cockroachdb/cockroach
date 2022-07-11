@@ -181,6 +181,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/physicalplan",
+        "//pkg/sql/privilege",
         "//pkg/sql/querycache",
         "//pkg/sql/rangeprober",
         "//pkg/sql/roleoption",
