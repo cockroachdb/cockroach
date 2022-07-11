@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -119,6 +120,7 @@ func TestTelemetryLogging(t *testing.T) {
 	testData := []struct {
 		name                    string
 		query                   string
+		queryNoConstants        string
 		execTimestampsSeconds   []float64 // Execute the query with the following timestamps.
 		expectedLogStatement    string
 		stubMaxEventFrequency   int64
@@ -133,6 +135,7 @@ func TestTelemetryLogging(t *testing.T) {
 			// logged since  we log all statements that are not of type DML.
 			"truncate-table-query",
 			"TRUNCATE t;",
+			"TRUNCATE TABLE t",
 			[]float64{1, 1.1, 1.2, 2},
 			`TRUNCATE TABLE`,
 			1,
@@ -145,6 +148,7 @@ func TestTelemetryLogging(t *testing.T) {
 			// The first statement should be logged.
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
+			"SELECT * FROM t LIMIT _",
 			[]float64{3},
 			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
 			1,
@@ -158,6 +162,7 @@ func TestTelemetryLogging(t *testing.T) {
 			// thus 2 log statements are expected, with 2 skipped queries.
 			"select-*-limit-2-query",
 			"SELECT * FROM t LIMIT 2;",
+			"SELECT * FROM t LIMIT _",
 			[]float64{4, 4.1, 4.2, 5},
 			`SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
 			1,
@@ -170,6 +175,7 @@ func TestTelemetryLogging(t *testing.T) {
 			// Once required time has elapsed, the next statement should be logged.
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
+			"SELECT * FROM t LIMIT _",
 			[]float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
 			`SELECT * FROM \"\".\"\".t LIMIT ‹3›`,
 			10,
@@ -276,6 +282,10 @@ func TestTelemetryLogging(t *testing.T) {
 				}
 				if !strings.Contains(e.Message, "\"DatabaseID\":"+strconv.Itoa(int(dbID))) {
 					t.Errorf("expected to find DatabaseID: %v", dbID)
+				}
+				stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, false, true, databaseName)
+				if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
+					t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
 				}
 			}
 		}

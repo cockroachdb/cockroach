@@ -1053,6 +1053,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
+	var stmtFingerprintID roachpb.StmtFingerprintID
 	defer func() {
 		planner.maybeLogStatement(
 			ctx,
@@ -1064,6 +1065,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
 		)
 	}()
 
@@ -1170,7 +1172,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
-	ex.recordStatementSummary(
+	stmtFingerprintID = ex.recordStatementSummary(
 		ctx, planner,
 		int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)), res.RowsAffected(), res.Err(), stats,
 	)
