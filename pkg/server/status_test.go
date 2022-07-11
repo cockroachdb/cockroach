@@ -2297,7 +2297,7 @@ func TestListActivitySecurity(t *testing.T) {
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(ctx)
 
-	expectedErrNoPermission := "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED role options"
+	expectedErrNoPermission := "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED system privilege"
 	contentionMsg := &serverpb.ListContentionEventsResponse{}
 	flowsMsg := &serverpb.ListDistSQLFlowsResponse{}
 	getErrors := func(msg protoutil.Message) []serverpb.ListActivityError {
