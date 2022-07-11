@@ -270,35 +270,73 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
 }
 
-// Resume is part of the jobs.Resumer interface.
-func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
+// The ingestion job should never fail, only pause, as progress should never be lost.
+func (s *streamIngestionResumer) handleResumeError(
+	resumeCtx context.Context, execCtx interface{}, err error,
+) error {
+	const errorFmt = "ingestion job failed (%v) but is being paused"
+	errorMessage := fmt.Sprintf(errorFmt, err)
+	log.Warningf(resumeCtx, errorFmt, err)
+
+	// The ingestion job is paused but the producer job will keep
+	// running until it times out. Users can still resume ingestion before
+	// the producer job times out.
 	jobExecCtx := execCtx.(sql.JobExecContext)
+	return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), func(ctx context.Context,
+		planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+		progress.RunningStatus = errorMessage
+		return nil
+	}, errorMessage)
+}
+
+// Resume is part of the jobs.Resumer interface.  Ensure that any errors
+// produced here are returned as s.handleResumeError.
+func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
+	// Cutover should be the *first* thing checked upon resumption as it is the
+	// most critical task in disaster recovery.
+	reverted, err := maybeRevertToCutoverTimestamp(resumeCtx, execCtx, s.job.ID())
+	if err != nil {
+		return s.handleResumeError(resumeCtx, execCtx, err)
+	}
+
+	if reverted {
+		log.Infof(resumeCtx, "job completed cutover on resume")
+		return nil
+	}
+
 	// Start ingesting KVs from the replication stream.
 	// TODO(casper): retry stream ingestion with exponential
 	// backoff and finally pause on error.
-	err := ingest(resumeCtx, jobExecCtx, s.job)
+	err = ingest(resumeCtx, execCtx.(sql.JobExecContext), s.job)
 	if err != nil {
-		const errorFmt = "ingestion job failed (%v) but is being paused"
-		errorMessage := fmt.Sprintf(errorFmt, err)
-		log.Warningf(resumeCtx, errorFmt, err)
-		// The ingestion job is paused but the producer job will keep
-		// running until it times out. Users can still resume the job before
-		// the producer job times out.
-		return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), func(ctx context.Context,
-			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
-			progress.RunningStatus = errorMessage
-			return nil
-		}, errorMessage)
+		return s.handleResumeError(resumeCtx, execCtx, err)
 	}
 	return nil
 }
 
-// revertToCutoverTimestamp reads the job progress for the cutover time and
-// issues a RevertRangeRequest with the target time set to that cutover time, to
-// bring the ingesting cluster to a consistent state.
+// revertToCutoverTimestamp attempts a cutover and errors out if one was not
+// executed.
 func revertToCutoverTimestamp(
 	ctx context.Context, execCtx interface{}, ingestionJobID jobspb.JobID,
 ) error {
+	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJobID)
+	if err != nil {
+		return err
+	}
+	if !reverted {
+		return errors.Errorf("required cutover was not completed")
+	}
+
+	return nil
+}
+
+// maybeRevertToCutoverTimestamp reads the job progress for the cutover time and
+// if the job has progressed passed the cutover time issues a RevertRangeRequest
+// with the target time set to that cutover time, to bring the ingesting cluster
+// to a consistent state.
+func maybeRevertToCutoverTimestamp(
+	ctx context.Context, execCtx interface{}, ingestionJobID jobspb.JobID,
+) (bool, error) {
 	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
 	defer span.Finish()
 
@@ -306,25 +344,30 @@ func revertToCutoverTimestamp(
 	db := p.ExecCfg().DB
 	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, ingestionJobID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	details := j.Details()
 	var sd jobspb.StreamIngestionDetails
 	var ok bool
 	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
-		return errors.Newf("unknown details type %T in stream ingestion job %d",
+		return false, errors.Newf("unknown details type %T in stream ingestion job %d",
 			details, ingestionJobID)
 	}
 	progress := j.Progress()
 	var sp *jobspb.Progress_StreamIngest
 	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return errors.Newf("unknown progress type %T in stream ingestion job %d",
+		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
 			j.Progress().Progress, ingestionJobID)
 	}
 
-	if sp.StreamIngest.CutoverTime.IsEmpty() {
-		return errors.AssertionFailedf("cutover time is unexpectedly empty, " +
-			"cannot revert to a consistent state")
+	cutoverTime := sp.StreamIngest.CutoverTime
+	if cutoverTime.IsEmpty() {
+		log.Infof(ctx, "empty cutover time, no revert required")
+		return false, nil
+	}
+	if progress.GetHighWater() == nil || progress.GetHighWater().Less(cutoverTime) {
+		log.Infof(ctx, "job with highwater %s not yet ready to revert to cutover at %s", progress.GetHighWater(), cutoverTime.String())
+		return false, nil
 	}
 
 	spans := []roachpb.Span{sd.Span}
@@ -342,7 +385,7 @@ func revertToCutoverTimestamp(
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
 		if err := db.Run(ctx, &b); err != nil {
-			return err
+			return false, err
 		}
 
 		spans = spans[:0]
@@ -350,13 +393,13 @@ func revertToCutoverTimestamp(
 			r := raw.GetRevertRange()
 			if r.ResumeSpan != nil {
 				if !r.ResumeSpan.Valid() {
-					return errors.Errorf("invalid resume span: %s", r.ResumeSpan)
+					return false, errors.Errorf("invalid resume span: %s", r.ResumeSpan)
 				}
 				spans = append(spans, *r.ResumeSpan)
 			}
 		}
 	}
-	return j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+	return true, j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
 }
 
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
