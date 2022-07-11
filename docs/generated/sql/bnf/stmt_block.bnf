@@ -1369,6 +1369,7 @@ unreserved_keyword ::=
 	| 'VALIDATE'
 	| 'VALUE'
 	| 'VARYING'
+	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'VIEW'
 	| 'VIEWACTIVITY'
 	| 'VIEWACTIVITYREDACTED'
@@ -2530,6 +2531,7 @@ restore_options ::=
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'TENANT' '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
+	| 'VERIFY_BACKUP_TABLE_DATA'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

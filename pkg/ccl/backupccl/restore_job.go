@@ -389,6 +389,7 @@ func restore(
 			dataToRestore.getRekeys(),
 			dataToRestore.getTenantRekeys(),
 			endTime,
+			dataToRestore.isValidateOnly(),
 			progCh,
 		)
 	}
@@ -484,6 +485,8 @@ type restoreResumer struct {
 		// afterPreRestore runs on cluster restores after restoring the "preRestore"
 		// data.
 		afterPreRestore func() error
+		// checksumRecover
+		checksumRecover func() error
 	}
 }
 
@@ -657,15 +660,32 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	return ok
 }
 
-// createImportingDescriptors create the tables that we will restore into. It also
-// fetches the information from the old tables that we need for the restore.
+// createImportingDescriptors creates the tables that we will restore into and returns up to three
+// configurations for separate restoration flows. The three restoration flows are
+//
+//   1. dataToPreRestore: a restoration flow cfg to ingest a subset of
+//   system tables (e.g. zone configs) during a cluster restore that are
+//   required to be set up before the rest of the data gets restored.
+//   This should be empty during non-cluster restores.
+//
+//   2. preValidation: a restoration flow cfg to ingest the remainder of system tables,
+//   during a verify_backup_table_data, cluster level, restores. This should be empty otherwise.
+//
+//   3. trackedRestore: a restoration flow cfg to ingest the remainder of
+//   restore targets. This flow should get executed last and should contain the
+//   bulk of the work, as it is used for job progress tracking.
 func createImportingDescriptors(
 	ctx context.Context,
 	p sql.JobExecContext,
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
-) (*restorationDataBase, *mainRestorationData, error) {
+) (
+	dataToPreRestore *restorationDataBase,
+	preValidation *restorationDataBase,
+	trackedRestore *mainRestorationData,
+	err error,
+) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	var allMutableDescs []catalog.MutableDescriptor
@@ -729,12 +749,18 @@ func createImportingDescriptors(
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
 	preRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly)
 	postRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly)
+	var verifySpans []roachpb.Span
+	if details.VerifyData {
+		// verifySpans contains the spans that should be read and checksum'd during a
+		// verify_backup_table_data RESTORE
+		verifySpans = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false)
+	}
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
 	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	databaseDescs := make([]*descpb.DatabaseDescriptor, len(mutableDatabases))
@@ -757,11 +783,11 @@ func createImportingDescriptors(
 	}
 
 	if err := rewrite.SchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if err := remapPublicSchemas(ctx, p, mutableDatabases, &schemasToWrite, &writtenSchemas, &details); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Assign new IDs and privileges to the tables, and update all references to
@@ -769,7 +795,7 @@ func createImportingDescriptors(
 	if err := rewrite.TableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
 	for i, table := range mutableTables {
@@ -807,13 +833,13 @@ func createImportingDescriptors(
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
 	if err := rewrite.TypeDescs(types, details.DescriptorRewrites); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Finally, clean up / update any schema changer state inside descriptors
 	// globally.
 	if err := rewrite.MaybeClearSchemaChangerStateInDescs(allMutableDescs); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Set the new descriptors' states to offline.
@@ -1110,7 +1136,7 @@ func createImportingDescriptors(
 			return err
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -1120,7 +1146,7 @@ func createImportingDescriptors(
 		tableToSerialize := tables[i]
 		newDescBytes, err := protoutil.Marshal(tableToSerialize.DescriptorProto())
 		if err != nil {
-			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, execinfrapb.TableRekey{
@@ -1131,7 +1157,7 @@ func createImportingDescriptors(
 
 	_, backupTenantID, err := keys.DecodeTenantPrefix(backupCodec.TenantPrefix())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
 		// Ensure old processors fail if this is a previously unsupported restore of
@@ -1168,20 +1194,41 @@ func createImportingDescriptors(
 		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
-	dataToPreRestore := &restorationDataBase{
+	dataToPreRestore = &restorationDataBase{
 		spans:        preRestoreSpans,
 		tableRekeys:  rekeys,
 		tenantRekeys: tenantRekeys,
 		pkIDs:        pkIDs,
 	}
 
-	dataToRestore := &mainRestorationData{
+	trackedRestore = &mainRestorationData{
 		restorationDataBase{
 			spans:        postRestoreSpans,
 			tableRekeys:  rekeys,
 			tenantRekeys: tenantRekeys,
 			pkIDs:        pkIDs,
 		},
+	}
+
+	preValidation = &restorationDataBase{}
+	// During a RESTORE with verify_backup_table_data data, progress on
+	// verifySpans should be the source of job progress (as it will take the most time); therefore,
+	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
+	// (only relevant during a cluster restore).
+	if details.VerifyData {
+		trackedRestore.restorationDataBase.spans = verifySpans
+		trackedRestore.restorationDataBase.validateOnly = true
+
+		// Before the main (validation) flow, during a cluster level restore,
+		// we still need to restore system tables that do NOT get restored in the dataToPreRestore
+		// flow. This restoration will not get tracked during job progress.
+		if (details.DescriptorCoverage != tree.AllDescriptors) && len(postRestoreSpans) != 0 {
+			return nil, nil, nil, errors.AssertionFailedf(
+				"no spans should get restored in a non cluster, verify_backup_table_data restore")
+		}
+		preValidation.spans = postRestoreSpans
+		preValidation.tableRekeys = rekeys
+		preValidation.pkIDs = pkIDs
 	}
 
 	if tempSystemDBID != descpb.InvalidID {
@@ -1192,11 +1239,19 @@ func createImportingDescriptors(
 		}
 		for _, table := range postRestoreTables {
 			if table.GetParentID() == tempSystemDBID {
-				dataToRestore.systemTables = append(dataToRestore.systemTables, table)
+				if details.VerifyData {
+					// During a verify_backup_table_data RESTORE, system tables are
+					// restored pre validation. Note that the system tables are still
+					// added to the trackedRestore flow because after ingestion, the
+					// restore job uses systemTable metadata hanging from the
+					// trackedRestore object.
+					preValidation.systemTables = append(preValidation.systemTables, table)
+				}
+				trackedRestore.systemTables = append(trackedRestore.systemTables, table)
 			}
 		}
 	}
-	return dataToPreRestore, dataToRestore, nil
+	return dataToPreRestore, preValidation, trackedRestore, nil
 }
 
 // remapPublicSchemas is used to create a descriptor backed public schema
@@ -1333,7 +1388,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	preData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
+	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec,
+		sqlDescs, r)
 	if err != nil {
 		return err
 	}
@@ -1444,6 +1500,25 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
+	if !preValidateData.isEmpty() {
+		res, err := restoreWithRetry(
+			ctx,
+			p,
+			numNodes,
+			backupManifests,
+			details.BackupLocalityInfo,
+			details.EndTime,
+			preValidateData,
+			r.job,
+			details.Encryption,
+			&kmsEnv,
+		)
+		if err != nil {
+			return err
+		}
+
+		resTotal.Add(res)
+	}
 	{
 		// Restore the main data bundle. We notably only restore the system tables
 		// later.
