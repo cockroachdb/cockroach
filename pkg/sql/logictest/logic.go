@@ -4617,6 +4617,8 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 	// limit than other logic tests get.
 	serverArgs := TestServerArgs{
 		maxSQLMemoryLimit: 512 << 20, // 512 MiB
+		// TODO(yuzefovich): remove this once the flake in #84022 is fixed.
+		DisableWorkmemRandomization: true,
 	}
 	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, "", true /* runCCLConfigs */, prefixedGlobs...)
 }
