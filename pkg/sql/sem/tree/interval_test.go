@@ -195,11 +195,11 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseDInterval(styleVal, test.input, test.itm)
+					di, err := parseInterval(styleVal, test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
-					s3 := di.Duration.String()
+					s3 := di.String()
 					if s3 != test.output {
 						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
 					}
@@ -462,11 +462,11 @@ func TestPGIntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseDInterval(styleVal, test.input, test.itm)
+					di, err := parseInterval(styleVal, test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
-					s3 := di.Duration.String()
+					s3 := di.String()
 					if s3 != expected {
 						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, expected)
 					}
@@ -585,11 +585,11 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					di, err := parseInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
-					s3 := di.Duration.String()
+					s3 := di.String()
 					if s3 != test.output {
 						t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
 					}
@@ -597,11 +597,11 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 
 				// Test that ISO 8601 output format also round-trips
 				s4 := dur.ISO8601String()
-				di2, err := parseDInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), s4, test.itm)
+				di2, err := parseInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), s4, test.itm)
 				if err != nil {
 					t.Fatalf(`%q: ISO8601String "%s" unrecognized as datum: %v`, test.input, s4, err)
 				}
-				s5 := di2.Duration.String()
+				s5 := di2.String()
 				if s != s5 {
 					t.Fatalf(`%q: repr "%s" does not round-trip, got %s instead`, test.input, s4, s5)
 

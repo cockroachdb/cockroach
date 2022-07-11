@@ -159,7 +159,9 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DDecimal:
 			return tree.MakeDBool(v.Sign() != 0), nil
 		case *tree.DString:
-			return tree.ParseDBool(strings.TrimSpace(string(*v)))
+			// No need to trim the spaces explicitly since ParseDBool does that
+			// itself.
+			return tree.ParseDBool(string(*v))
 		case *tree.DCollatedString:
 			return tree.ParseDBool(v.Contents)
 		case *tree.DJSON:

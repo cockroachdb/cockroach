@@ -1,3 +1,3 @@
 alter_onetable_stmt ::=
-	'ALTER' 'TABLE' table_name 'SET' '(' storage_parameter_key '=' var_value ) ) )* ')'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'SET' '(' storage_parameter_key '=' var_value ) ) )* ')'
+	'ALTER' 'TABLE' table_name 'SET' '(' storage_parameter_key '=' var_value ')'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'SET' '(' storage_parameter_key '=' var_value ')'
