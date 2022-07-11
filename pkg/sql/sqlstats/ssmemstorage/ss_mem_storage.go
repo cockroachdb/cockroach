@@ -465,6 +465,7 @@ func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStati
 	s.mu.distSQLUsed = statistics.Key.DistSQL
 	s.mu.fullScan = statistics.Key.FullScan
 	s.mu.database = statistics.Key.Database
+	s.mu.querySummary = statistics.Key.QuerySummary
 }
 
 // getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid

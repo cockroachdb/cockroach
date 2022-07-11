@@ -403,3 +403,19 @@ SELECT * FROM txn_fingerprint_view
 
 statement ok
 COMMIT
+
+statement ok
+BEGIN; SELECT count(1) AS wombat1; COMMIT
+
+query T
+SELECT metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE '%wombat1%'
+----
+SELECT count(_) AS wom...
+
+statement ok
+SELECT count(1) AS wombat2
+
+query T
+SELECT metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE '%wombat2%'
+----
+SELECT count(_) AS wom...
