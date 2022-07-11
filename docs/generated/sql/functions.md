@@ -1,3 +1,12 @@
+### ANYELEMENT functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="inet"></a><code>inet(val: anyelement) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>If possible, converts input to that of type INet.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Array functions
 
 <table>
