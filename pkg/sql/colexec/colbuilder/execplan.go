@@ -2345,7 +2345,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 		)
 	} else {
 		var leftIdx int
@@ -2422,7 +2422,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 				)
 			}
 		} else {
