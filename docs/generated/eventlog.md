@@ -2245,6 +2245,7 @@ contains common SQL event/execution details.
 | `StatementID` | Statement ID of the query. | no |
 | `TransactionID` | Transaction ID of the query. | no |
 | `DatabaseID` | Database ID of the query. | no |
+| `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
 
 
 #### Common fields
