@@ -615,7 +615,7 @@ func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
 			// will have extra inverted columns added. Add any new inverted columns to
 			// the metadata.
 			for j, n := md.tables[i].Table.ColumnCount(), tab.ColumnCount(); j < n; j++ {
-				md.AddColumn(string(tab.Column(i).ColName()), types.Bytes)
+				md.AddColumn(string(tab.Column(j).ColName()), types.Bytes)
 			}
 			md.tables[i].Table = tab
 		}
