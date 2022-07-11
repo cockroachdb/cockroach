@@ -4119,3 +4119,43 @@ DROP TABLE drop_fk_during_addition_ref;
 
 statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: \(42P01\): referenced relation \"drop_fk_during_addition_ref\" does not exist
 COMMIT;
+
+# Regression test for #80828. Do not attempt a fast path cascading delete when
+# a descendent is in the process of being added.
+subtest 80828
+
+statement ok
+CREATE TABLE parent80828 (id int primary key);
+CREATE TABLE child80828 (id INT PRIMARY KEY, pid INT NOT NULL REFERENCES parent80828(id) ON DELETE CASCADE, UNIQUE INDEX (pid));
+INSERT INTO parent80828 VALUES (1);
+INSERT INTO child80828 VALUES (1, 1);
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.base = .00001;
+
+# Set a pause point so that grandchild stays in the "adding" state.
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec'
+
+statement error job .* was paused before it completed with reason: pause point "schemachanger.before.exec" hit
+CREATE TABLE grandchild80828 (parent_id INT NOT NULL REFERENCES child80828(pid) ON DELETE CASCADE);
+
+statement ok
+DELETE FROM parent80828 WHERE id = 1;
+
+# Clear the pause point.
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints
+
+statement ok
+RESET CLUSTER SETTING jobs.registry.interval.base
+
+query I
+SELECT count(*) FROM parent80828
+----
+0
+
+query I
+SELECT count(*) FROM child80828
+----
+0
