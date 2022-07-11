@@ -389,7 +389,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(catalog.IncludeConstraints)
+	desc, err := ib.desc.MakeFirstMutationPublic()
 	if err != nil {
 		return err
 	}
