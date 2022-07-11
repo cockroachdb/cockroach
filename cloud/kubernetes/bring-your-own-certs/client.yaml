@@ -20,7 +20,7 @@ spec:
   serviceAccountName: cockroachdb
   containers:
   - name: cockroachdb-client
-    image: cockroachdb/cockroach:v22.1.2
+    image: cockroachdb/cockroach:v22.1.3
     # Keep a pod open indefinitely so kubectl exec can be used to get a shell to it
     # and run cockroach client commands, such as cockroach sql, cockroach node status, etc.
     command:
