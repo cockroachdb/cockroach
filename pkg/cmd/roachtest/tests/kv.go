@@ -273,7 +273,7 @@ func registerKV(r registry.Registry) {
 		if opts.tracing {
 			nameParts = append(nameParts, "tracing")
 		}
-		owner := registry.OwnerKV
+		owner := registry.OwnerTestEng
 		if opts.owner != "" {
 			owner = opts.owner
 		}
