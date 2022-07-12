@@ -253,12 +253,34 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if len(r.mu.pausedFollowers) > 0 {
-		// If we have paused followers, make log truncation lenient until the
-		// log is large enough so that catching up would certainly be slower.
-		// Without this, followers that are paused regularly due to an ongoing
-		// overload situation over time might be cut off from all logs and will
-		// be overloaded via snapshots instead.
+
+	// If we have paused followers, make log truncation lenient until the
+	// log is large enough so that catching up would certainly be slower.
+	// Without this, followers that are paused regularly due to an ongoing
+	// overload situation over time might be cut off from all logs and will
+	// be overloaded via snapshots instead.
+	ioThresholds := r.store.ioOverloadedStores.Load()
+	thresh := pauseReplicationIOThreshold.Get(&r.store.cfg.Settings.SV)
+	if thresh < 1.0 {
+		// We're pausing replication to followers based on `thresh`, but if we delay
+		// log truncations only while above that threshold, the moment we drop below
+		// we'll truncate the log. This is perhaps fine if the recovery is
+		// permanent, but more often than not it will be transient - we're hitting
+		// the store with more load again, so it might overload again. So use a
+		// lower threshold for delaying truncations, i.e. we will delay truncation
+		// for stores before and after they get paused, i.e. carry out the aggressive
+		// truncations only once the store has (hopefully) conclusively dipped below
+		// half the original threshold.
+		thresh /= 2
+	}
+	if len(r.mu.pausedFollowers) > 0 || (thresh > 0 && len(r.descRLocked().Replicas().Filter(func(rDesc roachpb.ReplicaDescriptor) bool {
+		iot, ok := ioThresholds[rDesc.StoreID]
+		if !ok {
+			return false
+		}
+		sc, _ := iot.Score()
+		return sc > thresh
+	}).AsProto()) > 0) {
 		targetSize = r.mu.conf.RangeMaxBytes
 	}
 	if targetSize > r.mu.conf.RangeMaxBytes {
