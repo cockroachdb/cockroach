@@ -283,8 +283,8 @@ func maybeUpdateBackRefsAndBuildMap(
 	t *tabledesc.Mutable,
 	seqIdentifiers []seqexpr.SeqIdentifier,
 	changedSeqDescs *[]*tabledesc.Mutable,
-) (map[string]descpb.ID, error) {
-	seqNameToID := make(map[string]descpb.ID)
+) (map[string]int64, error) {
+	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
 		seqDesc, err := sql.GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 		if err != nil {
@@ -309,7 +309,7 @@ func maybeUpdateBackRefsAndBuildMap(
 				*changedSeqDescs = append(*changedSeqDescs, seqDesc)
 			}
 		}
-		seqNameToID[seqDesc.GetName()] = seqDesc.ID
+		seqNameToID[seqDesc.GetName()] = int64(seqDesc.ID)
 	}
 
 	return seqNameToID, nil

@@ -79,29 +79,35 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
 		}
 
-		// Verify that restored sequences are now referenced by ID.
-		var createTable string
-		sqlDB.QueryRow(t, `SHOW CREATE test.t1`).Scan(&unused, &createTable)
-		require.Contains(t, createTable, "i INT8 NOT NULL DEFAULT nextval('test.public.t1_i_seq'::REGCLASS)")
-		require.Contains(t, createTable, "j INT8 NOT NULL DEFAULT nextval('test.public.s'::REGCLASS)")
-		sqlDB.QueryRow(t, `SHOW CREATE test.v`).Scan(&unused, &createTable)
-		require.Contains(t, createTable, "SELECT nextval('test.public.s2'::REGCLASS)")
-		sqlDB.QueryRow(t, `SHOW CREATE test.v2`).Scan(&unused, &createTable)
-		require.Contains(t, createTable, "SELECT nextval('test.public.s2'::REGCLASS) AS k")
+		// Verify that sequences created in older versions cannot be renamed, nor can the
+		// database they are referencing.
+		sqlDB.ExpectErr(t,
+			`pq: cannot rename relation "test.public.s" because view "t1" depends on it`,
+			`ALTER SEQUENCE test.s RENAME TO test.s2`)
+		sqlDB.ExpectErr(t,
+			`pq: cannot rename relation "test.public.t1_i_seq" because view "t1" depends on it`,
+			`ALTER SEQUENCE test.t1_i_seq RENAME TO test.t1_i_seq_new`)
+		sqlDB.ExpectErr(t,
+			`pq: cannot rename database because relation "test.public.t1" depends on relation "test.public.s"`,
+			`ALTER DATABASE test RENAME TO new_test`)
 
-		// Verify that, as a result, all sequences can now be renamed.
-		sqlDB.Exec(t, `ALTER SEQUENCE test.t1_i_seq RENAME TO test.t1_i_seq_new`)
-		sqlDB.Exec(t, `ALTER SEQUENCE test.s RENAME TO test.s_new`)
-		sqlDB.Exec(t, `ALTER SEQUENCE test.s2 RENAME TO test.s2_new`)
-
-		// Finally, verify that sequences are correctly restored and can be used in tables/views.
-		sqlDB.Exec(t, `INSERT INTO test.t1 VALUES (default, default)`)
-		expectedRows := [][]string{
+		sequenceResults := [][]string{
 			{"1", "1"},
 			{"2", "2"},
 		}
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY i`, expectedRows)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.v`, [][]string{{"1"}})
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.v2`, [][]string{{"2"}})
+
+		// Verify that tables with old sequences aren't corrupted.
+		sqlDB.Exec(t, `SET database = test; INSERT INTO test.t1 VALUES (default, default)`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY i`, sequenceResults)
+
+		// Verify that the views are okay, and the sequences it depends on cannot be renamed.
+		sqlDB.CheckQueryResults(t, `SET database = test; SELECT * FROM test.v`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SET database = test; SELECT * FROM test.v2`, [][]string{{"2"}})
+		sqlDB.ExpectErr(t,
+			`pq: cannot rename relation "s2" because view "v" depends on it`,
+			`ALTER SEQUENCE s2 RENAME TO s3`)
+		sqlDB.CheckQueryResults(t, `SET database = test; SHOW CREATE VIEW test.v`, [][]string{{
+			"test.public.v", "CREATE VIEW public.v (\n\tnextval\n) AS (SELECT nextval('s2':::STRING))",
+		}})
 	}
 }
