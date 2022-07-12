@@ -718,6 +718,10 @@ func (u *sqlSymUnion) scheduleLabelSpec() *tree.ScheduleLabelSpec {
     return u.val.(*tree.ScheduleLabelSpec)
 }
 
+func (u *sqlSymUnion) connectionLabelSpec() *tree.ConnectionLabelSpec {
+    return u.val.(*tree.ConnectionLabelSpec)
+}
+
 func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
   return u.val.(geopb.ShapeType)
 }
@@ -1066,6 +1070,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
+%type <tree.Statement> create_external_connection_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -1531,6 +1536,9 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
+
+%type <*tree.ConnectionLabelSpec> connection_label_spec
+
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -3131,6 +3139,25 @@ opt_with_schedule_options:
     $$.val = nil
   }
 
+create_external_connection_stmt:
+	CREATE EXTERNAL CONNECTION /*$4=*/connection_label_spec AS /*$6=*/string_or_placeholder
+	{
+		$$.val = &tree.CreateExternalConnection{
+				  ConnectionLabelSpec: *($4.connectionLabelSpec()),
+		      As: $6.expr(),
+		}
+	}
+ | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
+
+connection_label_spec:
+  string_or_placeholder
+  {
+      $$.val = &tree.ConnectionLabelSpec{Label: $1.expr(), IfNotExists: false}
+  }
+| IF NOT EXISTS string_or_placeholder
+  {
+      $$.val = &tree.ConnectionLabelSpec{Label: $4.expr(), IfNotExists: true}
+  }
 
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
@@ -3813,6 +3840,7 @@ create_stmt:
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_changefeed_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
+| create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -8264,7 +8292,7 @@ storing:
 // ALL or STORING (*). The syntax addition is straightforward, but we
 // need to be careful with the rest of the implementation. In
 // particular, columns stored at indexes are currently encoded in such
-// a way that adding a new column would require rewriting the existing
+// a way that adding a new column would require rewConnectionLabelSpec the existing
 // index values. We will need to change the storage format so that it
 // is a list of <columnID, value> pairs which will allow both adding
 // and dropping columns without rewriting indexes that are storing the
