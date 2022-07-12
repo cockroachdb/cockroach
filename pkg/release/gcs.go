@@ -64,25 +64,29 @@ func (p *GCSProvider) PutObject(input *PutObjectInput) error {
 	var body []byte
 	if input.WebsiteRedirectLocation != nil {
 		// Seems like Google storage doesn't support this. Copy the original object.
-		// copy content
-		r, err := p.client.Bucket(p.bucket).Object(*input.WebsiteRedirectLocation).NewReader(ctx)
+		// copy content. Strip the leading slash to normalize the object name.
+		copyFrom := strings.TrimPrefix(*input.WebsiteRedirectLocation, "/")
+		r, err := p.client.Bucket(p.bucket).Object(copyFrom).NewReader(ctx)
 		if err != nil {
-			return fmt.Errorf("cannot read %s: %w", *input.WebsiteRedirectLocation, err)
+			return fmt.Errorf("cannot read %s: %w", copyFrom, err)
 		}
 		body, err = ioutil.ReadAll(r)
 		if err != nil {
-			return fmt.Errorf("cannot download %s: %w", *input.WebsiteRedirectLocation, err)
+			return fmt.Errorf("cannot download %s: %w", copyFrom, err)
 		}
 	} else {
 		var err error
 		body, err = ioutil.ReadAll(input.Body)
 		if err != nil {
-			return fmt.Errorf("cannot download %s: %w", *input.WebsiteRedirectLocation, err)
+			return fmt.Errorf("cannot read content: %w", err)
 		}
 	}
-	w := obj.NewWriter(ctx)
-	if _, err := w.Write(body); err != nil {
-		return fmt.Errorf("error in GCS upload %s: %w", *input.Key, err)
+	wc := obj.NewWriter(ctx)
+	if _, err := wc.Write(body); err != nil {
+		return fmt.Errorf("error writing to GCS object %s: %w", *input.Key, err)
+	}
+	if err := wc.Close(); err != nil {
+		return fmt.Errorf("error closing GCS object %s: %w", *input.Key, err)
 	}
 	attrs := storage.ObjectAttrsToUpdate{}
 	updateAttrs := false
