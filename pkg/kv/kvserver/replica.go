@@ -260,6 +260,14 @@ type Replica struct {
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
+	// isInitialized is true if we know the metadata of this replica's range,
+	// either because we created it or we have received an initial snapshot from
+	// another node. It is false when a replica has been created in response to an
+	// incoming message but we are waiting for our initial snapshot.
+	// The field can be accessed atomically without needing to acquire the
+	// replica.mu lock. All updates to state.Desc should be duplicated here.
+	isInitialized syncutil.AtomicBool
+
 	// connectionClass controls the ConnectionClass used to send raft messages.
 	connectionClass atomicConnectionClass
 
@@ -760,7 +768,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.isInitializedRLocked() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
+	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
 
 		// Set largestPreviousMaxRangeSizeBytes if the current range size is
@@ -1309,7 +1317,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
 			redact.Safe(pretty.Diff(diskState, r.mu.state)))
 	}
-	if r.isInitializedRLocked() {
+	if r.IsInitialized() {
 		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {
 			log.Fatalf(ctx, "denormalized start key %s diverged from %s", r.startKey, r.mu.state.Desc.StartKey)
 		}
@@ -1387,7 +1395,7 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	// to handle this case particularly well, but if we do reach here (as some
 	// tests that call directly into Replica.Send have), it's better to return
 	// an error than to panic in checkSpanInRangeRLocked.
-	if !r.isInitializedRLocked() {
+	if !r.IsInitialized() {
 		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
 	}
 

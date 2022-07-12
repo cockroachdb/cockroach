@@ -121,8 +121,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		}
 
 		// This is a fatal error as an initialized replica can never become
-		/// uninitialized.
-		if !rep.isInitializedRLocked() {
+		// uninitialized.
+		if !rep.IsInitialized() {
 			rep.mu.Unlock()
 			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica cannot be removed with removeInitializedReplica: %v", rep)
@@ -250,7 +250,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 			log.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
 		}
 
-		if rep.isInitializedRLocked() {
+		if rep.IsInitialized() {
 			rep.mu.Unlock()
 			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
