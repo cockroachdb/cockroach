@@ -624,3 +624,8 @@ func (desc *wrapper) GetPrivilegeDescriptor(
 ) (*catpb.PrivilegeDescriptor, error) {
 	return desc.GetPrivileges(), nil
 }
+
+// IsRefreshViewRequired implements the TableDescriptor interface.
+func (desc *wrapper) IsRefreshViewRequired() bool {
+	return desc.IsMaterializedView && desc.RefreshViewRequired
+}

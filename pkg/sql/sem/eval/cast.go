@@ -227,6 +227,8 @@ func performCastWithoutPrecisionTruncation(
 			}
 			res = tree.NewDInt(tree.DInt(v.UnixEpochDays()))
 		case *tree.DInterval:
+			// TODO(mgartner): This cast is not supported in Postgres. We should
+			// remove it.
 			iv, ok := v.AsInt64()
 			if !ok {
 				return nil, tree.ErrIntOutOfRange

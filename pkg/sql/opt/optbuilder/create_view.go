@@ -87,6 +87,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Columns:      p,
 			Deps:         b.viewDeps,
 			TypeDeps:     b.viewTypeDeps,
+			WithData:     cv.WithData,
 		},
 	)
 	return outScope
