@@ -833,6 +833,7 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 }
 
 type tpccBenchSpec struct {
+	Owner                    registry.Owner // defaults to Test-Eng
 	Nodes                    int
 	CPUs                     int
 	Chaos                    bool
@@ -885,6 +886,10 @@ func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
 }
 
 func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
+	owner := registry.OwnerTestEng
+	if b.Owner != "" {
+		owner = b.Owner
+	}
 	nameParts := []string{
 		"tpccbench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -934,7 +939,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 
 	r.Add(registry.TestSpec{
 		Name:    name,
-		Owner:   registry.OwnerKV,
+		Owner:   owner,
 		Cluster: nodes,
 		Tags:    b.Tags,
 		// NB: intentionally not enabling encryption-at-rest to produce
