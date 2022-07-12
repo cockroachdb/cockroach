@@ -16,15 +16,28 @@ type FullBackupClause struct {
 	Recurrence Expr
 }
 
-// ScheduleLabelSpec describes the labeling specification for a scheduled job.
-type ScheduleLabelSpec struct {
+// LabelSpec describes the labeling specification for an object.
+type LabelSpec struct {
 	IfNotExists bool
 	Label       Expr
 }
 
+// Format implements the NodeFormatter interface.
+func (l *LabelSpec) Format(ctx *FmtCtx) {
+	if l.IfNotExists {
+		ctx.WriteString(" IF NOT EXISTS")
+	}
+	if l.Label != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(l.Label)
+	}
+}
+
+var _ NodeFormatter = &LabelSpec{}
+
 // ScheduledBackup represents scheduled backup job.
 type ScheduledBackup struct {
-	ScheduleLabelSpec ScheduleLabelSpec
+	ScheduleLabelSpec LabelSpec
 	Recurrence        Expr
 	FullBackup        *FullBackupClause /* nil implies choose default */
 	Targets           *BackupTargetList /* nil implies tree.AllDescriptors coverage */
@@ -39,14 +52,7 @@ var _ Statement = &ScheduledBackup{}
 func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE SCHEDULE")
 
-	if node.ScheduleLabelSpec.IfNotExists {
-		ctx.WriteString(" IF NOT EXISTS")
-	}
-	if node.ScheduleLabelSpec.Label != nil {
-		ctx.WriteString(" ")
-		ctx.FormatNode(node.ScheduleLabelSpec.Label)
-	}
-
+	ctx.FormatNode(&node.ScheduleLabelSpec)
 	ctx.WriteString(" FOR BACKUP")
 	if node.Targets != nil {
 		ctx.WriteString(" ")

@@ -1,0 +1,15 @@
+parse
+CREATE EXTERNAL CONNECTION 'foo' AS 'bar'
+----
+CREATE EXTERNAL CONNECTION 'foo' AS 'bar'
+CREATE EXTERNAL CONNECTION ('foo') AS ('bar') -- fully parenthesized
+CREATE EXTERNAL CONNECTION '_' AS '_' -- literals removed
+CREATE EXTERNAL CONNECTION 'foo' AS 'bar' -- identifiers removed
+
+parse
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar'
+----
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar'
+CREATE EXTERNAL CONNECTION IF NOT EXISTS ('foo') AS ('bar') -- fully parenthesized
+CREATE EXTERNAL CONNECTION IF NOT EXISTS '_' AS '_' -- literals removed
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar' -- identifiers removed

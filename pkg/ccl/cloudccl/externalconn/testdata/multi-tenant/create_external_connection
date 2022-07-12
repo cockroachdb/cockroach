@@ -1,0 +1,30 @@
+subtest basic-nodelocal
+
+initialize tenant=10
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo/bar';
+----
+
+inspect-system-table
+----
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+
+# Try to create another External Connection with the same name.
+exec-sql
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+----
+pq: external connection with connection name 'foo' already exists
+
+# Create another External Connection with a unique name.
+exec-sql
+CREATE EXTERNAL CONNECTION bar123 AS 'nodelocal://1/baz';
+----
+
+inspect-system-table
+----
+bar123 STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/baz"}}}
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+
+subtest end

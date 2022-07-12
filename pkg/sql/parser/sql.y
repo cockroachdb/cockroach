@@ -716,9 +716,11 @@ func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlacehol
 func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
     return u.val.(*tree.FullBackupClause)
 }
-
-func (u *sqlSymUnion) scheduleLabelSpec() *tree.ScheduleLabelSpec {
-    return u.val.(*tree.ScheduleLabelSpec)
+func (u *sqlSymUnion) scheduleLabelSpec() *tree.LabelSpec {
+    return u.val.(*tree.LabelSpec)
+}
+func (u *sqlSymUnion) labelSpec() *tree.LabelSpec {
+    return u.val.(*tree.LabelSpec)
 }
 
 func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
@@ -1069,6 +1071,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
+%type <tree.Statement> create_external_connection_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -1510,7 +1513,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
-%type <*tree.ScheduleLabelSpec> schedule_label_spec
+%type <*tree.LabelSpec> schedule_label_spec
 %type <tree.Expr>  cron_expr sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
@@ -1537,6 +1540,9 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
+
+%type <*tree.LabelSpec> label_spec
+
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -3092,18 +3098,24 @@ cron_expr:
     $$.val = $2.expr()
   }
 
-schedule_label_spec:
+label_spec:
   string_or_placeholder
   {
-      $$.val = &tree.ScheduleLabelSpec{Label: $1.expr(), IfNotExists: false}
+      $$.val = &tree.LabelSpec{Label: $1.expr(), IfNotExists: false}
   }
 | IF NOT EXISTS string_or_placeholder
   {
-      $$.val = &tree.ScheduleLabelSpec{Label: $4.expr(), IfNotExists: true}
+      $$.val = &tree.LabelSpec{Label: $4.expr(), IfNotExists: true}
+  }
+
+schedule_label_spec:
+  label_spec
+  {
+      $$.val = $1.labelSpec()
   }
 | /* EMPTY */
   {
-      $$.val = &tree.ScheduleLabelSpec{IfNotExists: false}
+      $$.val = &tree.LabelSpec{IfNotExists: false}
   }
 
 
@@ -3137,6 +3149,26 @@ opt_with_schedule_options:
     $$.val = nil
   }
 
+
+// %Help: CREATE EXTERNAL CONNECTION - create a new external connection
+// %Category: Misc
+// %Text:
+// CREATE EXTERNAL CONNECTION [IF NOT EXISTS] <name> AS <endpoint>
+//
+// Name:
+//   Unique name for this external connection.
+//
+// Endpoint:
+//   Endpoint of the resource that the external connection represents.
+create_external_connection_stmt:
+	CREATE EXTERNAL CONNECTION /*$4=*/label_spec AS /*$6=*/string_or_placeholder
+	{
+		$$.val = &tree.CreateExternalConnection{
+				  ConnectionLabelSpec: *($4.labelSpec()),
+		      As: $6.expr(),
+		}
+	}
+ | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
 
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
@@ -3819,6 +3851,7 @@ create_stmt:
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_changefeed_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
+| create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 

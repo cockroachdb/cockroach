@@ -1171,7 +1171,7 @@ func constructExpectedScheduledBackupNode(
 		},
 	}
 	sb := &tree.ScheduledBackup{
-		ScheduleLabelSpec: tree.ScheduleLabelSpec{
+		ScheduleLabelSpec: tree.LabelSpec{
 			IfNotExists: false,
 			Label:       tree.NewDString(sj.ScheduleLabel())},
 		Recurrence: tree.NewDString(recurrence),
