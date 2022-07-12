@@ -201,14 +201,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	require.Equal(t, revertRangeTargetTime, hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
 
 	// Wait for the ingestion job to have been marked as succeeded.
-	testutils.SucceedsSoon(t, func() error {
-		var status string
-		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, ingestionJobID).Scan(&status)
-		if jobs.Status(status) != jobs.StatusSucceeded {
-			return errors.New("job not in succeeded state")
-		}
-		return nil
-	})
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(ingestionJobID))
 
 	// Check the validator for any failures.
 	for _, err := range streamValidator.failures() {

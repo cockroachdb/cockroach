@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -140,7 +137,7 @@ func distStreamIngest(
 	p.PlanToStreamColMap = []int{0}
 	dsp.FinalizePlan(planCtx, p)
 
-	rw := makeStreamIngestionResultWriter(ctx, jobID, execCfg.JobRegistry)
+	rw := sql.NewRowResultWriter(nil /* rowContainer */)
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
@@ -159,70 +156,4 @@ func distStreamIngest(
 	evalCtxCopy := *evalCtx
 	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rw.Err()
-}
-
-type streamIngestionResultWriter struct {
-	ctx          context.Context
-	registry     *jobs.Registry
-	jobID        jobspb.JobID
-	rowsAffected int
-	err          error
-}
-
-func makeStreamIngestionResultWriter(
-	ctx context.Context, jobID jobspb.JobID, registry *jobs.Registry,
-) *streamIngestionResultWriter {
-	return &streamIngestionResultWriter{
-		ctx:      ctx,
-		registry: registry,
-		jobID:    jobID,
-	}
-}
-
-// AddRow implements the sql.rowResultWriter interface.
-func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	if len(row) == 0 {
-		return errors.New("streamIngestionResultWriter received an empty row")
-	}
-	if row[0] == nil {
-		return errors.New("streamIngestionResultWriter expects non-nil row entry")
-	}
-
-	// Decode the row and write the ts into job record.
-	var ingestedHighWatermark hlc.Timestamp
-	if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
-		&ingestedHighWatermark); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
-	}
-	// TODO(casper): currently if this update is without read lock, read may see nil high watermark
-	// when getting a stream ingestion stats. We need to keep investigating why this happens.
-	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, true, /* useReadLock */
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if err := jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju); err != nil {
-				return err
-			}
-
-			// Reset RunStats.NumRuns to 1 since the stream ingestion has returned to
-			// a steady state. By resetting NumRuns,we avoid future job system level
-			// retries from having a large backoff because of past failures.
-			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
-				ju.UpdateRunStats(1, md.RunStats.LastRun)
-			}
-			return nil
-		})
-}
-
-// IncrementRowsAffected implements the sql.rowResultWriter interface.
-func (s *streamIngestionResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	s.rowsAffected += n
-}
-
-// SetError implements the sql.rowResultWriter interface.
-func (s *streamIngestionResultWriter) SetError(err error) {
-	s.err = err
-}
-
-// Err implements the sql.rowResultWriter interface.
-func (s *streamIngestionResultWriter) Err() error {
-	return s.err
 }
