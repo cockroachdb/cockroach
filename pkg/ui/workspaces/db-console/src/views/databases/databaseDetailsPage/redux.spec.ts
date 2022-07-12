@@ -163,6 +163,9 @@ describe("Database Details Page", function () {
             grants: [],
             statsLastUpdated: null,
             hasIndexRecommendations: false,
+            livePercentage: 0,
+            liveBytes: 0,
+            totalBytes: 0,
           },
           stats: {
             loading: false,
@@ -184,6 +187,9 @@ describe("Database Details Page", function () {
             grants: [],
             statsLastUpdated: null,
             hasIndexRecommendations: false,
+            livePercentage: 0,
+            totalBytes: 0,
+            liveBytes: 0,
           },
           stats: {
             loading: false,
@@ -257,6 +263,9 @@ describe("Database Details Page", function () {
         },
       ],
       stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+      data_total_bytes: new Long(456789),
+      data_live_bytes: new Long(12345),
+      data_live_percentage: 2.0,
     });
 
     fakeApi.stubTableDetails("things", "bar", {
@@ -306,6 +315,9 @@ describe("Database Details Page", function () {
         },
       ],
       stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+      data_total_bytes: new Long(456789),
+      data_live_bytes: new Long(12345),
+      data_live_percentage: 2.0,
     });
 
     await driver.refreshDatabaseDetails();
@@ -324,6 +336,9 @@ describe("Database Details Page", function () {
         makeTimestamp("0001-01-01T00:00:00Z"),
       ),
       hasIndexRecommendations: false,
+      liveBytes: 12345,
+      totalBytes: 456789,
+      livePercentage: 2.0,
     });
 
     driver.assertTableDetails("bar", {
@@ -338,6 +353,9 @@ describe("Database Details Page", function () {
         makeTimestamp("0001-01-01T00:00:00Z"),
       ),
       hasIndexRecommendations: false,
+      liveBytes: 12345,
+      totalBytes: 456789,
+      livePercentage: 2.0,
     });
   });
 

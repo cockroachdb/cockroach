@@ -8,9 +8,6 @@ go_library(
     deps = [
         "//pkg/release",
         "//pkg/util/version",
-        "@com_github_aws_aws_sdk_go//aws",
-        "@com_github_aws_aws_sdk_go//aws/session",
-        "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_kr_pretty//:pretty",
     ],
 )
@@ -30,8 +27,6 @@ go_test(
         "//pkg/release",
         "//pkg/testutils",
         "@com_github_alessio_shellescape//:shellescape",
-        "@com_github_aws_aws_sdk_go//service/s3",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
