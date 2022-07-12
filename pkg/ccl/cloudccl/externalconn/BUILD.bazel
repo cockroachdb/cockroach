@@ -1,0 +1,32 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "externalconn_test",
+    srcs = [
+        "datadriven_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/cloud/externalconn/providers",
+        "//pkg/cloud/externalconn/utils",
+        "//pkg/jobs",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
