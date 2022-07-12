@@ -1,0 +1,22 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "smith_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/smith",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/internal/sqlsmith",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "smith",
+    embed = [":smith_lib"],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
