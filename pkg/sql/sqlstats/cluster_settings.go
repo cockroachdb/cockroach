@@ -159,3 +159,12 @@ var MaxSQLStatReset = settings.RegisterDurationSetting(
 	time.Hour*2,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()
+
+// SampleIndexRecommendation specifies whether we generate an index recommendation
+// for each fingerprint ID.
+var SampleIndexRecommendation = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.metrics.statement_details.index_recommendation_collection.enabled",
+	"generate an index recommendation for each fingerprint ID",
+	true,
+).WithPublic()
