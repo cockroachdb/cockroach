@@ -27,6 +27,13 @@ import (
 // "footprint" of the set to grow, so the set should be thought of as on
 // overestimate.
 type condensableSpanSet struct {
+	// TODO(nvanbenschoten): It feels like there is a lot that we could do with
+	// this data structure to 1) reduce the per span overhead, and 2) avoid the
+	// retention of many small keys for the duration of a transaction. For
+	// instance, we could allocate a single large block of memory and copy keys
+	// into it. We could also store key lengths inline to minimize the per-span
+	// overhead. Recognizing that many spans are actually point keys would also
+	// help.
 	s     []roachpb.Span
 	bytes int64
 
@@ -238,9 +245,7 @@ func (s *condensableSpanSet) bytesSize() int64 {
 }
 
 func spanSize(sp roachpb.Span) int64 {
-	return int64(len(sp.Key) + len(sp.EndKey))
-}
-
-func keySize(k roachpb.Key) int64 {
-	return int64(len(k))
+	// Since the span is included into a []roachpb.Span, we also need to account
+	// for the overhead of storing it in that slice.
+	return roachpb.SpanOverhead + int64(cap(sp.Key)+cap(sp.EndKey))
 }

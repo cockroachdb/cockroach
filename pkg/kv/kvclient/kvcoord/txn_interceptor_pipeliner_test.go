@@ -1493,7 +1493,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	require.Empty(t, tp.ifWrites.len())
 }
 
-// TestTxnCoordSenderCondenseLockSpans2 verifies that lock spans are condensed
+// TestTxnPipelinerCondenseLockSpans2 verifies that lock spans are condensed
 // along range boundaries when they exceed the maximum intent bytes threshold.
 func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1708,10 +1708,12 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		// The 0-based index of the request that's expected to be rejected. -1 if no
 		// request is expected to be rejected.
 		expRejectIdx int
+		maxSize      int64
 	}{
 		{name: "large request",
 			reqs:         []roachpb.BatchRequest{largeWrite},
 			expRejectIdx: 0,
+			maxSize:      int64(len(largeAs)) - 1 + roachpb.SpanOverhead,
 		},
 		{name: "requests that add up",
 			reqs: []roachpb.BatchRequest{
@@ -1719,6 +1721,9 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 				putBatchNoAsyncConsensus(roachpb.Key("bbbb"), nil),
 				putBatchNoAsyncConsensus(roachpb.Key("cccc"), nil)},
 			expRejectIdx: 2,
+			// maxSize is such that first two requests fit and the third one
+			// goes above the limit.
+			maxSize: 9 + 2*roachpb.SpanOverhead,
 		},
 		{name: "async requests that add up",
 			// Like the previous test, but this time the requests run with async
@@ -1729,6 +1734,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 				putBatch(roachpb.Key("bbbb"), nil),
 				putBatch(roachpb.Key("cccc"), nil)},
 			expRejectIdx: 2,
+			maxSize:      10 + roachpb.SpanOverhead,
 		},
 		{
 			name: "response goes over budget, next request rejected",
@@ -1737,6 +1743,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			reqs:         []roachpb.BatchRequest{delRange, putBatch(roachpb.Key("a"), nil)},
 			resp:         []*roachpb.BatchResponse{delRangeResp},
 			expRejectIdx: 1,
+			maxSize:      10 + roachpb.SpanOverhead,
 		},
 		{
 			name: "response goes over budget",
@@ -1746,12 +1753,18 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			reqs:         []roachpb.BatchRequest{delRange},
 			resp:         []*roachpb.BatchResponse{delRangeResp},
 			expRejectIdx: -1,
+			maxSize:      10 + roachpb.SpanOverhead,
 		},
 		{
 			// Request keys overlap, so they don't count twice.
 			name:         "overlapping requests",
 			reqs:         []roachpb.BatchRequest{mediumWrite, mediumWrite, mediumWrite},
 			expRejectIdx: -1,
+			// Our estimation logic for rejecting requests based on size
+			// consults both the in-flight write set (which doesn't account for
+			// the span overhead) as well as the lock footprint (which accounts
+			// for the span overhead).
+			maxSize: 16 + roachpb.SpanOverhead,
 		},
 	}
 	for _, tc := range testCases {
@@ -1761,7 +1774,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			}
 
 			tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
-			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, 10) /* reject when exceeding 10 bytes */
+			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxSize)
 			rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
 
 			txn := makeTxnProto()
