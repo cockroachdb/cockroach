@@ -16,12 +16,15 @@ package cli
 import (
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func Example_demo_locality() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
+
+	skip.WithIssue(c.t, 84122)
 
 	defer democluster.TestingForceRandomizeDemoPorts()()
 
