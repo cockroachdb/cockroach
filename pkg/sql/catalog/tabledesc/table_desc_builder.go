@@ -15,12 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -117,28 +113,14 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() error {
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
-	// Upgrade FK representation
 	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
 		descLookupFn,
 		tdb.skipFKsWithNoMatchingTable,
 		tdb.maybeModified,
 	)
-	if err != nil {
-		return err
-	}
 	if upgradedFK {
 		tdb.changes.Add(catalog.UpgradedForeignKeyRepresentation)
 	}
-
-	// Upgrade sequence reference
-	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn, tdb.maybeModified)
-	if err != nil {
-		return err
-	}
-	if upgradedSequenceReference {
-		tdb.changes.Add(catalog.UpgradedSequenceReference)
-	}
-
 	return err
 }
 
@@ -789,186 +771,4 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 
 	}
 	return desc.NextConstraintID != initialConstraintID
-}
-
-// maybeUpgradeSequenceReference attempts to upgrade by-name sequence references.
-// If `rel` is a table: upgrade seq reference in each column;
-// If `rel` is a view: upgrade seq reference in its view query;
-// If `rel` is a sequence: upgrade its back-references to relations as "ByID".
-// All these attempts are on a best-effort basis.
-func maybeUpgradeSequenceReference(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, rel *descpb.TableDescriptor,
-) (hasUpgraded bool, err error) {
-	if rel.IsTable() {
-		hasUpgraded, err = maybeUpgradeSequenceReferenceForTable(descLookupFn, rel)
-		if err != nil {
-			return hasUpgraded, err
-		}
-	} else if rel.IsView() {
-		hasUpgraded, err = maybeUpgradeSequenceReferenceForView(descLookupFn, rel)
-		if err != nil {
-			return hasUpgraded, err
-		}
-	} else if rel.IsSequence() {
-		// Upgrade all references to this sequence to "by-ID".
-		for i, ref := range rel.DependedOnBy {
-			if ref.ID != descpb.InvalidID && !ref.ByID {
-				rel.DependedOnBy[i].ByID = true
-				hasUpgraded = true
-			}
-		}
-	} else {
-		return hasUpgraded, errors.AssertionFailedf("table descriptor %v (%d) is not a "+
-			"table, view, or sequence.", rel.Name, rel.ID)
-	}
-
-	return hasUpgraded, err
-}
-
-// maybeUpgradeSequenceReferenceForTable upgrades all by-name sequence references
-// in `tableDesc` to by-ID.
-func maybeUpgradeSequenceReferenceForTable(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, tableDesc *descpb.TableDescriptor,
-) (hasUpgraded bool, err error) {
-	if !tableDesc.IsTable() {
-		return hasUpgraded, nil
-	}
-
-	for _, col := range tableDesc.Columns {
-		// Find sequence names for all sequences used in this column.
-		usedSequenceIDToNames, err := resolveTableNamesForIDs(descLookupFn, col.UsesSequenceIds)
-		if err != nil {
-			return hasUpgraded, err
-		}
-
-		// Upgrade sequence reference in DEFAULT expression, if any.
-		if col.HasDefault() {
-			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames, builtins.GetBuiltinProperties)
-			if err != nil {
-				return hasUpgraded, err
-			}
-			hasUpgraded = hasUpgraded || hasUpgradedInDefault
-		}
-
-		// Upgrade sequence reference in ON UPDATE expression, if any.
-		if col.HasOnUpdate() {
-			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames, builtins.GetBuiltinProperties)
-			if err != nil {
-				return hasUpgraded, err
-			}
-			hasUpgraded = hasUpgraded || hasUpgradedInOnUpdate
-		}
-	}
-
-	return hasUpgraded, nil
-}
-
-// maybeUpgradeSequenceReferenceForView similarily upgrades all by-name sequence references
-// in `viewDesc` to by-ID.
-func maybeUpgradeSequenceReferenceForView(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, viewDesc *descpb.TableDescriptor,
-) (hasUpgraded bool, err error) {
-	if !viewDesc.IsView() {
-		return hasUpgraded, err
-	}
-
-	// Find sequence names for all those used sequences.
-	usedSequenceIDToNames, err := resolveTableNamesForIDs(descLookupFn, viewDesc.DependsOn)
-	if err != nil {
-		return hasUpgraded, err
-	}
-
-	// A function that looks at an expression and replace any by-name sequence reference with
-	// by-ID reference. It, of course, also append replaced sequence IDs to `upgradedSeqIDs`.
-	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		newExprStr := expr.String()
-		hasUpgradedInExpr, err := seqexpr.UpgradeSequenceReferenceInExpr(&newExprStr, usedSequenceIDToNames, builtins.GetBuiltinProperties)
-		if err != nil {
-			return false, expr, err
-		}
-		newExpr, err = parser.ParseExpr(newExprStr)
-		if err != nil {
-			return false, expr, err
-		}
-
-		hasUpgraded = hasUpgraded || hasUpgradedInExpr
-		return false, newExpr, err
-	}
-
-	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
-	if err != nil {
-		return hasUpgraded, err
-	}
-
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
-	if err != nil {
-		return hasUpgraded, err
-	}
-
-	viewDesc.ViewQuery = newStmt.String()
-
-	return hasUpgraded, err
-}
-
-// Attempt to fully resolve table names for `ids` from a list of descriptors.
-// IDs that do not exist or do not identify a table descriptor will be skipped.
-//
-// This is done on a best-effort basis, meaning if we cannot find a table's
-// schema or database name from `descLookupFn`, they will be set to empty.
-// Consumers of the return of this function should hence expect non-fully resolved
-// table names.
-func resolveTableNamesForIDs(
-	descLookupFn func(id descpb.ID) catalog.Descriptor, ids []descpb.ID,
-) (map[descpb.ID]*tree.TableName, error) {
-	result := make(map[descpb.ID]*tree.TableName)
-
-	for _, id := range ids {
-		if _, exists := result[id]; exists {
-			continue
-		}
-
-		// Attempt to retrieve the table descriptor for `id`; Skip if it does not exist or it does not
-		// identify a table descriptor.
-		d := descLookupFn(id)
-		tableDesc, ok := d.(catalog.TableDescriptor)
-		if !ok {
-			continue
-		}
-
-		// Attempt to get its database and schema name on a best-effort basis.
-		dbName := ""
-		d = descLookupFn(tableDesc.GetParentID())
-		if dbDesc, ok := d.(catalog.DatabaseDescriptor); ok {
-			dbName = dbDesc.GetName()
-		}
-
-		scName := ""
-		d = descLookupFn(tableDesc.GetParentSchemaID())
-		if d != nil {
-			if scDesc, ok := d.(catalog.SchemaDescriptor); ok {
-				scName = scDesc.GetName()
-			}
-		} else {
-			if tableDesc.GetParentSchemaID() == keys.PublicSchemaIDForBackup {
-				// For backups created in 21.2 and prior, the "public" schema is descriptorless,
-				// and always uses the const `keys.PublicSchemaIDForBackUp` as the "public"
-				// schema ID.
-				scName = tree.PublicSchema
-			}
-		}
-
-		result[id] = tree.NewTableNameWithSchema(
-			tree.Name(dbName),
-			tree.Name(scName),
-			tree.Name(tableDesc.GetName()),
-		)
-		if dbName == "" {
-			result[id].ExplicitCatalog = false
-		}
-		if scName == "" {
-			result[id].ExplicitSchema = false
-		}
-	}
-
-	return result, nil
 }

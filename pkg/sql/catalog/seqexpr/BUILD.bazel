@@ -7,14 +7,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -23,12 +20,10 @@ go_test(
     srcs = ["sequence_test.go"],
     deps = [
         ":seqexpr",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "@com_github_stretchr_testify//require",
     ],
 )
 
