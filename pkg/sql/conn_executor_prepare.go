@@ -556,8 +556,10 @@ func (ex *connExecutor) execDescribe(
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
 		}
 	default:
-		return retErr(errors.AssertionFailedf(
-			"unknown describe type: %s", errors.Safe(descCmd.Type)))
+		return retErr(pgerror.Newf(
+			pgcode.ProtocolViolation,
+			"invalid DESCRIBE message subtype %d", errors.Safe(byte(descCmd.Type)),
+		))
 	}
 	return nil, nil
 }
