@@ -1,0 +1,27 @@
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, INDEX idx(b));
+
+statement ok
+ALTER INDEX t@idx NOT VISIBLE
+
+
+query TTBITTBBB colnames
+SHOW INDEXES FROM t
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  is_hidden
+t           idx         true        1             b            ASC        false    false     true
+t           idx         true        2             rowid        ASC        false    true      true
+t           t_pkey      false       1             rowid        ASC        false    false     false
+t           t_pkey      false       2             a            N/A        true     false     false
+t           t_pkey      false       3             b            N/A        true     false     false
+t           t_pkey      false       4             c            N/A        true     false     false
+
+
+statement error pgcode 0A000 a primary index cannot be invisible.
+ALTER INDEX t@t_pkey NOT VISIBLE
+
+statement ok
+CREATE UNIQUE INDEX unique_idx ON t (b) USING HASH WITH BUCKET_COUNT = 5;
+
+statement error pgcode 0A000 invisible unique index is currently not supported.
+ALTER INDEX t@unique_idx NOT VISIBLE

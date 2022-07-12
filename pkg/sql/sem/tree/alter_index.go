@@ -64,3 +64,25 @@ type AlterIndexPartitionBy struct {
 func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.PartitionByIndex)
 }
+
+// AlterIndexVisible represents a ALTER INDEX statement.
+type AlterIndexVisible struct {
+	Index    *TableIndexName
+	IfExists bool
+	Hidden   bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterIndexVisible) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER INDEX ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Index)
+	ctx.WriteString(" ")
+	if node.Hidden {
+		ctx.WriteString(" NOT VISIBLE")
+	} else {
+		ctx.WriteString(" VISIBLE")
+	}
+}

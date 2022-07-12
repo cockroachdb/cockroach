@@ -1004,6 +1004,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
 %type <tree.Statement> alter_zone_index_stmt
+%type <tree.Statement> alter_index_visible_stmt
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
@@ -1220,6 +1221,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.AlterTableCmds> alter_table_cmds
 %type <tree.AlterIndexCmd> alter_index_cmd
 %type <tree.AlterIndexCmds> alter_index_cmds
+%type <tree.Expr> alter_index_visible
 
 %type <tree.DropBehavior> opt_drop_behavior
 
@@ -1959,6 +1961,7 @@ alter_index_stmt:
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
+| alter_index_visible_stmt
 // ALTER INDEX has its error help token here because the ALTER INDEX
 // prefix is spread over multiple non-terminals.
 | ALTER INDEX error // SHOW HELP: ALTER INDEX
@@ -9132,6 +9135,26 @@ alter_rename_index_stmt:
   {
     $$.val = &tree.RenameIndex{Index: $5.newTableIndexName(), NewName: tree.UnrestrictedName($8), IfExists: true}
   }
+
+alter_index_visible_stmt:
+  ALTER INDEX table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $3.newTableIndexName(), Hidden: $4.bool(), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $5.newTableIndexName(), Hidden: $6.bool(), IfExists: true}
+  }
+
+alter_index_visible:
+ NOT VISIBLE
+  {
+    $$.val = true
+  }
+| VISIBLE
+   {
+     $$.val = false
+   }
 
 // %Help: ALTER DEFAULT PRIVILEGES - alter default privileges on an object
 // %Category: DDL

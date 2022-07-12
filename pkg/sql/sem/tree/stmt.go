@@ -322,6 +322,17 @@ func (*AlterIndex) StatementTag() string { return "ALTER INDEX" }
 func (*AlterIndex) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterIndexVisible) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterIndexVisible) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterIndexVisible) StatementTag() string { return "ALTER INDEX VISIBILITY" }
+
+func (*AlterIndexVisible) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1782,7 +1793,6 @@ func (*ValuesClause) StatementTag() string { return "VALUES" }
 func (n *AlterChangefeed) String() string                { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string            { return AsString(n) }
 func (n *AlterBackup) String() string                    { return AsString(n) }
-func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
@@ -1793,6 +1803,8 @@ func (n *AlterDatabaseAddSuperRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseDropSuperRegion) String() string   { return AsString(n) }
 func (n *AlterDatabaseAlterSuperRegion) String() string  { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string         { return AsString(n) }
+func (n *AlterIndex) String() string                     { return AsString(n) }
+func (n *AlterIndexVisible) String() string              { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
