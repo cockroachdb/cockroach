@@ -1056,9 +1056,9 @@ primary        id     DESC
 primary        id2    N/A
 primary        name   N/A
 primary        rowid  N/A
+t1_id_key      id     ASC
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 
 statement ok
@@ -1071,9 +1071,9 @@ primary        id     DESC
 primary        id2    N/A
 primary        name   N/A
 primary        rowid  N/A
+t1_id_key      id     ASC
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1085,9 +1085,9 @@ primary        id     DESC
 primary        id2    N/A
 primary        name   N/A
 primary        rowid  N/A
+t1_id_key      id     ASC
 t1_id_id2_key  id     ASC
 t1_id_id2_key  id2    ASC
-t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
@@ -1102,11 +1102,11 @@ primary        name                       N/A
 primary        rowid                      N/A
 t1_id_key1     id                         DESC
 t1_id_key1     crdb_internal_id_shard_10  ASC
+t1_id_key      id                         ASC
+t1_id_key      crdb_internal_id_shard_10  ASC
 t1_id_id2_key  id                         ASC
 t1_id_id2_key  id2                        ASC
 t1_id_id2_key  crdb_internal_id_shard_10  ASC
-t1_id_key      id                         ASC
-t1_id_key      crdb_internal_id_shard_10  ASC
 
 statement ok
 CREATE TABLE table_with_virtual_cols (
@@ -1192,3 +1192,76 @@ query II
 SELECT * FROM t71553@t71553_b_key
 ----
 1  1
+
+# The following regression test makes sure that when the new PK columns
+# is a (strict) subset of the old PK columns, all existing secondary indexes
+# were rewritten, and hence dropping a column from the old PK columns does not
+# unexpectedly drop an existing secondary index.
+subtest regression_#84040
+
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX uniq_idx (c)
+);
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
+
+statement ok
+ALTER TABLE t DROP COLUMN b
+
+query TTT
+select index_name,column_name,direction from [show indexes from t];
+----
+primary   a  ASC
+primary   c  N/A
+uniq_idx  c  ASC
+uniq_idx  a  ASC
+
+# Alter primary key on a hash-sharded primary key to be non-hash-sharded.
+# This had unexpectedly caused all unique indexes to be dropped silently on v21.2.
+# See the support issue https://github.com/cockroachlabs/support/issues/1687
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+set experimental_enable_hash_sharded_indexes = true;
+
+statement ok
+CREATE TABLE t (
+	i INT PRIMARY KEY USING HASH WITH bucket_count=7 DEFAULT unique_rowid(),
+	j INT NOT NULL UNIQUE
+)
+
+# Assert that the primary key is hash-sharded and the unique index is created.
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+----
+primary  crdb_internal_i_shard_7  ASC
+primary  i                        ASC
+primary  j                        N/A
+t_j_key  j                        ASC
+t_j_key  crdb_internal_i_shard_7  ASC
+t_j_key  i                        ASC
+
+# Alter the primary key to be no longer hash-sharded.
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i)
+
+# Now assert that the primary key has been modified to non-hash-sharded,
+# and the unique index still exists.
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+----
+primary  i                        ASC
+primary  crdb_internal_i_shard_7  N/A
+primary  j                        N/A
+t_j_key  j                        ASC
+t_j_key  i                        ASC
