@@ -46,19 +46,11 @@ data: /Table/1/1/"row3"/1/1/123.000000000,45 -> /BYTES/r3b
 run ok
 with ts=300,0 k=a end=z
   scan
-  scan avoidExcess
   scan reverse=true
-  scan reverse=true avoidExcess
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "a" -> /BYTES/abcdef @123.000000000,45
@@ -66,19 +58,11 @@ scan: "a" -> /BYTES/abcdef @123.000000000,45
 run ok
 with ts=300,0 k=a end=z targetbytes=0
   scan
-  scan avoidExcess
   scan reverse=true
-  scan reverse=true avoidExcess
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "a" -> /BYTES/abcdef @123.000000000,45
@@ -86,21 +70,11 @@ scan: "a" -> /BYTES/abcdef @123.000000000,45
 run ok
 with ts=300,0 k=a end=z targetbytes=10000000
   scan
-  scan avoidExcess
   scan reverse=true
-  scan reverse=true avoidExcess
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 108 bytes (target 10000000)
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 108 bytes (target 10000000)
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: 108 bytes (target 10000000)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
@@ -111,22 +85,10 @@ scan: 108 bytes (target 10000000)
 run ok
 with ts=300,0 k=a end=z targetbytes=-1
   scan
-  scan avoidExcess
   scan allowEmpty
-  scan avoidExcess allowEmpty
   scan reverse=true
-  scan reverse=true avoidExcess
   scan reverse=true allowEmpty
-  scan reverse=true avoidExcess allowEmpty
 ----
-scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
-scan: "a"-"z" -> <no data>
-scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
-scan: "a"-"z" -> <no data>
-scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
-scan: "a"-"z" -> <no data>
-scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
-scan: "a"-"z" -> <no data>
 scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
 scan: "a"-"z" -> <no data>
 scan: resume span ["a","z") RESUME_BYTE_LIMIT nextBytes=0
@@ -153,15 +115,7 @@ run ok
 
 scan     k=a end=z ts=300,0 targetbytes=1
 scan     k=a end=z ts=300,0 targetbytes=1 allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=1 avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=1 avoidExcess allowEmpty
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 1)
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 1)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 1)
@@ -172,15 +126,7 @@ scan: "a"-"z" -> <no data>
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34
 scan     k=a end=z ts=300,0 targetbytes=34 allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=34 avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=34 avoidExcess allowEmpty
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 34)
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 34)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 34)
@@ -191,17 +137,7 @@ scan: 34 bytes (target 34)
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35
 scan     k=a end=z ts=300,0 targetbytes=35 allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=35 avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=35 avoidExcess allowEmpty
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 35)
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 35)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 35)
@@ -211,12 +147,7 @@ scan: 34 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=74
-scan     k=a end=z ts=300,0 targetbytes=74 avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 74)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
@@ -224,12 +155,7 @@ scan: 74 bytes (target 74)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=75
-scan     k=a end=z ts=300,0 targetbytes=75 avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 108 bytes (target 75)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
@@ -237,12 +163,7 @@ scan: 74 bytes (target 75)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=108
-scan     k=a end=z ts=300,0 targetbytes=108 avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 108 bytes (target 108)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
@@ -252,15 +173,7 @@ scan: 108 bytes (target 108)
 run ok
 scan     k=b end=z ts=300 targetbytes=1
 scan     k=b end=z ts=300 targetbytes=1 allowEmpty
-scan     k=b end=z ts=300 targetbytes=1 avoidExcess
-scan     k=b end=z ts=300 targetbytes=1 avoidExcess allowEmpty
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 40 bytes (target 1)
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 40 bytes (target 1)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
 scan: 40 bytes (target 1)
@@ -271,15 +184,7 @@ scan: "b"-"z" -> <no data>
 run ok
 scan     k=b end=z ts=300,0 targetbytes=41
 scan     k=b end=z ts=300,0 targetbytes=41 allowEmpty
-scan     k=b end=z ts=300,0 targetbytes=41 avoidExcess
-scan     k=b end=z ts=300,0 targetbytes=41 avoidExcess allowEmpty
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 74 bytes (target 41)
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: 74 bytes (target 41)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
 scan: 40 bytes (target 41)
@@ -292,15 +197,7 @@ scan: 40 bytes (target 41)
 run ok
 scan     k=a end=z ts=300,0 targetbytes=1 reverse=true
 scan     k=a end=z ts=300,0 targetbytes=1 reverse=true allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=1 reverse=true avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=1 reverse=true avoidExcess allowEmpty
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 1)
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 1)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 1)
@@ -311,15 +208,7 @@ scan: "a"-"z" -> <no data>
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34 reverse=true
 scan     k=a end=z ts=300,0 targetbytes=34 reverse=true allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=34 reverse=true avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=34 reverse=true avoidExcess allowEmpty
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 34)
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
-scan: 34 bytes (target 34)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 34)
@@ -330,17 +219,7 @@ scan: 34 bytes (target 34)
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
 scan     k=a end=z ts=300,0 targetbytes=35 reverse=true allowEmpty
-scan     k=a end=z ts=300,0 targetbytes=35 reverse=true avoidExcess
-scan     k=a end=z ts=300,0 targetbytes=35 reverse=true avoidExcess allowEmpty
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 35)
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 35)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: resume span ["a","c\x00") RESUME_BYTE_LIMIT nextBytes=40
 scan: 34 bytes (target 35)
@@ -350,12 +229,7 @@ scan: 34 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
-scan     k=a end=z ts=300,0 targetbytes=74 reverse=true avoidExcess
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 74 bytes (target 74)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
@@ -363,12 +237,7 @@ scan: 74 bytes (target 74)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=75 reverse=true
-scan     k=a end=z ts=300,0 targetbytes=75 reverse=true avoidExcess
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: 108 bytes (target 75)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
@@ -376,12 +245,7 @@ scan: 74 bytes (target 75)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=108 reverse=true
-scan     k=a end=z ts=300,0 targetbytes=108 reverse=true avoidExcess
 ----
-scan: "e" -> /BYTES/mnopqr @123.000000000,45
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: 108 bytes (target 108)
 scan: "e" -> /BYTES/mnopqr @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "a" -> /BYTES/abcdef @123.000000000,45
@@ -408,15 +272,7 @@ scan: 108 bytes (target 108)
 run ok
 scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true
 scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true allowEmpty
-scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true avoidExcess
-scan     k=aa end=z ts=300,0 targetbytes=1 tombstones=true avoidExcess allowEmpty
 ----
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 24 bytes (target 1)
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 24 bytes (target 1)
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
 scan: 24 bytes (target 1)
@@ -426,35 +282,21 @@ scan: "aa"-"z" -> <no data>
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true
-scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
-scan: 34 bytes (target 34)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
 scan: 34 bytes (target 34)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
-scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 58 bytes (target 35)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: resume span ["aa","z") RESUME_BYTE_LIMIT nextBytes=24
 scan: 34 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
-scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
-scan: 58 bytes (target 58)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
@@ -462,13 +304,7 @@ scan: 58 bytes (target 58)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true
-scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 98 bytes (target 59)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["c","z") RESUME_BYTE_LIMIT nextBytes=40
@@ -476,13 +312,7 @@ scan: 58 bytes (target 59)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=98 tombstones=true
-scan     k=a end=z ts=300,0 targetbytes=98 tombstones=true avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 98 bytes (target 98)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
@@ -492,13 +322,7 @@ scan: 98 bytes (target 98)
 run ok
 with k=a end=z ts=300,0 targetbytes=98 tombstones=true
   scan
-  scan avoidExcess
 ----
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["e","z") RESUME_BYTE_LIMIT nextBytes=34
-scan: 98 bytes (target 98)
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
@@ -511,15 +335,7 @@ scan: 98 bytes (target 98)
 run ok
 scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true
 scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true allowEmpty
-scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true avoidExcess
-scan     k=a end=b ts=300,0 targetbytes=1 tombstones=true reverse=true avoidExcess allowEmpty
 ----
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 24 bytes (target 1)
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 24 bytes (target 1)
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
 scan: 24 bytes (target 1)
@@ -529,35 +345,21 @@ scan: "a"-"b" -> <no data>
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true
-scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true avoidExcess
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
-scan: 40 bytes (target 40)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
 scan: 40 bytes (target 40)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
-scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true avoidExcess
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 64 bytes (target 41)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: resume span ["a","aa\x00") RESUME_BYTE_LIMIT nextBytes=24
 scan: 40 bytes (target 41)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
-scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true avoidExcess
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
-scan: 64 bytes (target 64)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
@@ -565,12 +367,7 @@ scan: 64 bytes (target 64)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true
-scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true avoidExcess
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: 98 bytes (target 65)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: resume span ["a","a\x00") RESUME_BYTE_LIMIT nextBytes=34
@@ -578,12 +375,7 @@ scan: 64 bytes (target 65)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=98 reverse=true tombstones=true
-scan    k=a end=d ts=300,0 targetbytes=98 reverse=true tombstones=true avoidExcess
 ----
-scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
-scan: "aa" -> /<empty> @250.000000000,1
-scan: "a" -> /BYTES/abcdef @123.000000000,45
-scan: 98 bytes (target 98)
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
 scan: "aa" -> /<empty> @250.000000000,1
 scan: "a" -> /BYTES/abcdef @123.000000000,45
@@ -591,7 +383,7 @@ scan: 98 bytes (target 98)
 
 # Whole SQL rows.
 run ok
-with ts=300,0 avoidExcess
+with ts=300,0
   scan k=/ end=/z targetbytes=1
   scan k=/ end=/z targetbytes=1 wholeRows
   scan k=/ end=/z targetbytes=1 wholeRows allowEmpty
@@ -609,7 +401,7 @@ scan: 0 bytes (target 1)
 scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
 
 run ok
-with ts=300,0 avoidExcess allowEmpty wholeRows
+with ts=300,0 allowEmpty wholeRows
   scan k=/ end=/z targetbytes=121
   scan k=/ end=/z targetbytes=122
   scan k=/ end=/z targetbytes=123
@@ -629,7 +421,7 @@ scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextB
 scan: 122 bytes (target 123)
 
 run ok
-with ts=300,0 avoidExcess allowEmpty wholeRows
+with ts=300,0 allowEmpty wholeRows
   scan k=/ end=/z targetbytes=161
   scan k=/ end=/z targetbytes=162
   scan k=/ end=/z targetbytes=163
@@ -653,7 +445,7 @@ scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_BYTE_LIMIT nextB
 scan: 162 bytes (target 163)
 
 run ok
-with ts=300,0 avoidExcess allowEmpty wholeRows
+with ts=300,0 allowEmpty wholeRows
   scan k=/ end=/z targetbytes=242
   scan k=/ end=/z targetbytes=243
 ----
@@ -673,7 +465,7 @@ scan: 243 bytes (target 243)
 
 # Whole SQL rows in reverse.
 run ok
-with ts=300,0 avoidExcess
+with ts=300,0
   scan k=/ end=/z targetbytes=1 reverse
   scan k=/ end=/z targetbytes=1 reverse wholeRows
   scan k=/ end=/z targetbytes=1 reverse wholeRows allowEmpty
@@ -690,7 +482,7 @@ scan: 0 bytes (target 1)
 scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
 
 run ok
-with ts=300,0 reverse avoidExcess allowEmpty wholeRows
+with ts=300,0 reverse allowEmpty wholeRows
   scan k=/ end=/z targetbytes=80
   scan k=/ end=/z targetbytes=81
   scan k=/ end=/z targetbytes=82
@@ -708,7 +500,7 @@ scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_BYTE_LIMIT n
 scan: 81 bytes (target 82)
 
 run ok
-with ts=300,0 reverse avoidExcess allowEmpty wholeRows
+with ts=300,0 reverse allowEmpty wholeRows
   scan k=/ end=/z targetbytes=120
   scan k=/ end=/z targetbytes=121
   scan k=/ end=/z targetbytes=122
@@ -729,7 +521,7 @@ scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_BYTE_LIMIT
 scan: 121 bytes (target 122)
 
 run ok
-with ts=300,0 reverse avoidExcess allowEmpty wholeRows
+with ts=300,0 reverse allowEmpty wholeRows
   scan k=/ end=/z targetbytes=242
   scan k=/ end=/z targetbytes=243
 ----
@@ -749,7 +541,7 @@ scan: 243 bytes (target 243)
 # WholeRows on non-SQL row data.
 run ok
 with ts=300,0
-  scan k=a end=/z targetbytes=110 avoidExcess wholeRows
+  scan k=a end=/z targetbytes=110 wholeRows
 ----
 scan: "a" -> /BYTES/abcdef @123.000000000,45
 scan: "c" -> /BYTES/ghijkllkjihg @123.000000000,45
@@ -780,21 +572,11 @@ with t=A ts=11,0 targetbytes=32
   put       k=n  v=c
   txn_step  seq=20
   scan      k=k end=o
-  scan      k=k end=o avoidExcess
   scan      k=k end=o reverse=true
-  scan      k=k end=o reverse=true avoidExcess
 ----
-scan: "k" -> /BYTES/b @11.000000000,0
-scan: "l" -> /BYTES/b @11.000000000,0
-scan: resume span ["m","o") RESUME_BYTE_LIMIT nextBytes=25
-scan: 50 bytes (target 32)
 scan: "k" -> /BYTES/b @11.000000000,0
 scan: resume span ["l","o") RESUME_BYTE_LIMIT nextBytes=25
 scan: 25 bytes (target 32)
-scan: "n" -> /BYTES/b @11.000000000,0
-scan: "m" -> /BYTES/b @11.000000000,0
-scan: resume span ["k","l\x00") RESUME_BYTE_LIMIT nextBytes=25
-scan: 50 bytes (target 32)
 scan: "n" -> /BYTES/b @11.000000000,0
 scan: resume span ["k","m\x00") RESUME_BYTE_LIMIT nextBytes=25
 scan: 25 bytes (target 32)

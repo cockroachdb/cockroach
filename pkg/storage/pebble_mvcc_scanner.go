@@ -311,13 +311,7 @@ type pebbleMVCCScanner struct {
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
-	// If true, don't exceed targetBytes except for the first kv pair.
-	//
-	// TODO(erikgrinaker): This option exists for backwards compatibility with
-	// 21.2 RPC clients, in 22.1 it should always be enabled.
-	targetBytesAvoidExcess bool
-	// If true, return an empty result if the first result exceeds targetBytes
-	// and targetBytesAvoidExcess is true.
+	// If true, return an empty result if the first result exceeds targetBytes.
 	allowEmpty bool
 	// If set, don't return partial SQL rows (spanning multiple KV pairs) when
 	// hitting a limit. Partial rows at the end of the result will be trimmed. If
@@ -972,8 +966,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 	}
 
 	// Check if adding the key would exceed a limit.
-	if p.targetBytes > 0 && (p.results.bytes >= p.targetBytes || (p.targetBytesAvoidExcess &&
-		p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(rawValue))) > p.targetBytes)) {
+	if p.targetBytes > 0 && p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(rawValue))) > p.targetBytes {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
 		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(rawValue)))
 
