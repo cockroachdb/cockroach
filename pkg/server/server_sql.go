@@ -916,7 +916,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
 	// We use one BytesMonitor for all InternalExecutor's created by the
-	// ieFactory, this BytesMonitor is never closed.
+	// ieFactory.
+	// Note that ieFactoryMonitor does not have to be closed, the parent
+	// monitor comes from server. ieFactoryMonitor is a singleton attached
+	// to server, if server is closed, we don't have to worry about
+	// returning the memory allocated to ieFactoryMonitor since the
+	// parent monitor is being closed anyway.
 	ieFactoryMonitor := mon.NewMonitor(
 		"internal executor factory",
 		mon.MemoryResource,
@@ -927,7 +932,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.Settings,
 	)
 	ieFactoryMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
-	cfg.stopper.AddCloser(stop.CloserFn(func() { ieFactoryMonitor.Stop(ctx) }))
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
