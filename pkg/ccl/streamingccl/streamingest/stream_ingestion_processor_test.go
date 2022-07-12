@@ -55,6 +55,7 @@ import (
 // partition addresses.
 type mockStreamClient struct {
 	partitionEvents map[string][]streamingccl.Event
+	doneCh          chan struct{}
 }
 
 var _ streamclient.Client = &mockStreamClient{}
@@ -109,18 +110,25 @@ func (m *mockStreamClient) Subscribe(
 	var events []streamingccl.Event
 	var ok bool
 	if events, ok = m.partitionEvents[string(token)]; !ok {
-		return nil, errors.Newf("no events found for paritition %s", string(token))
+		return nil, errors.Newf("no events found for partition %s", string(token))
 	}
 	log.Infof(ctx, "%q beginning subscription from time %v ", string(token), startTime)
 
 	log.Infof(ctx, "%q emitting %d events", string(token), len(events))
 	eventCh := make(chan streamingccl.Event, len(events))
-	for _, event := range events {
-		log.Infof(ctx, "%q emitting event %v", string(token), event)
-		eventCh <- event
-	}
-	log.Infof(ctx, "%q done emitting %d events", string(token), len(events))
-	close(eventCh)
+	go func() {
+		for _, event := range events {
+			log.Infof(ctx, "%q emitting event %v", string(token), event)
+			eventCh <- event
+		}
+		log.Infof(ctx, "%q done emitting %d events", string(token), len(events))
+		if m.doneCh != nil {
+			log.Infof(ctx, "%q waiting for doneCh", string(token))
+			<-m.doneCh
+			log.Infof(ctx, "%q received event on doneCh", string(token))
+		}
+		close(eventCh)
+	}()
 	return &mockSubscription{eventsCh: eventCh}, nil
 }
 
