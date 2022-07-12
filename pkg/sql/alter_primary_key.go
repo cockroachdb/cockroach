@@ -406,6 +406,11 @@ func (p *planner) AlterPrimaryKey(
 				return true, nil
 			}
 		}
+		if !idx.Primary() && catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...).SubsetOf(
+			catalog.MakeTableColSet(tableDesc.PrimaryIndex.KeyColumnIDs...)) {
+			// Always rewrite a secondary index if the new PK columns is a (strict) subset of the old PK columns.
+			return true, nil
+		}
 		if idx.IsUnique() {
 			for i := 0; i < idx.NumKeyColumns(); i++ {
 				colID := idx.GetKeyColumnID(i)
