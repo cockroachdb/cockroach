@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuildDataDriven(t *testing.T) {
@@ -183,27 +185,73 @@ func indentText(input string, tab string) string {
 
 // marshalState marshals a scpb.CurrentState to YAML.
 func marshalState(t *testing.T, state scpb.CurrentState) string {
-	var sortedEntries []string
+	var sortedEntries nodeEntries
 	for i, status := range state.Current {
 		node := screl.Node{
 			Target:        &state.Targets[i],
 			CurrentStatus: status,
 		}
-		yaml, err := sctestutils.ProtoToYAML(node.Target.Element(), protoreflect.FmtFlags{})
-		require.NoError(t, err)
+
 		entry := strings.Builder{}
 		entry.WriteString("- ")
 		entry.WriteString(screl.NodeString(&node))
 		entry.WriteString("\n")
-		entry.WriteString(indentText("details:\n", "  "))
-		entry.WriteString(indentText(yaml, "    "))
-		sortedEntries = append(sortedEntries, entry.String())
+		entry.WriteString(indentText(string(formatElementForDisplay(t, node.Element())), "  "))
+		sortedEntries = append(sortedEntries, nodeEntry{
+			node:  node,
+			entry: entry.String(),
+		})
 	}
 	// Sort the output buffer of state for determinism.
 	result := strings.Builder{}
-	sort.Strings(sortedEntries)
+	sort.Sort(sortedEntries)
 	for _, entry := range sortedEntries {
-		result.WriteString(entry)
+		result.WriteString(entry.entry)
 	}
 	return result.String()
+}
+
+type nodeEntry struct {
+	node  screl.Node
+	entry string
+}
+
+type nodeEntries []nodeEntry
+
+func (n nodeEntries) Len() int { return len(n) }
+
+func (n nodeEntries) Less(i, j int) bool {
+	less, _ := screl.Schema.CompareOn([]rel.Attr{
+		screl.DescID, screl.ColumnID, screl.IndexID, screl.ConstraintID,
+		screl.ColumnFamilyID, screl.ReferencedDescID,
+	}, &n[i].node, &n[j].node)
+	return less
+}
+
+func (n nodeEntries) Swap(i, j int) { n[i], n[j] = n[j], n[i] }
+
+var _ sort.Interface = nodeEntries{}
+
+func formatElementForDisplay(t *testing.T, e scpb.Element) []byte {
+	marshaled, err := sctestutils.ProtoToYAML(e, protoreflect.FmtFlags{})
+	require.NoError(t, err)
+	dec := yaml.NewDecoder(strings.NewReader(marshaled))
+	dec.KnownFields(true)
+	var n yaml.Node
+	require.NoError(t, dec.Decode(&n))
+	walkYaml(&n, func(node *yaml.Node) { node.Style = yaml.FlowStyle })
+	data, err := yaml.Marshal(&n)
+	require.NoError(t, err)
+	return data
+}
+
+func walkYaml(root *yaml.Node, f func(node *yaml.Node)) {
+	var walk func(node *yaml.Node)
+	walk = func(node *yaml.Node) {
+		f(node)
+		for _, child := range node.Content {
+			walk(child)
+		}
+	}
+	walk(root)
 }
