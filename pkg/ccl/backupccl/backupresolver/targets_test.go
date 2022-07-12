@@ -171,16 +171,16 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		expectedDBs     []string
 		err             string
 	}{
-		{"", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
+		{"", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
 		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
-		{"", "DATABASE system, system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
+		{"", "DATABASE system, system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
 		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
+		{"", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
 		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
-		{"system", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
+		{"system", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
 		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
 		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
+		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
 		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
 
 		{"", "TABLE foo", nil, nil, `table "foo" does not exist`},
@@ -191,7 +191,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
 		{"", "TABLE *, system.public.foo", nil, nil, `"\*" does not match any valid database or schema`},
 		{"noexist", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
-		{"system", "TABLE *", []string{"system", "foo", "bar"}, nil, ``},
+		{"system", "TABLE *", []string{"system", "foo", "bar", "offline"}, nil, ``},
 		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
 		{"empty", "TABLE *", []string{"empty"}, nil, ``},
 
@@ -211,11 +211,11 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 
 		{"", "TABLE noexist.*", nil, nil, `"noexist\.\*" does not match any valid database or schema`},
 		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
-		{"", "TABLE system.*", []string{"system", "foo", "bar"}, nil, ``},
-		{"", "TABLE system.public.*", []string{"system", "foo", "bar"}, nil, ``},
+		{"", "TABLE system.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
+		{"", "TABLE system.public.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
 		{"", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
 		{"system", "TABLE system.public.*, foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "data", "baz"}, nil, ``},
+		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "offline", "data", "baz"}, nil, ``},
 		{"data", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
 
 		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
@@ -229,7 +229,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 
 		{"system", `TABLE offline`, nil, nil, `table "offline" does not exist`},
 		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
-		{"system", `TABLE *`, []string{"system", "foo", "bar"}, nil, ``},
+		{"system", `TABLE *`, []string{"system", "foo", "bar", "offline"}, nil, ``},
 		// If we backup udts, then all tables and types (even unused) should be present.
 		{"", "DATABASE udts", []string{"udts", "enum1", "_enum1", "enum2", "_enum2", "enum_tbl", "enum_arr_tbl"}, []string{"udts"}, ``},
 		// Backing up enum_tbl should pull in both the enum and its array type.
