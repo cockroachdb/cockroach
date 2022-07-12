@@ -121,7 +121,6 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			TagGroups         []tracingpb.TagGroup
 			StartTime         time.Time
 			Duration          time.Duration
-			RedactableLogs    bool
 			Logs              []tracingpb.LogRecord
 			Verbose           bool
 			RecordingMode     tracingpb.RecordingMode

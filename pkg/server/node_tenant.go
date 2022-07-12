@@ -13,7 +13,6 @@ package server
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -22,7 +21,8 @@ const TraceRedactedMarker = redact.RedactableString("verbose trace message redac
 
 // redactRecordingForTenant redacts the sensitive parts of log messages in the
 // recording if the tenant to which this recording is intended is not the system
-// tenant (the system tenant gets an. See https://github.com/cockroachdb/cockroach/issues/70407.
+// tenant (the system tenant gets an unredacted trace).
+// See https://github.com/cockroachdb/cockroach/issues/70407.
 // The recording is modified in place.
 //
 // tenID is the tenant that will receive this recording.
@@ -36,12 +36,6 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) e
 		sp.TagGroups = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]
-			if record.Message != "" && !sp.RedactableLogs {
-				// If Message is set, the record should have been produced by a 22.1
-				// node that also sets RedactableLogs.
-				return errors.AssertionFailedf(
-					"recording has non-redactable span with the Message field set: %s", sp)
-			}
 			record.Message = record.Message.Redact()
 		}
 	}
