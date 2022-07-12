@@ -1068,3 +1068,7 @@ func (a *inFlightWriteAlloc) clear() {
 	}
 	*a = (*a)[:0]
 }
+
+func keySize(k roachpb.Key) int64 {
+	return int64(len(k))
+}
