@@ -412,6 +412,7 @@ func startTestFullServer(
 // need to be applied to each of the servers in the test cluster
 // returned from this function.
 func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB, func()) {
+	skip.UnderStressRace(t, "multinode setup doesn't work under testrace")
 	ctx := context.Background()
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
