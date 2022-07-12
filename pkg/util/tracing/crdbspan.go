@@ -834,16 +834,15 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	recordingType tracingpb.RecordingType, finishing bool,
 ) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
-		TraceID:        s.traceID,
-		SpanID:         s.spanID,
-		ParentSpanID:   s.parentSpanID,
-		GoroutineID:    s.mu.goroutineID,
-		Operation:      s.operation,
-		StartTime:      s.startTime,
-		Duration:       s.mu.duration,
-		RedactableLogs: true,
-		Verbose:        s.recordingType() == tracingpb.RecordingVerbose,
-		RecordingMode:  s.recordingType().ToProto(),
+		TraceID:       s.traceID,
+		SpanID:        s.spanID,
+		ParentSpanID:  s.parentSpanID,
+		GoroutineID:   s.mu.goroutineID,
+		Operation:     s.operation,
+		StartTime:     s.startTime,
+		Duration:      s.mu.duration,
+		Verbose:       s.recordingType() == tracingpb.RecordingVerbose,
+		RecordingMode: s.recordingType().ToProto(),
 	}
 
 	if rs.Duration == -1 {

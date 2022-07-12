@@ -101,10 +101,6 @@ message RecordedSpan {
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
-  // RedactableLogs determines whether the verbose log messages are redactable.
-  // This field was introduced in the 22.1 release. It can be removed in the 22.2
-  // release. On 22.1 this is always set to `true`.
-  bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
   // verbose indicates whether the span was recording in verbose mode at the
@@ -141,7 +137,7 @@ message RecordedSpan {
   // view of the various operations that are being traced as part of a span.
   map<string, OperationMetadata> children_metadata = 19 [(gogoproto.nullable) = false];
 
-  reserved 5,10,11;
+  reserved 5,10,11,15;
 }
 
 message TagGroup {
