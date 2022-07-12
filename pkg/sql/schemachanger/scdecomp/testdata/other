@@ -247,85 +247,82 @@ ElementState:
     tableId: 112
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 1
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: IntFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 20
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 64
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 112
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: IntFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 20
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 64
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: OidFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 26
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 112
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: OidFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 26
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: DecimalFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 1700
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 112
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: DecimalFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 1700
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
   Status: PUBLIC
 - Namespace:
     databaseId: 104
@@ -433,112 +430,108 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 1
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: StringFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 25
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 113
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: StringFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 25
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 2
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: IntFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 20
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 64
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 113
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: IntFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 20
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 64
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: OidFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 26
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 113
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: OidFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 26
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
   Status: PUBLIC
 - ColumnType:
+    closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
-    embeddedTypeT:
-      closedTypeIds: []
-      type:
-        arrayContents: null
-        arrayDimensions: []
-        arrayElemType: null
-        family: DecimalFamily
-        geoMetadata: null
-        intervalDurationField: null
-        locale: null
-        oid: 1700
-        precision: 0
-        timePrecisionIsSet: false
-        tupleContents: []
-        tupleLabels: []
-        udtMetadata: null
-        visibleType: 0
-        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
     tableId: 113
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: DecimalFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 1700
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
   Status: PUBLIC
 - Namespace:
     databaseId: 104
