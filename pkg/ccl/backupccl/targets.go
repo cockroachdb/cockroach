@@ -336,7 +336,7 @@ func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
 	backupManifests []backuppb.BackupManifest,
-	targets tree.TargetList,
+	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {

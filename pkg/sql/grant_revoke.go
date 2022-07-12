@@ -158,7 +158,7 @@ type changePrivilegesNode struct {
 	withGrantOption bool
 	grantees        []username.SQLUsername
 	desiredprivs    privilege.List
-	targets         tree.TargetList
+	targets         tree.GrantTargetList
 	grantOn         privilege.ObjectType
 }
 
@@ -427,7 +427,7 @@ func (*changeDescriptorBackedPrivilegesNode) Close(context.Context)        {}
 // privilege.Table. Only when all objects in the target list are sequence, it
 // returns the privilege.Sequence.
 func (p *planner) getGrantOnObject(
-	ctx context.Context, targets tree.TargetList, incIAMFunc func(on string),
+	ctx context.Context, targets tree.GrantTargetList, incIAMFunc func(on string),
 ) (privilege.ObjectType, error) {
 	switch {
 	case targets.Databases != nil:
@@ -486,7 +486,7 @@ const (
 // privilege.
 // This is because the table privilege is the subset of sequence privilege.
 func (p *planner) getTablePatternsComposition(
-	ctx context.Context, targets tree.TargetList,
+	ctx context.Context, targets tree.GrantTargetList,
 ) (tablePatternsComposition, error) {
 	if targets.Tables.SequenceOnly {
 		return sequenceOnly, nil

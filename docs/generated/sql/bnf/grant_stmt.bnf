@@ -1,10 +1,10 @@
 grant_stmt ::=
-	'GRANT' 'ALL' 'PRIVILEGES' 'ON' targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
-	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' targets 'TO' role_spec_list 
-	| 'GRANT' 'ALL'  'ON' targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
-	| 'GRANT' 'ALL'  'ON' targets 'TO' role_spec_list 
-	| 'GRANT' privilege_list 'ON' targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
-	| 'GRANT' privilege_list 'ON' targets 'TO' role_spec_list 
+	'GRANT' 'ALL' 'PRIVILEGES' 'ON' grant_targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' grant_targets 'TO' role_spec_list 
+	| 'GRANT' 'ALL'  'ON' grant_targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL'  'ON' grant_targets 'TO' role_spec_list 
+	| 'GRANT' privilege_list 'ON' grant_targets 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' privilege_list 'ON' grant_targets 'TO' role_spec_list 
 	| 'GRANT' privilege_list 'TO' role_spec_list
 	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
 	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'TYPE' target_types 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'

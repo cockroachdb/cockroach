@@ -342,7 +342,7 @@ func createChangefeedJobRecord(
 		}
 	}
 
-	tableOnlyTargetList := tree.TargetList{}
+	tableOnlyTargetList := tree.BackupTargetList{}
 	for _, t := range changefeedStmt.Targets {
 		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
 	}
@@ -591,7 +591,7 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 func getTableDescriptors(
 	ctx context.Context,
 	p sql.PlanHookState,
-	targets *tree.TargetList,
+	targets *tree.BackupTargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
 ) (map[tree.TablePattern]catalog.Descriptor, error) {

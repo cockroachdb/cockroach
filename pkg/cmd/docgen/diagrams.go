@@ -562,13 +562,14 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"grant_targets":                  "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"backup_targets":                 "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
 			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"targets", "collectionURI", "destination", "timestamp", "localityURI", "subdirectory"},
+		unlink:  []string{"backup_targets", "collectionURI", "destination", "timestamp", "localityURI", "subdirectory"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
@@ -716,7 +717,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
-			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+			"backup_targets":                    "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
 	},
 	{
 		name:    "create_schema_stmt",
@@ -1116,7 +1117,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"backup_targets":                         "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
 			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
@@ -1330,7 +1331,7 @@ var specs = []stmtSpec{
 			"type_name_list",
 		},
 		replace: map[string]string{
-			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"grant_targets":           "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"qualifiable_schema_name": "schema_name",
 		},
 		unlink: []string{"table_name", "database_name", "schema_name", "name"},
