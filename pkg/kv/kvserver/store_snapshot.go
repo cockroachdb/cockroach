@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"io"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -74,7 +75,7 @@ type outgoingDelegatedStream interface {
 // snapshotRecordMetrics is a wrapper function that increments a set of metrics
 // related to the number of snapshot bytes sent/received. The definer of the
 // function specifies which metrics are incremented.
-type snapshotRecordMetrics func(inc int64)
+type snapshotRecordMetrics func(inc int64, total int64, net int64, disk int64, misc int64)
 
 // snapshotStrategy is an approach to sending and receiving Range snapshots.
 // Each implementation corresponds to a SnapshotRequest_Strategy, and it is
@@ -313,7 +314,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
-			recordBytesReceived(int64(len(req.KVBatch)))
+			recordBytesReceived(int64(len(req.KVBatch)), -1, -1, -1, -1)
 			batchStopwatch.Start()
 			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 			if err != nil {
@@ -383,6 +384,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				batchDuration, batchDuration/totalTime*100,
 				recvDuration, recvDuration/totalTime*100,
 			)
+
+			recordBytesReceived(0, totalTimeStopwatch.Elapsed().Nanoseconds(), recvStopwatch.Elapsed().Nanoseconds(), msstwStopwatch.Elapsed().Nanoseconds(), batchStopwatch.Elapsed().Nanoseconds())
 
 			kvSS.status = redact.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
@@ -457,7 +460,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return 0, err
 			}
 			bytesSent += bLen
-			recordBytesSent(bLen)
+			recordBytesSent(bLen, -1, -1, -1, -1)
 			b.Close()
 			b = nil
 		}
@@ -468,7 +471,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return 0, err
 		}
 		bytesSent += int64(b.Len())
-		recordBytesSent(int64(b.Len()))
+		recordBytesSent(int64(b.Len()), -1, -1, -1, -1)
 	}
 
 	totalTimeStopwatch.Stop()
@@ -487,6 +490,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		ratelimitDuration, ratelimitDuration/totalTime*100,
 	)
 	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
+	recordBytesSent(0, totalTimeStopwatch.Elapsed().Nanoseconds(), sendStopwatch.Elapsed().Nanoseconds(), iterStopwatch.Elapsed().Nanoseconds(), rateLimitStopwatch.Elapsed().Nanoseconds())
 	return bytesSent, nil
 }
 
@@ -873,7 +877,7 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
-	recordBytesReceived := func(inc int64) {
+	recordBytesReceived := func(inc int64, total int64, net int64, disk int64, misc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
 
 		switch header.Priority {
@@ -885,6 +889,22 @@ func (s *Store) receiveSnapshot(
 			// If a snapshot is not a RECOVERY or REBALANCE snapshot, it must be of
 			// type UNKNOWN.
 			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
+		}
+
+		if total != -1 {
+			s.metrics.SnapshotReceiveTotalNanos.RecordValue(total)
+			if net != -1 {
+				s.metrics.SnapshotReceiveNetworkNanos.RecordValue(net)
+				s.metrics.SnapshotReceiveNetworkPercentageHistogram.RecordValue(int64(math.Round(float64(net) / float64(total) * 100)))
+			}
+			if disk != -1 {
+				s.metrics.SnapshotReceiveDiskNanos.RecordValue(disk)
+				s.metrics.SnapshotReceiveDiskPercentageHistogram.RecordValue(int64(math.Round(float64(disk) / float64(total) * 100)))
+			}
+			if misc != -1 {
+				s.metrics.SnapshotReceiveBatchNanos.RecordValue(misc)
+				s.metrics.SnapshotReceiveBatchPercentageHistogram.RecordValue(int64(math.Round(float64(misc) / float64(total) * 100)))
+			}
 		}
 	}
 	ctx, sp := s.AnnotateCtxWithSpan(ctx, "receive snapshot data")
@@ -1281,7 +1301,7 @@ func sendSnapshot(
 		// NB: Some tests and an offline tool (ResetQuorum) call into `sendSnapshot`
 		// with a nil metrics tracking function. We pass in a fake metrics tracking function here that isn't
 		// hooked up to anything.
-		recordBytesSent = func(inc int64) {}
+		recordBytesSent = func(inc int64, total int64, net int64, disk int64, misc int64) {}
 	}
 	start := timeutil.Now()
 	to := header.RaftMessageRequest.ToReplica

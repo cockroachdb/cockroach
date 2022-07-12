@@ -1459,6 +1459,94 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	metaSnapshotSendNetworkPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.send.network_percentage",
+		Help:        "Percentage of snapshot send time spent on network",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSnapshotSendRateLimitPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.send.rate_limit_percentage",
+		Help:        "Percentage of snapshot send time spent on waits to enforce rate limits",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSnapshotSendDiskPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.send.disk_percentage",
+		Help:        "Percentage of snapshot send time spent on reading OutgoingShapshot",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaSnapshotReceiveNetworkPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.receive.network_percentage",
+		Help:        "Percentage of snapshot receive time spent on network",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSnapshotReceiveBatchPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.receive.batch_percentage",
+		Help:        "Percentage of snapshot receive time spent on reading batches",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSnapshotReceiveDiskPercentageHistogram = metric.Metadata{
+		Name:        "range.snapshots.receive.disk_percentage",
+		Help:        "Percentage of snapshot receive time spent on writing with msstw",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaSnapshotSendTotalNanos = metric.Metadata{
+		Name:        "range.snapshot.send.total_nanos",
+		Help:        "Time spent during snapshot send in total",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotSendNetworkNanos = metric.Metadata{
+		Name:        "range.snapshot.send.network_nanos",
+		Help:        "Time spent during snapshot send on network",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotSendDiskNanos = metric.Metadata{
+		Name:        "range.snapshot.send.disk_nanos",
+		Help:        "Time spent during snapshot send on disk",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotSendRateLimitNanos = metric.Metadata{
+		Name:        "range.snapshot.send.rate_limit_nanos",
+		Help:        "Time spent during snapshot send on rate limiting",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaSnapshotReceiveTotalNanos = metric.Metadata{
+		Name:        "range.snapshot.receive.total_nanos",
+		Help:        "Time spent during snapshot receive in total",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotReceiveNetworkNanos = metric.Metadata{
+		Name:        "range.snapshot.receive.network_nanos",
+		Help:        "Time spent during snapshot receive on network",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotReceiveDiskNanos = metric.Metadata{
+		Name:        "range.snapshot.receive.disk_nanos",
+		Help:        "Time spent during snapshot receive on disk",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSnapshotReceiveBatchNanos = metric.Metadata{
+		Name:        "range.snapshot.receive.batch_nanos",
+		Help:        "Time spent during snapshot receive on reading batches",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1723,6 +1811,22 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+
+	SnapshotSendNetworkPercentageHistogram    *metric.Histogram
+	SnapshotSendRateLimitPercentageHistogram  *metric.Histogram
+	SnapshotSendDiskPercentageHistogram       *metric.Histogram
+	SnapshotReceiveNetworkPercentageHistogram *metric.Histogram
+	SnapshotReceiveBatchPercentageHistogram   *metric.Histogram
+	SnapshotReceiveDiskPercentageHistogram    *metric.Histogram
+
+	SnapshotSendTotalNanos      *metric.Histogram
+	SnapshotSendNetworkNanos    *metric.Histogram
+	SnapshotSendDiskNanos       *metric.Histogram
+	SnapshotSendRateLimitNanos  *metric.Histogram
+	SnapshotReceiveTotalNanos   *metric.Histogram
+	SnapshotReceiveNetworkNanos *metric.Histogram
+	SnapshotReceiveDiskNanos    *metric.Histogram
+	SnapshotReceiveBatchNanos   *metric.Histogram
 }
 
 type tenantMetricsRef struct {
@@ -2197,6 +2301,22 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Replica batch evaluation.
 		ReplicaReadBatchEvaluationLatency:  metric.NewLatency(metaReplicaReadBatchEvaluationLatency, histogramWindow),
 		ReplicaWriteBatchEvaluationLatency: metric.NewLatency(metaReplicaWriteBatchEvaluationLatency, histogramWindow),
+
+		SnapshotSendNetworkPercentageHistogram:    metric.NewHistogram(metaSnapshotSendNetworkPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+		SnapshotSendRateLimitPercentageHistogram:  metric.NewHistogram(metaSnapshotSendRateLimitPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+		SnapshotSendDiskPercentageHistogram:       metric.NewHistogram(metaSnapshotSendDiskPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveNetworkPercentageHistogram: metric.NewHistogram(metaSnapshotReceiveNetworkPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveBatchPercentageHistogram:   metric.NewHistogram(metaSnapshotReceiveBatchPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveDiskPercentageHistogram:    metric.NewHistogram(metaSnapshotReceiveDiskPercentageHistogram, histogramWindow, 100 /* maxVal */, 3 /* sigFigs */),
+
+		SnapshotSendTotalNanos:      metric.NewHistogram(metaSnapshotSendTotalNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotSendNetworkNanos:    metric.NewHistogram(metaSnapshotSendNetworkNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotSendDiskNanos:       metric.NewHistogram(metaSnapshotSendDiskNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotSendRateLimitNanos:  metric.NewHistogram(metaSnapshotSendRateLimitNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveTotalNanos:   metric.NewHistogram(metaSnapshotReceiveTotalNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveNetworkNanos: metric.NewHistogram(metaSnapshotReceiveNetworkNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveDiskNanos:    metric.NewHistogram(metaSnapshotReceiveDiskNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
+		SnapshotReceiveBatchNanos:   metric.NewHistogram(metaSnapshotReceiveBatchNanos, histogramWindow, (time.Minute * 3).Nanoseconds() /* maxVal */, 3 /* sigFigs */),
 	}
 
 	{

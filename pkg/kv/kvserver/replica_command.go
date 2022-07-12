@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -2767,7 +2768,7 @@ func (r *Replica) followerSendSnapshot(
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
 
-	recordBytesSent := func(inc int64) {
+	recordBytesSent := func(inc int64, total int64, net int64, disk int64, misc int64) {
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
 
 		switch header.Priority {
@@ -2779,6 +2780,22 @@ func (r *Replica) followerSendSnapshot(
 			// If a snapshot is not a RECOVERY or REBALANCE snapshot, it must be of
 			// type UNKNOWN.
 			r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
+		}
+
+		if total != -1 {
+			r.store.metrics.SnapshotSendTotalNanos.RecordValue(total)
+			if net != -1 {
+				r.store.metrics.SnapshotSendNetworkNanos.RecordValue(net)
+				r.store.metrics.SnapshotSendNetworkPercentageHistogram.RecordValue(int64(math.Round(float64(net) / float64(total) * 100)))
+			}
+			if disk != -1 {
+				r.store.metrics.SnapshotSendDiskNanos.RecordValue(disk)
+				r.store.metrics.SnapshotSendDiskPercentageHistogram.RecordValue(int64(math.Round(float64(disk) / float64(total) * 100)))
+			}
+			if misc != -1 {
+				r.store.metrics.SnapshotSendRateLimitNanos.RecordValue(misc)
+				r.store.metrics.SnapshotSendRateLimitPercentageHistogram.RecordValue(int64(math.Round(float64(misc) / float64(total) * 100)))
+			}
 		}
 	}
 
