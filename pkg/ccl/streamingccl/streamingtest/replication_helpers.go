@@ -172,18 +172,15 @@ type TenantState struct {
 type ReplicationHelper struct {
 	// SysServer is the backing server.
 	SysServer serverutils.TestServerInterface
-	// SysDB is a sql connection to the system tenant.
-	SysDB *sqlutils.SQLRunner
+	// SysSQL is a sql connection to the system tenant.
+	SysSQL *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
 	PGUrl url.URL
-	// Tenant is a tenant running on this server.
-	Tenant TenantState
 }
 
-// NewReplicationHelper starts test server and configures it to have active
-// tenant.
+// NewReplicationHelper starts test server with the required cluster settings for streming
 func NewReplicationHelper(
-	t *testing.T, serverArgs base.TestServerArgs, tenantID roachpb.TenantID,
+	t *testing.T, serverArgs base.TestServerArgs,
 ) (*ReplicationHelper, func()) {
 	ctx := context.Background()
 
@@ -202,27 +199,32 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 `, `;`)...)
 
-	// Start tenant server
-	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
-
 	// Sink to read data from.
 	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 
 	h := &ReplicationHelper{
 		SysServer: s,
-		SysDB:     sqlutils.MakeSQLRunner(db),
+		SysSQL:    sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
-		Tenant: TenantState{
-			ID:    tenantID,
-			Codec: keys.MakeSQLCodec(tenantID),
-			SQL:   sqlutils.MakeSQLRunner(tenantConn),
-		},
 	}
 
 	return h, func() {
 		cleanupSink()
 		resetFreq()
-		require.NoError(t, tenantConn.Close())
 		s.Stopper().Stop(ctx)
 	}
+}
+
+// CreateTenant creates a tenant under the replication helper's server
+func (rh *ReplicationHelper) CreateTenant(
+	t *testing.T, tenantID roachpb.TenantID,
+) (TenantState, func()) {
+	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{TenantID: tenantID})
+	return TenantState{
+			ID:    tenantID,
+			Codec: keys.MakeSQLCodec(tenantID),
+			SQL:   sqlutils.MakeSQLRunner(tenantConn),
+		}, func() {
+			require.NoError(t, tenantConn.Close())
+		}
 }

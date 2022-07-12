@@ -7775,6 +7775,102 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		close(continueNotif)
 		require.NoError(t, g.Wait())
 	})
+
+	t.Run("restore-table-concurrent-parent-drop", func(t *testing.T) {
+		ctx := context.Background()
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		kvDB := tc.Server(0).DB()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.beforePublishingDescriptors = func() error {
+						notifyBackfill(ctx)
+						return nil
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+CREATE DATABASE d;
+CREATE SCHEMA d.sc;
+CREATE TYPE d.sc.typ AS ENUM ('hello');
+CREATE TABLE d.sc.tb (x d.sc.typ);
+`)
+
+		// Back up the table.
+		sqlDB.Exec(t, `BACKUP TABLE d.sc.tb TO 'nodelocal://0/test/'`)
+
+		// Drop the table and the type.
+		sqlDB.Exec(t, `DROP TABLE d.sc.tb`)
+		sqlDB.Exec(t, `DROP TYPE d.sc.typ`)
+
+		// Create a new database and restore into it.
+		sqlDB.Exec(t, `CREATE DATABASE newdb`)
+		sqlDB.Exec(t, `CREATE SCHEMA newdb.sc`)
+
+		// Restore the table.
+		beforePublishingNotif, continueNotif := initBackfillNotification()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			if _, err := sqlDB.DB.ExecContext(ctx, `RESTORE TABLE d.sc.tb FROM 'nodelocal://0/test/' WITH into_db = 'newdb'`); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		})
+
+		<-beforePublishingNotif
+
+		// Verify that the database and schema descriptors are public.
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		require.Equal(t, descpb.DescriptorState_PUBLIC, dbDesc.DatabaseDesc().State)
+
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		require.Equal(t, descpb.DescriptorState_PUBLIC, schemaDesc.SchemaDesc().State)
+
+		// Verify that the table and type descriptors are offline.
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
+
+		typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, typDesc.TypeDesc().State)
+
+		// Verify that dropping the table or the type is not permitted in any way.
+		//
+		// The table descriptor undergoing a restore is offline is are owned
+		// by the restore job, it cannot undergo a schema change (see #84137).
+		//
+		// Exercises both legacy and declarative schema changes.
+		//
+		// TODO(postamar): assert on pgcodes instead
+		{
+			sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+			const reLegacy = `type .* is offline|relation .* is offline|cannot drop a database or a schema with OFFLINE`
+			sqlDB.ExpectErr(t, reLegacy, `DROP TYPE newdb.sc.typ`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP TABLE newdb.sc.tb`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP DATABASE newdb CASCADE`)
+			sqlDB.ExpectErr(t, reLegacy, `DROP SCHEMA newdb.sc CASCADE`)
+
+			sqlDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+			const reDecl = `type .* is offline|relation .* is offline|object state is OFFLINE instead of PUBLIC, cannot be targeted by DROP`
+			sqlDB.ExpectErr(t, reDecl, `DROP TYPE newdb.sc.typ`)
+			sqlDB.ExpectErr(t, reDecl, `DROP TABLE newdb.sc.tb`)
+			sqlDB.ExpectErr(t, reDecl, `DROP DATABASE newdb CASCADE`)
+			sqlDB.ExpectErr(t, reDecl, `DROP SCHEMA newdb.sc CASCADE`)
+		}
+
+		// Wrap up the test.
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+	})
+
 }
 
 // TestCleanupDoesNotDeleteParentsWithChildObjects tests that if the job fails

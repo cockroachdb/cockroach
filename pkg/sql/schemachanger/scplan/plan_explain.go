@@ -34,6 +34,15 @@ func (p Plan) DecorateErrorWithPlanDetails(err error) error {
 	if err == nil {
 		return nil
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			rAsErr, ok := r.(error)
+			if !ok {
+				rAsErr = errors.Errorf("panic during scplan.DecorateErrorWithPlanDetails: %v", r)
+			}
+			err = errors.CombineErrors(err, rAsErr)
+		}
+	}()
 
 	if len(p.Stages) > 0 {
 		explain, explainErr := p.ExplainVerbose()
