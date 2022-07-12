@@ -253,6 +253,14 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
+	if len(r.mu.pausedFollowers) > 0 {
+		// If we have paused followers, make log truncation lenient until the
+		// log is large enough so that catching up would certainly be slower.
+		// Without this, followers that are paused regularly due to an ongoing
+		// overload situation over time might be cut off from all logs and will
+		// be overloaded via snapshots instead.
+		targetSize = r.mu.conf.RangeMaxBytes
+	}
 	if targetSize > r.mu.conf.RangeMaxBytes {
 		targetSize = r.mu.conf.RangeMaxBytes
 	}
