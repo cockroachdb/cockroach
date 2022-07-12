@@ -134,7 +134,7 @@ func (rsl StateLoader) Save(
 	}
 	rai, lai, rait, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, state.RaftAppliedIndexTerm,
 		&state.RaftClosedTimestamp
-	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, ct, nil); err != nil {
+	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, *ct, nil); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return *ms, nil
@@ -186,17 +186,12 @@ func (rsl StateLoader) LoadMVCCStats(
 // The applied indices and the stats used to be stored separately in different
 // keys. We now deem those keys to be "legacy" because they have been replaced
 // by the range applied state key.
-//
-// TODO(andrei): raftClosedTimestamp is a pointer to avoid an allocation when
-// putting it in RangeAppliedState. Once RangeAppliedState.RaftClosedTimestamp
-// is made non-nullable (see comments on the field), this argument should be
-// taken by value.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
 	newMS *enginepb.MVCCStats,
-	raftClosedTimestamp *hlc.Timestamp,
+	raftClosedTimestamp hlc.Timestamp,
 	asAlloc *enginepb.RangeAppliedState, // optional
 ) error {
 	if asAlloc == nil {
@@ -209,8 +204,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RangeStats:           newMS.ToPersistentStats(),
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
-	if raftClosedTimestamp != nil && !raftClosedTimestamp.IsEmpty() {
-		as.RaftClosedTimestamp = *raftClosedTimestamp
+	if !raftClosedTimestamp.IsEmpty() {
+		as.RaftClosedTimestamp = raftClosedTimestamp
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStatsForRange.
@@ -232,7 +227,7 @@ func (rsl StateLoader) SetMVCCStats(
 	alloc := as // reuse
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
-		&as.RaftClosedTimestamp, alloc)
+		as.RaftClosedTimestamp, alloc)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
@@ -246,7 +241,7 @@ func (rsl StateLoader) SetClosedTimestamp(
 	alloc := as // reuse
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
-		as.RangeStats.ToStatsPtr(), closedTS, alloc)
+		as.RangeStats.ToStatsPtr(), *closedTS, alloc)
 }
 
 // LoadGCThreshold loads the GC threshold.

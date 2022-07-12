@@ -258,9 +258,6 @@ message RangeAppliedState {
   // commands that can still apply are writing at higher timestamps.
   // Non-leaseholder replicas are free to serve "follower reads" at or below
   // this timestamp.
-  //
-  // Not nullable because we cannot write empty timestamp to disk as that
-  // looks like an inconsistency to the consistency-checker.
   util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
 
   // raft_applied_index_term is the term corresponding to raft_applied_index.
