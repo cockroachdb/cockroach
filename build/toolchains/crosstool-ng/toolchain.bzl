@@ -1,8 +1,8 @@
 def _impl(rctx):
     if rctx.attr.host == "x86_64":
-        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/{}/20220317-191459/{}.tar.gz".format(rctx.attr.host, rctx.attr.target)
+        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/{}/20220711-205918/{}.tar.gz".format(rctx.attr.host, rctx.attr.target)
     elif rctx.attr.host == "aarch64":
-        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/{}/20220316-165237/{}.tar.gz".format(rctx.attr.host, rctx.attr.target)
+        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/{}/20220711-204538/{}.tar.gz".format(rctx.attr.host, rctx.attr.target)
     rctx.download_and_extract(
         url = [url],
         sha256 = rctx.attr.tarball_sha256,
