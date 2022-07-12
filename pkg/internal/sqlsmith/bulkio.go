@@ -62,7 +62,7 @@ func (s *Smither) enableBulkIO() {
 		}
 	}))
 	s.bulkFiles = map[string][]byte{}
-	s.bulkBackups = map[string]tree.TargetList{}
+	s.bulkBackups = map[string]tree.BackupTargetList{}
 }
 
 func makeAsOf(s *Smither) tree.AsOfClause {
@@ -89,7 +89,7 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 
 func makeBackup(s *Smither) (tree.Statement, bool) {
 	name := fmt.Sprintf("%s/%s", s.bulkSrv.URL, s.name("backup"))
-	var targets tree.TargetList
+	var targets tree.BackupTargetList
 	seen := map[tree.TableName]bool{}
 	for len(targets.Tables.TablePatterns) < 1 || s.coin() {
 		table, ok := s.getRandTable()
@@ -116,7 +116,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 
 func makeRestore(s *Smither) (tree.Statement, bool) {
 	var name string
-	var targets tree.TargetList
+	var targets tree.BackupTargetList
 	s.lock.Lock()
 	for name, targets = range s.bulkBackups {
 		break
