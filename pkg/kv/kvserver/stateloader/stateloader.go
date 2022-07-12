@@ -82,9 +82,7 @@ func (rsl StateLoader) Load(
 	s.LeaseAppliedIndex = as.LeaseAppliedIndex
 	ms := as.RangeStats.ToStats()
 	s.Stats = &ms
-	if as.RaftClosedTimestamp != nil {
-		s.RaftClosedTimestamp = *as.RaftClosedTimestamp
-	}
+	s.RaftClosedTimestamp = as.RaftClosedTimestamp
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
@@ -212,7 +210,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
 	if raftClosedTimestamp != nil && !raftClosedTimestamp.IsEmpty() {
-		as.RaftClosedTimestamp = raftClosedTimestamp
+		as.RaftClosedTimestamp = *raftClosedTimestamp
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStatsForRange.
@@ -234,7 +232,7 @@ func (rsl StateLoader) SetMVCCStats(
 	alloc := as // reuse
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
-		as.RaftClosedTimestamp, alloc)
+		&as.RaftClosedTimestamp, alloc)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
