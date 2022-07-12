@@ -31,7 +31,11 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 	var allLatchSpans spanset.SpanSet
 	declareAllKeys(&allLatchSpans)
 
-	for method, command := range cmds {
+	for i, command := range cmds {
+		if command.isEmpty() {
+			continue
+		}
+		method := roachpb.Method(i)
 		if method == roachpb.Probe {
 			// Probe is special since it's a no-op round-trip through the replication
 			// layer. It does not declare any keys.

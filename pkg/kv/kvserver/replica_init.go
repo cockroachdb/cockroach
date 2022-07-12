@@ -174,7 +174,7 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 //
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
-	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
+	if r.mu.state.Desc != nil && r.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
@@ -249,9 +249,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 // node. It is false when a replica has been created in response to an incoming
 // message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.isInitializedRLocked()
+	return r.isInitialized.Get()
 }
 
 // TenantID returns the associated tenant ID and a boolean to indicate that it
@@ -264,15 +262,6 @@ func (r *Replica) TenantID() (roachpb.TenantID, bool) {
 
 func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
 	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
-}
-
-// isInitializedRLocked is true if we know the metadata of this range, either
-// because we created it or we have received an initial snapshot from
-// another node. It is false when a range has been created in response
-// to an incoming message but we are waiting for our initial snapshot.
-// isInitializedLocked requires that the replica lock is held.
-func (r *Replica) isInitializedRLocked() bool {
-	return r.mu.state.Desc.IsInitialized()
 }
 
 // maybeInitializeRaftGroup check whether the internal Raft group has
@@ -378,6 +367,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	}
 
 	r.rangeStr.store(r.replicaID, desc)
+	r.isInitialized.Set(desc.IsInitialized())
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
