@@ -2832,24 +2832,23 @@ func mvccScanToBytes(
 	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
-		parent:                 iter,
-		memAccount:             opts.MemoryAccount,
-		lockTable:              opts.LockTable,
-		reverse:                opts.Reverse,
-		start:                  key,
-		end:                    endKey,
-		ts:                     timestamp,
-		maxKeys:                opts.MaxKeys,
-		targetBytes:            opts.TargetBytes,
-		targetBytesAvoidExcess: opts.TargetBytesAvoidExcess,
-		allowEmpty:             opts.AllowEmpty,
-		wholeRows:              opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
-		maxIntents:             opts.MaxIntents,
-		inconsistent:           opts.Inconsistent,
-		skipLocked:             opts.SkipLocked,
-		tombstones:             opts.Tombstones,
-		failOnMoreRecent:       opts.FailOnMoreRecent,
-		keyBuf:                 mvccScanner.keyBuf,
+		parent:           iter,
+		memAccount:       opts.MemoryAccount,
+		lockTable:        opts.LockTable,
+		reverse:          opts.Reverse,
+		start:            key,
+		end:              endKey,
+		ts:               timestamp,
+		maxKeys:          opts.MaxKeys,
+		targetBytes:      opts.TargetBytes,
+		allowEmpty:       opts.AllowEmpty,
+		wholeRows:        opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
+		maxIntents:       opts.MaxIntents,
+		inconsistent:     opts.Inconsistent,
+		skipLocked:       opts.SkipLocked,
+		tombstones:       opts.Tombstones,
+		failOnMoreRecent: opts.FailOnMoreRecent,
+		keyBuf:           mvccScanner.keyBuf,
 	}
 
 	var trackLastOffsets int
@@ -2971,14 +2970,8 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
-	// TargetBytesAvoidExcess will prevent TargetBytes from being exceeded
-	// unless only a single key/value pair is returned.
-	//
-	// TODO(erikgrinaker): This option exists for backwards compatibility with
-	// 21.2 RPC clients, in 22.2 it should always be enabled.
-	TargetBytesAvoidExcess bool
 	// AllowEmpty will return an empty result if the first kv pair exceeds the
-	// TargetBytes limit and TargetBytesAvoidExcess is set.
+	// TargetBytes limit.
 	AllowEmpty bool
 	// WholeRowsOfSize will prevent returning partial rows when limits (MaxKeys or
 	// TargetBytes) are set. The value indicates the max number of keys per row.

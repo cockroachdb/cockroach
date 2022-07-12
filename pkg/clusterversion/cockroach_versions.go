@@ -164,11 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// TargetBytesAvoidExcess prevents exceeding BatchRequest.Header.TargetBytes
-	// except when there is a single value in the response. 21.2 DistSender logic
-	// requires the limit to always be overshot in order to properly enforce
-	// limits when splitting requests.
-	TargetBytesAvoidExcess
 	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
 	// of span that RPCs get on the server depending on the tracing context.
 	TraceIDDoesntImplyStructuredRecording
@@ -419,10 +414,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     TargetBytesAvoidExcess,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
 	},
 	{
 		Key:     TraceIDDoesntImplyStructuredRecording,
