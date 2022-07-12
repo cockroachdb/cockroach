@@ -95,7 +95,7 @@ func registerYCSB(r registry.Registry) {
 			wl, cpus := wl, cpus
 			r.Add(registry.TestSpec{
 				Name:    name,
-				Owner:   registry.OwnerKV,
+				Owner:   registry.OwnerTestEng,
 				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
