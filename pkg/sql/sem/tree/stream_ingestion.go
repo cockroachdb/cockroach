@@ -12,7 +12,7 @@ package tree
 
 // StreamIngestion represents a RESTORE FROM REPLICATION STREAM statement.
 type StreamIngestion struct {
-	Targets  TargetList
+	Targets  BackupTargetList
 	From     StringOrPlaceholderOptList
 	AsTenant TenantID
 }

@@ -394,7 +394,7 @@ type DescriptorWithObjectType struct {
 // for the targets. Each descriptor is marked along with the corresponding
 // object type.
 func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
-	ctx context.Context, targets tree.TargetList,
+	ctx context.Context, targets tree.GrantTargetList,
 ) ([]DescriptorWithObjectType, error) {
 	const required = true
 	flags := tree.CommonLookupFlags{

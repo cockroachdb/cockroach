@@ -27,7 +27,7 @@ type ScheduledBackup struct {
 	ScheduleLabelSpec ScheduleLabelSpec
 	Recurrence        Expr
 	FullBackup        *FullBackupClause /* nil implies choose default */
-	Targets           *TargetList       /* nil implies tree.AllDescriptors coverage */
+	Targets           *BackupTargetList /* nil implies tree.AllDescriptors coverage */
 	To                StringOrPlaceholderOptList
 	BackupOptions     BackupOptions
 	ScheduleOptions   KVOptions

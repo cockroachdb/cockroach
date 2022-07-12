@@ -24,18 +24,17 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 // Grant represents a GRANT statement.
 type Grant struct {
 	Privileges      privilege.List
-	Targets         TargetList
+	Targets         GrantTargetList
 	Grantees        RoleSpecList
 	WithGrantOption bool
 }
 
-// TargetList represents a list of targets.
+// GrantTargetList represents a list of targets.
 // Only one field may be non-nil.
-type TargetList struct {
+type GrantTargetList struct {
 	Databases NameList
 	Schemas   ObjectNamePrefixList
 	Tables    TableAttrs
-	TenantID  TenantID
 	Types     []*UnresolvedObjectName
 	// If the target is for all sequences in a set of schemas.
 	AllSequencesInSchema bool
@@ -52,7 +51,7 @@ type TargetList struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (tl *TargetList) Format(ctx *FmtCtx) {
+func (tl *GrantTargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
@@ -65,9 +64,6 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	} else if tl.Schemas != nil {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
-	} else if tl.TenantID.Specified {
-		ctx.WriteString("TENANT ")
-		ctx.FormatNode(&tl.TenantID)
 	} else if tl.Types != nil {
 		ctx.WriteString("TYPE ")
 		for i, typ := range tl.Types {

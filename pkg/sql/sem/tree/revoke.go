@@ -25,7 +25,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
 	Privileges     privilege.List
-	Targets        TargetList
+	Targets        GrantTargetList
 	Grantees       RoleSpecList
 	GrantOptionFor bool
 }
