@@ -617,6 +617,7 @@ define CreateView {
     Columns colinfo.ResultColumns
     deps opt.ViewDeps
     typeDeps opt.ViewTypeDeps
+    withData bool
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.

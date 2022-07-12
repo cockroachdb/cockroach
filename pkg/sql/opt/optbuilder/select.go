@@ -491,6 +491,12 @@ func (b *Builder) buildScan(
 		}
 	}
 
+	if tab.IsRefreshViewRequired() {
+		err := errors.WithHint(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "materialized view %q has not been populated", tab.Name()),
+			"use the REFRESH MATERIALIZED VIEW command.")
+		panic(err)
+	}
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
 			panic(pgerror.Newf(pgcode.Syntax,

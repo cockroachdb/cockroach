@@ -389,7 +389,6 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		return nil
 	}
 	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.GetCreateQuery())
-
 	return sc.backfillQueryIntoTable(ctx, table, table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill")
 }
 
@@ -418,6 +417,14 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 	ctx context.Context, table catalog.TableDescriptor,
 ) error {
 	if !(table.Adding() && table.MaterializedView()) {
+		return nil
+	}
+	// If materialized view is created with the WITH NO DATA option, skip backfill of the view
+	// during creation. The RefreshViewRequired field within the table descriptor indicates
+	// that a materialized view has been created with no data and a REFRESH VIEW operation needs
+	// to be called on it prior to access.
+	if table.IsRefreshViewRequired() {
+		log.Infof(ctx, "skipping backfill for CREATE MATERIALIZED VIEW %s WITH NO DATA", table.GetName())
 		return nil
 	}
 	log.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.GetViewQuery())
