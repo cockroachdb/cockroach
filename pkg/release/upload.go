@@ -206,9 +206,7 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 			_ = fileToUpload.Close()
 		}()
 
-		// NB: The leading slash is required to make redirects work
-		// correctly since we reuse this key as the redirect location.
-		versionKey := fmt.Sprintf("/%s/%s", nonReleasePrefix, f.FilePath)
+		versionKey := fmt.Sprintf("%s/%s", nonReleasePrefix, f.FilePath)
 		log.Printf("Uploading to %s", svc.URL(versionKey))
 		if err := svc.PutObject(&PutObjectInput{
 			ContentDisposition: &disposition,
@@ -223,12 +221,15 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 			latestSuffix = "LATEST"
 		}
 		latestKey := fmt.Sprintf("%s/%s.%s", nonReleasePrefix, f.RedirectPathPrefix, latestSuffix)
+		// NB: The leading slash is required to make redirects work
+		// correctly since we reuse this key as the redirect location.
+		target := "/" + versionKey
 		if err := svc.PutObject(&PutObjectInput{
 			CacheControl:            &NoCache,
 			Key:                     &latestKey,
-			WebsiteRedirectLocation: &versionKey,
+			WebsiteRedirectLocation: &target,
 		}); err != nil {
-			log.Fatalf("failed adding a redirect to %s: %s", versionKey, err)
+			log.Fatalf("failed adding a redirect to %s: %s", target, err)
 		}
 	}
 }
