@@ -9,8 +9,8 @@
 package streamingccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // EventType enumerates all possible events emitted over a cluster stream.
@@ -23,7 +23,7 @@ const (
 	// SSTableEvent indicates that the SSTable field of an event holds an updated
 	// SSTable which needs to be ingested.
 	SSTableEvent
-	// CheckpointEvent indicates that GetResolved will be meaningful. The resolved
+	// CheckpointEvent indicates that GetResolvedSpans will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
 	// GenerationEvent indicates that the stream should start ingesting with the
@@ -42,10 +42,10 @@ type Event interface {
 
 	// GetSSTable returns a SSTable event if the EventType is SSTable.
 	GetSSTable() *roachpb.RangeFeedSSTable
-	// GetResolved returns a resolved timestamp if the EventType is
-	// CheckpointEvent. The resolved timestamp indicates that all KV events until
-	// this time have been emitted.
-	GetResolved() *hlc.Timestamp
+
+	// GetResolvedSpans returns a list of span-time pairs indicating the time for
+	// which all KV events within that span has been emitted.
+	GetResolvedSpans() *[]jobspb.ResolvedSpan
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -70,8 +70,8 @@ func (kve kvEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
-// GetResolved implements the Event interface.
-func (kve kvEvent) GetResolved() *hlc.Timestamp {
+// GetResolvedSpans implements the Event interface.
+func (kve kvEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -95,8 +95,8 @@ func (sste sstableEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return &sste.sst
 }
 
-// GetResolved implements the Event interface.
-func (sste sstableEvent) GetResolved() *hlc.Timestamp {
+// GetResolvedSpans implements the Event interface.
+func (sste sstableEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -105,7 +105,7 @@ var _ Event = sstableEvent{}
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
 type checkpointEvent struct {
-	resolvedTimestamp hlc.Timestamp
+	resolvedSpans []jobspb.ResolvedSpan
 }
 
 var _ Event = checkpointEvent{}
@@ -125,9 +125,9 @@ func (ce checkpointEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
-// GetResolved implements the Event interface.
-func (ce checkpointEvent) GetResolved() *hlc.Timestamp {
-	return &ce.resolvedTimestamp
+// GetResolvedSpans implements the Event interface.
+func (ce checkpointEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return &ce.resolvedSpans
 }
 
 // generationEvent indicates that the topology of the stream has changed.
@@ -150,8 +150,8 @@ func (ge generationEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
-// GetResolved implements the Event interface.
-func (ge generationEvent) GetResolved() *hlc.Timestamp {
+// GetResolvedSpans implements the Event interface.
+func (ge generationEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -166,8 +166,8 @@ func MakeSSTableEvent(sst roachpb.RangeFeedSSTable) Event {
 }
 
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
-func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
-	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
+func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
+	return checkpointEvent{resolvedSpans: resolvedSpans}
 }
 
 // MakeGenerationEvent creates an GenerationEvent.

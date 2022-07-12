@@ -73,24 +73,20 @@ func getStreamIngestionStats(
 		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
 			MinIngestedTimestamp: *highwater,
 		}
-		lagInfo.SlowestSourcePartitionTimestamp = hlc.MaxTimestamp
-		lagInfo.FastestSourcePartitionTimestamp = hlc.MinTimestamp
-		// TODO(casper): track spans that the slowest partition is associated with once
-		// we switch from tracking partition ID as frontier to tracking actual spans as
-		// frontier.
-		for partition, pp := range progress.GetStreamIngest().PartitionProgress {
-			if pp.IngestedTimestamp.Less(lagInfo.SlowestSourcePartitionTimestamp) {
-				lagInfo.SlowestSourcePartitionTimestamp = pp.IngestedTimestamp
-				lagInfo.SlowestSourcePartition = partition
+		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
+		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
+		// TODO(casper): track spans that the slowest partition is associated
+		for _, resolvedSpan := range progress.GetStreamIngest().Checkpoint.ResolvedSpans {
+			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
+				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
 
-			if lagInfo.FastestSourcePartitionTimestamp.Less(pp.IngestedTimestamp) {
-				lagInfo.FastestSourcePartitionTimestamp = pp.IngestedTimestamp
-				lagInfo.FastestSourcePartition = partition
+			if lagInfo.LatestCheckpointedTimestamp.Less(resolvedSpan.Timestamp) {
+				lagInfo.LatestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
 		}
-		lagInfo.SlowestFastestPartitionIngestionLag = lagInfo.FastestSourcePartitionTimestamp.GoTime().
-			Sub(lagInfo.SlowestSourcePartitionTimestamp.GoTime())
+		lagInfo.SlowestFastestIngestionLag = lagInfo.LatestCheckpointedTimestamp.GoTime().
+			Sub(lagInfo.EarliestCheckpointedTimestamp.GoTime())
 		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
 		stats.ReplicationLagInfo = lagInfo
 	}
@@ -163,15 +159,22 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		// TODO(casper): update running status
-		if progress.GetStreamIngest().StartTime.Less(startTime) {
-			progress.GetStreamIngest().StartTime = startTime
-			if err := ingestionJob.SetProgress(ctx, nil, *progress.GetStreamIngest()); err != nil {
-				return errors.Wrap(err, "failed to update job progress")
+		err = ingestionJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
+				md.Progress.GetStreamIngest().StartTime = startTime
 			}
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to update job progress")
 		}
 
 		log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
 			ingestionJob.ID(), progress.GetStreamIngest().StartTime)
+		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		checkpoint := ingestProgress.Checkpoint
+
 		evalCtx := execCtx.ExtendedEvalContext()
 		dsp := execCtx.DistSQLPlanner()
 
@@ -182,7 +185,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime,
+			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime, checkpoint,
 			ingestionJob.ID(), streamID, details.TenantID, details.NewTenantID)
 		if err != nil {
 			return err

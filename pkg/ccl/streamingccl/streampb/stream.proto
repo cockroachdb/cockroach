@@ -73,16 +73,10 @@ message StreamEvent {
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
   }
 
-  // SpanCheckpoint represents a checkpoint record for completed span.
-  // All events up to timestamp must already have been emitted.
-  message SpanCheckpoint {
-    roachpb.Span span = 1 [(gogoproto.nullable) = false];
-    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  }
-
   // Checkpoint represents stream checkpoint.
   message StreamCheckpoint {
-    repeated SpanCheckpoint spans = 1  [(gogoproto.nullable) = false];
+    reserved 1;
+    repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 2  [(gogoproto.nullable) = false];
   }
 
   // Only 1 field ought to be set.
@@ -134,17 +128,14 @@ message StreamIngestionStats {
     google.protobuf.Duration replication_lag = 2
     [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
-    string fastest_source_partition = 3;
-
-    util.hlc.Timestamp fastest_source_partition_timestamp = 4 [(gogoproto.nullable) = false];
-
-    string slowest_source_partition = 5;
-
-    util.hlc.Timestamp slowest_source_partition_timestamp = 6 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp latest_checkpointed_timestamp = 3 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp earliest_checkpointed_timestamp = 4 [(gogoproto.nullable) = false];
+    reserved 5;
+    reserved 6;
 
     // Lag between the slowest ingested timestamp to the fastest ingested timestamp
     // among all partitions.
-    google.protobuf.Duration slowest_fastest_partition_ingestion_lag = 7
+    google.protobuf.Duration slowest_fastest_ingestion_lag = 7
     [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
   }
 
