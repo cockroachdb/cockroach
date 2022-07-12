@@ -13,6 +13,7 @@ package kvcoord
 import (
 	"context"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -237,10 +238,10 @@ func (s *condensableSpanSet) bytesSize() int64 {
 	return s.bytes
 }
 
-func spanSize(sp roachpb.Span) int64 {
-	return int64(len(sp.Key) + len(sp.EndKey))
-}
+const spanOverhead = int64(unsafe.Sizeof(roachpb.Span{}))
 
-func keySize(k roachpb.Key) int64 {
-	return int64(len(k))
+func spanSize(sp roachpb.Span) int64 {
+	// Since the span is included into a []roachpb.Span, we also need to account
+	// for the overhead of storing it in that slice.
+	return spanOverhead + int64(cap(sp.Key)+cap(sp.EndKey))
 }
