@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -227,6 +228,15 @@ type hashJoiner struct {
 		rowIdx int
 	}
 
+	// accountedFor tracks how much memory the hash joiner has accounted for so
+	// far related to some of the internal slices in the hash table.
+	accountedFor struct {
+		// hashtableSame tracks the current memory usage of hj.ht.Same.
+		hashtableSame int64
+		// hashtableVisited tracks the current memory usage of hj.ht.Visited.
+		hashtableVisited int64
+	}
+
 	exportBufferedState struct {
 		rightExported      int
 		rightWindowedBatch coldata.Batch
@@ -323,11 +333,25 @@ func (hj *hashJoiner) build() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
 		// they have separate collectLeftAnti method.
 		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the right input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
+		// hj.ht.Same will never shrink, so the delta is non-negative.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(newAccountedFor - hj.accountedFor.hashtableSame)
+		hj.accountedFor.hashtableSame = newAccountedFor
 	}
 	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
 		// visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the right input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		newAccountedFor := memsize.Bool * int64(cap(hj.ht.Visited))
+		// hj.ht.Visited will never shrink, so the delta is non-negative.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(newAccountedFor - hj.accountedFor.hashtableVisited)
+		hj.accountedFor.hashtableVisited = newAccountedFor
 		// Since keyID = 0 is reserved for end of list, it can be marked as visited
 		// at the beginning.
 		hj.ht.Visited[0] = true
@@ -722,6 +746,10 @@ func (hj *hashJoiner) Reset(ctx context.Context) {
 		}
 	}
 	hj.state = hjBuilding
+	// Note that hj.ht.Reset() doesn't reset hj.ht.Same and hj.ht.Visited
+	// slices, but we'll reset them manually in hj.build(). We also keep
+	// references to those slices, so we don't release any of the memory we've
+	// accounted for.
 	hj.ht.Reset(ctx)
 	// Note that we don't zero out hj.probeState.buildIdx,
 	// hj.probeState.probeIdx, and hj.probeState.probeRowUnmatched because the
