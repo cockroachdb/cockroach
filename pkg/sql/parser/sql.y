@@ -14804,6 +14804,7 @@ unreserved_keyword:
 bare_label_keywords:
   ATOMIC
 | CALLED
+| COST
 | DEFINER
 | EXTERNAL
 | IMMUTABLE
