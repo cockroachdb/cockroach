@@ -258,12 +258,7 @@ message RangeAppliedState {
   // commands that can still apply are writing at higher timestamps.
   // Non-leaseholder replicas are free to serve "follower reads" at or below
   // this timestamp.
-  //
-  // TODO(andrei): Make this field not-nullable in 21.2, once all the ranges
-  // have a closed timestamp applied to their state (this might need a
-  // migration). In 21.1 we cannot write empty timestamp to disk because that
-  // looks like an inconsistency to the consistency-checker.
-  util.hlc.Timestamp raft_closed_timestamp = 4;
+  util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
 
   // raft_applied_index_term is the term corresponding to raft_applied_index.
   // The serialized proto will not contain this field until code starts
