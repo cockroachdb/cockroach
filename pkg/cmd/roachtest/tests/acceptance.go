@@ -46,19 +46,6 @@ func registerAcceptance(r registry.Registry) {
 				minVersion:        "v19.2.0", // SQL syntax unsupported on 19.1.x
 				encryptionSupport: registry.EncryptionMetamorphic,
 			},
-			{
-				name: "version-upgrade",
-				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runVersionUpgrade(ctx, t, c)
-				},
-				// This test doesn't like running on old versions because it upgrades to
-				// the latest released version and then it tries to "head", where head is
-				// the cockroach binary built from the branch on which the test is
-				// running. If that branch corresponds to an older release, then upgrading
-				// to head after 19.2 fails.
-				minVersion: "v19.2.0",
-				timeout:    30 * time.Minute,
-			},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
@@ -76,6 +63,21 @@ func registerAcceptance(r registry.Registry) {
 		registry.OwnerDevInf: {
 			{name: "build-info", fn: RunBuildInfo},
 			{name: "build-analyze", fn: RunBuildAnalyze},
+		},
+		registry.OwnerTestEng: {
+			{
+				name: "version-upgrade",
+				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runVersionUpgrade(ctx, t, c)
+				},
+				// This test doesn't like running on old versions because it upgrades to
+				// the latest released version and then it tries to "head", where head is
+				// the cockroach binary built from the branch on which the test is
+				// running. If that branch corresponds to an older release, then upgrading
+				// to head after 19.2 fails.
+				minVersion: "v19.2.0",
+				timeout:    30 * time.Minute,
+			},
 		},
 	}
 	tags := []string{"default", "quick"}
