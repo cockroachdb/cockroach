@@ -85,7 +85,7 @@ discard_stmt ::=
 	'DISCARD' 'ALL'
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' role_spec_list opt_with_grant_option
+	'GRANT' privileges 'ON' grant_targets 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privilege_list 'TO' role_spec_list
 	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
 	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' role_spec_list opt_with_grant_option
@@ -98,8 +98,8 @@ prepare_stmt ::=
 	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt
 
 revoke_stmt ::=
-	'REVOKE' privileges 'ON' targets 'FROM' role_spec_list
-	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' targets 'FROM' role_spec_list
+	'REVOKE' privileges 'ON' grant_targets 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' grant_targets 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'TYPE' target_types 'FROM' role_spec_list
@@ -217,11 +217,11 @@ reset_stmt ::=
 restore_stmt ::=
 	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' backup_targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_tenant_clause
+	| 'RESTORE' backup_targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_tenant_clause
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -347,7 +347,7 @@ privileges ::=
 	'ALL' opt_privileges_clause
 	| privilege_list
 
-targets ::=
+grant_targets ::=
 	'identifier'
 	| col_name_keyword
 	| unreserved_keyword
@@ -355,8 +355,6 @@ targets ::=
 	| 'SEQUENCE' table_pattern_list
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
-	| 'TENANT' iconst64
-	| 'TENANT' 'identifier'
 	| 'DATABASE' name_list
 
 role_spec_list ::=
@@ -492,7 +490,7 @@ alter_tenant_csetting_stmt ::=
 	| 'ALTER' 'TENANT_ALL' 'ALL' set_or_reset_csetting_stmt
 
 opt_backup_targets ::=
-	targets
+	backup_targets
 
 sconst_or_placeholder ::=
 	'SCONST'
@@ -673,6 +671,17 @@ opt_with_restore_options ::=
 	'WITH' restore_options_list
 	| 'WITH' 'OPTIONS' '(' restore_options_list ')'
 	| 
+
+backup_targets ::=
+	'identifier'
+	| col_name_keyword
+	| unreserved_keyword
+	| complex_table_pattern
+	| table_pattern ',' table_pattern_list
+	| 'TABLE' table_pattern_list
+	| 'TENANT' iconst64
+	| 'TENANT' 'identifier'
+	| 'DATABASE' name_list
 
 opt_as_tenant_clause ::=
 	'AS' 'TENANT' iconst64
@@ -1419,9 +1428,6 @@ table_pattern ::=
 	simple_db_object_name
 	| complex_table_pattern
 
-iconst64 ::=
-	'ICONST'
-
 privilege ::=
 	name
 	| 'CREATE'
@@ -1763,6 +1769,9 @@ var_name ::=
 
 restore_options_list ::=
 	( restore_options ) ( ( ',' restore_options ) )*
+
+iconst64 ::=
+	'ICONST'
 
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
@@ -2450,7 +2459,7 @@ targets_roles ::=
 	| 'SCHEMA' schema_name_list
 	| 'SCHEMA' schema_wildcard
 	| 'TYPE' type_name_list
-	| targets
+	| grant_targets
 
 partition ::=
 	'PARTITION' partition_name
