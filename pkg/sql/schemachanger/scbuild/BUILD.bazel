@@ -72,6 +72,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",
+        "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scerrors",
@@ -88,5 +89,6 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

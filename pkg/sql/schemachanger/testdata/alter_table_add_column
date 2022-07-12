@@ -178,11 +178,10 @@ upsert descriptor #106
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            constraintId: 1
-  +            indexId: 1
-  +            isUnique: true
-  +            tableId: 106
+  +          constraintId: 1
+  +          indexId: 1
+  +          isUnique: true
+  +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -217,12 +216,11 @@ upsert descriptor #106
   +    - elementProto:
   +        columnType:
   +          columnId: 2
-  +          embeddedTypeT:
-  +            type:
-  +              family: IntFamily
-  +              oid: 20
-  +              width: 64
   +          tableId: 106
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -230,8 +228,7 @@ upsert descriptor #106
   +    - elementProto:
   +        columnDefaultExpression:
   +          columnId: 2
-  +          embeddedExpr:
-  +            expr: 42:::INT8
+  +          expr: 42:::INT8
   +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -258,13 +255,12 @@ upsert descriptor #106
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            constraintId: 1
-  +            indexId: 2
-  +            isUnique: true
-  +            sourceIndexId: 1
-  +            tableId: 106
-  +            temporaryIndexId: 3
+  +          constraintId: 1
+  +          indexId: 2
+  +          isUnique: true
+  +          sourceIndexId: 1
+  +          tableId: 106
+  +          temporaryIndexId: 3
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -280,12 +276,11 @@ upsert descriptor #106
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        temporaryIndex:
-  +          embeddedIndex:
-  +            constraintId: 1
-  +            indexId: 3
-  +            isUnique: true
-  +            sourceIndexId: 1
-  +            tableId: 106
+  +          constraintId: 1
+  +          indexId: 3
+  +          isUnique: true
+  +          sourceIndexId: 1
+  +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -706,11 +701,10 @@ upsert descriptor #106
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            constraintId: 1
-  -            indexId: 1
-  -            isUnique: true
-  -            tableId: 106
+  -          constraintId: 1
+  -          indexId: 1
+  -          isUnique: true
+  -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -745,12 +739,11 @@ upsert descriptor #106
   -    - elementProto:
   -        columnType:
   -          columnId: 2
-  -          embeddedTypeT:
-  -            type:
-  -              family: IntFamily
-  -              oid: 20
-  -              width: 64
   -          tableId: 106
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -758,8 +751,7 @@ upsert descriptor #106
   -    - elementProto:
   -        columnDefaultExpression:
   -          columnId: 2
-  -          embeddedExpr:
-  -            expr: 42:::INT8
+  -          expr: 42:::INT8
   -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -786,13 +778,12 @@ upsert descriptor #106
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            constraintId: 1
-  -            indexId: 2
-  -            isUnique: true
-  -            sourceIndexId: 1
-  -            tableId: 106
-  -            temporaryIndexId: 3
+  -          constraintId: 1
+  -          indexId: 2
+  -          isUnique: true
+  -          sourceIndexId: 1
+  -          tableId: 106
+  -          temporaryIndexId: 3
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -808,12 +799,11 @@ upsert descriptor #106
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        temporaryIndex:
-  -          embeddedIndex:
-  -            constraintId: 1
-  -            indexId: 3
-  -            isUnique: true
-  -            sourceIndexId: 1
-  -            tableId: 106
+  -          constraintId: 1
+  -          indexId: 3
+  -          isUnique: true
+  -          sourceIndexId: 1
+  -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1

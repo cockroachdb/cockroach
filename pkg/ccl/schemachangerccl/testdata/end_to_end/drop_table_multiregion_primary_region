@@ -213,13 +213,12 @@ upsert descriptor #108
   +    - elementProto:
   +        columnType:
   +          columnId: 1
-  +          embeddedTypeT:
-  +            type:
-  +              family: IntFamily
-  +              oid: 20
-  +              width: 64
   +          isRelationBeingDropped: true
   +          tableId: 108
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -247,13 +246,12 @@ upsert descriptor #108
   +    - elementProto:
   +        columnType:
   +          columnId: 4.294967295e+09
-  +          embeddedTypeT:
-  +            type:
-  +              family: DecimalFamily
-  +              oid: 1700
   +          isNullable: true
   +          isRelationBeingDropped: true
   +          tableId: 108
+  +          type:
+  +            family: DecimalFamily
+  +            oid: 1700
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -281,13 +279,12 @@ upsert descriptor #108
   +    - elementProto:
   +        columnType:
   +          columnId: 4.294967294e+09
-  +          embeddedTypeT:
-  +            type:
-  +              family: OidFamily
-  +              oid: 26
   +          isNullable: true
   +          isRelationBeingDropped: true
   +          tableId: 108
+  +          type:
+  +            family: OidFamily
+  +            oid: 26
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -303,11 +300,10 @@ upsert descriptor #108
   +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
-  +          embeddedIndex:
-  +            constraintId: 1
-  +            indexId: 1
-  +            isUnique: true
-  +            tableId: 108
+  +          constraintId: 1
+  +          indexId: 1
+  +          isUnique: true
+  +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -610,13 +606,12 @@ upsert descriptor #108
   -    - elementProto:
   -        columnType:
   -          columnId: 1
-  -          embeddedTypeT:
-  -            type:
-  -              family: IntFamily
-  -              oid: 20
-  -              width: 64
   -          isRelationBeingDropped: true
   -          tableId: 108
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -644,13 +639,12 @@ upsert descriptor #108
   -    - elementProto:
   -        columnType:
   -          columnId: 4.294967295e+09
-  -          embeddedTypeT:
-  -            type:
-  -              family: DecimalFamily
-  -              oid: 1700
   -          isNullable: true
   -          isRelationBeingDropped: true
   -          tableId: 108
+  -          type:
+  -            family: DecimalFamily
+  -            oid: 1700
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -678,13 +672,12 @@ upsert descriptor #108
   -    - elementProto:
   -        columnType:
   -          columnId: 4.294967294e+09
-  -          embeddedTypeT:
-  -            type:
-  -              family: OidFamily
-  -              oid: 26
   -          isNullable: true
   -          isRelationBeingDropped: true
   -          tableId: 108
+  -          type:
+  -            family: OidFamily
+  -            oid: 26
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -700,11 +693,10 @@ upsert descriptor #108
   -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
-  -          embeddedIndex:
-  -            constraintId: 1
-  -            indexId: 1
-  -            isUnique: true
-  -            tableId: 108
+  -          constraintId: 1
+  -          indexId: 1
+  -          isUnique: true
+  -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
