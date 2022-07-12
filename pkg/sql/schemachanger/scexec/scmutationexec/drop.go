@@ -60,10 +60,31 @@ func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobFo
 	return nil
 }
 
+func (m *visitor) MarkDescriptorAsPublic(
+	ctx context.Context, op scop.MarkDescriptorAsPublic,
+) error {
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	if err != nil {
+		return err
+	}
+	desc.SetPublic()
+	return nil
+}
+
+func (m *visitor) MarkDescriptorAsOffline(
+	ctx context.Context, op scop.MarkDescriptorAsOffline,
+) error {
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	if err != nil {
+		return err
+	}
+	desc.SetOffline(op.Reason)
+	return nil
+}
+
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-	// Before we can mutate the descriptor, get rid of any synthetic descriptor.
 	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err

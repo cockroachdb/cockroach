@@ -186,7 +186,7 @@ func (tc *Collection) getDescriptorsByID(
 		// TODO(ajwerner): Sort out the hydration mess; define clearly what is
 		// hydrated where and test the API boundary accordingly.
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			desc, err = tc.hydrateTypesInTableDesc(ctx, txn, table)
+			desc, err = tc.hydrateTypesInTableDescWithOptions(ctx, txn, table, flags.IncludeOffline, flags.AvoidLeased)
 			if err != nil {
 				return nil, err
 			}

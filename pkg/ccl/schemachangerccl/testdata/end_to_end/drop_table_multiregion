@@ -19,50 +19,8 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
-## StatementPhase stage 1 of 1 with 7 MutationType ops
-delete object namespace entry {104 106 table_regional_by_row} -> 108
-upsert descriptor #105
-  ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: crdb_internal_region
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 108
-     regionConfig:
-       primaryRegion: us-east1
-       zoneConfigExtensions: {}
-  -  version: "2"
-  +  version: "3"
-upsert descriptor #107
-  ...
-     id: 107
-     kind: ALIAS
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: _crdb_internal_region
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 108
-  -  version: "2"
-  +  version: "3"
+## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #108
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  +  dropTime: <redacted>"
-     families:
-     - columnIds:
   ...
      localityConfig:
        regionalByRow: {}
@@ -72,13 +30,18 @@ upsert descriptor #108
      name: table_regional_by_row
      nextColumnId: 3
   ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
+     parentId: 104
+     partitionAllBy: true
+  ...
      replacementOf:
        time: {}
-  +  state: DROP
+  +  state: OFFLINE
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
-delete all comments for table descriptors [108]
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -94,12 +57,16 @@ upsert descriptor #105
   ...
      id: 105
      kind: MULTIREGION_ENUM
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
      name: crdb_internal_region
      parentId: 104
   ...
+       primaryRegion: us-east1
+       zoneConfigExtensions: {}
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #107
   ...
        family: ArrayFamily
@@ -110,12 +77,16 @@ upsert descriptor #107
   +    jobId: "1"
      id: 107
      kind: ALIAS
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
      name: _crdb_internal_region
      parentId: 104
   ...
+     referencingDescriptorIds:
+     - 108
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -124,32 +95,32 @@ upsert descriptor #108
   +    authorization:
   +      userName: root
   +    currentStatuses:
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - OFFLINE
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    - WRITE_ONLY
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - VALIDATED
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -463,8 +434,8 @@ upsert descriptor #108
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: ABSENT
-     dropTime: <redacted>"
      families:
+     - columnIds:
   ...
      localityConfig:
        regionalByRow: {}
@@ -483,7 +454,134 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
+delete object namespace entry {104 106 table_regional_by_row} -> 108
+upsert descriptor #105
+  ...
+     id: 105
+     kind: MULTIREGION_ENUM
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: crdb_internal_region
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
+     regionConfig:
+       primaryRegion: us-east1
+       zoneConfigExtensions: {}
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #107
+  ...
+     id: 107
+     kind: ALIAS
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: _crdb_internal_region
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #108
+  ...
+         userName: root
+       currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - OFFLINE
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - WRITE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - VALIDATED
+  -    - PUBLIC
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
+  ...
+           subWorkId: 1
+         targetStatus: ABSENT
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     localityConfig:
+       regionalByRow: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: table_regional_by_row
+     nextColumnId: 3
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  -  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
+     parentId: 104
+     partitionAllBy: true
+  ...
+     replacementOf:
+       time: {}
+  -  state: OFFLINE
+  +  state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "2"
+  +  version: "3"
+delete all comments for table descriptors [108]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -497,15 +595,15 @@ upsert descriptor #105
      id: 105
      kind: MULTIREGION_ENUM
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      name: crdb_internal_region
      parentId: 104
   ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #107
   ...
        family: ArrayFamily
@@ -517,15 +615,15 @@ upsert descriptor #107
      id: 107
      kind: ALIAS
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      name: _crdb_internal_region
      parentId: 104
   ...
          withGrantOption: 2
        version: 2
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -542,22 +640,22 @@ upsert descriptor #108
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - WRITE_ONLY
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
-  -    - WRITE_ONLY
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - WRITE_ONLY
-  -    - ABSENT
-  -    - ABSENT
-  -    - WRITE_ONLY
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - DELETE_ONLY
   -    - ABSENT
-  -    - VALIDATED
+  -    - ABSENT
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    jobId: "1"
@@ -879,19 +977,19 @@ upsert descriptor #108
      localityConfig:
        regionalByRow: {}
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      name: table_regional_by_row
      nextColumnId: 3
   ...
      state: DROP
      unexposedParentSchemaId: 106
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
-commit transaction #3
+commit transaction #4
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

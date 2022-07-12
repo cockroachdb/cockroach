@@ -2921,8 +2921,9 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		if err := drainUntilErr(drop); !testutils.IsError(err, `"drop" was dropped`) {
-			t.Errorf(`expected ""drop" was dropped" error got: %+v`, err)
+		const dropOrOfflineRE = `"drop" was dropped|CHANGEFEED cannot target offline table: drop`
+		if err := drainUntilErr(drop); !testutils.IsError(err, dropOrOfflineRE) {
+			t.Errorf(`expected %q error, instead got: %+v`, dropOrOfflineRE, err)
 		}
 		assertFailuresCounter(t, metrics, 3)
 	}

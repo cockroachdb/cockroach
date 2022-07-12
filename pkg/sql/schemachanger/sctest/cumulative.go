@@ -365,6 +365,9 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 		conn, err := db.Conn(ctx)
 		require.NoError(t, err)
 		tdb := sqlutils.MakeSQLRunner(conn)
+		// TODO(postamar): remove this threshold bump
+		//   This requires the test cases to be properly parallelized.
+		tdb.SucceedsSoonDuration = testutils.RaceSucceedsSoonDuration
 		tdb.Exec(t, "create database backups")
 		var g errgroup.Group
 		var before [][]string
