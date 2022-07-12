@@ -43,23 +43,25 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	fTof0 := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("f0")}
 	g := roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key(nil)}
 	g0Tog1 := roachpb.Span{Key: roachpb.Key("g0"), EndKey: roachpb.Key("g1")}
-	fTog1Closed := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g1")}
+	fTog1 := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g1")}
 	testCases := []struct {
 		span         roachpb.Span
 		expLocks     []roachpb.Span
-		expLocksSize int64
+		expLocksSize int64 // doesn't include the span overhead
 	}{
 		{span: a, expLocks: []roachpb.Span{a}, expLocksSize: 1},
 		{span: b, expLocks: []roachpb.Span{a, b}, expLocksSize: 2},
 		{span: c, expLocks: []roachpb.Span{a, b, c}, expLocksSize: 3},
 		{span: d, expLocks: []roachpb.Span{a, b, c, d}, expLocksSize: 10},
-		// Note that c-e condenses and then lists first.
-		{span: e, expLocks: []roachpb.Span{cToEClosed, a, b}, expLocksSize: 5},
-		{span: fTof0, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0}, expLocksSize: 8},
-		{span: g, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expLocksSize: 9},
-		{span: g0Tog1, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expLocksSize: 9},
+		// Note that c-e condenses and then lists first, we proceed to condense
+		// a-b too to get under half of the threshold.
+		{span: e, expLocks: []roachpb.Span{cToEClosed, aToBClosed}, expLocksSize: 6},
+		{span: fTof0, expLocks: []roachpb.Span{cToEClosed, aToBClosed, fTof0}, expLocksSize: 9},
+		{span: g, expLocks: []roachpb.Span{cToEClosed, aToBClosed, fTof0, g}, expLocksSize: 10},
+		// f-g1 condenses and then aToBClosed gets reordered with cToEClosed.
+		{span: g0Tog1, expLocks: []roachpb.Span{fTog1, aToBClosed, cToEClosed}, expLocksSize: 9},
 		// Add a key in the middle of a span, which will get merged on commit.
-		{span: c, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed, c}, expLocksSize: 10},
+		{span: c, expLocks: []roachpb.Span{fTog1, aToBClosed, cToEClosed, c}, expLocksSize: 10},
 	}
 	splits := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
@@ -78,12 +80,14 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	descDB := kvcoord.TestingMockRangeDescriptorDBForDescs(descs...)
 	s := createTestDB(t)
 	st := s.Store.ClusterSettings()
-	kvcoord.TrackedWritesMaxSize.Override(ctx, &st.SV, 10) /* 10 bytes and it will condense */
+	// 10 bytes for the keys and 192 bytes for the span overhead, and then it
+	// will condense.
+	kvcoord.TrackedWritesMaxSize.Override(ctx, &st.SV, 10+4*roachpb.SpanOverhead)
 	defer s.Stop()
 
 	// Check end transaction locks, which should be condensed and split
 	// at range boundaries.
-	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
+	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1}
 	sendFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		resp := ba.CreateReply()
 		resp.Txn = ba.Txn
@@ -145,7 +149,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		}
 		locksSize := int64(0)
 		for _, i := range locks {
-			locksSize += int64(len(i.Key) + len(i.EndKey))
+			locksSize += int64(len(i.Key) + len(i.EndKey)) // ignoring the span overhead
 		}
 		if a, e := locksSize, tc.expLocksSize; a != e {
 			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
