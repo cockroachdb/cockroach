@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -52,7 +51,6 @@ func TestGetResumeSpan(t *testing.T) {
 		maxKeys         int64
 		targetBytes     int64
 		allowEmpty      bool
-		avoidExcess     bool
 		expectResume    bool
 		expectReason    roachpb.ResumeReason
 		expectNextBytes int64
@@ -67,27 +65,18 @@ func TestGetResumeSpan(t *testing.T) {
 		{targetBytes: 1, expectResume: false},
 		{targetBytes: 11, expectResume: false},
 		{targetBytes: 12, expectResume: false},
-		// allowEmpty takes precedence over avoidExcess at the RPC level, since
-		// callers have no control over avoidExcess.
-		{targetBytes: 1, allowEmpty: true, avoidExcess: false, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
+		{targetBytes: 1, allowEmpty: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
 		{targetBytes: 11, allowEmpty: true, expectResume: false},
 		{targetBytes: 12, allowEmpty: true, expectResume: false},
-		{targetBytes: 1, allowEmpty: true, avoidExcess: true, expectResume: true, expectReason: roachpb.RESUME_BYTE_LIMIT, expectNextBytes: 11},
-		{targetBytes: 11, allowEmpty: true, avoidExcess: true, expectResume: false},
-		{targetBytes: 12, allowEmpty: true, avoidExcess: true, expectResume: false},
 
 		{maxKeys: -1, targetBytes: -1, expectResume: true, expectReason: roachpb.RESUME_KEY_LIMIT, expectNextBytes: 0},
 		{maxKeys: 10, targetBytes: 100, expectResume: false},
 	}
 	for _, tc := range testCases {
-		name := fmt.Sprintf("maxKeys=%d targetBytes=%d allowEmpty=%t avoidExcess=%t",
-			tc.maxKeys, tc.targetBytes, tc.allowEmpty, tc.avoidExcess)
+		name := fmt.Sprintf("maxKeys=%d targetBytes=%d allowEmpty=%t",
+			tc.maxKeys, tc.targetBytes, tc.allowEmpty)
 		t.Run(name, func(t *testing.T) {
-			version := clusterversion.TestingBinaryVersion
-			if !tc.avoidExcess {
-				version = clusterversion.ByKey(clusterversion.TargetBytesAvoidExcess - 1)
-			}
-			settings := cluster.MakeTestingClusterSettingsWithVersions(version, clusterversion.TestingBinaryMinSupportedVersion, true)
+			settings := cluster.MakeTestingClusterSettings()
 
 			resp := roachpb.GetResponse{}
 			_, err := Get(ctx, db, CommandArgs{
