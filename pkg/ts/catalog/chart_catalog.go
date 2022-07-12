@@ -1466,6 +1466,26 @@ var charts = []sectionDescription{
 					"streaming.ingested_bytes",
 				},
 			},
+			{
+				Title:   "Earliest Data Processor Checkpoint Span",
+				Metrics: []string{"streaming.earliest_data_checkpoint_span"},
+			},
+			{
+				Title:   "Latest Data Processor Checkpoint Span",
+				Metrics: []string{"streaming.latest_data_checkpoint_span"},
+			},
+			{
+				Title:   "Data Checkpoint Span Count",
+				Metrics: []string{"streaming.data_checkpoint_span_count"},
+			},
+			{
+				Title:   "Frontier Checkpoint Span Count",
+				Metrics: []string{"streaming.frontier_checkpoint_span_count"},
+			},
+			{
+				Title:   "Job Progress Updates",
+				Metrics: []string{"streaming.job_progress_updates"},
+			},
 		},
 	},
 	{

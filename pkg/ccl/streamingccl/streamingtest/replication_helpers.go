@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -43,6 +44,16 @@ func KeyMatches(key roachpb.Key) FeedPredicate {
 	}
 }
 
+func minResolvedTimestamp(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
+	minTimestamp := hlc.MaxTimestamp
+	for _, rs := range resolvedSpans {
+		if rs.Timestamp.Less(minTimestamp) {
+			minTimestamp = rs.Timestamp
+		}
+	}
+	return minTimestamp
+}
+
 // ResolvedAtLeast makes a FeedPredicate that matches when a timestamp has been
 // reached.
 func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
@@ -50,7 +61,7 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
 		if msg.Type() != streamingccl.CheckpointEvent {
 			return false
 		}
-		return lo.LessEq(*msg.GetResolved())
+		return lo.LessEq(minResolvedTimestamp(*msg.GetResolvedSpans()))
 	}
 }
 
@@ -98,7 +109,7 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 // as high as the specified low watermark.  Returns observed resolved timestamp.
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
 	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
-	return *rf.msg.GetResolved()
+	return minResolvedTimestamp(*rf.msg.GetResolvedSpans())
 }
 
 // ObserveGeneration consumes the feed until we received a GenerationEvent. Returns true.

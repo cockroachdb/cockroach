@@ -65,13 +65,6 @@ func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, s
 	require.Equal(t, cutoverTime.UnixNano(),
 		parseInt64(fetchRequiredValueKey(fetchRequiredValueKey(ingestionProgress, "cutover_time"), "wall_time").String()))
 
-	partitionProgressIter, err := fetchRequiredValueKey(ingestionProgress, "partition_progress").ObjectIter()
-	require.NoError(t, err)
-	for partitionProgressIter.Next() {
-		require.Less(t, cutoverTime.UnixNano(), parseInt64(fetchRequiredValueKey(fetchRequiredValueKey(
-			partitionProgressIter.Value(), "ingested_timestamp"), "wall_time").String()))
-	}
-
 	require.Equal(t, strconv.Itoa(int(streampb.StreamReplicationStatus_STREAM_INACTIVE)),
 		fetchRequiredValueKey(fetchRequiredValueKey(statsJSON, "producer_status"), "stream_status").String())
 }
@@ -139,7 +132,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms'
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
-SET CLUSTER SETTING streaming.partition_progress_frequency = '100ms';
+SET CLUSTER SETTING stream_replication.job_checkpoint_frequency = '100ms';
 SET enable_experimental_stream_replication = true;
 `,
 		";")...)
