@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -24,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,6 +73,10 @@ type streamIngestionFrontier struct {
 	// stream alive.
 	heartbeatSender *heartbeatSender
 
+	// persistedHighWater stores the highwater mark of progress that is persisted
+	// in the job record.
+	persistedHighWater hlc.Timestamp
+
 	lastPartitionUpdate time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 }
@@ -112,14 +117,15 @@ func newStreamIngestionFrontierProcessor(
 		}
 	}
 	sf := &streamIngestionFrontier{
-		flowCtx:           flowCtx,
-		spec:              spec,
-		input:             input,
-		highWaterAtStart:  spec.HighWaterAtStart,
-		frontier:          frontier,
-		partitionProgress: partitionProgress,
-		metrics:           flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
-		heartbeatSender:   heartbeatSender,
+		flowCtx:            flowCtx,
+		spec:               spec,
+		input:              input,
+		highWaterAtStart:   spec.HighWaterAtStart,
+		frontier:           frontier,
+		partitionProgress:  partitionProgress,
+		metrics:            flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
+		heartbeatSender:    heartbeatSender,
+		persistedHighWater: spec.HighWaterAtStart,
 	}
 	if err := sf.Init(
 		sf,
@@ -283,9 +289,8 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
-		var frontierChanged bool
 		var err error
-		if frontierChanged, err = sf.noteResolvedTimestamps(row[0]); err != nil {
+		if _, err = sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
@@ -296,27 +301,14 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 
 		// Send back a row to the job so that it can update the progress.
-		newResolvedTS := sf.frontier.Frontier()
 		select {
 		case <-sf.Ctx.Done():
 			sf.MoveToDraining(sf.Ctx.Err())
 			return nil, sf.DrainHelper()
-		// Send the frontier update in the heartbeat to the source cluster.
-		case sf.heartbeatSender.frontierUpdates <- newResolvedTS:
-			if !frontierChanged {
-				break
-			}
-			progressBytes, err := protoutil.Marshal(&newResolvedTS)
-			if err != nil {
-				sf.MoveToDraining(err)
-				break
-			}
-			pushRow := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
-			}
-			if outRow := sf.ProcessRowHelper(pushRow); outRow != nil {
-				return outRow, nil
-			}
+			// Send the latest persisted highwater in the heartbeat to the source cluster
+			// as even with retries we will never request an earlier row than it, and
+			// the source cluster is free to clean up earlier data.
+		case sf.heartbeatSender.frontierUpdates <- sf.persistedHighWater:
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.stoppedChan:
@@ -418,22 +410,47 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		return span.ContinueMatch
 	})
 
+	highWatermark := f.Frontier()
 	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
 
-	sf.metrics.JobProgressUpdates.Inc(1)
-	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	err = job.Update(ctx, nil, func(
+		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
 
-	// TODO(pbardea): Only update partitions that have changed.
-	return job.FractionProgressed(ctx, nil, /* txn */
-		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
+		progress := md.Progress
 
-			prog.PartitionProgress = partitionProgress
-			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
-			// "FractionProgressed" isn't relevant on jobs that are streaming in changes.
-			return 0.0
-		},
-	)
+		// Keep the recorded highwater empty until some advancement has been made
+		if sf.highWaterAtStart.Less(highWatermark) {
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &highWatermark,
+			}
+		}
+
+		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		streamProgress.PartitionProgress = partitionProgress
+		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
+
+		ju.UpdateProgress(progress)
+
+		// Reset RunStats.NumRuns to 1 since the stream ingestion has returned to
+		// a steady state. By resetting NumRuns,we avoid future job system level
+		// retries from having a large backoff because of past failures.
+		if md.RunStats != nil && md.RunStats.NumRuns > 1 {
+			ju.UpdateRunStats(1, md.RunStats.LastRun)
+		}
+		return nil
+	})
+
+	if err != nil {
+		sf.metrics.JobProgressUpdates.Inc(1)
+		sf.persistedHighWater = f.Frontier()
+		sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	}
+
+	return err
 }

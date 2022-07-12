@@ -23,10 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -38,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -550,4 +554,79 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingTimestampProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
+	skip.UnderStressRace(t, "slow under stressrace")
+
+	rnd, _ := randutil.NewTestRand()
+	ctx := context.Background()
+
+	loadProducerPTSRecord := func(c *tenantStreamingClusters, producerJobID int) *ptpb.Record {
+		jobRegistry := c.srcSysServer.JobRegistry().(*jobs.Registry)
+		job, err := jobRegistry.LoadJob(context.Background(), jobspb.JobID(producerJobID))
+		require.NoError(t, err)
+
+		serverCfg := c.srcSysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+		ptp := serverCfg.ProtectedTimestampProvider
+
+		payload := job.Payload()
+
+		var record *ptpb.Record
+		require.NoError(t, serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			record, err = ptp.GetRecord(ctx, txn, payload.GetStreamReplication().ProtectedTimestampRecordID)
+			return err
+		}))
+
+		return record
+	}
+
+	loadIngestProgress := func(c *tenantStreamingClusters, ingestionJobID int) *jobspb.StreamIngestionProgress {
+		jobRegistry := c.destSysServer.JobRegistry().(*jobs.Registry)
+		job, err := jobRegistry.LoadJob(context.Background(), jobspb.JobID(ingestionJobID))
+		require.NoError(t, err)
+
+		progress := job.Progress()
+		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		return ingestProgress
+	}
+
+	// Since the ingestion job may retry at any moment, the producer PTS should never exceed
+	// the persisted checkpoint of the ingestion job
+	t.Run(`pts record never exceeds persisted ingestion checkpoint`, func(t *testing.T) {
+		args := defaultTenantStreamingClustersArgs
+		args.destInitFunc = func(t *testing.T, sysSQL *sqlutils.SQLRunner) {
+			settings := destClusterSetting
+			// Make heartbeats far more frequent than job checkpointing to ensure the
+			// producer's pts record moves as far forward as it can
+			settings[`stream_replication.job_checkpoint_frequency`] = `'1s'`
+			settings[`stream_replication.consumer_heartbeat_frequency`] = `'50ms'`
+			sysSQL.ExecMultiple(t, configureClusterSettings(settings)...)
+		}
+		c, cleanup := createTenantStreamingClusters(ctx, t, args)
+		producerJobID, ingestionJobID := c.startStreamReplication()
+
+		// Should take around 5s total
+		for i := 0; i < 20; i++ {
+			ingestCheckpoint := loadIngestProgress(c, ingestionJobID).Checkpoint
+			producerPTS := loadProducerPTSRecord(c, producerJobID)
+
+			lowestCheckpointTs := hlc.MaxTimestamp
+			for _, resolvedSpan := range ingestCheckpoint.ResolvedSpans {
+				if resolvedSpan.Timestamp.Less(lowestCheckpointTs) {
+					lowestCheckpointTs = resolvedSpan.Timestamp
+				}
+			}
+			require.LessOrEqual(t, producerPTS.Timestamp.WallTime, lowestCheckpointTs.WallTime)
+
+			<-time.NewTimer(time.Duration(200+rnd.Int()%100) * time.Millisecond).C
+		}
+
+		defer cleanup()
+	})
+
 }
