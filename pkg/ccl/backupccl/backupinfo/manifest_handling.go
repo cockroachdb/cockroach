@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -187,6 +188,9 @@ func ReadBackupCheckpointManifest(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupCheckpointManifest")
+	defer sp.Finish()
+
 	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, filename)
 	if err != nil {
 		return backuppb.BackupManifest{}, 0, err
@@ -216,6 +220,9 @@ func ReadBackupManifest(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifest")
+	defer sp.Finish()
+
 	manifestFile, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
 		return backuppb.BackupManifest{}, 0, err
@@ -250,6 +257,9 @@ func readManifest(
 	manifestReader ioctx.ReadCloserCtx,
 	checksumReader ioctx.ReadCloserCtx,
 ) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readManifest")
+	defer sp.Finish()
+
 	descBytes, err := mon.ReadAll(ctx, manifestReader, mem)
 	if err != nil {
 		return backuppb.BackupManifest{}, 0, err
@@ -345,6 +355,9 @@ func readBackupPartitionDescriptor(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (backuppb.BackupPartitionDescriptor, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readBackupPartitionDescriptor")
+	defer sp.Finish()
+
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
 		return backuppb.BackupPartitionDescriptor{}, 0, err
@@ -405,6 +418,9 @@ func readTableStatistics(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (*backuppb.StatsTable, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readTableStatistics")
+	defer sp.Finish()
+
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
 		return nil, err
@@ -440,6 +456,9 @@ func GetStatisticsFromBackup(
 	encryption *jobspb.BackupEncryptionOptions,
 	backup backuppb.BackupManifest,
 ) ([]*stats.TableStatisticProto, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetStatisticsFromBackup")
+	defer sp.Finish()
+
 	// This part deals with pre-20.2 stats format where backup statistics
 	// are stored as a field in backup manifests instead of in their
 	// individual files.
@@ -472,6 +491,9 @@ func WriteBackupManifest(
 	encryption *jobspb.BackupEncryptionOptions,
 	desc *backuppb.BackupManifest,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupManifest")
+	defer sp.Finish()
+
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
 	descBuf, err := protoutil.Marshal(desc)
@@ -533,6 +555,9 @@ func WriteBackupPartitionDescriptor(
 	encryption *jobspb.BackupEncryptionOptions,
 	desc *backuppb.BackupPartitionDescriptor,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupPartitionDescriptor")
+	defer sp.Finish()
+
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
@@ -565,6 +590,9 @@ func WriteTableStatistics(
 	encryption *jobspb.BackupEncryptionOptions,
 	stats *backuppb.StatsTable,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteTableStatistics")
+	defer sp.Finish()
+
 	statsBuf, err := protoutil.Marshal(stats)
 	if err != nil {
 		return err
@@ -596,6 +624,9 @@ func LoadBackupManifests(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.LoadBackupManifests")
+	defer sp.Finish()
+
 	backupManifests := make([]backuppb.BackupManifest, len(uris))
 	var reserved int64
 	defer func() {
@@ -636,6 +667,9 @@ func GetLocalityInfo(
 	encryption *jobspb.BackupEncryptionOptions,
 	prefix string,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetLocalityInfo")
+	defer sp.Finish()
+
 	var info jobspb.RestoreDetails_BackupLocalityInfo
 	// Now get the list of expected partial per-store backup manifest filenames
 	// and attempt to find them.
@@ -856,6 +890,9 @@ func SanitizeLocalityKV(kv string) string {
 func CheckForPreviousBackup(
 	ctx context.Context, exportStore cloud.ExternalStorage, defaultURI string,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.CheckForPreviousBackup")
+	defer sp.Finish()
+
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
 	r, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName)
 	if err == nil {
@@ -906,6 +943,9 @@ func WriteBackupManifestCheckpoint(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupManifestCheckpoint")
+	defer sp.Finish()
+
 	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
 	if err != nil {
 		return err
@@ -1088,6 +1128,9 @@ func FetchPreviousBackups(
 	encryptionParams jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.FetchPreviousBackups")
+	defer sp.Finish()
+
 	if len(prevBackupURIs) == 0 {
 		return nil, nil, 0, nil
 	}
