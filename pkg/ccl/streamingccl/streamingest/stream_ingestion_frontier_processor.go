@@ -72,6 +72,10 @@ type streamIngestionFrontier struct {
 	// stream alive.
 	heartbeatSender *heartbeatSender
 
+	// persistedHighWater stores the highwater mark of progress that is persisted
+	// in the job record.
+	persistedHighWater hlc.Timestamp
+
 	lastPartitionUpdate time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 }
@@ -112,14 +116,15 @@ func newStreamIngestionFrontierProcessor(
 		}
 	}
 	sf := &streamIngestionFrontier{
-		flowCtx:           flowCtx,
-		spec:              spec,
-		input:             input,
-		highWaterAtStart:  spec.HighWaterAtStart,
-		frontier:          frontier,
-		partitionProgress: partitionProgress,
-		metrics:           flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
-		heartbeatSender:   heartbeatSender,
+		flowCtx:            flowCtx,
+		spec:               spec,
+		input:              input,
+		highWaterAtStart:   spec.HighWaterAtStart,
+		frontier:           frontier,
+		partitionProgress:  partitionProgress,
+		metrics:            flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
+		heartbeatSender:    heartbeatSender,
+		persistedHighWater: spec.HighWaterAtStart,
 	}
 	if err := sf.Init(
 		sf,
@@ -296,16 +301,18 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 
 		// Send back a row to the job so that it can update the progress.
-		newResolvedTS := sf.frontier.Frontier()
 		select {
 		case <-sf.Ctx.Done():
 			sf.MoveToDraining(sf.Ctx.Err())
 			return nil, sf.DrainHelper()
-		// Send the frontier update in the heartbeat to the source cluster.
-		case sf.heartbeatSender.frontierUpdates <- newResolvedTS:
+			// Send the latest persisted highwater in the heartbeat to the source cluster
+			// as even with retries we will never request an earlier row than it, and
+			// the source cluster is free to clean up earlier data.
+		case sf.heartbeatSender.frontierUpdates <- sf.persistedHighWater:
 			if !frontierChanged {
 				break
 			}
+			newResolvedTS := sf.frontier.Frontier()
 			progressBytes, err := protoutil.Marshal(&newResolvedTS)
 			if err != nil {
 				sf.MoveToDraining(err)
@@ -421,6 +428,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
+	sf.persistedHighWater = f.Frontier()
 
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
