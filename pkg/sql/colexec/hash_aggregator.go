@@ -431,6 +431,12 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 }
 
 func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch {
+	if op.ht != nil {
+		// This is the first call to ExportBuffered - release the hash table
+		// since we no longer need it.
+		op.ht.Release()
+		op.ht = nil
+	}
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
 		// zero-length batch.

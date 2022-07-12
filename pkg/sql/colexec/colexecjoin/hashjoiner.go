@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -229,6 +230,7 @@ type hashJoiner struct {
 	}
 
 	exportBufferedState struct {
+		hashTableReleased  bool
 		rightExported      int
 		rightWindowedBatch coldata.Batch
 	}
@@ -324,11 +326,19 @@ func (hj *hashJoiner) build() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
 		// they have separate collectLeftAnti method.
 		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the righ input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(memsize.Uint64 * int64(cap(hj.ht.Same)))
 	}
 	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
 		// visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the righ input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(memsize.Bool * int64(cap(hj.ht.Visited)))
 		// Since keyID = 0 is reserved for end of list, it can be marked as visited
 		// at the beginning.
 		hj.ht.Visited[0] = true
@@ -669,6 +679,12 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 }
 
 func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
+	if !hj.exportBufferedState.hashTableReleased {
+		// This is the first call to ExportBuffered(), and since we no longer
+		// need the internal state of the hast table, we can release it.
+		hj.ht.Release()
+		hj.exportBufferedState.hashTableReleased = true
+	}
 	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
@@ -743,6 +759,7 @@ func (hj *hashJoiner) Reset(ctx context.Context) {
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
 	hj.emittingRightState.rowIdx = 0
+	hj.exportBufferedState.hashTableReleased = false
 	hj.exportBufferedState.rightExported = 0
 }
 
