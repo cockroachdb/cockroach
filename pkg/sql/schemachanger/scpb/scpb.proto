@@ -37,6 +37,7 @@ enum Status {
   // Intermediate states on the descriptor dropping path.
   reserved 4; // Formerly TXN_DROPPED.
   DROPPED = 5;
+  OFFLINE = 15;
 
   // Intermediate states on the column and index dropping and adding paths.
   WRITE_ONLY = 6;

@@ -27,11 +27,12 @@ import (
 
 // descriptorStatus tries to map a descriptor to an element status for its
 // top-level element on a best-effort basis.
-//
-// TODO(postamar): handle offline descriptors?
 func descriptorStatus(desc catalog.Descriptor) scpb.Status {
 	if desc.Dropped() {
 		return scpb.Status_DROPPED
+	}
+	if desc.Offline() {
+		return scpb.Status_OFFLINE
 	}
 	return scpb.Status_PUBLIC
 }
