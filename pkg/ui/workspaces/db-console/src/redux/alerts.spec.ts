@@ -478,7 +478,7 @@ describe("alerts", function () {
       it("initialized with default false state", () => {
         const settingState =
           clusterPreserveDowngradeOptionDismissedSetting.selector(state());
-        assert.isFalse(settingState);
+        expect(settingState).toBe(false);
       });
       it("returns an alert if cluster.preserve_downgrad_option is lastUpdated >48 hours ago", () => {
         dispatch(
@@ -497,7 +497,7 @@ describe("alerts", function () {
           ),
         );
         const alert = clusterPreserveDowngradeOptionOvertimeSelector(state());
-        assert.isNotEmpty(alert);
+        expect(alert).toBeDefined();
       });
       it("does not display alert once dismissed", async () => {
         dispatch(
@@ -521,7 +521,7 @@ describe("alerts", function () {
         await alert.dismiss(dispatch, state);
         const openState =
           clusterPreserveDowngradeOptionDismissedSetting.selector(state());
-        assert.isTrue(openState);
+        expect(openState).toBe(true);
       });
     });
   });

@@ -12,7 +12,6 @@ import { shallow } from "enzyme";
 import { earliestRetainedTime } from "./jobsPage.fixture";
 import { JobTable, JobTableProps } from "./jobTable";
 
-
 describe("<JobTable>", () => {
   it("should reset page to 1 after job list prop changes", () => {
     const toJSON = () => {
