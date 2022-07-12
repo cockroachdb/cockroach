@@ -376,7 +376,7 @@ CREATE TABLE public.privileges (
 CREATE TABLE public.external_connections (
 	connection_name STRING NOT NULL,
 	created TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
-	"lastUpdated" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	updated TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 	connection_type STRING NOT NULL,
 	connection_details BYTES NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name ASC)

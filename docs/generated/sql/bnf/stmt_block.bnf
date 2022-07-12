@@ -178,6 +178,7 @@ create_stmt ::=
 	| create_schedule_for_backup_stmt
 	| create_changefeed_stmt
 	| create_extension_stmt
+	| create_external_connection_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -561,6 +562,9 @@ create_changefeed_stmt ::=
 create_extension_stmt ::=
 	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
 	| 'CREATE' 'EXTENSION' name
+
+create_external_connection_stmt ::=
+	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
 
 opt_with_clause ::=
 	with_clause
@@ -1663,8 +1667,7 @@ opt_create_stats_options ::=
 	| 
 
 schedule_label_spec ::=
-	string_or_placeholder
-	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+	label_spec
 	| 
 
 cron_expr ::=
@@ -1691,6 +1694,10 @@ target_list ::=
 
 changefeed_target_expr ::=
 	insert_target
+
+label_spec ::=
+	string_or_placeholder
+	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 with_clause ::=
 	'WITH' cte_list

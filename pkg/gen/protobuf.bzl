@@ -10,6 +10,7 @@ PROTOBUF_SRCS = [
   "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
   "//pkg/ccl/streamingccl/streampb:streampb_go_proto",
   "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",
+  "//pkg/cloud/externalconn/connectionpb:connectionpb_go_proto",
   "//pkg/clusterversion:clusterversion_go_proto",
   "//pkg/config/zonepb:zonepb_go_proto",
   "//pkg/config:config_go_proto",

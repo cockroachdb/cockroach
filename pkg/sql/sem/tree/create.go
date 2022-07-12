@@ -2160,3 +2160,19 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	// users attempt to load.
 	ctx.WriteString(node.Name)
 }
+
+// CreateExternalConnection represents a CREATE EXTERNAL CONNECTION statement.
+type CreateExternalConnection struct {
+	ConnectionLabelSpec LabelSpec
+	As                  Expr
+}
+
+var _ Statement = &CreateExternalConnection{}
+
+// Format implements the Statement interface.
+func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE EXTERNAL CONNECTION")
+	ctx.FormatNode(&node.ConnectionLabelSpec)
+	ctx.WriteString(" AS ")
+	ctx.FormatNode(node.As)
+}
