@@ -158,7 +158,7 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 			//
 			// See https://github.com/cockroachdb/cockroach/pull/58006#pullrequestreview-565859919
 			// for all the gory details.
-			f.ud.Ht.MaybeRepairAfterDistinctBuild()
+			f.ud.Ht.RepairAfterDistinctBuild()
 			f.ud.MaybeEmitErrorOnDup(f.ud.LastInputBatchOrigLen, batch.Length())
 			f.seenBatch = true
 			return batch
