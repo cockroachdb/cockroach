@@ -36,6 +36,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
     ],
 )
 
