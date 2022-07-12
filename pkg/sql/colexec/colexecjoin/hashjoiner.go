@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -170,9 +171,9 @@ type hashJoinerSourceSpec struct {
 type hashJoiner struct {
 	*joinHelper
 
-	// buildSideAllocator should be used when building the hash table from the
+	// hashTableAllocator should be used when building the hash table from the
 	// right input.
-	buildSideAllocator *colmem.Allocator
+	hashTableAllocator *colmem.Allocator
 	// outputUnlimitedAllocator should *only* be used when populating the
 	// output when we have already fully built the hash table from the right
 	// input and are only populating output one batch at a time. If we were to
@@ -229,6 +230,7 @@ type hashJoiner struct {
 	}
 
 	exportBufferedState struct {
+		hashTableReleased  bool
 		rightExported      int
 		rightWindowedBatch coldata.Batch
 	}
@@ -258,7 +260,7 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 	const hashTableLoadFactor = 1.0
 	hj.ht = colexechash.NewHashTable(
 		ctx,
-		hj.buildSideAllocator,
+		hj.hashTableAllocator,
 		hashTableLoadFactor,
 		hj.hashTableInitialNumBuckets,
 		hj.spec.Right.SourceTypes,
@@ -268,7 +270,7 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 		probeMode,
 	)
 
-	hj.exportBufferedState.rightWindowedBatch = hj.buildSideAllocator.NewMemBatchWithFixedCapacity(
+	hj.exportBufferedState.rightWindowedBatch = hj.outputUnlimitedAllocator.NewMemBatchWithFixedCapacity(
 		hj.spec.Right.SourceTypes, 0, /* size */
 	)
 	hj.state = hjBuilding
@@ -324,11 +326,19 @@ func (hj *hashJoiner) build() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
 		// they have separate collectLeftAnti method.
 		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the righ input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(memsize.Uint64 * int64(cap(hj.ht.Same)))
 	}
 	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
 		// visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
+		// At this point, we have fully built the hash table on the right side
+		// (meaning we have fully consumed the righ input), so it'd be a shame
+		// to fallback to disk, thus, we use the unlimited allocator.
+		hj.outputUnlimitedAllocator.AdjustMemoryUsage(memsize.Bool * int64(cap(hj.ht.Visited)))
 		// Since keyID = 0 is reserved for end of list, it can be marked as visited
 		// at the beginning.
 		hj.ht.Visited[0] = true
@@ -675,7 +685,13 @@ func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 		// point we haven't requested a single batch from the left.
 		return coldata.ZeroBatch
 	} else if hj.inputTwo == input {
+		if hj.exportBufferedState.hashTableReleased {
+			return coldata.ZeroBatch
+		}
 		if hj.exportBufferedState.rightExported == hj.ht.Vals.Length() {
+			// We no longer need the hash table, so we can release it.
+			hj.ht.Release()
+			hj.exportBufferedState.hashTableReleased = true
 			return coldata.ZeroBatch
 		}
 		newRightExported := hj.exportBufferedState.rightExported + coldata.BatchSize()
@@ -743,6 +759,14 @@ func (hj *hashJoiner) Reset(ctx context.Context) {
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
 	hj.emittingRightState.rowIdx = 0
+	if buildutil.CrdbTestBuild {
+		if hj.exportBufferedState.hashTableReleased {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"the hash joiner is being reset after having spilled to disk",
+			))
+		}
+	}
+	hj.exportBufferedState.hashTableReleased = false
 	hj.exportBufferedState.rightExported = 0
 }
 
@@ -811,7 +835,7 @@ func MakeHashJoinerSpec(
 
 // NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
-// buildSideAllocator should use a limited memory account and will be used for
+// hashTableAllocator should use a limited memory account and will be used for
 // the build side whereas outputUnlimitedAllocator should use an unlimited
 // memory account and will only be used when populating the output.
 // memoryLimit will limit the size of the batches produced by the hash joiner.
@@ -823,7 +847,7 @@ func NewHashJoiner(
 ) colexecop.ResettableOperator {
 	return &hashJoiner{
 		joinHelper:                 newJoinHelper(leftSource, rightSource),
-		buildSideAllocator:         buildSideAllocator,
+		hashTableAllocator:         buildSideAllocator,
 		outputUnlimitedAllocator:   outputUnlimitedAllocator,
 		spec:                       spec,
 		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),

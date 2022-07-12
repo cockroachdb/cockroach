@@ -277,6 +277,9 @@ var _ colexecop.Resetter = &HashTable{}
 
 // NewHashTable returns a new HashTable.
 //
+// - allocator must be the allocator that is owned by the hash table and not
+// shared with any other components.
+//
 // - loadFactor determines the average number of tuples per bucket which, if
 // exceeded, will trigger resizing the hash table. This number can have a
 // noticeable effect on the performance, so every user of the hash table should
@@ -387,6 +390,22 @@ func (ht *HashTable) shouldResize(numTuples int) bool {
 	return float64(numTuples)/float64(ht.numBuckets) > ht.loadFactor
 }
 
+// probeBufferInternalMaxMemUsed returns the maximum memory used by the slices
+// of hashTableProbeBuffer that are limited by coldata.BatchSize() in size.
+func probeBufferInternalMaxMemUsed() int64 {
+	// probeBufferInternalMaxMemUsed accounts for:
+	// - five uint64 slices:
+	//   - hashTableProbeBuffer.hashChains.Next
+	//   - hashTableProbeBuffer.ToCheck
+	//   - hashTableProbeBuffer.ToCheckID
+	//   - hashTableProbeBuffer.HeadID
+	//   - hashTableProbeBuffer.HashBuffer
+	// - two bool slices:
+	//   - hashTableProbeBuffer.differs
+	//   - hashTableProbeBuffer.distinct.
+	return memsize.Uint64*int64(5*coldata.BatchSize()) + memsize.Bool*int64(2*coldata.BatchSize())
+}
+
 // accountForLimitedSlices checks whether we have already accounted for the
 // memory used by the slices that are limited by coldata.BatchSize() in size
 // and adjusts the allocator accordingly if we haven't.
@@ -394,9 +413,18 @@ func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocat
 	if p.limitedSlicesAreAccountedFor {
 		return
 	}
-	internalMemMaxUsed := memsize.Int64*int64(5*coldata.BatchSize()) + memsize.Bool*int64(2*coldata.BatchSize())
-	allocator.AdjustMemoryUsage(internalMemMaxUsed)
+	allocator.AdjustMemoryUsage(probeBufferInternalMaxMemUsed())
 	p.limitedSlicesAreAccountedFor = true
+}
+
+func (ht *HashTable) accountForUnlimitedSlices(newUint64Count int64) {
+	ht.allocator.AdjustMemoryUsage(memsize.Uint64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
+	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
+}
+
+func (ht *HashTable) unlimitedSlicesCapacity() int64 {
+	// Note that if ht.ProbeScratch.First is nil, it'll have zero capacity.
+	return int64(cap(ht.BuildScratch.First) + cap(ht.ProbeScratch.First) + cap(ht.BuildScratch.Next))
 }
 
 // buildFromBufferedTuples builds the hash table from already buffered tuples
@@ -406,24 +434,45 @@ func (ht *HashTable) buildFromBufferedTuples() {
 	for ht.shouldResize(ht.Vals.Length()) {
 		ht.numBuckets *= 2
 	}
+	// Account for memory used by the internal auxiliary slices that are limited
+	// in size.
+	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
+	// Figure out the minimum capacities of the unlimited slices before actually
+	// allocating then.
+	needCapacity := int64(ht.numBuckets) + int64(ht.Vals.Length()+1) // ht.BuildScratch.First + ht.BuildScratch.Next
+	if ht.ProbeScratch.First != nil {
+		needCapacity += int64(ht.numBuckets) // ht.ProbeScratch.First
+	}
+	if needCapacity > ht.unlimitedSlicesCapacity() {
+		// We'll need to allocate larger slices then we currently have, so
+		// perform the memory accounting for the anticipated memory usage. Note
+		// that it might not be precise, so we'll reconcile after the
+		// allocations below.
+		ht.accountForUnlimitedSlices(needCapacity)
+	}
+	// Perform the actual build.
+	ht.buildFromBufferedTuplesNoAccounting()
+	// Now ensure that the accounting is precise (cap's of the slices might
+	// exceed len's that we've accounted for).
+	ht.accountForUnlimitedSlices(ht.unlimitedSlicesCapacity())
+}
+
+// buildFromBufferedTuples builds the hash table from already buffered tuples in
+// ht.Vals according to the current number of buckets. No memory accounting is
+// performed, so this function is guaranteed to not throw a memory error.
+func (ht *HashTable) buildFromBufferedTuplesNoAccounting() {
 	ht.BuildScratch.First = colexecutils.MaybeAllocateUint64Array(ht.BuildScratch.First, int(ht.numBuckets))
 	if ht.ProbeScratch.First != nil {
 		ht.ProbeScratch.First = colexecutils.MaybeAllocateUint64Array(ht.ProbeScratch.First, int(ht.numBuckets))
 	}
+	// ht.BuildScratch.Next is used to store the computed hash value of each key.
+	ht.BuildScratch.Next = colexecutils.MaybeAllocateUint64Array(ht.BuildScratch.Next, ht.Vals.Length()+1)
+
 	for i, keyCol := range ht.keyCols {
 		ht.Keys[i] = ht.Vals.ColVec(int(keyCol))
 	}
-	// ht.BuildScratch.Next is used to store the computed hash value of each key.
-	ht.BuildScratch.Next = colexecutils.MaybeAllocateUint64Array(ht.BuildScratch.Next, ht.Vals.Length()+1)
 	ht.ComputeBuckets(ht.BuildScratch.Next[1:], ht.Keys, ht.Vals.Length(), nil /* sel */)
 	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, 1 /* offset */, uint64(ht.Vals.Length()))
-	// Account for memory used by the internal auxiliary slices that are
-	// limited in size.
-	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
-	// Note that if ht.ProbeScratch.First is nil, it'll have zero capacity.
-	newUint64Count := int64(cap(ht.BuildScratch.First) + cap(ht.ProbeScratch.First) + cap(ht.BuildScratch.Next))
-	ht.allocator.AdjustMemoryUsage(memsize.Int64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
-	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
 }
 
 // FullBuild executes the entirety of the hash table build phase using the input
@@ -688,20 +737,18 @@ func (ht *HashTable) AppendAllDistinct(batch coldata.Batch) {
 	}
 }
 
-// MaybeRepairAfterDistinctBuild checks whether the hash table built via
-// DistinctBuild is in an inconsistent state and repairs it if so.
-func (ht *HashTable) MaybeRepairAfterDistinctBuild() {
-	// BuildScratch.Next has an extra 0th element not used by the tuples
-	// reserved for the end of the chain.
-	if len(ht.BuildScratch.Next) < ht.Vals.Length()+1 {
-		// The hash table in such a state that some distinct tuples were
-		// appended to ht.Vals, but 'Next' and 'First' slices were not updated
-		// accordingly.
-		numConsistentTuples := len(ht.BuildScratch.Next) - 1
-		lastBatchNumDistinctTuples := ht.Vals.Length() - numConsistentTuples
-		ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:lastBatchNumDistinctTuples]...)
-		ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, uint64(numConsistentTuples)+1, uint64(lastBatchNumDistinctTuples))
-	}
+// RepairAfterDistinctBuild rebuilds the hash table populated via DistinctBuild
+// in the case a memory error was thrown.
+func (ht *HashTable) RepairAfterDistinctBuild() {
+	// Note that we don't try to be smart and "repair" the already built hash
+	// table in which only the most recently added tuples might need to be
+	// "built". We do it this way because the memory error could have occurred
+	// in several spots making it harder to reason about what are the
+	// "consistent" tuples and what are those that need to be repaired. This is
+	// a minor performance hit, but it is done only once throughout the lifetime
+	// of the unordered distinct when it just spilled to disk, so the regression
+	// is ok.
+	ht.buildFromBufferedTuplesNoAccounting()
 }
 
 // checkCols performs a column by column checkCol on the key columns.
@@ -948,4 +995,20 @@ func (ht *HashTable) Reset(_ context.Context) {
 		// so we make the length 1).
 		ht.BuildScratch.Next = ht.BuildScratch.Next[:1]
 	}
+}
+
+// Release releases all of the slices used by the hash table as well as the
+// corresponding memory reservations.
+//
+// The hash table becomes unusable, so any method calls after Release() will
+// result in an undefined behavior.
+//
+// Note that this happens to implement the execreleasable.Releasable interface,
+// but this method serves a different purpose (namely we want to release the
+// hash table mid-execution, when the spilling to disk occurs), so the hash
+// table is not added to the slice of objects that are released on the flow
+// cleanup.
+func (ht *HashTable) Release() {
+	ht.allocator.ReleaseMemory(ht.allocator.Used())
+	*ht = HashTable{}
 }
