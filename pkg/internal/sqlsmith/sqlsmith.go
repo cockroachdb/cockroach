@@ -138,9 +138,11 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	s.enableBulkIO()
-	row := s.db.QueryRow("SELECT current_database()")
-	if err := row.Scan(&s.dbName); err != nil {
-		return nil, err
+	if s.db != nil {
+		row := s.db.QueryRow("SELECT current_database()")
+		if err := row.Scan(&s.dbName); err != nil {
+			return nil, err
+		}
 	}
 	return s, s.ReloadSchemas()
 }
@@ -474,4 +476,18 @@ var PostgresMode = multiOption(
 	IgnoreFNs("^postgis_.*build_date"),
 	IgnoreFNs("^postgis_.*version"),
 	IgnoreFNs("^postgis_.*scripts"),
+)
+
+// MutatingMode causes the Smither to generate mutation statements in the same
+// way as the query-comparison roachtests (costfuzz and
+// unoptimized-query-oracle).
+var MutatingMode = multiOption(
+	"mutating mode",
+	MutationsOnly(),
+	FavorCommonData(),
+	UnlikelyRandomNulls(),
+	DisableInsertSelect(),
+	DisableCrossJoins(),
+	SetComplexity(.05),
+	SetScalarComplexity(.01),
 )
