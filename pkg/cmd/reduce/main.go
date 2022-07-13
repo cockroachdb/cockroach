@@ -49,16 +49,17 @@ var (
 		}
 		return n
 	}()
-	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
-	file            = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
-	verbose         = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
-	contains        = flags.String("contains", "", "error regex to search for")
-	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
-	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
-	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
-	tlp             = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
-	costfuzz        = flags.Bool("costfuzz", false, "last four statements in file are two identical queries separated by settings changes")
+	flags             = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	binary            = flags.String("binary", "./cockroach", "path to cockroach binary")
+	file              = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
+	verbose           = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
+	contains          = flags.String("contains", "", "error regex to search for")
+	unknown           = flags.Bool("unknown", false, "print unknown types during walk")
+	workers           = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
+	chunkReductions   = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	tlp               = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
+	costfuzz          = flags.Bool("costfuzz", false, "last four statements in file are two identical queries separated by settings changes")
+	unoptimizedOracle = flags.Bool("unoptimized-query-oracle", false, "last several statements in file are two identical queries separated by settings changes")
 )
 
 const description = `
@@ -108,13 +109,18 @@ func main() {
 	if *costfuzz {
 		modes++
 	}
+	if *unoptimizedOracle {
+		modes++
+	}
 
 	if modes != 1 {
 		fmt.Printf("%s: exactly one of -contains, -tlp, or -costfuzz must be specified\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp, *costfuzz)
+	out, err := reduceSQL(
+		*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp, *costfuzz, *unoptimizedOracle,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -127,7 +133,7 @@ func reduceSQL(
 	workers int,
 	verbose bool,
 	chunkReductions int,
-	tlp, costfuzz bool,
+	tlp, costfuzz, unoptimizedOracle bool,
 ) (string, error) {
 	var settings string
 	if devLicense, ok := envutil.EnvString("COCKROACH_DEV_LICENSE", 0); ok {
@@ -136,8 +142,9 @@ func reduceSQL(
 	}
 
 	const (
-		tlpFailureError = "TLP_FAILURE"
-		costfuzzSep     = "COSTFUZZ_SEP"
+		tlpFailureError      = "TLP_FAILURE"
+		costfuzzSep          = "COSTFUZZ_SEP"
+		unoptimizedOracleSep = "UNOPTIMIZED_ORACLE_SEP"
 	)
 	if tlp {
 		contains = tlpFailureError
@@ -152,7 +159,7 @@ func reduceSQL(
 	}
 
 	inputString := string(input)
-	var tlpCostfuzzCheck string
+	var queryComparisonCheck string
 
 	// If TLP check is requested, then we remove the last two queries from the
 	// input (each query is expected to be delimited by empty lines) which we
@@ -168,11 +175,11 @@ func reduceSQL(
 		partitioned, lineIdx := findPreviousQuery(lines, lineIdx)
 		unpartitioned, lineIdx := findPreviousQuery(lines, lineIdx)
 		inputString = strings.Join(lines[:lineIdx], "\n")
-		// We make tlpCostfuzzCheck a query that will result in an error with
+		// We make queryComparisonCheck a query that will result in an error with
 		// tlpFailureError error message when unpartitioned and partitioned queries
 		// return different results (which is the case when there are rows in one
 		// result set that are not present in the other).
-		tlpCostfuzzCheck = fmt.Sprintf(`
+		queryComparisonCheck = fmt.Sprintf(`
 SELECT CASE
   WHEN
     (SELECT count(*) FROM ((%[1]s) EXCEPT ALL (%[2]s))) != 0
@@ -190,13 +197,13 @@ SELECT CASE
 		lines := strings.Split(string(input), "\n")
 		lineIdx := len(lines) - 1
 		perturb, lineIdx := findPreviousQuery(lines, lineIdx)
-		setting1, lineIdx := findPreviousQuery(lines, lineIdx)
 		setting2, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting1, lineIdx := findPreviousQuery(lines, lineIdx)
 		control, lineIdx := findPreviousQuery(lines, lineIdx)
 		inputString = strings.Join(lines[:lineIdx], "\n")
-		// We make tlpCostfuzzCheck the original control / settings / perturbed
+		// We make queryComparisonCheck the original control / settings / perturbed
 		// statements, surrounded by sentinel statements.
-		tlpCostfuzzCheck = fmt.Sprintf(`
+		queryComparisonCheck = fmt.Sprintf(`
 SELECT '%[1]s';
 
 %[2]s;
@@ -217,6 +224,40 @@ SELECT '%[1]s';
 `, costfuzzSep, control, setting1, setting2, perturb)
 	}
 
+	// If unoptimizedOracle mode is requested, then we remove the last several statements
+	// from the input (statements are expected to be delimited by empty lines)
+	// which we then save for the unoptimizedOracle check.
+	if unoptimizedOracle {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		optimized, lineIdx := findPreviousQuery(lines, lineIdx)
+		settings2, lineIdx := findPreviousSetStatements(lines, lineIdx)
+		unoptimized, lineIdx := findPreviousQuery(lines, lineIdx)
+		settings1, lineIdx := findPreviousSetStatements(lines, lineIdx)
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// We make queryComparisonCheck the original unoptimized / settings /
+		// optimized statements, surrounded by sentinel statements.
+		queryComparisonCheck = fmt.Sprintf(`
+SELECT '%[1]s';
+
+%[2]s
+
+SELECT '%[1]s';
+
+%[3]s;
+
+SELECT '%[1]s';
+
+%[4]s
+
+SELECT '%[1]s';
+
+%[5]s;
+
+SELECT '%[1]s';
+`, unoptimizedOracleSep, settings1, unoptimized, settings2, optimized)
+	}
+
 	// Pretty print the input so the file size comparison is useful.
 	inputSQL, err := reducesql.Pretty(inputString)
 	if err != nil {
@@ -227,8 +268,8 @@ SELECT '%[1]s';
 	if verbose {
 		logger = log.New(os.Stderr, "", 0)
 		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
-		if tlp || costfuzz {
-			prettyTLPCheck, err := reducesql.Pretty(tlpCostfuzzCheck)
+		if tlp || costfuzz || unoptimizedOracle {
+			prettyTLPCheck, err := reducesql.Pretty(queryComparisonCheck)
 			if err != nil {
 				return "", err
 			}
@@ -256,8 +297,8 @@ SELECT '%[1]s';
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}
-		// If neither -tlp nor -costfuzz were specified, this is a noop.
-		sql += tlpCostfuzzCheck
+		// If neither -tlp nor -costfuzz nor -unoptimized-query-oracle were specified, this is a noop.
+		sql += queryComparisonCheck
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {
@@ -280,10 +321,27 @@ SELECT '%[1]s';
 			}
 			if verbose {
 				logOriginalHint = func() {
-					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[3]))
+					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[4]))
 				}
 			}
 			return !bytes.Equal(parts[1], parts[4]), logOriginalHint
+		}
+		if unoptimizedOracle {
+			parts := bytes.Split(out, []byte(unoptimizedOracleSep))
+			if len(parts) != 6 {
+				if verbose {
+					logOriginalHint = func() {
+						logger.Printf("could not divide output into 6 parts:\n%s", string(out))
+					}
+				}
+				return false, logOriginalHint
+			}
+			if verbose {
+				logOriginalHint = func() {
+					logger.Printf("unoptimized and optimized query results were the same: \n%v\n\n%v\n", string(parts[2]), string(parts[4]))
+				}
+			}
+			return !bytes.Equal(parts[2], parts[4]), logOriginalHint
 		}
 		if verbose {
 			logOriginalHint = func() {
@@ -321,4 +379,32 @@ func findPreviousQuery(lines []string, lineIdx int) (string, int) {
 	query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
 	// Remove the semicolon.
 	return query[:len(query)-1], lineIdx
+}
+
+// findPreviousSetStatements returns any SET or RESET statements preceding
+// lineIdx. Queries are expected to be delimited with empty lines.
+func findPreviousSetStatements(lines []string, lineIdx int) (string, int) {
+	// Skip empty lines.
+	for lines[lineIdx] == "" {
+		lineIdx--
+	}
+	lastQueryLineIdx := lineIdx
+	firstQueryLineIdx := lineIdx
+	for {
+		// Now skip over all lines comprising the query.
+		for lines[lineIdx] != "" {
+			lineIdx--
+		}
+		if !strings.HasPrefix(lines[lineIdx+1], "SET") && !strings.HasPrefix(lines[lineIdx+1], "RESET") {
+			break
+		}
+		firstQueryLineIdx = lineIdx
+		// Skip empty lines.
+		for lines[lineIdx] == "" {
+			lineIdx--
+		}
+	}
+	// firstQueryLineIdx right now points at an empty line before the statement.
+	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], " ")
+	return query, firstQueryLineIdx
 }
