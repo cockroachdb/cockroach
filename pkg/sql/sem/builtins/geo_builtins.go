@@ -7306,12 +7306,9 @@ func initGeoBuiltins() {
 	}
 
 	for k, v := range geoBuiltins {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
 		v.props.Category = builtinconstants.CategorySpatial
 		v.props.AvailableOnPublicSchema = true
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 }
 

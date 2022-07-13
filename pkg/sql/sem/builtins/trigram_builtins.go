@@ -21,12 +21,9 @@ import (
 
 func initTrigramBuiltins() {
 	for k, v := range trigramBuiltins {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
 		v.props.Category = builtinconstants.CategoryTrigram
 		v.props.AvailableOnPublicSchema = true
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 }
 

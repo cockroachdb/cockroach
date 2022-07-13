@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -411,7 +411,7 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 	// Collect sequence IDs.
 	var seqIDs catalog.DescriptorIDSet
 	{
-		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtins.GetBuiltinProperties)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			panic(err)
 		}
@@ -434,7 +434,7 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 			seqIDs.Add(seq.SequenceID)
 		}
 		if len(seqNameToID) > 0 {
-			expr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtins.GetBuiltinProperties)
+			expr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtinsregistry.GetBuiltinProperties)
 			if err != nil {
 				panic(err)
 			}

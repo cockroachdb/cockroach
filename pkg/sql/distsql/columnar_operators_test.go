@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -121,7 +121,7 @@ func TestAggregateFuncToNumArguments(t *testing.T) {
 	check := func(t *testing.T, fn execinfrapb.AggregatorSpec_Func) {
 		n, ok := aggregateFuncToNumArguments[fn]
 		require.Truef(t, ok, "didn't find number of arguments for %s", fn)
-		_, overloads := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+		_, overloads := builtinsregistry.GetBuiltinProperties(strings.ToLower(fn.String()))
 		checkForOverload(t, n, overloads)
 	}
 

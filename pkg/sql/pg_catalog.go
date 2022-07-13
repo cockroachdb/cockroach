@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -2272,7 +2273,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if unicode.IsUpper(first) {
 						continue
 					}
-					props, overloads := builtins.GetBuiltinProperties(name)
+					props, overloads := builtinsregistry.GetBuiltinProperties(name)
 					isAggregate := props.Class == tree.AggregateClass
 					isWindow := props.Class == tree.WindowClass
 					for _, builtin := range overloads {
@@ -4149,7 +4150,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 						// any_not_null is treated as a special case.
 						continue
 					}
-					_, overloads := builtins.GetBuiltinProperties(name)
+					_, overloads := builtinsregistry.GetBuiltinProperties(name)
 					for _, overload := range overloads {
 						params, _ := tree.GetParamsAndReturnType(overload)
 						sortOperatorOid := oidZero
@@ -4444,7 +4445,7 @@ func (h oidHasher) BuiltinOid(name string, builtin *tree.Overload) *tree.DOid {
 }
 
 func (h oidHasher) RegProc(name string) tree.Datum {
-	_, overloads := builtins.GetBuiltinProperties(name)
+	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	if len(overloads) == 0 {
 		return tree.DNull
 	}

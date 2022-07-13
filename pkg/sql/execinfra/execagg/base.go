@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,7 +39,7 @@ func GetAggregateInfo(
 		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
 	}
 
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	_, builtins := builtinsregistry.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
 		typs := b.Types.Types()
 		if len(typs) != len(inputTypes) {
@@ -131,7 +132,7 @@ func GetWindowFunctionInfo(
 			"function is neither an aggregate nor a window function",
 		)
 	}
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	_, builtins := builtinsregistry.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
 		typs := b.Types.Types()
 		if len(typs) != len(inputTypes) {

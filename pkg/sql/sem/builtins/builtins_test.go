@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,16 +39,20 @@ import (
 
 func TestCategory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if expected, actual := builtinconstants.CategoryString, builtins["lower"].props.Category; expected != actual {
+	getCategory := func(name string) string {
+		props, _ := builtinsregistry.GetBuiltinProperties(name)
+		return props.Category
+	}
+	if expected, actual := builtinconstants.CategoryString, getCategory("lower"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := builtinconstants.CategoryString, builtins["length"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategoryString, getCategory("length"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := builtinconstants.CategoryDateAndTime, builtins["now"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategoryDateAndTime, getCategory("now"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := builtinconstants.CategorySystemInfo, builtins["version"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategorySystemInfo, getCategory("version"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }
