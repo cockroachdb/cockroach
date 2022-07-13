@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -225,7 +226,7 @@ func startDistChangefeed(
 		sql.DistributionTypeAlways)
 
 	var spanPartitions []sql.SpanPartition
-	if details.SinkURI == `` {
+	if details.SinkURI == `` || evalCtx.SessionData.DistSQLMode == sessiondata.DistSQLOff {
 		// Sinkless feeds get one ChangeAggregator on the gateway.
 		spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
 	} else {
