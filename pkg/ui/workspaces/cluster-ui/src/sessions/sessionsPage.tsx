@@ -136,6 +136,7 @@ export class SessionsPage extends React.Component<
 > {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
+  refreshDataInterval: NodeJS.Timeout;
 
   constructor(props: SessionsPageProps) {
     super(props);
@@ -210,13 +211,24 @@ export class SessionsPage extends React.Component<
   };
 
   componentDidMount(): void {
-    this.props.refreshSessions();
+    if (!this.props.sessions || this.props.sessions.length === 0) {
+      this.props.refreshSessions();
+    }
+
+    this.refreshDataInterval = setInterval(
+      this.props.refreshSessions,
+      10 * 1000,
+    );
+  }
+
+  componentWillUnmount(): void {
+    if (!this.refreshDataInterval) return;
+    clearInterval(this.refreshDataInterval);
   }
 
   componentDidUpdate = (): void => {
     const { history, sortSetting } = this.props;
 
-    this.props.refreshSessions();
     updateSortSettingQueryParamsOnTab(
       "Sessions",
       sortSetting,
