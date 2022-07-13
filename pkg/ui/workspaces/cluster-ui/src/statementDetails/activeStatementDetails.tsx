@@ -22,31 +22,37 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr, DATE_FORMAT_24_UTC } from "../util";
-import { ActiveStatement } from "src/activeExecutions";
+import { executionIdAttr, DATE_FORMAT_24_UTC, Duration } from "../util";
+import {
+  ActiveStatement,
+  ExecutionContentionDetails,
+} from "src/activeExecutions";
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 
 import styles from "./statementDetails.module.scss";
 import { SqlBox } from "src/sql/box";
+import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export type ActiveStatementDetailsStateProps = {
+  contentionDetails?: ExecutionContentionDetails;
   statement: ActiveStatement;
   match: match;
 };
 
 export type ActiveStatementDetailsDispatchProps = {
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
   ActiveStatementDetailsDispatchProps;
 
 export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
+  contentionDetails,
   statement,
   match,
-  refreshSessions,
+  refreshLiveWorkload,
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -54,9 +60,9 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
   useEffect(() => {
     if (statement == null) {
       // Refresh sessions if the statement was not found initially.
-      refreshSessions();
+      refreshLiveWorkload();
     }
-  }, [refreshSessions, statement]);
+  }, [refreshLiveWorkload, statement]);
 
   const returnToActiveStatements = () => {
     history.push("/sql-activity?tab=Statements&view=active");
@@ -99,7 +105,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                     />
                     <SummaryCardItem
                       label="Elapsed Time"
-                      value={`${statement.elapsedTimeSeconds} s`}
+                      value={Duration(statement.elapsedTimeMillis * 1e6)}
                     />
                     <SummaryCardItem
                       label="Status"
@@ -153,6 +159,19 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
           </Row>
         )}
       </section>
+      {statement && contentionDetails && (
+        <WaitTimeInsightsPanel
+          execType="statement"
+          executionID={statement.statementID}
+          schemaName={contentionDetails.waitInsights?.schemaName}
+          tableName={contentionDetails.waitInsights?.tableName}
+          indexName={contentionDetails.waitInsights?.indexName}
+          databaseName={contentionDetails.waitInsights?.databaseName}
+          waitTime={contentionDetails.waitInsights?.waitTime}
+          waitingExecutions={contentionDetails.waitingExecutions}
+          blockingExecutions={contentionDetails.blockingExecutions}
+        />
+      )}
     </div>
   );
 };
