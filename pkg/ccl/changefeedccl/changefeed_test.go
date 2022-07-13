@@ -73,6 +73,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,6 +96,114 @@ import (
 )
 
 var testServerRegion = "us-east-1"
+
+func TestChangefeedReplanning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "multinode setup doesn't work under testrace")
+
+	assertReplanCounter := func(t *testing.T, m *Metrics, exp int64) {
+		t.Helper()
+		// If this changefeed is running as a job, we anticipate that it will move
+		// through the failed state and will increment the metric. Sinkless feeds
+		// don't contribute to the failures counter.
+		if strings.Contains(t.Name(), `sinkless`) {
+			return
+		}
+		testutils.SucceedsSoon(t, func() error {
+			if got := m.ReplanCount.Count(); got != exp {
+				return errors.Errorf("expected %d failures, got %d", exp, got)
+			}
+			return nil
+		})
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+
+		ctx := context.Background()
+
+		numNodes := 3
+		errChan := make(chan error, 1)
+		readyChan := make(chan struct{})
+		defaultServerArgs := base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					Changefeed: &TestingKnobs{
+						HandleDistChangefeedError: func(err error) error {
+							select {
+							case errChan <- err:
+								return err
+							default:
+								return nil
+							}
+						},
+						ShouldReplan: func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
+							select {
+							case <-readyChan:
+								return true
+							default:
+								return false
+							}
+						},
+					},
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+			UseDatabase:              "d",
+			DisableDefaultTestTenant: true,
+		}
+
+		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+			ServerArgs: defaultServerArgs,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+
+		db := tc.ServerConn(0)
+		serverutils.SetClusterSetting(t, tc, "changefeed.replan_flow_frequency", time.Millisecond*100)
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0);`)
+
+		feedFactory := makeKafkaFeedFactoryForCluster(tc, db)
+
+		cf := feed(t, feedFactory, "CREATE CHANGEFEED FOR d.foo")
+		defer closeFeed(t, cf)
+
+		feed, ok := cf.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		require.NoError(t, feed.TickHighWaterMark(tc.Server(0).Clock().Now()))
+
+		sqlDB.ExecMultiple(t,
+			`INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000);`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
+			`ALTER TABLE foo SCATTER;`,
+		)
+
+		timeout := 20 * time.Second
+		if util.RaceEnabled {
+			timeout *= 3
+		}
+
+		readyChan <- struct{}{}
+
+		select {
+		case err := <-errChan:
+			require.Regexp(t, "physical plan has changed", err)
+			assertReplanCounter(t, metrics, 1)
+			log.Info(ctx, "replan triggered")
+		case <-time.After(timeout):
+			t.Fatal("expected distflow to error but hasn't after 20 seconds")
+		}
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
 
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
