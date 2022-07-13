@@ -1014,7 +1014,8 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
-		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
+		semaCtx := s.builder.semaCtx
+		def, err := t.Func.Resolve(semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
 			panic(err)
 		}
@@ -1495,7 +1496,7 @@ func (s *scope) replaceCount(
 				e := &cpy
 				e.Exprs = tree.Exprs{tree.DBoolTrue}
 
-				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath, nil /* resolver */)
 				if err != nil {
 					panic(err)
 				}
@@ -1521,7 +1522,7 @@ func (s *scope) replaceCount(
 			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
-			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath, nil /* resolver */)
 			if err != nil {
 				panic(err)
 			}

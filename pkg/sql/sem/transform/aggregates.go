@@ -33,7 +33,9 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
-		fd, err := t.Func.Resolve(&v.searchPath)
+		// TODO(mgartner): Plumb a function resolver here, or determine that the
+		// function should have already been resolved.
+		fd, err := t.Func.Resolve(&v.searchPath, nil /* resolver */)
 		if err != nil {
 			return false, expr
 		}

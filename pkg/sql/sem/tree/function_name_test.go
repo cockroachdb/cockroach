@@ -58,7 +58,7 @@ func TestResolveFunction(t *testing.T) {
 		if tc.customSearchPath != nil {
 			sp = tc.customSearchPath
 		}
-		_, err = q.Resolve(sp)
+		_, err = q.Resolve(sp, nil /* resolver */)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)

@@ -62,7 +62,9 @@ func ComputeColNameInternal(sp SearchPath, target Expr) (int, string, error) {
 		return ComputeColNameInternal(sp, e.Expr)
 
 	case *FuncExpr:
-		fd, err := e.Func.Resolve(sp)
+		// TODO(mgartner): Plumb a function resolver here, or determine that the
+		// function should have already been resolved.
+		fd, err := e.Func.Resolve(sp, nil /* resolver */)
 		if err != nil {
 			return 0, "", err
 		}
