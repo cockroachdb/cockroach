@@ -23,7 +23,7 @@ import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
 import { executionIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
-import { refreshSessions } from "src/redux/apiReducers";
+import { refreshLiveWorkload } from "src/redux/apiReducers";
 
 export const selectActiveStatement = createSelector(
   (state: AdminUIState) => state.cachedData.sessions,
@@ -50,6 +50,6 @@ export default withRouter(
       statement: selectActiveStatement(state, props),
       match: props.match,
     }),
-    { refreshSessions },
+    { refreshLiveWorkload },
   )(ActiveStatementDetails),
 );

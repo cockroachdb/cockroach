@@ -22,7 +22,7 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr, DATE_FORMAT_24_UTC } from "../util";
+import { executionIdAttr, DATE_FORMAT_24_UTC, Duration } from "../util";
 import { ActiveStatement } from "src/activeExecutions";
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 
@@ -37,7 +37,7 @@ export type ActiveStatementDetailsStateProps = {
 };
 
 export type ActiveStatementDetailsDispatchProps = {
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
@@ -46,7 +46,7 @@ export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
 export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
   statement,
   match,
-  refreshSessions,
+  refreshLiveWorkload,
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -54,9 +54,9 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
   useEffect(() => {
     if (statement == null) {
       // Refresh sessions if the statement was not found initially.
-      refreshSessions();
+      refreshLiveWorkload();
     }
-  }, [refreshSessions, statement]);
+  }, [refreshLiveWorkload, statement]);
 
   const returnToActiveStatements = () => {
     history.push("/sql-activity?tab=Statements&view=active");
@@ -99,7 +99,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                     />
                     <SummaryCardItem
                       label="Elapsed Time"
-                      value={`${statement.elapsedTimeSeconds} s`}
+                      value={Duration(statement.elapsedTimeMillis * 1e6)}
                     />
                     <SummaryCardItem
                       label="Status"

@@ -17,8 +17,12 @@ import {
   ActiveTransactionDetails,
   ActiveTransactionDetailsDispatchProps,
 } from "./activeTransactionDetails";
-import { selectActiveTransaction } from "./activeTransactionDetails.selectors";
 import { ActiveTransactionDetailsStateProps } from ".";
+import { selectHasViewActivityRedactedRole } from "src/store/uiConfig";
+import {
+  selectActiveTransaction,
+  selectContentionDetails,
+} from "src/transactionsPage/activeTransactionsPage.selectors";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -28,14 +32,16 @@ const mapStateToProps = (
 ): ActiveTransactionDetailsStateProps => {
   return {
     transaction: selectActiveTransaction(state, props),
+    contentionDetails: selectContentionDetails(state, props),
     match: props.match,
+    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): ActiveTransactionDetailsDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
 export const ActiveTransactionDetailsPageConnected = withRouter(

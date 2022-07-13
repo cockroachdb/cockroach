@@ -73,7 +73,7 @@ export const mapStateToActiveStatementsPageProps = (
 export const mapDispatchToActiveStatementsPageProps = (
   dispatch: Dispatch,
 ): ActiveStatementsViewDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
   onColumnsSelect: columns => {
     dispatch(
       localStorageActions.update({

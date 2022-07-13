@@ -10,27 +10,47 @@
 
 import {
   ActiveTransactionFilters,
-  ActiveTransaction,
-  getActiveTransactionsFromSessions,
   SortSetting,
   defaultFilters,
+  ActiveTransactionsViewDispatchProps,
+  selectActiveTransactionCombiner,
+  selectActiveTransactionsCombiner,
+  selectContentionDetailsCombiner,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { SessionsResponseMessage } from "src/util/api";
-import { refreshSessions } from "src/redux/apiReducers";
+import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { selectAppName } from "src/views/statements/activeStatementsSelectors";
+import { RouteComponentProps } from "react-router-dom";
 
-const selectActiveTransactions = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (
-    state?: CachedDataReducerState<SessionsResponseMessage>,
-  ): ActiveTransaction[] => {
-    if (state?.data == null) return [];
-    return getActiveTransactionsFromSessions(state.data, state.setAt);
-  },
+const selectSessions = (state: AdminUIState) => state.cachedData.sessions?.data;
+const selectSessionsLastUpdated = (state: AdminUIState) =>
+  state.cachedData.sessions?.setAt;
+
+const selectClusterLocks = (state: AdminUIState) =>
+  state.cachedData.clusterLocks?.data;
+
+const selectRouterProps = (_state: AdminUIState, props: RouteComponentProps) =>
+  props;
+
+export const selectActiveTransactions = createSelector(
+  selectSessions,
+  selectSessionsLastUpdated,
+  selectActiveTransactionsCombiner,
+);
+
+export const selectActiveTransaction = createSelector(
+  selectActiveTransactions,
+  selectRouterProps,
+  selectActiveTransactionCombiner,
+);
+
+export const selectContentionDetails = createSelector(
+  selectClusterLocks,
+  selectActiveTransactions,
+  selectActiveTransaction,
+  selectContentionDetailsCombiner,
 );
 
 const transactionsColumnsLocalSetting = new LocalSetting<
@@ -66,11 +86,14 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   internalAppNamePrefix: selectAppName(state),
 });
 
-export const activeTransactionsPageActions = {
-  onColumnsSelect: (columns: string[]) =>
-    transactionsColumnsLocalSetting.set(columns.join(",")),
-  refreshSessions,
-  onFiltersChange: (filters: ActiveTransactionFilters) =>
-    filtersLocalSetting.set(filters),
-  onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-};
+// This object is just for convenience so we don't need to supply dispatch to
+// each action.
+export const activeTransactionsPageActionCreators: ActiveTransactionsViewDispatchProps =
+  {
+    onColumnsSelect: (columns: string[]) =>
+      transactionsColumnsLocalSetting.set(columns.join(",")),
+    onFiltersChange: (filters: ActiveTransactionFilters) =>
+      filtersLocalSetting.set(filters),
+    onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+    refreshLiveWorkload,
+  };

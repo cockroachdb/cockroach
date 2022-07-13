@@ -35,7 +35,7 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): ActiveStatementDetailsDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
 export const ActiveStatementDetailsPageConnected = withRouter(

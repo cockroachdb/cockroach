@@ -30,7 +30,7 @@ export type ActiveStatement = {
   query: string;
   status: ExecutionStatus;
   start: Moment;
-  elapsedTimeSeconds: number;
+  elapsedTimeMillis: number;
   application: string;
   user: string;
   clientAddress: string;
@@ -49,8 +49,30 @@ export type ActiveTransaction = {
   mostRecentStatement: ActiveStatement | null;
   status: ExecutionStatus;
   start: Moment;
-  elapsedTimeSeconds: number;
+  elapsedTimeMillis: number;
   statementCount: number;
   retries: number;
   application: string;
+};
+
+export type ContendedTransaction = Pick<
+  ActiveTransaction,
+  "executionID" | "mostRecentStatement" | "status" | "start"
+> & {
+  timeSpentBlocking: moment.Duration;
+};
+
+export type TransactionContentionDetails = {
+  // Info on the lock the transaction is waiting for.
+  waitInsights?: {
+    databaseName?: string;
+    schemaName?: string;
+    tableName?: string;
+    indexName?: string;
+    waitTime: moment.Duration;
+  };
+  // Txns waiting for a lock held by this txn.
+  waitingTxns: ContendedTransaction[];
+  // Txns holding a lock required by this txn.
+  blockingTxns: ContendedTransaction[];
 };

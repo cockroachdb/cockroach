@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { RouteComponentProps } from "react-router-dom";
+import { Dispatch } from "redux";
 import { createSelector } from "reselect";
-import { getActiveTransactionsFromSessions } from "../activeExecutions/activeStatementUtils";
-import { selectAppName } from "src/statementsPage/activeStatementsPage.selectors";
-import { localStorageSelector } from "../store/utils/selectors";
 import {
   ActiveTransactionFilters,
   ActiveTransactionsViewDispatchProps,
@@ -19,20 +18,25 @@ import {
   AppState,
   SortSetting,
 } from "src";
-import { actions as sessionsActions } from "src/store/sessions";
+import { selectAppName } from "src/statementsPage/activeStatementsPage.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { Dispatch } from "redux";
+import { actions as sessionsActions } from "src/store/sessions";
+import { localStorageSelector } from "../store/utils/selectors";
+import {
+  selectActiveTransactionCombiner,
+  selectActiveTransactionsCombiner,
+  selectContentionDetailsCombiner,
+} from "./activeTransactionsCommon.selectors";
+
+const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
+
+const selectSessionsLastUpdated = (state: AppState) =>
+  state.adminUI.sessions?.lastUpdated;
 
 export const selectActiveTransactions = createSelector(
-  (state: AppState) => state.adminUI.sessions,
-  response => {
-    if (!response.data) return [];
-
-    return getActiveTransactionsFromSessions(
-      response.data,
-      response.lastUpdated,
-    );
-  },
+  selectSessions,
+  selectSessionsLastUpdated,
+  selectActiveTransactionsCombiner,
 );
 
 export const selectSortSetting = (state: AppState): SortSetting =>
@@ -69,7 +73,7 @@ export const mapStateToActiveTransactionsPageProps = (
 export const mapDispatchToActiveTransactionsPageProps = (
   dispatch: Dispatch,
 ): ActiveTransactionsViewDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
   onColumnsSelect: columns =>
     dispatch(
       localStorageActions.update({
@@ -92,3 +96,24 @@ export const mapDispatchToActiveTransactionsPageProps = (
       }),
     ),
 });
+
+// ---------------------------------------------------
+//       Active transaction details selectors
+// ---------------------------------------------------
+
+const selectRouterProps = (_: AppState, props: RouteComponentProps) => props;
+const selectClusterLocks = (state: AppState) =>
+  state.adminUI.clusterLocks?.data;
+
+export const selectActiveTransaction = createSelector(
+  selectActiveTransactions,
+  selectRouterProps,
+  selectActiveTransactionCombiner,
+);
+
+export const selectContentionDetails = createSelector(
+  selectClusterLocks,
+  selectActiveTransactions,
+  selectActiveTransaction,
+  selectContentionDetailsCombiner,
+);

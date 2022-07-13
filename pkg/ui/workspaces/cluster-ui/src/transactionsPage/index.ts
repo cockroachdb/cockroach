@@ -12,3 +12,4 @@ export * from "./transactionsPage";
 export * from "./transactionsPageConnected";
 export * from "./activeTransactionsView";
 export * from "./transactionsPageRoot";
+export * from "./activeTransactionsCommon.selectors";

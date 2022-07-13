@@ -18,8 +18,10 @@ import {
   ExecutionStatus,
   ActiveTransactionFilters,
   SessionStatusType,
+  ContendedTransaction,
 } from "./types";
 import { ActiveStatement, ActiveStatementFilters } from "./types";
+import { ClusterLockState } from "src/api";
 
 export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";
@@ -93,10 +95,7 @@ export function getActiveStatementsFromSessions(
             ? "Executing"
             : "Preparing",
         start: TimestampToMoment(query.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(query.start),
-          "seconds",
-        ),
+        elapsedTimeMillis: time.diff(TimestampToMoment(query.start), "ms"),
         application: session.application_name,
         user: session.username,
         clientAddress: session.client_address,
@@ -216,13 +215,73 @@ export function getActiveTransactionsFromSessions(
         mostRecentStatement: mostRecentStmt,
         status: "Executing" as ExecutionStatus,
         start: TimestampToMoment(activeTxn.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(activeTxn.start),
-          "seconds",
-        ),
+        elapsedTimeMillis: time.diff(TimestampToMoment(activeTxn.start), "ms"),
         application: session.application_name,
         retries: activeTxn.num_auto_retries,
         statementCount: activeTxn.num_statements_executed,
       };
     });
+}
+
+export function getContendedTransactionsFromLocks(
+  transactions: ActiveTransaction[],
+  locks: ClusterLockState[],
+  txnExecID: string, // Txn we are returning contention info for.
+): {
+  waiters: ContendedTransaction[];
+  blockers: ContendedTransaction[];
+  requiredLock: ClusterLockState;
+} | null {
+  if (
+    !transactions ||
+    transactions.length === 0 ||
+    !locks ||
+    locks.length === 0
+  ) {
+    return null;
+  }
+
+  const txnByID: Record<string, ActiveTransaction> = {};
+  transactions.forEach(txn => (txnByID[txn.executionID] = txn));
+
+  const waiters: ContendedTransaction[] = [];
+  const blockers: ContendedTransaction[] = [];
+  let requiredLock: ClusterLockState | null = null;
+
+  locks.forEach(lock => {
+    if (lock.lockHolderTxnID === txnExecID) {
+      lock.waiters
+        .filter(waiter => txnByID[waiter.id])
+        .forEach(waiter => {
+          const activeTxn = txnByID[waiter.id];
+          waiters.push({
+            ...activeTxn,
+            timeSpentBlocking: waiter.waitTime,
+          });
+        });
+    }
+
+    if (lock.waiters.map(waiter => waiter.id).includes(txnExecID)) {
+      const activeTxn = txnByID[lock.lockHolderTxnID];
+      if (!activeTxn) return;
+
+      // We just need to set this for information on the db, index, schema etc.
+      requiredLock = lock;
+
+      blockers.push({
+        ...activeTxn,
+        timeSpentBlocking: lock.holdTime,
+      });
+    }
+  });
+
+  if (waiters.length === 0 && blockers.length === 0) {
+    return null;
+  }
+
+  return {
+    waiters,
+    blockers,
+    requiredLock,
+  };
 }

@@ -8,53 +8,84 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect } from "react";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Button } from "src/button";
-import Helmet from "react-helmet";
-import { commonStyles } from "src/common";
-import { SqlBox } from "src/sql/box";
-import classNames from "classnames/bind";
-import { Link, useHistory, match } from "react-router-dom";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import classNames from "classnames/bind";
+import React, { useEffect } from "react";
+import Helmet from "react-helmet";
+import { Link, match, useHistory } from "react-router-dom";
+import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import { SqlBox } from "src/sql/box";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
+import {
+  ActiveTransaction,
+  TransactionContentionDetails,
+} from "src/activeExecutions";
+import { StatusIcon } from "src/activeExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
 import { executionIdAttr } from "../util";
-import { ActiveTransaction } from "src/activeExecutions";
-import { StatusIcon } from "src/activeExecutions/statusIcon";
 
 import styles from "../statementDetails/statementDetails.module.scss";
+import { TransactionContentionDetailsSection } from "./transactionContentionDetailsSection";
+import { Duration } from "../util/format";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export type ActiveTransactionDetailsStateProps = {
+  hasViewActivityRedactedRole: boolean;
   transaction: ActiveTransaction;
+  contentionDetails?: TransactionContentionDetails;
   match: match;
 };
 
 export type ActiveTransactionDetailsDispatchProps = {
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
+
+const BACK_TO_ACTIVE_TXNS_BUTTON_LABEL = "Active Transactions";
+const TXN_EXECUTION_ID_LABEL = "Transaction Execution ID";
+
+export const GeneralActiveTxnInsightsLabels = {
+  START_TIME: "Start Time (UTC)",
+  ELAPSED_TIME: "Elapsed Time",
+  STATUS: "Status",
+  RETRY_COUNT: "Number of Retries",
+  STATEMENT_COUNT: "Number of Statements",
+  APPLICATION_NAME: "Application Name",
+  LAST_STATEMENT_EXEC_ID: "Most Recent Statement Execution ID",
+  SESSION_ID: "Session ID",
+};
+
+export const RECENT_STATEMENT_NOT_FOUND_MESSAGE =
+  "Most recent statement not found.";
 
 export type ActiveTransactionDetailsProps = ActiveTransactionDetailsStateProps &
   ActiveTransactionDetailsDispatchProps;
 
 export const ActiveTransactionDetails: React.FC<
   ActiveTransactionDetailsProps
-> = ({ transaction, match, refreshSessions }) => {
+> = ({
+  hasViewActivityRedactedRole,
+  transaction,
+  contentionDetails,
+  match,
+  refreshLiveWorkload,
+}) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
+  console.log("blah blah");
 
   useEffect(() => {
     if (transaction == null) {
-      // Refresh sessions if the transaction was not found initially.
-      refreshSessions();
+      // Refresh sessions and cluster lock info  if the transaction was not found initially.
+      refreshLiveWorkload();
     }
-  }, [refreshSessions, transaction]);
+  }, [refreshLiveWorkload, transaction]);
 
   const returnToActiveTransactions = () => {
     history.push("/sql-activity?tab=Transactions&view=active");
@@ -72,10 +103,10 @@ export const ActiveTransactionDetails: React.FC<
           iconPosition="left"
           className="small-margin"
         >
-          Active Transactions
+          {BACK_TO_ACTIVE_TXNS_BUTTON_LABEL}
         </Button>
         <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
-          Transaction Execution ID:{" "}
+          {TXN_EXECUTION_ID_LABEL}:{" "}
           <span className={cx("heading-execution-id")}>{executionID}</span>
         </h3>
       </div>
@@ -85,7 +116,7 @@ export const ActiveTransactionDetails: React.FC<
             <SqlBox
               value={
                 transaction?.mostRecentStatement?.query ||
-                "Most recent statement not found."
+                RECENT_STATEMENT_NOT_FOUND_MESSAGE
               }
             />
           </Col>
@@ -97,17 +128,17 @@ export const ActiveTransactionDetails: React.FC<
                 <Row>
                   <Col>
                     <SummaryCardItem
-                      label="Start Time (UTC)"
+                      label={GeneralActiveTxnInsightsLabels.START_TIME}
                       value={transaction.start.format(
                         "MMM D, YYYY [at] H:mm (UTC)",
                       )}
                     />
                     <SummaryCardItem
-                      label="Elapsed Time"
-                      value={`${transaction.elapsedTimeSeconds} s`}
+                      label={GeneralActiveTxnInsightsLabels.ELAPSED_TIME}
+                      value={Duration(transaction.elapsedTimeMillis * 1e6)}
                     />
                     <SummaryCardItem
-                      label="Status"
+                      label={GeneralActiveTxnInsightsLabels.STATUS}
                       value={
                         <>
                           <StatusIcon status={transaction.status} />
@@ -122,21 +153,23 @@ export const ActiveTransactionDetails: React.FC<
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
-                  label="Number of Retries"
+                  label={GeneralActiveTxnInsightsLabels.RETRY_COUNT}
                   value={transaction.retries}
                 />
                 <SummaryCardItem
-                  label="Number of Statements"
+                  label={GeneralActiveTxnInsightsLabels.STATEMENT_COUNT}
                   value={transaction.statementCount}
                 />
                 <SummaryCardItem
-                  label="Application Name"
+                  label={GeneralActiveTxnInsightsLabels.APPLICATION_NAME}
                   value={transaction.application}
                 />
                 <p className={summaryCardStylesCx("summary--card__divider")} />
                 {transaction.mostRecentStatement && (
                   <SummaryCardItem
-                    label="Most Recent Statement Execution ID"
+                    label={
+                      GeneralActiveTxnInsightsLabels.LAST_STATEMENT_EXEC_ID
+                    }
                     value={
                       <Link
                         className={cx("text-link")}
@@ -149,7 +182,7 @@ export const ActiveTransactionDetails: React.FC<
                 )}
 
                 <SummaryCardItem
-                  label="Session ID"
+                  label={GeneralActiveTxnInsightsLabels.SESSION_ID}
                   value={
                     <Link
                       className={cx("text-link")}
@@ -164,6 +197,12 @@ export const ActiveTransactionDetails: React.FC<
           </Row>
         )}
       </section>
+      {!hasViewActivityRedactedRole && transaction && (
+        <TransactionContentionDetailsSection
+          contentionDetails={contentionDetails}
+          transactionExecutionID={transaction.executionID}
+        />
+      )}
     </div>
   );
 };

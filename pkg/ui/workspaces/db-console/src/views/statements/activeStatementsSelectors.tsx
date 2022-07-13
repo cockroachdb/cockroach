@@ -17,7 +17,10 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
+import {
+  CachedDataReducerState,
+  refreshLiveWorkload,
+} from "src/redux/apiReducers";
 import { createSelector } from "reselect";
 import { SessionsResponseMessage } from "src/util/api";
 
@@ -78,7 +81,7 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
 export const activeStatementsViewActions = {
   onColumnsSelect: (columns: string[]) =>
     selectedColumnsLocalSetting.set(columns.join(",")),
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange: (filters: ActiveStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),

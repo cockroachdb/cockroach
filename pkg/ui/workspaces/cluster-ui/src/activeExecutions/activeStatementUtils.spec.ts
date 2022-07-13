@@ -55,7 +55,7 @@ const defaultActiveStatement: ActiveStatement = {
   query: defaultActiveQuery.sql,
   status: "Executing",
   start: MOCK_START_TIME,
-  elapsedTimeSeconds: 60,
+  elapsedTimeMillis: 60,
   application: "test",
   user: "user",
   clientAddress: "clientAddress",
@@ -80,7 +80,7 @@ function makeActiveTxn(
     executionID: "txn",
     sessionID: "sessionID",
     start: MOCK_START_TIME,
-    elapsedTimeSeconds: 10,
+    elapsedTimeMillis: 10,
     application: "application",
     mostRecentStatement: defaultActiveStatement,
     retries: 3,
@@ -234,8 +234,8 @@ describe("test activeStatementUtils", () => {
       }
       // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
       expect(stmt.status).toBe("Executing");
-      expect(stmt.elapsedTimeSeconds).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "seconds"),
+      expect(stmt.elapsedTimeMillis).toBe(
+        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
       );
       expect(stmt.start.unix()).toBe(
         TimestampToMoment(defaultActiveQuery.start).unix(),
@@ -326,8 +326,8 @@ describe("test activeStatementUtils", () => {
       expect(txn.application).toBe(
         sessionsResponse.sessions[i].application_name,
       );
-      expect(txn.elapsedTimeSeconds).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "seconds"),
+      expect(txn.elapsedTimeMillis).toBe(
+        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
       );
       expect(txn.status).toBe("Executing");
       expect(txn.mostRecentStatement).toBeTruthy();

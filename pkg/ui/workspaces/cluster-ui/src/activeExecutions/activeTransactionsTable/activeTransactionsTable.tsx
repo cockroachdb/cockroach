@@ -25,7 +25,7 @@ import {
   ExecutionType,
   ExecutionsColumn,
 } from "../execTableCommon";
-import { DATE_FORMAT } from "../../util";
+import { DATE_FORMAT, Duration } from "../../util";
 
 interface ActiveTransactionsTable {
   data: ActiveTransaction[];
@@ -82,8 +82,8 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
     {
       name: "elapsedTime",
       title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveTransaction) => `${item.elapsedTimeSeconds} s`,
-      sort: (item: ActiveTransaction) => item.elapsedTimeSeconds,
+      cell: (item: ActiveTransaction) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: ActiveTransaction) => item.elapsedTimeMillis,
     },
     {
       name: "statementCount",

@@ -11,6 +11,7 @@
 export {
   getActiveStatementsFromSessions,
   getActiveTransactionsFromSessions,
+  getContendedTransactionsFromLocks,
 } from "./activeStatementUtils";
 
 export * from "./types";

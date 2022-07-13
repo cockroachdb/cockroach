@@ -21,7 +21,8 @@ export type ExecutionsColumn =
   | "retries"
   | "startTime"
   | "statementCount"
-  | "status";
+  | "status"
+  | "timeSpentBlocking";
 
 export type ExecutionType = "statement" | "transaction";
 
@@ -42,6 +43,7 @@ export const executionsColumnLabels: Record<
   startTime: () => "Start Time (UTC)",
   statementCount: () => "Statements",
   status: () => "Status",
+  timeSpentBlocking: () => "Time Spent Blocking",
 };
 
 export type ExecutionsTableColumnKeys = keyof typeof executionsColumnLabels;
@@ -108,4 +110,15 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
   statementCount: () => <span>{getLabel("statementCount")}</span>,
   elapsedTime: () => <span>{getLabel("elapsedTime")}</span>,
   retries: () => <span>{getLabel("retries")}</span>,
+  timeSpentBlocking: () => (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={
+        <p>Amount of time this transaction has been experiencing contention.</p>
+      }
+    >
+      {getLabel("timeSpentBlocking")}
+    </Tooltip>
+  ),
 };
