@@ -16,7 +16,7 @@ SELECT * FROM crdb_internal.cluster_settings;
 user root
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER BY 1, 2
 ----
 testuser  /global/  {MODIFYCLUSTERSETTING}  {}
 
@@ -31,5 +31,57 @@ SELECT * FROM crdb_internal.cluster_settings;
 user root
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER BY 1, 2
 ----
+
+user root
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO root
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+
+statement ok
+REVOKE GRANT OPTION FOR SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1, 2
+----
+root  /global/  {MODIFYCLUSTERSETTING}  {}

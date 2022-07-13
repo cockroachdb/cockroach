@@ -57,8 +57,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 	if n.isGrant {
 		// Privileges are valid, write them to the system.privileges table.
 		for _, user := range n.grantees {
-			syntheticPrivDesc.Grant(user, n.desiredprivs, false)
-
+			syntheticPrivDesc.Grant(user, n.desiredprivs, n.withGrantOption)
 			userPrivs, found := syntheticPrivDesc.FindUser(user)
 			if !found {
 				return errors.AssertionFailedf("user %s not found", user)
@@ -84,7 +83,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 
 	// Handle revoke case.
 	for _, user := range n.grantees {
-		syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, false)
+		syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption)
 		userPrivs, found := syntheticPrivDesc.FindUser(user)
 
 		// If there are no entries remaining on the PrivilegeDescriptor for the user
