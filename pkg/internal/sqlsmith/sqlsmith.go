@@ -79,7 +79,7 @@ type Smither struct {
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
 	disableWith                bool
-	disableImpureFns           bool
+	disableNondeterministicFns bool
 	disableLimits              bool
 	disableWindowFuncs         bool
 	simpleDatums               bool
@@ -318,9 +318,9 @@ var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
-// DisableImpureFns causes the Smither to disable impure functions.
-var DisableImpureFns = simpleOption("disable impure funcs", func(s *Smither) {
-	s.disableImpureFns = true
+// DisableNondeterministicFns causes the Smither to disable nondeterministic functions.
+var DisableNondeterministicFns = simpleOption("disable nondeterministic funcs", func(s *Smither) {
+	s.disableNondeterministicFns = true
 })
 
 // DisableCRDBFns causes the Smither to disable crdb_internal functions.
@@ -435,7 +435,7 @@ var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither)
 var CompareMode = multiOption(
 	"compare mode",
 	DisableMutations(),
-	DisableImpureFns(),
+	DisableNondeterministicFns(),
 	DisableCRDBFns(),
 	IgnoreFNs("^version"),
 	DisableLimits(),
