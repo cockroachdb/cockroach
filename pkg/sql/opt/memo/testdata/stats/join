@@ -1975,3 +1975,68 @@ anti-join (cross)
  │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+# Regression test for #84236. Don't calculate selectivity as NaN.
+exec-ddl
+CREATE TABLE t84236_1 (
+  col1_0 DATE NOT NULL,
+  col1_1 FLOAT4 NOT NULL,
+  col1_2 INT NOT NULL,
+  col1_4 INT NOT NULL,
+  col1_5 BOOL,
+  col1_6 STRING NOT NULL,
+  PRIMARY KEY (col1_4 ASC, col1_1, col1_6, col1_2 ASC)
+);
+----
+
+exec-ddl
+CREATE TABLE t84236_2 (col2_0 BIT(27), col2_2 TIMETZ NOT NULL);
+----
+
+norm
+SELECT
+        t2.col2_0, '1971-10-24':::DATE
+FROM
+        t84236_2 AS t2
+        FULL JOIN t84236_2 AS t2_2
+                INNER JOIN t84236_1 AS t1 ON NULL ON t1.col1_5
+ORDER BY
+        t2.col2_2 DESC
+LIMIT
+        82;
+----
+project
+ ├── columns: col2_0:1(bit) date:19(date!null)  [hidden: t2.col2_2:2(timetz)]
+ ├── cardinality: [0 - 82]
+ ├── stats: [rows=82]
+ ├── fd: ()-->(19)
+ ├── ordering: -2 opt(19) [actual: -2]
+ ├── limit
+ │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    ├── internal-ordering: -2
+ │    ├── cardinality: [0 - 82]
+ │    ├── stats: [rows=82]
+ │    ├── ordering: -2
+ │    ├── sort
+ │    │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── ordering: -2
+ │    │    ├── limit hint: 82.00
+ │    │    └── full-join (cross)
+ │    │         ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz) col1_5:15(bool)
+ │    │         ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ │    │         ├── stats: [rows=1000]
+ │    │         ├── scan t84236_2 [as=t2]
+ │    │         │    ├── columns: t2.col2_0:1(bit) t2.col2_2:2(timetz!null)
+ │    │         │    └── stats: [rows=1000]
+ │    │         ├── values
+ │    │         │    ├── columns: col1_5:15(bool!null)
+ │    │         │    ├── cardinality: [0 - 0]
+ │    │         │    ├── stats: [rows=0, distinct(15)=0, null(15)=0, avgsize(15)=0]
+ │    │         │    ├── key: ()
+ │    │         │    └── fd: ()-->(15)
+ │    │         └── filters
+ │    │              └── col1_5:15 [type=bool, outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
+ │    └── 82 [type=int]
+ └── projections
+      └── '1971-10-24' [as=date:19, type=date]
