@@ -12,6 +12,9 @@ ALTER TABLE t SPLIT AT VALUES (0)
 let $rangeid
 SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
 
+let $tableid
+SELECT id FROM system.namespace WHERE name = 't'
+
 # Without any data in the table, there shouldn't be any keys in the range.
 query T
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
@@ -29,6 +32,14 @@ SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 /Table/106/1/1/0
 /Table/106/1/2/0
 
+# List out all of the keys in this range. The values themselves are
+# different on each run of the test due to metadata stored in the value.
+query T
+SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
+----
+/106/1/1/0
+/106/1/2/0
+
 # An error should be returned when an invalid range ID is specified.
 statement error pq: range with ID 1000000 not found
 SELECT key FROM crdb_internal.list_sql_keys_in_range(1000000)
@@ -37,13 +48,21 @@ SELECT key FROM crdb_internal.list_sql_keys_in_range(1000000)
 # Create a new table with a multiple of rangeKeyIteratorChunkSize (currently 256).
 statement ok
 CREATE TABLE t2 (x INT PRIMARY KEY);
-INSERT INTO t2 (SELECT * FROM generate_series(1, 1024));
+INSERT INTO t2 (SELECT * FROM generate_series(1, 4096));
 ALTER TABLE t2 SPLIT AT VALUES (0)
 
 let $rangeid
 SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't2'
 
+let $tableid
+SELECT id FROM system.namespace WHERE name = 't2'
+
 query II
 SELECT count(key), count(DISTINCT key) FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
-1024 1024
+4096 4096
+
+query II
+SELECT count(key), count(DISTINCT key) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
+----
+4096 4096

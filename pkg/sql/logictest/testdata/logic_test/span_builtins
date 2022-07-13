@@ -1,0 +1,16 @@
+## Tests for span construction/manipulation builtins
+
+query T
+select crdb_internal.trim_tenant_prefix(crdb_internal.table_span(1))
+----
+{"\\x89","\\x8a"}
+
+query T
+select crdb_internal.trim_tenant_prefix(crdb_internal.index_span(1, 1))
+----
+{"\\x8989","\\x898a"}
+
+query T
+select crdb_internal.tenant_span(2)
+----
+{"\\xfe8a","\\xfe8b"}
