@@ -59,6 +59,10 @@ type SemaContext struct {
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
 
+	// FunctionResolver manages resolving functions names into
+	// *FunctionDefinitons.
+	FunctionResolver FunctionReferenceResolver
+
 	// TableNameResolver is used to resolve the fully qualified
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver
@@ -1036,7 +1040,11 @@ func (expr *FuncExpr) TypeCheck(
 	if semaCtx != nil {
 		searchPath = semaCtx.SearchPath
 	}
-	def, err := expr.Func.Resolve(searchPath)
+	var resolver FunctionReferenceResolver
+	if semaCtx != nil {
+		resolver = semaCtx.FunctionResolver
+	}
+	def, err := expr.Func.Resolve(searchPath, resolver)
 	if err != nil {
 		return nil, err
 	}
