@@ -274,6 +274,20 @@ func TestShowCreateTable(t *testing.T) {
 	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
 )`,
 		},
+		// Check trigram inverted indexes.
+		{
+			CreateStatement: `CREATE TABLE %s (
+        id INT PRIMARY KEY,
+				a TEXT,
+				INVERTED INDEX (a gin_trgm_ops)
+			)`,
+			Expect: `CREATE TABLE public.%[1]s (
+	id INT8 NOT NULL,
+	a STRING NULL,
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (id ASC),
+	INVERTED INDEX %[1]s_a_idx (a gin_trgm_ops ASC)
+)`,
+		},
 	}
 	sqltestutils.ShowCreateTableTest(t, "" /* extraQuerySetup */, testCases)
 }
