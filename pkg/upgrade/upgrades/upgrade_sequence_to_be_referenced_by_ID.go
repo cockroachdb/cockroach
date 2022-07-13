@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -176,7 +176,7 @@ func upgradeSequenceReferenceInTable(
 		if err != nil {
 			return err
 		}
-		seqIdentifiers, err := seqexpr.GetUsedSequences(parsedExpr, builtins.GetBuiltinProperties)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(parsedExpr, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func upgradeSequenceReferenceInTable(
 		}
 
 		// Perform the sequence replacement in the default expression.
-		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(parsedExpr, seqNameToID, builtins.GetBuiltinProperties)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(parsedExpr, seqNameToID, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return err
 		}
@@ -235,7 +235,7 @@ func upgradeSequenceReferenceInView(
 ) error {
 	var changedSeqDescs []*tabledesc.Mutable
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtins.GetBuiltinProperties)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return false, expr, err
 		}
@@ -244,7 +244,7 @@ func upgradeSequenceReferenceInView(
 			return false, expr, err
 		}
 
-		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtins.GetBuiltinProperties)
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return false, expr, err
 		}

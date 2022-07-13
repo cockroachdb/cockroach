@@ -99,11 +99,8 @@ func PGIOBuiltinPrefix(typ *types.T) string {
 // initPGBuiltins adds all of the postgres builtins to the builtins map.
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
 		v.props.Category = builtinconstants.CategoryCompatibility
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 
 	// Make non-array type i/o builtins.
@@ -118,19 +115,19 @@ func initPGBuiltins() {
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
 		for name, builtin := range makeTypeIOBuiltins(builtinPrefix, typ) {
-			builtins[name] = builtin
+			registerBuiltin(name, builtin)
 		}
 	}
 	// Make array type i/o builtins.
 	for name, builtin := range makeTypeIOBuiltins("array_", types.AnyArray) {
-		builtins[name] = builtin
+		registerBuiltin(name, builtin)
 	}
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
-		builtins[name] = builtin
+		registerBuiltin(name, builtin)
 	}
 	// Make enum type i/o builtins.
 	for name, builtin := range makeTypeIOBuiltins("enum_", types.AnyEnum) {
-		builtins[name] = builtin
+		registerBuiltin(name, builtin)
 	}
 
 	// Make crdb_internal.create_regfoo and to_regfoo builtins.
@@ -146,8 +143,8 @@ func initPGBuiltins() {
 		{"Translates a textual type name to its OID", types.RegType},
 	} {
 		typName := b.typ.SQLStandardName()
-		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(b.typ)
-		builtins["to_"+typName] = makeToRegOverload(b.typ, b.toRegOverloadHelpText)
+		registerBuiltin("crdb_internal.create_"+typName, makeCreateRegDef(b.typ))
+		registerBuiltin("to_"+typName, makeToRegOverload(b.typ, b.toRegOverloadHelpText))
 	}
 
 }
