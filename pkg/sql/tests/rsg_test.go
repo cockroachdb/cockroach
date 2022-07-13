@@ -300,7 +300,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
-				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
+				case "crdb_internal.reset_sql_stats",
+					"crdb_internal.check_consistency",
+					"crdb_internal.request_statement_bundle":
 					// Skipped due to long execution time.
 					continue
 				}
