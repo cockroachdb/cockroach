@@ -53,7 +53,8 @@ func (tc *Catalog) CreateType(c *tree.CreateType) {
 	tc.enumTypes[c.TypeName.Object()] = typ
 }
 
-// ResolveType part of the cat.Catalog interface.
+// ResolveType part of the cat.Catalog interface and the
+// tree.TypeReferenceResolver interface.
 func (tc *Catalog) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {

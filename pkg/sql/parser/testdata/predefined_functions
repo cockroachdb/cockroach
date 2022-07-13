@@ -211,7 +211,7 @@ parse
 SELECT EXTRACT(second from now())
 ----
 SELECT extract('second', now()) -- normalized!
-SELECT (extract(('second'), ((now)()))) -- fully parenthesized
+SELECT (extract(('second'), (now()))) -- fully parenthesized
 SELECT extract('_', now()) -- literals removed
 SELECT extract('second', now()) -- identifiers removed
 
@@ -219,7 +219,7 @@ parse
 SELECT EXTRACT('second' from now())
 ----
 SELECT extract('second', now()) -- normalized!
-SELECT (extract(('second'), ((now)()))) -- fully parenthesized
+SELECT (extract(('second'), (now()))) -- fully parenthesized
 SELECT extract('_', now()) -- literals removed
 SELECT extract('second', now()) -- identifiers removed
 

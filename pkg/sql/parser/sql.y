@@ -314,9 +314,6 @@ func (u *sqlSymUnion) unresolvedObjectName() *tree.UnresolvedObjectName {
 func (u *sqlSymUnion) unresolvedObjectNames() []*tree.UnresolvedObjectName {
     return u.val.([]*tree.UnresolvedObjectName)
 }
-func (u *sqlSymUnion) functionReference() tree.FunctionReference {
-    return u.val.(tree.FunctionReference)
-}
 func (u *sqlSymUnion) tablePatterns() tree.TablePatterns {
     return u.val.(tree.TablePatterns)
 }
