@@ -229,7 +229,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				partitionEvents: tc.events,
 			}
 			defer func() {
-				require.NoError(t, sip.forceClientForTests.Close())
+				require.NoError(t, sip.forceClientForTests.Close(ctx))
 			}()
 
 			// Create a frontier processor.

@@ -127,26 +127,21 @@ func ingestionPlanHook(
 		}
 
 		streamAddress := streamingccl.StreamAddress(from[0])
-		url, err := streamAddress.URL()
+		streamUrl, err := streamAddress.URL()
 		if err != nil {
 			return err
 		}
-		q := url.Query()
+		q := streamUrl.Query()
 
 		// Operator should specify a postgres scheme address with cert authentication.
 		if hasPostgresAuthentication := (q.Get("sslmode") == "verify-full") &&
-			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); (url.Scheme == "postgres") && !hasPostgresAuthentication {
+			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); (streamUrl.Scheme == "postgres") &&
+				!hasPostgresAuthentication {
 			return errors.Errorf(
 				"stream replication address should have cert authentication if in postgres scheme: %s", streamAddress)
 		}
 
-		// Convert this URL into sslinline mode.
-		*url, err = maybeAddInlineSecurityCredentials(*url)
-		if err != nil {
-			return err
-		}
-		streamAddress = streamingccl.StreamAddress(url.String())
-
+		streamAddress = streamingccl.StreamAddress(streamUrl.String())
 		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||
 			ingestionStmt.Targets.Tables.TablePatterns != nil || ingestionStmt.Targets.Schemas != nil {
 			return errors.Newf("unsupported target in ingestion query, "+
@@ -190,7 +185,7 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		if err := client.Close(); err != nil {
+		if err := client.Close(ctx); err != nil {
 			return err
 		}
 

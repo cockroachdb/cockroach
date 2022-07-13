@@ -126,7 +126,7 @@ func (m *mockStreamClient) Subscribe(
 }
 
 // Close implements the Client interface.
-func (m *mockStreamClient) Close() error {
+func (m *mockStreamClient) Close(ctx context.Context) error {
 	return nil
 }
 
@@ -327,7 +327,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
 			partitions, startTime, []jobspb.ResolvedSpan{} /* checkpoint */, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */, streamingTestingKnob)
 		defer func() {
-			require.NoError(t, sip.forceClientForTests.Close())
+			require.NoError(t, sip.forceClientForTests.Close(ctx))
 		}()
 		require.NoError(t, err)
 
@@ -597,7 +597,7 @@ func runStreamIngestionProcessor(
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}
-	if err := sip.forceClientForTests.Close(); err != nil {
+	if err := sip.forceClientForTests.Close(ctx); err != nil {
 		return nil, err
 	}
 	return out, err

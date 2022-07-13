@@ -99,7 +99,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	registerValidator := registerValidatorWithClient(streamValidator)
 	client := streamclient.GetRandomStreamClientSingletonForTesting()
 	defer func() {
-		require.NoError(t, client.Close())
+		require.NoError(t, client.Close(ctx))
 	}()
 	interceptEvents := []streamclient.InterceptFn{
 		completeJobAfterCheckpoints,

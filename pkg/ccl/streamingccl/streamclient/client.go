@@ -78,7 +78,7 @@ type Client interface {
 	) (Subscription, error)
 
 	// Close releases all the resources used by this client.
-	Close() error
+	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streaming.StreamID) error
