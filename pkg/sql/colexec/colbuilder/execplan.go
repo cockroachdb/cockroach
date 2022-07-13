@@ -436,6 +436,7 @@ func (r opResult) createDiskBackedSort(
 				args.DiskQueueCfg,
 				args.FDSemaphore,
 				diskAccount,
+				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
 			r.ToClose = append(r.ToClose, es.(colexecop.Closer))
 			return es

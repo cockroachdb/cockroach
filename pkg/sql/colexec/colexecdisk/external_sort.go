@@ -232,6 +232,7 @@ func NewExternalSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
+	testingVecFDsToAcquire int,
 ) colexecop.Operator {
 	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
 		// With the default limit of 256 file descriptors, this results in 16
@@ -242,6 +243,9 @@ func NewExternalSorter(
 	}
 	if maxNumberPartitions < colexecop.ExternalSorterMinPartitions {
 		maxNumberPartitions = colexecop.ExternalSorterMinPartitions
+	}
+	if testingVecFDsToAcquire > 0 {
+		maxNumberPartitions = testingVecFDsToAcquire
 	}
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
