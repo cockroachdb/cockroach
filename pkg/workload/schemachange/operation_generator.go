@@ -1220,6 +1220,7 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 }
 
 func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	const MaxRowsToConsume = 300000
 	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
 
 	sourceTableNames := make([]tree.TableExpr, numSourceTables)
@@ -1335,8 +1336,8 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(opStmt.expectedExecErrors)
 
-	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s`,
-		destTableName, selectStatement.String())
+	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
+		destTableName, selectStatement.String(), MaxRowsToConsume)
 	return opStmt, nil
 }
 
