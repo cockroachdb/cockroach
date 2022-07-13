@@ -43,8 +43,7 @@ func (di debugInfo) reachable(sName string) bool {
 
 func typeName(i interface{}) string {
 	s := fmt.Sprintf("%#v", i)
-	parts := strings.Split(s, ".")
-	return parts[len(parts)-1]
+	return strings.TrimPrefix(s, "sql.")
 }
 func trimState(s string) string { return strings.TrimPrefix(s, "state") }
 func trimEvent(s string) string { return strings.TrimPrefix(s, "event") }
