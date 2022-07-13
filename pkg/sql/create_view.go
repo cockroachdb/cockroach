@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -435,7 +435,7 @@ func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, viewQuery string,
 ) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtins.GetBuiltinProperties)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return false, expr, err
 		}
@@ -447,7 +447,7 @@ func replaceSeqNamesWithIDs(
 			}
 			seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 		}
-		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtins.GetBuiltinProperties)
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return false, expr, err
 		}

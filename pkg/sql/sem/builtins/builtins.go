@@ -148,17 +148,6 @@ type builtinDefinition struct {
 	overloads []tree.Overload
 }
 
-// GetBuiltinProperties provides low-level access to a built-in function's properties.
-// For a better, semantic-rich interface consider using tree.FunctionDefinition
-// instead, and resolve function names via ResolvableFunctionReference.Resolve().
-func GetBuiltinProperties(name string) (*tree.FunctionProperties, []tree.Overload) {
-	def, ok := builtins[name]
-	if !ok {
-		return nil, nil
-	}
-	return &def.props, def.overloads
-}
-
 // defProps is used below to define built-in functions with default properties.
 func defProps() tree.FunctionProperties { return tree.FunctionProperties{} }
 
@@ -192,10 +181,16 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 	return tenID, nil
 }
 
+func initRegularBuiltins() {
+	for k, v := range regularBuiltins {
+		registerBuiltin(k, v)
+	}
+}
+
 // builtins contains the built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
-var builtins = map[string]builtinDefinition{
+var regularBuiltins = map[string]builtinDefinition{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length":           lengthImpls(true /* includeBitOverload */),
 	"char_length":      lengthImpls(false /* includeBitOverload */),

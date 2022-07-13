@@ -40,9 +40,6 @@ import (
 func initAggregateBuiltins() {
 	// Add all aggregates to the builtins map after a few sanity checks.
 	for k, v := range aggregates {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
 
 		if v.props.Class != tree.AggregateClass {
 			panic(errors.AssertionFailedf("%s: aggregate functions should be marked with the tree.AggregateClass "+
@@ -59,7 +56,7 @@ func initAggregateBuiltins() {
 			}
 		}
 
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 }
 

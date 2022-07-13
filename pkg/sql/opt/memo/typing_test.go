@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils"
@@ -137,7 +138,7 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 			// These are treated as special cases.
 			continue
 		}
-		_, overloads := builtins.GetBuiltinProperties(name)
+		_, overloads := builtinsregistry.GetBuiltinProperties(name)
 		for i, overload := range overloads {
 			// Check for basic ambiguity where two different aggregate function
 			// overloads both allow equivalent operand types.

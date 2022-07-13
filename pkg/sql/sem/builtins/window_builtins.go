@@ -25,10 +25,6 @@ import (
 func initWindowBuiltins() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range windows {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
-
 		if v.props.Class != tree.WindowClass {
 			panic(errors.AssertionFailedf("%s: window functions should be marked with the tree.WindowClass "+
 				"function class, found %v", k, v))
@@ -39,7 +35,7 @@ func initWindowBuiltins() {
 					"found %v", k, w))
 			}
 		}
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 }
 

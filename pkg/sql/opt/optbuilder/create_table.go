@@ -13,7 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -81,7 +81,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		input = outScope.expr
 		if !ct.AsHasUserSpecifiedPrimaryKey() {
 			// Synthesize rowid column, and append to end of column list.
-			props, overloads := builtins.GetBuiltinProperties("unique_rowid")
+			props, overloads := builtinsregistry.GetBuiltinProperties("unique_rowid")
 			private := &memo.FunctionPrivate{
 				Name:       "unique_rowid",
 				Typ:        types.Int,

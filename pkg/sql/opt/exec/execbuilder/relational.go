@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
@@ -2404,7 +2404,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		if !b.disableTelemetry {
 			telemetry.Inc(sqltelemetry.WindowFunctionCounter(name))
 		}
-		props, _ := builtins.GetBuiltinProperties(name)
+		props, _ := builtinsregistry.GetBuiltinProperties(name)
 
 		args := make([]tree.TypedExpr, fn.ChildCount())
 		argIdxs[i] = make([]exec.NodeColumnOrdinal, fn.ChildCount())

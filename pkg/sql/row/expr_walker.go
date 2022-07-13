@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -629,7 +629,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		visitorSideEffect: func(annot *tree.Annotations, fn *tree.FuncExpr) error {
 			// Get sequence name so that we can update the annotation with the number
 			// of nextval calls to this sequence in a row.
-			seqIdentifier, err := seqexpr.GetSequenceFromFunc(fn, builtins.GetBuiltinProperties)
+			seqIdentifier, err := seqexpr.GetSequenceFromFunc(fn, builtinsregistry.GetBuiltinProperties)
 			if err != nil {
 				return err
 			}

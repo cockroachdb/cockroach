@@ -155,6 +155,10 @@ func NewFunctionDefinition(
 
 // FunDefs holds pre-allocated FunctionDefinition instances
 // for every builtin function. Initialized by builtins.init().
+//
+// Note that this is extremely similar to the set stored in builtinsregistry.
+// The hope is to remove this map at some point in the future as we delegate
+// function definition resolution to interfaces defined in the SemaContext.
 var FunDefs map[string]*FunctionDefinition
 
 // OidToBuiltinName contains a map from the hashed OID of all builtin functions
