@@ -482,7 +482,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
+	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr))
 	require.NoError(t, err)
 	id, err := streamClient.Create(ctx, roachpb.MakeTenantID(tenantID))
 	require.NoError(t, err)
