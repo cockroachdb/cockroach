@@ -600,14 +600,14 @@ func checkFunctionSupported(
 		}
 	}
 
-	switch fn := fnCall.Func.FunctionReference.(type) {
+	switch fn := fnCall.Func.(type) {
 	case *tree.UnresolvedName:
 		funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
 		if err != nil {
 			return nil, unsupportedFunctionErr()
 		}
 		fnCall = &tree.FuncExpr{
-			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
+			Func:  funDef,
 			Type:  fnCall.Type,
 			Exprs: fnCall.Exprs,
 		}

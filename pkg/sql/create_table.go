@@ -231,7 +231,7 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 	if funcExpr, ok := colDef.DefaultExpr.Expr.(*tree.FuncExpr); ok {
 		var name string
 
-		switch t := funcExpr.Func.FunctionReference.(type) {
+		switch t := funcExpr.Func.(type) {
 		case *tree.FunctionDefinition:
 			name = t.Name
 		case *tree.UnresolvedName:

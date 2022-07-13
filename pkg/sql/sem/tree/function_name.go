@@ -26,50 +26,23 @@ import (
 // UnresolvedName, and gets assigned a FunctionDefinition upon the
 // first call to its Resolve() method.
 
+// FunctionReferenceResolver is the interface that provides the ability to
+// resolve built-in or user-defined function definitions from unresolved names.
+type FunctionReferenceResolver interface {
+	ResolveFunction(name *UnresolvedName, path SearchPath) (*FunctionDefinition, error)
+}
+
 // ResolvableFunctionReference implements the editable reference cell
-// of a FuncExpr. The FunctionRerence is updated by the Normalize()
-// method.
-type ResolvableFunctionReference struct {
+// of a FuncExpr.
+type ResolvableFunctionReference interface {
 	FunctionReference
 }
 
-// Format implements the NodeFormatter interface.
-func (fn *ResolvableFunctionReference) Format(ctx *FmtCtx) {
-	ctx.FormatNode(fn.FunctionReference)
-}
-func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
+var _ ResolvableFunctionReference = &UnresolvedName{}
+var _ ResolvableFunctionReference = &FunctionDefinition{}
 
-// Resolve checks if the function name is already resolved and
-// resolves it as necessary.
-func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*FunctionDefinition, error) {
-	switch t := fn.FunctionReference.(type) {
-	case *FunctionDefinition:
-		return t, nil
-	case *UnresolvedName:
-		fd, err := t.ResolveFunction(searchPath)
-		if err != nil {
-			return nil, err
-		}
-		fn.FunctionReference = fd
-		return fd, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown function name type: %+v (%T)",
-			fn.FunctionReference, fn.FunctionReference,
-		)
-	}
-}
-
-// WrapFunction creates a new ResolvableFunctionReference
-// holding a pre-resolved function. Helper for grammar rules.
-func WrapFunction(n string) ResolvableFunctionReference {
-	fd, ok := FunDefs[n]
-	if !ok {
-		panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(n)))
-	}
-	return ResolvableFunctionReference{fd}
-}
-
-// FunctionReference is the common interface to UnresolvedName and QualifiedFunctionName.
+// FunctionReference is the common interface to UnresolvedName and
+// FunctionDefinition.
 type FunctionReference interface {
 	fmt.Stringer
 	NodeFormatter
@@ -78,3 +51,33 @@ type FunctionReference interface {
 
 func (*UnresolvedName) functionReference()     {}
 func (*FunctionDefinition) functionReference() {}
+
+// ResolveFunction converts a ResolvableFunctionReference into a
+// *FunctionDefinition.
+func ResolveFunction(
+	ref ResolvableFunctionReference, path SearchPath, resolver FunctionReferenceResolver,
+) (*FunctionDefinition, error) {
+	switch t := ref.(type) {
+	case *FunctionDefinition:
+		return t, nil
+	case *UnresolvedName:
+		if resolver == nil {
+			// Use the default resolution logic if there is no resolver.
+			return t.ResolveFunction(path)
+		}
+		return resolver.ResolveFunction(t, path)
+	default:
+		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
+	}
+}
+
+// WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved
+// function from a built-in function name. Helper for grammar rules and
+// execbuilder.
+func WrapFunction(n string) ResolvableFunctionReference {
+	fd, ok := FunDefs[n]
+	if !ok {
+		panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(n)))
+	}
+	return fd
+}

@@ -717,7 +717,7 @@ func (node *AliasedTableExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
-	d := p.Doc(&node.Func)
+	d := p.Doc(node.Func)
 
 	if len(node.Exprs) > 0 {
 		args := node.Exprs.doc(p)

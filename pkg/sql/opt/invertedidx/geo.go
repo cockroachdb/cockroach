@@ -785,7 +785,7 @@ func NewGeoDatumsToInvertedExpr(
 		switch t := expr.(type) {
 		case *tree.FuncExpr:
 			funcExprCount++
-			name := t.Func.FunctionReference.String()
+			name := t.Func.String()
 			relationship, ok := geoindex.RelationshipMap[name]
 			if !ok {
 				return nil, fmt.Errorf("%s cannot be index-accelerated", name)
@@ -914,7 +914,7 @@ func newGeoBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, in
 		return nil, nil,
 			errors.Errorf("pre-filtering only supported for single function expression")
 	}
-	name := f.Func.FunctionReference.String()
+	name := f.Func.String()
 	relationship, ok := geoindex.RelationshipMap[name]
 	if !ok {
 		return nil, nil, fmt.Errorf("%s cannot be index-accelerated", name)

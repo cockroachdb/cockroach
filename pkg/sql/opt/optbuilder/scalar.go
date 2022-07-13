@@ -524,7 +524,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
+	def, err := tree.ResolveFunction(f.Func, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver)
 	if err != nil {
 		panic(err)
 	}

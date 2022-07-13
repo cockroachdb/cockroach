@@ -20,11 +20,9 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 //
 func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
-		return tree.ResolvableFunctionReference{
-			FunctionReference: &tree.UnresolvedName{
-				NumParts: 1,
-				Parts:    tree.NameParts{funcName},
-			},
+		return &tree.UnresolvedName{
+			NumParts: 1,
+			Parts:    tree.NameParts{funcName},
 		}
 	}
 	columnItems := func() tree.Exprs {

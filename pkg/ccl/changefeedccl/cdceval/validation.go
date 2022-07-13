@@ -296,7 +296,7 @@ func (v *checkForPrevVisitor) VisitPost(e tree.Expr) tree.Expr {
 func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
 	if f, ok := e.(*tree.FuncExpr); ok {
 		var name string
-		switch fn := f.Func.FunctionReference.(type) {
+		switch fn := f.Func.(type) {
 		case *tree.UnresolvedName:
 			funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
 			if err != nil {

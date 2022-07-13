@@ -1014,7 +1014,8 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
-		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
+		semaCtx := s.builder.semaCtx
+		def, err := tree.ResolveFunction(t.Func, semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
 			panic(err)
 		}
@@ -1180,7 +1181,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 		// Override function definition.
 		def = orderedSetDef
-		fCopy.Func.FunctionReference = orderedSetDef
+		fCopy.Func = orderedSetDef
 
 		// Copy Exprs slice.
 		oldExprs := f.Exprs
@@ -1495,7 +1496,7 @@ func (s *scope) replaceCount(
 				e := &cpy
 				e.Exprs = tree.Exprs{tree.DBoolTrue}
 
-				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+				newDef, err := tree.ResolveFunction(e.Func, s.builder.semaCtx.SearchPath, nil /* resolver */)
 				if err != nil {
 					panic(err)
 				}
@@ -1509,10 +1510,8 @@ func (s *scope) replaceCount(
 			// TypeCheck()).  Replace the function with COUNT_ROWS (which doesn't
 			// take any arguments).
 			e := &tree.FuncExpr{
-				Func: tree.ResolvableFunctionReference{
-					FunctionReference: &tree.UnresolvedName{
-						NumParts: 1, Parts: tree.NameParts{"count_rows"},
-					},
+				Func: &tree.UnresolvedName{
+					NumParts: 1, Parts: tree.NameParts{"count_rows"},
 				},
 			}
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
@@ -1521,7 +1520,7 @@ func (s *scope) replaceCount(
 			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
-			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+			newDef, err := tree.ResolveFunction(e.Func, s.builder.semaCtx.SearchPath, nil /* resolver */)
 			if err != nil {
 				panic(err)
 			}

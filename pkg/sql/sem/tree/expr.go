@@ -1313,7 +1313,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// TODO(thomas): when function names are correctly typed as FunctionDefinition
 	// remove FmtMarkRedactionNode from being overridden.
 	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode|FmtBareIdentifiers, func() {
-		ctx.FormatNode(&node.Func)
+		ctx.FormatNode(node.Func)
 	})
 
 	ctx.WriteByte('(')
