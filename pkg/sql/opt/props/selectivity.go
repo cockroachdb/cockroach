@@ -10,7 +10,12 @@
 
 package props
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+
+	"github.com/cockroachdb/errors"
+)
 
 // epsilon is the minimum value Selectivity can hold, since it cannot be 0.
 const epsilon = 1e-10
@@ -100,6 +105,9 @@ func MaxSelectivity(a, b Selectivity) Selectivity {
 // selectivityInRange performs the range check, if the selectivity falls
 // outside of the range, this method will return the appropriate min/max value.
 func selectivityInRange(sel float64) float64 {
+	if math.IsNaN(sel) {
+		panic(errors.AssertionFailedf("selectivity is NaN"))
+	}
 	switch {
 	case sel < epsilon:
 		return epsilon
