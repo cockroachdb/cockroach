@@ -18,8 +18,13 @@ import {
   ExecutionStatus,
   ActiveTransactionFilters,
   SessionStatusType,
+  ContendedExecution,
+  ActiveExecutions,
+  ExecutionContentionDetails,
+  ActiveExecution,
 } from "./types";
 import { ActiveStatement, ActiveStatementFilters } from "./types";
+import { ClusterLocksResponse, ClusterLockState } from "src/api";
 
 export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";
@@ -68,57 +73,101 @@ export function filterActiveStatements(
   return filteredStatements;
 }
 
-export function getActiveStatementsFromSessions(
+/**
+ * getActiveExecutionsFromSessions returns active statements and
+ * transactions from the array of sessions provided.
+ * @param sessionsResponse sessions array from which to extract data
+ * @param lastUpdated the time the sessions data was last updated
+ * @returns
+ */
+export function getActiveExecutionsFromSessions(
   sessionsResponse: SessionsResponse,
-  lastUpdated: Moment | null,
-): ActiveStatement[] {
-  const activeQueries: ActiveStatement[] = [];
-  if (sessionsResponse.sessions == null) {
-    return activeQueries;
-  }
+  lastUpdated: Moment,
+): ActiveExecutions {
+  if (sessionsResponse.sessions == null)
+    return { statements: [], transactions: [] };
 
   const time = lastUpdated || moment.utc();
+  const activeStmtByTxnID: Record<string, ActiveStatement> = {};
+  const statements: ActiveStatement[] = [];
+  const transactions: ActiveTransaction[] = [];
 
-  sessionsResponse.sessions.forEach(session => {
-    if (session.status === SessionStatusType.CLOSED) return;
-    session.active_queries.forEach(query => {
-      activeQueries.push({
-        executionID: query.id,
-        transactionID: byteArrayToUuid(query.txn_id),
-        sessionID: byteArrayToUuid(session.id),
-        // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
-        query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
-        status:
-          query.phase === ActiveStatementPhase.EXECUTING
-            ? "Executing"
-            : "Preparing",
-        start: TimestampToMoment(query.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(query.start),
-          "seconds",
-        ),
+  sessionsResponse.sessions
+    .filter(
+      session =>
+        session.status !== SessionStatusType.CLOSED &&
+        (session.active_txn || session.active_queries?.length !== 0),
+    )
+    .forEach(session => {
+      const sessionID = byteArrayToUuid(session.id);
+
+      session.active_queries.forEach(query => {
+        const queryTxnID = byteArrayToUuid(query.txn_id);
+        const stmt: ActiveStatement = {
+          statementID: query.id,
+          transactionID: queryTxnID,
+          sessionID,
+          // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
+          query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
+          status:
+            query.phase === ActiveStatementPhase.EXECUTING
+              ? "Executing"
+              : "Preparing",
+          start: TimestampToMoment(query.start),
+          elapsedTimeMillis: time.diff(TimestampToMoment(query.start), "ms"),
+          application: session.application_name,
+          user: session.username,
+          clientAddress: session.client_address,
+        };
+
+        statements.push(stmt);
+        activeStmtByTxnID[queryTxnID] = stmt;
+      });
+
+      const activeTxn = session.active_txn;
+      if (!activeTxn) return;
+
+      transactions.push({
+        transactionID: byteArrayToUuid(activeTxn.id),
+        sessionID,
+        query: null,
+        statementID: null,
+        status: "Executing" as ExecutionStatus,
+        start: TimestampToMoment(activeTxn.start),
+        elapsedTimeMillis: time.diff(TimestampToMoment(activeTxn.start), "ms"),
         application: session.application_name,
-        user: session.username,
-        clientAddress: session.client_address,
+        retries: activeTxn.num_auto_retries,
+        statementCount: activeTxn.num_statements_executed,
       });
     });
+
+  // Find most recent statement for each txn.
+  transactions.map(txn => {
+    const mostRecentStmt = activeStmtByTxnID[txn.transactionID];
+    if (!mostRecentStmt) return txn;
+    txn.query = mostRecentStmt.query;
+    txn.statementID = mostRecentStmt.statementID;
+    return txn;
   });
 
-  return activeQueries;
+  return {
+    transactions,
+    statements,
+  };
 }
 
-export function getAppsFromActiveStatements(
-  statements: ActiveStatement[] | null,
+export function getAppsFromActiveExecutions(
+  executions: ActiveExecution[] | null,
   internalAppNamePrefix: string,
 ): string[] {
-  if (statements == null) return [];
+  if (executions == null) return [];
 
   const uniqueAppNames = new Set(
-    statements.map(s => {
-      if (s.application.startsWith(internalAppNamePrefix)) {
+    executions.map(e => {
+      if (e.application.startsWith(internalAppNamePrefix)) {
         return internalAppNamePrefix;
       }
-      return s.application ? s.application : unset;
+      return e.application ? e.application : unset;
     }),
   );
 
@@ -158,71 +207,158 @@ export function filterActiveTransactions(
 
   if (search) {
     filteredTxns = filteredTxns.filter(
-      txn => !search || txn.mostRecentStatement?.query.includes(search),
+      txn => !search || txn.query?.includes(search),
     );
   }
 
   return filteredTxns;
 }
 
-export function getAppsFromActiveTransactions(
-  txns: ActiveTransaction[],
-  internalAppNamePrefix: string,
-): string[] {
-  if (txns == null) return [];
+export function getContendedExecutionsForTxn(
+  transactions: ActiveTransaction[],
+  locks: ClusterLockState[],
+  txnExecID: string, // Txn we are returning contention info for.
+): {
+  waiters: ContendedExecution[];
+  blockers: ContendedExecution[];
+  requiredLock: ClusterLockState;
+} | null {
+  if (
+    !transactions ||
+    transactions.length === 0 ||
+    !locks ||
+    locks.length === 0
+  ) {
+    return null;
+  }
 
-  const uniqueAppNames = new Set(
-    txns.map(t => {
-      if (t.application.startsWith(internalAppNamePrefix)) {
-        return internalAppNamePrefix;
+  const txnByID: Record<string, ActiveTransaction> = {};
+  transactions.forEach(txn => (txnByID[txn.transactionID] = txn));
+
+  const waiters: ContendedExecution[] = [];
+  const blockers: ContendedExecution[] = [];
+  let requiredLock: ClusterLockState | null = null;
+
+  locks.forEach(lock => {
+    if (lock.lockHolderTxnID === txnExecID) {
+      lock.waiters
+        .filter(waiter => txnByID[waiter.id])
+        .forEach(waiter => {
+          const activeTxn = txnByID[waiter.id];
+          waiters.push({
+            ...activeTxn,
+            statementExecutionID: activeTxn.statementID,
+            transactionExecutionID: activeTxn.transactionID,
+            contentionTime: waiter.waitTime,
+          });
+        });
+      return;
+    }
+
+    const isWaiter = lock.waiters.map(waiter => waiter.id).includes(txnExecID);
+    if (!isWaiter) return;
+
+    // We just need to set this for information on the db, index, schema etc.
+    requiredLock = lock;
+
+    const lockHolder = txnByID[lock.lockHolderTxnID];
+
+    if (!lockHolder) return;
+
+    blockers.push({
+      ...lockHolder,
+      statementExecutionID: lockHolder.statementID,
+      transactionExecutionID: lockHolder.transactionID,
+      contentionTime: lock.holdTime,
+    });
+  });
+
+  // For VIEWACTIVITYREDACTED, we won't have info on relating txns
+  // for a txn waiting for a lock. We can still include information
+  // on the blocked schema, index, and db.
+  if (waiters.length === 0 && blockers.length === 0 && !requiredLock) {
+    return null;
+  }
+
+  return {
+    waiters,
+    blockers,
+    requiredLock,
+  };
+}
+
+export function getWaitTimeByTxnIDFromLocks(
+  locks: ClusterLockState[],
+): Record<string, moment.Duration> {
+  if (!locks || locks.length === 0) return {};
+
+  const waitTimeRecord: Record<string, moment.Duration> = {};
+
+  locks.forEach(lock =>
+    lock.waiters?.forEach(waiter => {
+      if (!waiter.waitTime) return;
+
+      if (!waitTimeRecord[waiter.id]) {
+        waitTimeRecord[waiter.id] = moment.duration(0);
       }
-      return t.application ? t.application : unset;
+
+      waitTimeRecord[waiter.id].add(waiter.waitTime);
     }),
   );
 
-  return Array.from(uniqueAppNames).sort();
+  return waitTimeRecord;
 }
 
-export function getActiveTransactionsFromSessions(
-  sessionsResponse: SessionsResponse,
-  lastUpdated: Moment,
-): ActiveTransaction[] {
-  if (sessionsResponse.sessions == null) return [];
+export const getActiveTransaction = (
+  transactions: ActiveTransaction[],
+  txnExecutionID: string,
+): ActiveTransaction | null => {
+  if (!transactions || transactions.length === 0) return null;
+  return transactions.find(txn => txn.transactionID === txnExecutionID);
+};
 
-  const time = lastUpdated || moment.utc();
+export const getActiveStatement = (
+  statements: ActiveStatement[],
+  stmtExecutionID: string,
+): ActiveStatement => {
+  if (!statements || statements.length === 0) return null;
+  return statements.find(stmt => stmt.statementID === stmtExecutionID);
+};
 
-  const activeStmts = getActiveStatementsFromSessions(sessionsResponse, time);
-  const activeStmtByTxnID: Record<string, ActiveStatement> = {};
+export const getContentionDetailsFromLocksAndTxns = (
+  clusterLocks: ClusterLocksResponse | null,
+  transactions: ActiveTransaction[],
+  currentTransaction: ActiveTransaction | null,
+): ExecutionContentionDetails | null => {
+  if (!currentTransaction || !clusterLocks?.length) {
+    return null;
+  }
 
-  activeStmts.forEach(stmt => {
-    activeStmtByTxnID[stmt.transactionID] = stmt;
-  });
+  const txnID = currentTransaction.transactionID;
+  const contention = getContendedExecutionsForTxn(
+    transactions,
+    clusterLocks,
+    txnID,
+  );
 
-  return sessionsResponse.sessions
-    .filter(
-      session =>
-        session.status !== SessionStatusType.CLOSED && session.active_txn,
-    )
-    .map(session => {
-      const activeTxn = session.active_txn;
+  if (!contention) return null;
 
-      const executionID = byteArrayToUuid(activeTxn.id);
-      // Find most recent statement.
-      const mostRecentStmt = activeStmtByTxnID[executionID];
+  let waitInsights = null;
+  if (contention.requiredLock != null) {
+    waitInsights = {
+      waitTime: contention.requiredLock.waiters?.find(
+        waiter => waiter.id === txnID,
+      )?.waitTime,
+      databaseName: contention.requiredLock.databaseName,
+      indexName: contention.requiredLock.indexName,
+      tableName: contention.requiredLock.tableName,
+      schemaName: contention.requiredLock.schemaName,
+    };
+  }
 
-      return {
-        executionID,
-        sessionID: byteArrayToUuid(session.id),
-        mostRecentStatement: mostRecentStmt,
-        status: "Executing" as ExecutionStatus,
-        start: TimestampToMoment(activeTxn.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(activeTxn.start),
-          "seconds",
-        ),
-        application: session.application_name,
-        retries: activeTxn.num_auto_retries,
-        statementCount: activeTxn.num_statements_executed,
-      };
-    });
-}
+  return {
+    waitInsights,
+    waitingExecutions: contention?.waiters,
+    blockingExecutions: contention?.blockers,
+  };
+};

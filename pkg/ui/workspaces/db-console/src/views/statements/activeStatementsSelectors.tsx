@@ -10,37 +10,13 @@
 
 import {
   ActiveStatementFilters,
-  ActiveStatement,
-  getActiveStatementsFromSessions,
   defaultFilters,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
+import { selectActiveStatements, selectAppName } from "src/selectors";
+import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
-import { createSelector } from "reselect";
-import { SessionsResponseMessage } from "src/util/api";
-
-const selectActiveStatements = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (
-    sessions?: CachedDataReducerState<SessionsResponseMessage>,
-  ): ActiveStatement[] => {
-    if (sessions?.data == null) return [];
-
-    return getActiveStatementsFromSessions(sessions.data, sessions.setAt);
-  },
-);
-
-export const selectAppName = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (state?: CachedDataReducerState<SessionsResponseMessage>) => {
-    if (!state.data) {
-      return null;
-    }
-    return state.data.internal_app_name_prefix;
-  },
-);
 
 const selectedColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -78,7 +54,7 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
 export const activeStatementsViewActions = {
   onColumnsSelect: (columns: string[]) =>
     selectedColumnsLocalSetting.set(columns.join(",")),
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange: (filters: ActiveStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),

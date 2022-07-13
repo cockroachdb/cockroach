@@ -8,13 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export {
-  getActiveExecutionsFromSessions,
-  getContendedExecutionsForTxn,
-  getWaitTimeByTxnIDFromLocks,
-  getActiveTransaction,
-  getActiveStatement,
-  getContentionDetailsFromLocksAndTxns,
-} from "./activeStatementUtils";
-
-export * from "./types";
+export * from "./activeExecutionsSelectors";

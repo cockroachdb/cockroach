@@ -9,8 +9,12 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { capitalize } from "lodash";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { ExecutionType, ActiveExecution } from "./types";
+import { ColumnDescriptor } from "src/sortedtable";
+import { Link } from "react-router-dom";
+import { DATE_FORMAT, Duration } from "src/util";
+import { StatusIcon } from "./statusIcon";
 
 export type ExecutionsColumn =
   | "applicationName"
@@ -21,9 +25,14 @@ export type ExecutionsColumn =
   | "retries"
   | "startTime"
   | "statementCount"
-  | "status";
+  | "status"
+  | "timeSpentBlocking"
+  | "timeSpentWaiting";
 
-export type ExecutionType = "statement" | "transaction";
+export function capitalize(str: string): string {
+  if (!str) return str;
+  return str[0].toUpperCase() + str.substring(1);
+}
 
 export const executionsColumnLabels: Record<
   ExecutionsColumn,
@@ -37,11 +46,21 @@ export const executionsColumnLabels: Record<
   executionID: (type: ExecutionType) => {
     return `${capitalize(type)} Execution ID`;
   },
-  mostRecentStatement: () => "Most Recent Statement",
+  mostRecentStatement: (type: ExecutionType) => {
+    switch (type) {
+      case "statement":
+        return "Statement Execution";
+      case "transaction":
+      default:
+        return "Most Recent Statement";
+    }
+  },
   retries: () => "Retries",
   startTime: () => "Start Time (UTC)",
   statementCount: () => "Statements",
   status: () => "Status",
+  timeSpentBlocking: () => "Time Spent Blocking",
+  timeSpentWaiting: () => "Time Spent Waiting",
 };
 
 export type ExecutionsTableColumnKeys = keyof typeof executionsColumnLabels;
@@ -87,7 +106,9 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
       {getLabel("executionID", execType)}
     </Tooltip>
   ),
-  mostRecentStatement: () => <span>{getLabel("mostRecentStatement")}</span>,
+  mostRecentStatement: (execType: ExecutionType) => (
+    <span>{getLabel("mostRecentStatement", execType)}</span>
+  ),
   status: execType => (
     <Tooltip
       placement="bottom"
@@ -108,4 +129,90 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
   statementCount: () => <span>{getLabel("statementCount")}</span>,
   elapsedTime: () => <span>{getLabel("elapsedTime")}</span>,
   retries: () => <span>{getLabel("retries")}</span>,
+  timeSpentBlocking: () => (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={
+        <p>Amount of time this transaction has been experiencing contention.</p>
+      }
+    >
+      {getLabel("timeSpentBlocking")}
+    </Tooltip>
+  ),
+  timeSpentWaiting: () => (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={<p>Amount of time this transaction has been blocked.</p>}
+    >
+      {getLabel("timeSpentWaiting")}
+    </Tooltip>
+  ),
 };
+
+function getID(item: ActiveExecution, execType: ExecutionType) {
+  return execType === "transaction" ? item.transactionID : item.statementID;
+}
+
+function makeActiveExecutionColumns(
+  execType: ExecutionType,
+): Partial<Record<ExecutionsColumn, ColumnDescriptor<ActiveExecution>>> {
+  return {
+    executionID: {
+      name: "executionID",
+      title: executionsTableTitles.executionID(execType),
+      cell: (item: ActiveExecution) => (
+        <Link
+          to={`/execution/${execType.toLowerCase()}/${getID(item, execType)}`}
+        >
+          {getID(item, execType)}
+        </Link>
+      ),
+      sort: (item: ActiveExecution) => item.statementID,
+      alwaysShow: true,
+    },
+    status: {
+      name: "status",
+      title: executionsTableTitles.status(execType),
+      cell: (item: ActiveExecution) => (
+        <span>
+          <StatusIcon status={item.status} />
+          {item.status}
+        </span>
+      ),
+      sort: (item: ActiveExecution) => item.status,
+    },
+    startTime: {
+      name: "startTime",
+      title: executionsTableTitles.startTime(execType),
+      cell: (item: ActiveExecution) => item.start.format(DATE_FORMAT),
+      sort: (item: ActiveExecution) => item.start.unix(),
+    },
+    elapsedTime: {
+      name: "elapsedTime",
+      title: executionsTableTitles.elapsedTime(execType),
+      cell: (item: ActiveExecution) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: ActiveExecution) => item.elapsedTimeMillis,
+    },
+    timeSpentWaiting: {
+      name: "timeSpentWaiting",
+      title: executionsTableTitles.timeSpentWaiting(execType),
+      cell: (item: ActiveExecution) =>
+        Duration(item.timeSpentWaiting?.asMilliseconds() ?? 0 * 1e6),
+      sort: (item: ActiveExecution) => item.timeSpentWaiting?.asMilliseconds(),
+    },
+    applicationName: {
+      name: "applicationName",
+      title: executionsTableTitles.applicationName(execType),
+      cell: (item: ActiveExecution) => item.application,
+      sort: (item: ActiveExecution) => item.application,
+    },
+  };
+}
+
+export const activeTransactionColumnsFromCommon =
+  makeActiveExecutionColumns("transaction");
+
+export const activeStatementColumnsFromCommon =
+  makeActiveExecutionColumns("statement");

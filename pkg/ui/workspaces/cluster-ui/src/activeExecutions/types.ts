@@ -17,23 +17,39 @@ export type SessionsResponse =
 export type ActiveStatementResponse =
   protos.cockroach.server.serverpb.ActiveQuery;
 export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
+export type ExecutionType = "statement" | "transaction";
 
 export const ActiveStatementPhase =
   protos.cockroach.server.serverpb.ActiveQuery.Phase;
 export const SessionStatusType =
   protos.cockroach.server.serverpb.Session.Status;
 
-export type ActiveStatement = {
-  executionID: string;
+export interface ActiveExecution {
+  statementID?: string; // This may not be present for a transaction.
   transactionID: string;
   sessionID: string;
-  query: string;
   status: ExecutionStatus;
   start: Moment;
-  elapsedTimeSeconds: number;
+  elapsedTimeMillis: number;
   application: string;
-  user: string;
-  clientAddress: string;
+  query?: string; // Possibly empty for a transaction.
+  timeSpentWaiting?: moment.Duration;
+}
+
+export type ActiveStatement = ActiveExecution &
+  Required<Pick<ActiveExecution, "statementID">> & {
+    user: string;
+    clientAddress: string;
+  };
+
+export type ActiveTransaction = ActiveExecution & {
+  statementCount: number;
+  retries: number;
+};
+
+export type ActiveExecutions = {
+  statements: ActiveStatement[];
+  transactions: ActiveTransaction[];
 };
 
 export type ActiveStatementFilters = Omit<
@@ -43,14 +59,26 @@ export type ActiveStatementFilters = Omit<
 
 export type ActiveTransactionFilters = ActiveStatementFilters;
 
-export type ActiveTransaction = {
-  executionID: string;
-  sessionID: string;
-  mostRecentStatement: ActiveStatement | null;
-  status: ExecutionStatus;
-  start: Moment;
-  elapsedTimeSeconds: number;
-  statementCount: number;
-  retries: number;
-  application: string;
+export type ContendedExecution = Pick<
+  ActiveExecution,
+  "status" | "start" | "query"
+> & {
+  transactionExecutionID: string;
+  statementExecutionID: string;
+  contentionTime: moment.Duration;
+};
+
+export type ExecutionContentionDetails = {
+  // Info on the lock the transaction is waiting for.
+  waitInsights?: {
+    databaseName?: string;
+    schemaName?: string;
+    tableName?: string;
+    indexName?: string;
+    waitTime: moment.Duration;
+  };
+  // Txns waiting for a lock held by this txn.
+  waitingExecutions: ContendedExecution[];
+  // Txns holding a lock required by this txn.
+  blockingExecutions: ContendedExecution[];
 };

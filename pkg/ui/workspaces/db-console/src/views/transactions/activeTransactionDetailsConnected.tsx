@@ -9,38 +9,20 @@
 // licenses/APL.txt.
 
 import {
-  ActiveTransaction,
-  getActiveTransactionsFromSessions,
   ActiveTransactionDetails,
   ActiveTransactionDetailsStateProps,
   ActiveTransactionDetailsDispatchProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { SessionsResponseMessage } from "src/util/api";
-import { executionIdAttr } from "src/util/constants";
-import { getMatchParamByName } from "src/util/query";
-import { refreshSessions } from "src/redux/apiReducers";
+import { refreshLiveWorkload } from "src/redux/apiReducers";
+import {
+  selectActiveTransaction,
+  selectContentionDetailsForTransaction,
+} from "src/selectors";
 
-const selectActiveTransaction = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (_state: AdminUIState, props: RouteComponentProps) => props,
-  (
-    state: CachedDataReducerState<SessionsResponseMessage>,
-    props: RouteComponentProps,
-  ): ActiveTransaction | null => {
-    const id = getMatchParamByName(props.match, executionIdAttr);
-    if (state?.data?.sessions == null) return null;
-    return getActiveTransactionsFromSessions(state.data, state.setAt).find(
-      txn => txn.executionID === id,
-    );
-  },
-);
-
-export default withRouter(
+const ActiveTransactionDetailsConnected = withRouter(
   connect<
     ActiveTransactionDetailsStateProps,
     ActiveTransactionDetailsDispatchProps,
@@ -48,8 +30,11 @@ export default withRouter(
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       transaction: selectActiveTransaction(state, props),
+      contentionDetails: selectContentionDetailsForTransaction(state, props),
       match: props.match,
     }),
-    { refreshSessions },
+    { refreshLiveWorkload },
   )(ActiveTransactionDetails),
 );
+
+export default ActiveTransactionDetailsConnected;

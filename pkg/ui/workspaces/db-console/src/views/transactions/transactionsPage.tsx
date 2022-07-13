@@ -36,7 +36,7 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
-  activeTransactionsPageActions,
+  activeTransactionsPageActionCreators,
   mapStateToActiveTransactionsPageProps,
 } from "./activeTransactionsSelectors";
 
@@ -156,7 +156,7 @@ const TransactionsPageConnected = withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        activeTransactionsPageActions,
+        activeTransactionsPageActionCreators,
         dispatch,
       ),
     }),

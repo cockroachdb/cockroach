@@ -35,6 +35,10 @@ import {
 } from "./indexStats/indexStats.reducer";
 import { JobsState, reducer as jobs } from "./jobs";
 import { JobState, reducer as job } from "./jobDetails";
+import {
+  ClusterLocksReqState,
+  reducer as clusterLocks,
+} from "./clusterLocks/clusterLocks.reducer";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -49,6 +53,7 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobState;
+  clusterLocks: ClusterLocksReqState;
 };
 
 export type AppState = {
@@ -68,6 +73,7 @@ export const reducers = combineReducers<AdminUiState>({
   indexStats,
   jobs,
   job,
+  clusterLocks,
 });
 
 export const rootActions = {
