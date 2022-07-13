@@ -143,6 +143,9 @@ const (
 	// explicitTxn means that the txn was explicitly started with a BEGIN
 	// statement.
 	explicitTxn
+	// upgradedExplicitTxn means that the txn started as implicit, but a BEGIN
+	// in the middle of it caused it to become explicit.
+	upgradedExplicitTxn
 )
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
