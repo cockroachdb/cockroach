@@ -8,10 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export {
-  getActiveStatementsFromSessions,
-  getActiveExecutionsFromSessions as getActiveExecutionsFromSessions,
-  getContendedExecutionsFromLocks as getContendedTransactionsFromLocks,
-} from "./activeStatementUtils";
-
-export * from "./types";
+export * from "./activeExecutionsSelectors";

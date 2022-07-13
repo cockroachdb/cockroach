@@ -44,7 +44,7 @@ export type ActiveTransactionsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveTransactionFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveTransactionsViewStateProps = {
@@ -63,7 +63,7 @@ const ACTIVE_TXN_SEARCH_PARAM = "q";
 
 export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   onColumnsSelect,
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
   selectedColumns,
@@ -83,13 +83,17 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshSessions();
-    const interval = setInterval(refreshSessions, 10 * 1000);
+    // Refresh  every 10 seconds.
+    // if (!transactions || transactions.length === 0) {
+    // Fire first refresh if there is no data.
+    refreshLiveWorkload();
+    // }
+
+    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshSessions]);
+  }, [refreshLiveWorkload]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),

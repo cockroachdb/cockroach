@@ -23,7 +23,7 @@ import { TimestampToMoment } from "../util/convert";
 import Long from "long";
 import {
   getAppsFromActiveTransactions,
-  getActiveTransactionsFromSessions,
+  getActiveExecutionsFromSessions,
   getAppsFromActiveStatements,
   getActiveStatementsFromSessions,
   filterActiveStatements,
@@ -49,13 +49,13 @@ const defaultActiveQuery = {
 };
 
 const defaultActiveStatement: ActiveStatement = {
-  executionID: defaultActiveQuery.id,
+  statementID: defaultActiveQuery.id,
   transactionID: "transactionID",
   sessionID: "sessionID",
   query: defaultActiveQuery.sql,
   status: "Executing",
   start: MOCK_START_TIME,
-  elapsedTimeSeconds: 60,
+  elapsedTimeMillis: 60,
   application: "test",
   user: "user",
   clientAddress: "clientAddress",
@@ -77,12 +77,13 @@ function makeActiveTxn(
   props: Partial<ActiveTransaction> = {},
 ): ActiveTransaction {
   return {
-    executionID: "txn",
+    transactionID: "txn",
     sessionID: "sessionID",
     start: MOCK_START_TIME,
-    elapsedTimeSeconds: 10,
+    elapsedTimeMillis: 10,
     application: "application",
-    mostRecentStatement: defaultActiveStatement,
+    query: defaultActiveStatement.query,
+    statementID: defaultActiveStatement.statementID,
     retries: 3,
     statementCount: 5,
     status: "Executing",
@@ -105,10 +106,10 @@ describe("test activeStatementUtils", () => {
   describe("filterActiveStatements", () => {
     it("should filter out statements that do not match filters", () => {
       const statements: ActiveStatement[] = [
-        makeActiveStatement({ executionID: "1", application: "app1" }),
-        makeActiveStatement({ executionID: "2", application: "app2" }),
-        makeActiveStatement({ executionID: "3", application: "app3" }),
-        makeActiveStatement({ executionID: "4", application: "app1" }),
+        makeActiveStatement({ statementID: "1", application: "app1" }),
+        makeActiveStatement({ statementID: "2", application: "app2" }),
+        makeActiveStatement({ statementID: "3", application: "app3" }),
+        makeActiveStatement({ statementID: "4", application: "app1" }),
       ];
 
       const filters: ActiveStatementFilters = { app: "app1" };
@@ -118,29 +119,29 @@ describe("test activeStatementUtils", () => {
         INTERNAL_APP_NAME_PREFIX,
       );
       expect(filtered.length).toBe(2);
-      expect(filtered[0].executionID).toBe("1");
-      expect(filtered[1].executionID).toBe("4");
+      expect(filtered[0].statementID).toBe("1");
+      expect(filtered[1].statementID).toBe("4");
     });
 
     it("should filter out statements that do not match search query", () => {
       const statements: ActiveStatement[] = [
         makeActiveStatement({
-          executionID: "1",
+          statementID: "1",
           application: "app1",
           query: "SELECT 1",
         }),
         makeActiveStatement({
-          executionID: "2",
+          statementID: "2",
           application: "app1",
           query: "SELECT 1",
         }),
         makeActiveStatement({
-          executionID: "3",
+          statementID: "3",
           application: "app1",
           query: "SELECT 2",
         }),
         makeActiveStatement({
-          executionID: "4",
+          statementID: "4",
           application: "app1",
           query: "SELECT 3",
         }),
@@ -156,8 +157,8 @@ describe("test activeStatementUtils", () => {
       );
 
       expect(filtered.length).toBe(2);
-      expect(filtered[0].executionID).toBe("1");
-      expect(filtered[1].executionID).toBe("2");
+      expect(filtered[0].statementID).toBe("1");
+      expect(filtered[1].statementID).toBe("2");
     });
 
     it("should return all statements on empty filters and search", () => {
@@ -234,14 +235,32 @@ describe("test activeStatementUtils", () => {
       }
       // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
       expect(stmt.status).toBe("Executing");
-      expect(stmt.elapsedTimeSeconds).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "seconds"),
+      expect(stmt.elapsedTimeMillis).toBe(
+        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
       );
       expect(stmt.start.unix()).toBe(
         TimestampToMoment(defaultActiveQuery.start).unix(),
       );
       // expect(stmt.sessionID).toBe(defaultActiveStatement.sessionID);
       expect(stmt.query).toBe(defaultActiveStatement.query);
+    });
+
+    describe("getActiveExecutionsFromSessions", () => {
+      const activeStatements = getActiveExecutionsFromSessions(
+        sessionsResponse,
+        LAST_UPDATED,
+      ).statements;
+
+      expect(activeStatements.length).toEqual(statements.length);
+      for (let i = 0; i < statements.length; i++) {
+        const a = activeStatements[i];
+        const b = statements[i];
+        expect(a.statementID).toEqual(b.statementID);
+        expect(a.sessionID).toEqual(b.sessionID);
+        expect(a.application).toEqual(b.application);
+        expect(a.query).toEqual(b.query);
+        expect(a.transactionID).toEqual(b.transactionID);
+      }
     });
   });
 
@@ -259,7 +278,7 @@ describe("test activeStatementUtils", () => {
     expect(apps).toEqual(["app1", "app2", "app3", "app4"]);
   });
 
-  describe("getActiveTransactionsFromSessions", () => {
+  describe("getActiveExecutionsFromSessions transactions result", () => {
     const txns = [
       {
         id: new Uint8Array(),
@@ -312,10 +331,10 @@ describe("test activeStatementUtils", () => {
       toJSON: () => ({}),
     };
 
-    const activeTransactions = getActiveTransactionsFromSessions(
+    const activeTransactions = getActiveExecutionsFromSessions(
       sessionsResponse,
       LAST_UPDATED,
-    );
+    ).transactions;
 
     // Should filter out the txn from closed  session.
     expect(activeTransactions.length).toBe(2);
@@ -326,11 +345,11 @@ describe("test activeStatementUtils", () => {
       expect(txn.application).toBe(
         sessionsResponse.sessions[i].application_name,
       );
-      expect(txn.elapsedTimeSeconds).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "seconds"),
+      expect(txn.elapsedTimeMillis).toBe(
+        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
       );
       expect(txn.status).toBe("Executing");
-      expect(txn.mostRecentStatement).toBeTruthy();
+      expect(txn.query).toBeTruthy();
       expect(txn.start.unix()).toBe(
         TimestampToMoment(defaultActiveQuery.start).unix(),
       );
@@ -340,10 +359,10 @@ describe("test activeStatementUtils", () => {
   describe("filterActiveTransactions", () => {
     it("should filter out txns that do not match filters", () => {
       const txns: ActiveTransaction[] = [
-        makeActiveTxn({ executionID: "1", application: "app1" }),
-        makeActiveTxn({ executionID: "2", application: "app2" }),
-        makeActiveTxn({ executionID: "3", application: "app3" }),
-        makeActiveTxn({ executionID: "4", application: "app1" }),
+        makeActiveTxn({ transactionID: "1", application: "app1" }),
+        makeActiveTxn({ transactionID: "2", application: "app2" }),
+        makeActiveTxn({ transactionID: "3", application: "app3" }),
+        makeActiveTxn({ transactionID: "4", application: "app1" }),
       ];
 
       const filters: ActiveTransactionFilters = { app: "app1" };
@@ -354,29 +373,29 @@ describe("test activeStatementUtils", () => {
       );
 
       expect(filtered.length).toBe(2);
-      expect(filtered[0].executionID).toBe("1");
-      expect(filtered[1].executionID).toBe("4");
+      expect(filtered[0].transactionID).toBe("1");
+      expect(filtered[1].transactionID).toBe("4");
     });
 
     it("should filter out txns that do not match search query", () => {
       const txns: ActiveTransaction[] = [
         makeActiveTxn({
-          executionID: "1",
+          transactionID: "1",
           application: "app1",
-          mostRecentStatement: makeActiveStatement({ query: "SELECT 1" }),
+          query: "SELECT 1",
         }),
         makeActiveTxn({
-          executionID: "2",
+          transactionID: "2",
           application: "app1",
-          mostRecentStatement: makeActiveStatement({ query: "SELECT 1" }),
+          query: "SELECT 1",
         }),
         makeActiveTxn({
-          executionID: "3",
+          transactionID: "3",
           application: "app1",
-          mostRecentStatement: makeActiveStatement({ query: "SELECT 2" }),
+          query: "SELECT 1",
         }),
         makeActiveTxn({
-          executionID: "4",
+          transactionID: "4",
           application: "app1",
         }),
       ];
@@ -391,8 +410,8 @@ describe("test activeStatementUtils", () => {
       );
 
       expect(filtered.length).toBe(2);
-      expect(filtered[0].executionID).toBe("1");
-      expect(filtered[1].executionID).toBe("2");
+      expect(filtered[0].transactionID).toBe("1");
+      expect(filtered[1].transactionID).toBe("2");
     });
 
     it("should return all statements on empty filters and search", () => {

@@ -15,17 +15,16 @@ import {
   ColumnDescriptor,
 } from "../../sortedtable";
 import { SortSetting } from "../../sortedtable";
-import { ActiveStatement } from "../types";
+import { ActiveStatement, ExecutionType } from "../types";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import {
   getLabel,
   executionsTableTitles,
-  ExecutionType,
   ExecutionsColumn,
 } from "../execTableCommon";
-import { DATE_FORMAT } from "../../util";
+import { DATE_FORMAT, Duration } from "src/util";
 
 interface ActiveStatementsTable {
   data: ActiveStatement[];
@@ -43,18 +42,18 @@ export function makeActiveStatementsColumns(): ColumnDescriptor<ActiveStatement>
       name: "executionID",
       title: executionsTableTitles.executionID(execType),
       cell: (item: ActiveStatement) => (
-        <Link to={`/execution/statement/${item.executionID}`}>
-          {item.executionID}
+        <Link to={`/execution/statement/${item.statementID}`}>
+          {item.statementID}
         </Link>
       ),
-      sort: (item: ActiveStatement) => item.executionID,
+      sort: (item: ActiveStatement) => item.statementID,
       alwaysShow: true,
     },
     {
       name: "execution",
       title: executionsTableTitles.execution(execType),
       cell: (item: ActiveStatement) => (
-        <Link to={`/execution/statement/${item.executionID}`}>
+        <Link to={`/execution/statement/${item.statementID}`}>
           {item.query}
         </Link>
       ),
@@ -80,8 +79,15 @@ export function makeActiveStatementsColumns(): ColumnDescriptor<ActiveStatement>
     {
       name: "elapsedTime",
       title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveStatement) => `${item.elapsedTimeSeconds} s`,
-      sort: (item: ActiveStatement) => item.elapsedTimeSeconds,
+      cell: (item: ActiveStatement) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: ActiveStatement) => item.elapsedTimeMillis,
+    },
+    {
+      name: "timeSpentWaiting",
+      title: executionsTableTitles.timeSpentWaiting(execType),
+      cell: (item: ActiveStatement) =>
+        Duration(item.timeSpentWaiting?.asMilliseconds() ?? 0 * 1e6),
+      sort: (item: ActiveStatement) => item.timeSpentWaiting?.asMilliseconds(),
     },
     {
       name: "applicationName",

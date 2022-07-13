@@ -18,8 +18,11 @@ import {
   ExecutionStatus,
   ActiveTransactionFilters,
   SessionStatusType,
+  ContendedExecution,
+  ActiveExecutions,
 } from "./types";
 import { ActiveStatement, ActiveStatementFilters } from "./types";
+import { ClusterLockState } from "src/api";
 
 export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";
@@ -83,7 +86,7 @@ export function getActiveStatementsFromSessions(
     if (session.status === SessionStatusType.CLOSED) return;
     session.active_queries.forEach(query => {
       activeQueries.push({
-        executionID: query.id,
+        statementID: query.id,
         transactionID: byteArrayToUuid(query.txn_id),
         sessionID: byteArrayToUuid(session.id),
         // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
@@ -93,10 +96,7 @@ export function getActiveStatementsFromSessions(
             ? "Executing"
             : "Preparing",
         start: TimestampToMoment(query.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(query.start),
-          "seconds",
-        ),
+        elapsedTimeMillis: time.diff(TimestampToMoment(query.start), "ms"),
         application: session.application_name,
         user: session.username,
         clientAddress: session.client_address,
@@ -158,7 +158,7 @@ export function filterActiveTransactions(
 
   if (search) {
     filteredTxns = filteredTxns.filter(
-      txn => !search || txn.mostRecentStatement?.query.includes(search),
+      txn => !search || txn.query?.includes(search),
     );
   }
 
@@ -183,22 +183,30 @@ export function getAppsFromActiveTransactions(
   return Array.from(uniqueAppNames).sort();
 }
 
-export function getActiveTransactionsFromSessions(
+/**
+ * getActiveExecutionsFromSessions returns active statements and
+ * transactions from the array of sessions provided.
+ * @param sessionsResponse sessions array from which to extract data
+ * @param lastUpdated the time the sessions data was last updated
+ * @returns
+ */
+export function getActiveExecutionsFromSessions(
   sessionsResponse: SessionsResponse,
   lastUpdated: Moment,
-): ActiveTransaction[] {
-  if (sessionsResponse.sessions == null) return [];
+): ActiveExecutions {
+  if (sessionsResponse.sessions == null)
+    return { statements: [], transactions: [] };
 
   const time = lastUpdated || moment.utc();
 
-  const activeStmts = getActiveStatementsFromSessions(sessionsResponse, time);
+  const statements = getActiveStatementsFromSessions(sessionsResponse, time);
   const activeStmtByTxnID: Record<string, ActiveStatement> = {};
 
-  activeStmts.forEach(stmt => {
+  statements.forEach(stmt => {
     activeStmtByTxnID[stmt.transactionID] = stmt;
   });
 
-  return sessionsResponse.sessions
+  const transactions = sessionsResponse.sessions
     .filter(
       session =>
         session.status !== SessionStatusType.CLOSED && session.active_txn,
@@ -211,18 +219,109 @@ export function getActiveTransactionsFromSessions(
       const mostRecentStmt = activeStmtByTxnID[executionID];
 
       return {
-        executionID,
+        transactionID: executionID,
         sessionID: byteArrayToUuid(session.id),
-        mostRecentStatement: mostRecentStmt,
+        query: mostRecentStmt?.query,
+        statementID: mostRecentStmt?.statementID,
         status: "Executing" as ExecutionStatus,
         start: TimestampToMoment(activeTxn.start),
-        elapsedTimeSeconds: time.diff(
-          TimestampToMoment(activeTxn.start),
-          "seconds",
-        ),
+        elapsedTimeMillis: time.diff(TimestampToMoment(activeTxn.start), "ms"),
         application: session.application_name,
         retries: activeTxn.num_auto_retries,
         statementCount: activeTxn.num_statements_executed,
       };
     });
+  return {
+    transactions,
+    statements,
+  };
+}
+
+export function getContendedExecutionsFromLocks(
+  transactions: ActiveTransaction[],
+  locks: ClusterLockState[],
+  txnExecID: string, // Txn we are returning contention info for.
+): {
+  waiters: ContendedExecution[];
+  blockers: ContendedExecution[];
+  requiredLock: ClusterLockState;
+} | null {
+  if (
+    !transactions ||
+    transactions.length === 0 ||
+    !locks ||
+    locks.length === 0
+  ) {
+    return null;
+  }
+
+  const txnByID: Record<string, ActiveTransaction> = {};
+  transactions.forEach(txn => (txnByID[txn.transactionID] = txn));
+
+  const waiters: ContendedExecution[] = [];
+  const blockers: ContendedExecution[] = [];
+  let requiredLock: ClusterLockState | null = null;
+
+  locks.forEach(lock => {
+    if (lock.lockHolderTxnID === txnExecID) {
+      lock.waiters
+        .filter(waiter => txnByID[waiter.id])
+        .forEach(waiter => {
+          const activeTxn = txnByID[waiter.id];
+          waiters.push({
+            ...activeTxn,
+            statementExecutionID: activeTxn.statementID,
+            transactionExecutionID: activeTxn.transactionID,
+            contentionTime: waiter.waitTime,
+          });
+        });
+    }
+
+    if (lock.waiters.map(waiter => waiter.id).includes(txnExecID)) {
+      const activeTxn = txnByID[lock.lockHolderTxnID];
+      if (!activeTxn) return;
+
+      // We just need to set this for information on the db, index, schema etc.
+      requiredLock = lock;
+
+      blockers.push({
+        ...activeTxn,
+        statementExecutionID: activeTxn.statementID,
+        transactionExecutionID: activeTxn.transactionID,
+        contentionTime: lock.holdTime,
+      });
+    }
+  });
+
+  if (waiters.length === 0 && blockers.length === 0) {
+    return null;
+  }
+
+  return {
+    waiters,
+    blockers,
+    requiredLock,
+  };
+}
+
+export function getWaitTimeByTxnIDFromLocks(
+  locks: ClusterLockState[],
+): Record<string, moment.Duration> {
+  if (!locks || locks.length === 0) return {};
+
+  const waitTimeRecord: Record<string, moment.Duration> = {};
+
+  locks.forEach(lock =>
+    lock.waiters?.forEach(waiter => {
+      if (!waiter.waitTime) return;
+
+      if (!waitTimeRecord[waiter.id]) {
+        waitTimeRecord[waiter.id] = moment.duration(0);
+      }
+
+      waitTimeRecord[waiter.id].add(waiter.waitTime);
+    }),
+  );
+
+  return waitTimeRecord;
 }

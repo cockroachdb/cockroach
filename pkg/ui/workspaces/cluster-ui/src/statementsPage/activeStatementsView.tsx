@@ -44,7 +44,7 @@ export type ActiveStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveStatementsViewStateProps = {
@@ -61,7 +61,7 @@ export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
 
 export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   onColumnsSelect,
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
   selectedColumns,
@@ -82,12 +82,15 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
 
   useEffect(() => {
     // Refresh every 10 seconds.
-    refreshSessions();
-    const interval = setInterval(refreshSessions, 10 * 1000);
+    if (!statements || statements.length === 0) {
+      // Fire first refresh if there is no data.
+      refreshLiveWorkload();
+    }
+    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshSessions]);
+  }, [refreshLiveWorkload]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),

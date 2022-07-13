@@ -15,17 +15,16 @@ import {
   ColumnDescriptor,
 } from "../../sortedtable";
 import { SortSetting } from "../../sortedtable";
-import { ActiveTransaction } from "../types";
+import { ActiveTransaction, ExecutionType } from "../types";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import {
   getLabel,
   executionsTableTitles,
-  ExecutionType,
   ExecutionsColumn,
 } from "../execTableCommon";
-import { DATE_FORMAT } from "../../util";
+import { DATE_FORMAT, Duration } from "../../util";
 
 interface ActiveTransactionsTable {
   data: ActiveTransaction[];
@@ -43,24 +42,22 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
       name: "executionID",
       title: executionsTableTitles.executionID(execType),
       cell: (item: ActiveTransaction) => (
-        <Link to={`/execution/transaction/${item.executionID}`}>
-          {item.executionID}
+        <Link to={`/execution/transaction/${item.transactionID}`}>
+          {item.transactionID}
         </Link>
       ),
-      sort: (item: ActiveTransaction) => item.executionID,
+      sort: (item: ActiveTransaction) => item.transactionID,
       alwaysShow: true,
     },
     {
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
       cell: (item: ActiveTransaction) => (
-        <Link
-          to={`/execution/statement/${item.mostRecentStatement?.executionID}`}
-        >
-          {item.mostRecentStatement?.query}
+        <Link to={`/execution/statement/${item.statementID}`}>
+          {item.query}
         </Link>
       ),
-      sort: (item: ActiveTransaction) => item.mostRecentStatement?.query,
+      sort: (item: ActiveTransaction) => item.query,
     },
     {
       name: "status",
@@ -82,8 +79,16 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
     {
       name: "elapsedTime",
       title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveTransaction) => `${item.elapsedTimeSeconds} s`,
-      sort: (item: ActiveTransaction) => item.elapsedTimeSeconds,
+      cell: (item: ActiveTransaction) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: ActiveTransaction) => item.elapsedTimeMillis,
+    },
+    {
+      name: "timeSpentWaiting",
+      title: executionsTableTitles.timeSpentWaiting(execType),
+      cell: (item: ActiveTransaction) =>
+        Duration(item.timeSpentWaiting?.asMilliseconds() ?? 0 * 1e6),
+      sort: (item: ActiveTransaction) =>
+        item.timeSpentWaiting?.asMilliseconds(),
     },
     {
       name: "statementCount",

@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,10 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export {
-  getActiveStatementsFromSessions,
-  getActiveExecutionsFromSessions as getActiveExecutionsFromSessions,
-  getContendedExecutionsFromLocks as getContendedTransactionsFromLocks,
-} from "./activeStatementUtils";
-
-export * from "./types";
+export * from "./activeExecutionsCommon.selectors";

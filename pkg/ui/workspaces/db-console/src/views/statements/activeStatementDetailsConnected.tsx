@@ -9,36 +9,19 @@
 // licenses/APL.txt.
 
 import {
-  ActiveStatement,
-  getActiveStatementsFromSessions,
   ActiveStatementDetails,
   ActiveStatementDetailsStateProps,
   ActiveStatementDetailsDispatchProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { SessionsResponseMessage } from "src/util/api";
-import { executionIdAttr } from "src/util/constants";
-import { getMatchParamByName } from "src/util/query";
-import { refreshSessions } from "src/redux/apiReducers";
-
-export const selectActiveStatement = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (_state: AdminUIState, props: RouteComponentProps) => props,
-  (
-    state: CachedDataReducerState<SessionsResponseMessage>,
-    props: RouteComponentProps,
-  ): ActiveStatement | null => {
-    const id = getMatchParamByName(props.match, executionIdAttr);
-    if (state?.data?.sessions == null) return null;
-    return getActiveStatementsFromSessions(state.data, state.setAt).find(
-      query => query.executionID === id,
-    );
-  },
-);
+import { refreshLiveWorkload } from "src/redux/apiReducers";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  selectActiveStatement,
+  selectContentionDetailsForStatement,
+} from "src/selectors";
 
 export default withRouter(
   connect<
@@ -47,9 +30,11 @@ export default withRouter(
     RouteComponentProps
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      statement: selectActiveStatement(state, props),
       match: props.match,
+      statement: selectActiveStatement(state, props),
+      contentionDetails: selectContentionDetailsForStatement(state, props),
+      hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     }),
-    { refreshSessions },
+    { refreshLiveWorkload },
   )(ActiveStatementDetails),
 );
