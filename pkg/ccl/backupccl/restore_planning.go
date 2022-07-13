@@ -192,11 +192,7 @@ func allocateDescriptorRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	var maxDescIDInBackup int64
 	for _, table := range tablesByID {
-		if int64(table.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(table.ID)
-		}
 		// Check that foreign key targets exist.
 		for i := range table.OutboundFKs {
 			fk := &table.OutboundFKs[i]
@@ -260,6 +256,59 @@ func allocateDescriptorRewrites(
 						restoreOptSkipMissingSequenceOwners,
 					)
 				}
+			}
+		}
+	}
+
+	// Collect the IDs from all system tables.
+	//
+	// We need the system table IDs to make sure that none of the descriptors in
+	// the backup conflict with system tables.
+	//
+	// TODO(ssd): We could do this in the big transaction below. However, even
+	// there I think there may be a problem if there is a concurrent migration
+	// that is adding a system table between when we look up the the system table
+	// IDs and when we actually create all the rewrites at the end of this
+	// function.
+	systemTableIDs := make(map[descpb.ID]struct{})
+	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		systemTableDescs, err := col.GetAllTableDescriptorsInDatabase(ctx, txn, systemschema.SystemDB.GetID())
+		if err != nil {
+			return err
+		}
+		for _, desc := range systemTableDescs {
+			systemTableIDs[desc.GetID()] = struct{}{}
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.Wrapf(err, "failed to collect system table descriptor IDs")
+	}
+
+	// Table IDs have strict ordering constraints because of how we later
+	// write SSTs.
+	//
+	// Because of this ordering constraint, if we find a conflict between a
+	// descriptor ID in the backup and an existing system table descriptor ID, we
+	// need to then rewrite all descriptors after that conflict. We calculate this
+	// here so that we can avoid using descriptors that are just going to be
+	// rewritten when calculating the maximum ID.
+	var lowestConflictingTableID descpb.ID
+	for tableID, table := range tablesByID {
+		if table.ParentID != systemschema.SystemDB.GetID() {
+			if _, conflicts := systemTableIDs[tableID]; conflicts {
+				if lowestConflictingTableID == 0 || lowestConflictingTableID > tableID {
+					lowestConflictingTableID = tableID
+				}
+			}
+		}
+	}
+
+	var maxDescIDInBackup int64
+	// Include table descriptors that won't be rewritten when calculating the max ID.
+	for _, table := range tablesByID {
+		if int64(table.ID) > maxDescIDInBackup {
+			if lowestConflictingTableID == 0 || lowestConflictingTableID > table.ID {
+				maxDescIDInBackup = int64(table.ID)
 			}
 		}
 	}
@@ -669,15 +718,17 @@ func allocateDescriptorRewrites(
 	// during restore we've "leaked" the IDs, in that the generator will have
 	// been incremented.
 	//
-	// NB: The ordering of the new IDs must be the same as the old ones,
-	// otherwise the keys may sort differently after they're rekeyed. We could
-	// handle this by chunking the AddSSTable calls more finely in Import, but
-	// it would be a big performance hit.
-
+	// NB: The ordering of the new IDs must be the same as the old ones, otherwise
+	// the keys may sort differently after they're rekeyed. The sort ordering is
+	// important because SSTWriter expects that keys are added in order. We could
+	// handle this by chunking the AddSSTable calls more finely in Import, but it
+	// would be a big performance hit.
 	for _, db := range restoreDBs {
 		var newID descpb.ID
 		var err error
-		if descriptorCoverage == tree.AllDescriptors {
+		// NB: Database IDs aren't encoded in keys that we add to SSTs, so we don't
+		// care about the ordering here.
+		if _, conflicts := systemTableIDs[db.GetID()]; descriptorCoverage == tree.AllDescriptors && !conflicts {
 			newID = db.GetID()
 		} else {
 			newID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
@@ -699,15 +750,28 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	// descriptorsToRemap usually contains all tables that are being restored. In a
-	// full cluster restore this should only include the system tables that need
-	// to be remapped to the temporary table. All other tables in a full cluster
-	// backup should have the same ID as they do in the backup.
+	// descriptorsToRemap usually contains all tables that are
+	// being restored.
+	//
+	// In a full cluster restore this should contains
+	//
+	// - the system tables that need to be remapped to the
+	//   temporary table in the temporary system database; and,
+	//
+	// - any user tables with an ID that conflicts IDs with an existing system
+	//   table or has an ID greater than a table that conflicts with an existing
+	//   system table.
+	//
+	// All other tables in a full cluster backup should have the
+	// same ID as they do in the backup.
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
 			if table.ParentID == systemschema.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
+				descriptorsToRemap = append(descriptorsToRemap, table)
+			} else if lowestConflictingTableID != 0 && table.ID >= lowestConflictingTableID {
+				// This is a user table that has the same ID as an existing system table.
 				descriptorsToRemap = append(descriptorsToRemap, table)
 			} else {
 				// This table does not need to be remapped.
