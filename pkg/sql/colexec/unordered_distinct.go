@@ -33,7 +33,7 @@ func NewUnorderedDistinct(
 ) colexecop.ResettableOperator {
 	return &UnorderedDistinct{
 		OneInputNode:         colexecop.NewOneInputNode(input),
-		allocator:            allocator,
+		hashTableAllocator:   allocator,
 		distinctCols:         distinctCols,
 		typs:                 typs,
 		nullsAreDistinct:     nullsAreDistinct,
@@ -50,10 +50,10 @@ type UnorderedDistinct struct {
 	colexecop.OneInputNode
 	colexecbase.UpsertDistinctHelper
 
-	allocator        *colmem.Allocator
-	distinctCols     []uint32
-	typs             []*types.T
-	nullsAreDistinct bool
+	hashTableAllocator *colmem.Allocator
+	distinctCols       []uint32
+	typs               []*types.T
+	nullsAreDistinct   bool
 
 	Ht *colexechash.HashTable
 	// lastInputBatch tracks the last input batch read from the input and not
@@ -80,7 +80,7 @@ func (op *UnorderedDistinct) Init(ctx context.Context) {
 	const hashTableNumBuckets = 128
 	op.Ht = colexechash.NewHashTable(
 		op.Ctx,
-		op.allocator,
+		op.hashTableAllocator,
 		hashTableLoadFactor,
 		hashTableNumBuckets,
 		op.typs,
