@@ -48,6 +48,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",

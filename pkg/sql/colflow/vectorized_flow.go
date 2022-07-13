@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -78,13 +79,41 @@ func newCountingSemaphore(sem semaphore.Semaphore, globalCount *metric.Gauge) *c
 	return s
 }
 
+var acquireTimeoutErr = errors.New(
+	"acquiring of file descriptors timed out, consider increasing " +
+		"COCKROACH_VEC_MAX_OPEN_FDS environment variable",
+)
+
 func (s *countingSemaphore) Acquire(ctx context.Context, n int) error {
-	if err := s.Semaphore.Acquire(ctx, n); err != nil {
-		return err
+	if s.TryAcquire(n) {
+		return nil
 	}
-	atomic.AddInt64(&s.count, int64(n))
-	s.globalCount.Inc(int64(n))
-	return nil
+	// Currently there is not enough capacity in the semaphore to acquire the
+	// desired number, so we set up a retry loop that exponentially backs off,
+	// until either the semaphore opens up or we time out (most likely due to a
+	// deadlock).
+	//
+	// The latter situation is possible when multiple queries already hold some
+	// of the quota and each of them needs more to proceed resulting in a
+	// deadlock. We get out of such a deadlock by randomly erroring out one of
+	// the queries (which would release some quota back to the semaphore) making
+	// it possible for other queries to proceed.
+	opts := retry.Options{
+		InitialBackoff:      100 * time.Millisecond,
+		Multiplier:          2.0,
+		RandomizationFactor: 0.25,
+		MaxBackoff:          10 * time.Second,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if s.TryAcquire(n) {
+			return nil
+		}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	log.Warning(ctx, "acquiring of file descriptors for disk-spilling timed out")
+	return acquireTimeoutErr
 }
 
 func (s *countingSemaphore) TryAcquire(n int) bool {
