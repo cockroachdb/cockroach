@@ -114,7 +114,7 @@ func UnderShort(t SkippableTest, args ...interface{}) {
 // UnderStress skips this test when running under stress.
 func UnderStress(t SkippableTest, args ...interface{}) {
 	t.Helper()
-	if NightlyStress() {
+	if Stress() {
 		t.Skip(append([]interface{}{"disabled under stress"}, args...))
 	}
 }
@@ -123,7 +123,7 @@ func UnderStress(t SkippableTest, args ...interface{}) {
 // run under stress with the -race flag.
 func UnderStressRace(t SkippableTest, args ...interface{}) {
 	t.Helper()
-	if NightlyStress() && util.RaceEnabled {
+	if Stress() && util.RaceEnabled {
 		t.Skip(append([]interface{}{"disabled under stressrace"}, args...))
 	}
 }
