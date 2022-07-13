@@ -46,7 +46,7 @@ data: "i"/7.000000000,0 -> /BYTES/i7
 
 # Writing next to or above point keys and tombstones should work.
 run ok
-del_range_pred k=a end=i ts=5 predTs=3 rangeThreshold=2
+del_range_pred k=a end=i ts=5 startTime=3 rangeThreshold=2
 ----
 >> at end:
 rangekey: {f-i}/[5.000000000,0=/<empty>]
@@ -67,7 +67,7 @@ data: "i"/7.000000000,0 -> /BYTES/i7
 
 # error on intent, no tombstones should be written
 run error
-del_range_pred k=a end=p ts=6 predTs=1
+del_range_pred k=a end=p ts=6 startTime=1
 ----
 >> at end:
 rangekey: {f-i}/[5.000000000,0=/<empty>]
@@ -88,12 +88,11 @@ data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*roachpb.WriteIntentError:) conflicting intents on "i"
 
 # error encountering point key at d5.
-# a tombstone should get written to c5, since we
-# flush on errors once iteration has started. However, a tombstone should
-# not get written to e5 as DeleteRange has been aborted at 'd'.
+# a tombstone should not get written at c5 or e5, since
+# DeleteRange didn't flush before reaching d5.
 run error
 put k=c ts=2 v=c2
-del_range_pred k=c end=f ts=5 predTs=1
+del_range_pred k=c end=f ts=5 startTime=1
 ----
 >> at end:
 rangekey: {f-i}/[5.000000000,0=/<empty>]
@@ -101,7 +100,6 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-data: "c"/5.000000000,0 -> /<empty>
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "d"/5.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -116,13 +114,12 @@ data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
 
 # error encountering range key at k4.
-# a tombstone should get written to j4, since we
-# flush on errors once iteration has started. However, a tombstone should
-# not get written to q4 as DeleteRange has been aborted at rangekey {k-p}4.
+# a tombstones should not get written to j4 or q4 since
+# DeleteRange did not flush before reaching rangekey {k-p}4.
 run error
 put k=j ts=2 v=j2
 put k=q ts=2 v=q2
-del_range_pred k=j end=r ts=4 predTs=1 rangeThreshold=2
+del_range_pred k=j end=r ts=4 startTime=1 rangeThreshold=2
 ----
 >> at end:
 rangekey: {f-i}/[5.000000000,0=/<empty>]
@@ -130,7 +127,6 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-data: "c"/5.000000000,0 -> /<empty>
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "d"/5.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -142,7 +138,6 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-data: "j"/4.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
@@ -150,29 +145,30 @@ error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at times
 # At this point the keyspace looks like this:
 # 7                                [i7]
 # 6
-# 5         x    x       o-----------o
+# 5              x       o-----------o
 # 4  x           d4      f4  x   h4          o-------------------o
-# 3      b3 c3
-# 2  a2              e2      g2
+# 3      b3
+# 2  a2     c2       e2      g2          j2                        q2
 # 1              d1
 # 0
-#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p  q
 #
-# check that we flush with a range tombstone, if maxBatchSize is exceeded
-# even though range tombstone threshold has not been met
-# and return a resume span
+# check that we flush with a range tombstone, if maxBytes is exceeded
+# even though range tombstone threshold has not been met.
+# Return a resume span. Note that the run extends past key d, since
+# its latest value is a point tombstone, and is therefore not counted
+# in runByteSize.
 run ok
-del_range_pred k=a end=i ts=6 predTs=1 maxBytes=1
+del_range_pred k=c end=i ts=6 startTime=1 maxBytes=1
 ----
-del_range: resume span ["e","i")
+del_range_pred: resume span ["e","i")
 >> at end:
-rangekey: {b-e}/[6.000000000,0=/<empty>]
+rangekey: {c-e}/[6.000000000,0=/<empty>]
 rangekey: {f-i}/[5.000000000,0=/<empty>]
 rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-data: "c"/5.000000000,0 -> /<empty>
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "d"/5.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -184,7 +180,6 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-data: "j"/4.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
 
@@ -194,17 +189,16 @@ data: "q"/2.000000000,0 -> /BYTES/q2
 # Note that we dont count shadowed tombstones in the batchSize
 run ok
 put k=f ts=6 v=f6
-del_range_pred k=c end=i ts=7 predTs=1 max=1
+del_range_pred k=c end=i ts=7 startTime=1 max=1
 ----
-del_range: resume span ["f","i")
+del_range_pred: resume span ["f","i")
 >> at end:
-rangekey: {b-e}/[6.000000000,0=/<empty>]
+rangekey: {c-e}/[6.000000000,0=/<empty>]
 rangekey: {f-i}/[5.000000000,0=/<empty>]
 rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-data: "c"/5.000000000,0 -> /<empty>
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "d"/5.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -218,7 +212,6 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-data: "j"/4.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
 
@@ -226,16 +219,15 @@ data: "q"/2.000000000,0 -> /BYTES/q2
 # No resume span should get returned because the iterator goes through
 # the whole span without encountering another eligible key to flush
 run ok
-del_range_pred k=c end=i ts=8 predTs=1 max=3
+del_range_pred k=c end=i ts=8 startTime=1 max=1
 ----
 >> at end:
-rangekey: {b-e}/[6.000000000,0=/<empty>]
+rangekey: {c-e}/[6.000000000,0=/<empty>]
 rangekey: {f-i}/[5.000000000,0=/<empty>]
 rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-data: "c"/5.000000000,0 -> /<empty>
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "d"/5.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -250,6 +242,5 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-data: "j"/4.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2

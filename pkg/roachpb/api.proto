@@ -357,22 +357,30 @@ message DeleteRangeRequest {
   // this parameter, as it is new in 22.2.
   bool use_range_tombstone = 5;
 
-  DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = true];
+  DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
 }
 
-// DeleteRangePredicates will conduct predicate based DeleteRange, if specified.
+// DeleteRangePredicates if specified, will conduct predicate based DeleteRange.
+// Predicate based delete range will issue tombstones on live keys that match the
+// filters provided by the caller. In particular, long runs of matched keys will
+// get deleted with a range tombstone, while smaller runs will get deleted with
+// point tombstones. Note that the keyspace across runs does not overlap.
 message DeleteRangePredicates {
   // StartTime specifies an exclusive lower bound to surface keys
-  // for deletion. If specified, DeleteRange will issue tombstones to keys
+  // for deletion. If specified, DeleteRange will only issue tombstones to keys
   // within the span [startKey, endKey) that also have MVCC versions with
-  // timestamps between (startTime, endTime].
+  // timestamps between (startTime, endTime).
   //
-  // The main application for this is a rollback of IMPORT INTO on a
-  // non-empty table. Here, the DeleteRange must only delete keys written by the
-  // import. In other words, older, pre-import, data cannot be touched. Because
-  // IMPORT INTO takes a table offline and does not allow masking an existing key,
-  // this operation will not issue tombstones to pre-import data that were
-  // written at or below predicateTime.
+  // The main application for this is a rollback of IMPORT INTO on a non-empty
+  // table. Here, DeleteRange with startTime = ImportStartTime, must only delete
+  // keys written by the import. In other words, older, pre-import, data cannot
+  // be touched. Because IMPORT INTO takes a table offline and does not allow
+  // masking an existing key, this operation will not issue tombstones to
+  // pre-import data that were written at or below StartTime.
+  //
+  // In other words, this operation assumes that for a k@t in the importing table:
+  //  - t must be < endTime
+  //  - if t in (startTime, endTime), then there is no other k@t' where t' <= startTime.
   util.hlc.Timestamp start_time = 6 [(gogoproto.nullable) = false];
 }
 

@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -59,6 +58,8 @@ func declareKeysDeleteRange(
 	}
 }
 
+const maxDeleteRangeBatchBytes = 32 << 20
+
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func DeleteRange(
@@ -68,8 +69,15 @@ func DeleteRange(
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
+	if args.Predicates != (roachpb.DeleteRangePredicates{}) && !args.UseRangeTombstone {
+		// This ensures predicate based DeleteRange piggybacks on the version gate,
+		// roachpb api flags, and latch declarations used by the UseRangeTombstone.
+		return result.Result{}, errors.AssertionFailedf(
+			"UseRangeTombstones must be passed with predicate based Delete Range")
+	}
+
 	// Use MVCC range tombstone if requested.
-	if args.UseRangeTombstone || args.Predicates != nil {
+	if args.UseRangeTombstone {
 		if cArgs.Header.Txn != nil {
 			return result.Result{}, ErrTransactionUnsupported
 		}
@@ -80,38 +88,55 @@ func DeleteRange(
 			return result.Result{}, errors.AssertionFailedf(
 				"ReturnKeys can't be used with range tombstones")
 		}
-
 		desc := cArgs.EvalCtx.Desc()
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
-		if args.Predicates == nil {
+		if args.Predicates == (roachpb.DeleteRangePredicates{}) {
+			// If no predicate parameters are passed, use the fast path.
 			err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
 			return result.Result{}, err
 		}
-		maxBatchSize := h.MaxSpanRequestKeys
-		if h.MaxSpanRequestKeys == 0 {
-			maxBatchSize = math.MaxInt64
-		}
 
-		// The minimum number of keys required in a run to use a range tombstone
-		//
+		if h.MaxSpanRequestKeys == 0 {
+			// In production, MaxSpanRequestKeys must be greater than zero to ensure
+			// the DistSender serializes predicate based DeleteRange requests across
+			// ranges. This ensures that only one resumeSpan gets returned to the
+			// client.
+			//
+			// Also, note that DeleteRangeUsingTombstone requests pass the isAlone
+			// flag in roachpb.api.proto, ensuring the requests do not intermingle with
+			// other types of requests, preventing further resume span muddling.
+			return result.Result{}, errors.AssertionFailedf(
+				"MaxSpanRequestKeys must be greater than zero when using predicated based DeleteRange")
+		}
 		// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
 		// been further optimized.
 		defaultRangeTombstoneThreshold := int64(64)
-		resumeSpan, err := storage.PredicateMVCCDeleteRange(ctx, readWriter, cArgs.Stats,
+		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-			args.Predicates, maxBatchSize, maxRevertRangeBatchBytes, defaultRangeTombstoneThreshold)
+			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
+			defaultRangeTombstoneThreshold, maxIntents)
 
-		// TODO (msbutler): plumb number of keys deleted into response, if needed
 		if resumeSpan != nil {
 			reply.ResumeSpan = resumeSpan
 			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+
+			// Note: While MVCCPredicateDeleteRange _could_ return reply.NumKeys, as
+			// the number of keys iterated through, doing so could lead to a
+			// significant performance drawback. The DistSender would have used
+			// NumKeys to subtract the number of keys processed by one range from the
+			// MaxSpanRequestKeys limit given to the next range. In this case, that's
+			// specifically not what we want, because this request does not use the
+			// normal meaning of MaxSpanRequestKeys (i.e. number of keys to return).
+			// Here, MaxSpanRequest keys is used to limit the number of tombstones
+			// written. Thus, setting NumKeys would just reduce the limit available to
+			// the next range for no good reason.
 		}
 		// Return result is always empty, since the reply is populated into the
-		// resp pointer that's passed into the function
+		// passed in resp pointer.
 		return result.Result{}, err
 	}
 
