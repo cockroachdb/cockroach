@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -470,8 +473,14 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
 			// Job does not accept an empty Details field, so arbitrarily provide
 			// ImportDetails.
-			Details:  jobspb.ImportDetails{},
-			Progress: jobspb.ImportProgress{},
+			Description: "foo",
+			Username:    username.RootUserName(),
+			Details: jobspb.ImportDetails{
+				URIs: []string{"a"},
+			},
+			Progress: jobspb.ImportProgress{
+				ReadProgress: []float32{2},
+			},
 		}, id, nil /* txn */)
 		require.NoError(t, err)
 		return id
@@ -549,13 +558,44 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		tsBefore(t, execErr.end, afterEnd)
 		require.Equal(t, cause, execErr.error)
 	}
-	getExecErrors := func(t *testing.T, id jobspb.JobID) []parsedError {
+	getExecErrorsFromSQL := func(t *testing.T, id jobspb.JobID) []parsedError {
 		return parseExecutionErrors(t,
 			tdb.QueryStr(t, `
 SELECT unnest(execution_errors)
   FROM crdb_internal.jobs
  WHERE job_id = $1;`, id),
 		)
+	}
+	getExecErrorsFromAdminAPI := func(t *testing.T, id jobspb.JobID, instance base.SQLInstanceID) (ret []parsedError) {
+		c, err := s.GetAuthenticatedHTTPClient(true)
+		require.NoError(t, err)
+		req, err := http.NewRequest(http.MethodGet, s.AdminURL()+"/_admin/v1/jobs/"+strconv.Itoa(int(id)), nil)
+		req.Header.Set("Accept", "application/x-protobuf")
+		resp, err := c.Do(req)
+		defer func() { require.NoError(t, resp.Body.Close()) }()
+		require.NoError(t, err)
+		require.Equal(t, 200, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var jobsResp serverpb.JobResponse
+		require.NoError(t, protoutil.Unmarshal(body, &jobsResp))
+		for _, f := range jobsResp.ExecutionFailures {
+			var start, end time.Time
+			if f.Start != nil {
+				start = *f.Start
+			}
+			if f.End != nil {
+				end = *f.End
+			}
+			ret = append(ret, parsedError{
+				start:    start,
+				end:      end,
+				status:   jobs.Status(f.Status),
+				error:    f.Error,
+				instance: instance,
+			})
+		}
+		return ret
 	}
 	checkLogEntry := func(
 		t *testing.T, id jobspb.JobID, status jobs.Status,
@@ -573,6 +613,16 @@ SELECT unnest(execution_errors)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 	}
+	type execErrSource int
+	const (
+		fromSQL execErrSource = iota
+		fromAdminAPI
+	)
+	type checkFunc func(execErrors []parsedError, source execErrSource)
+	doCheck := func(t *testing.T, id jobspb.JobID, f checkFunc) {
+		f(getExecErrorsFromSQL(t, id), fromSQL)
+		f(getExecErrorsFromAdminAPI(t, id, 1), fromAdminAPI)
+	}
 	t.Run("retriable error makes it into payload", func(t *testing.T) {
 		id := mkJob(t)
 		firstRun, firstStart := waitForEvent(t, id)
@@ -584,24 +634,22 @@ SELECT unnest(execution_errors)
 
 		// Confirm the previous execution error was properly recorded.
 		var firstExecErr parsedError
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			firstExecErr = execErrs[0]
 			checkExecutionError(t, firstExecErr, jobs.StatusRunning, firstStart, secondStart, err1)
 			checkLogEntry(t, id, jobs.StatusRunning, firstStart, secondStart, err1)
-		}
+		})
 		const err2 = "boom2"
 		secondRun.resume <- jobs.MarkAsRetryJobError(errors.New(err2))
 		thirdRun, thirdStart := waitForEvent(t, id)
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 2)
 			executionErrorEqual(t, firstExecErr, execErrs[0])
 			secondExecErr := execErrs[1]
 			checkExecutionError(t, secondExecErr, jobs.StatusRunning, secondStart, thirdStart, err2)
 			checkLogEntry(t, id, jobs.StatusRunning, secondStart, thirdStart, err2)
-		}
+		})
 		close(thirdRun.resume)
 		require.NoError(t, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
 	})
@@ -616,33 +664,30 @@ SELECT unnest(execution_errors)
 
 		// Confirm the previous execution error was properly recorded.
 		var firstExecErr parsedError
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			firstExecErr = execErrs[0]
 			checkExecutionError(t, firstExecErr, jobs.StatusRunning, firstStart, secondStart, err1)
 			checkLogEntry(t, id, jobs.StatusRunning, firstStart, secondStart, err1)
-		}
+		})
 		const err2 = "boom2"
 		secondRun.resume <- errors.New(err2)
 		thirdRun, thirdStart := waitForEvent(t, id) // thirdRun is Reverting
 		// Confirm that no new error was recorded in the log. It will be in
 		// FinalResumeError.
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			executionErrorEqual(t, firstExecErr, execErrs[0])
-		}
+		})
 		const err3 = "boom3"
 		thirdRun.resume <- jobs.MarkAsRetryJobError(errors.New(err3))
 		fourthRun, fourthStart := waitForEvent(t, id)
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 2)
 			executionErrorEqual(t, firstExecErr, execErrs[0])
 			checkExecutionError(t, execErrs[1], jobs.StatusReverting, thirdStart, fourthStart, err3)
 			checkLogEntry(t, id, jobs.StatusReverting, thirdStart, fourthStart, err3)
-		}
+		})
 		close(fourthRun.resume)
 		require.Regexp(t, err2, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
 	})
@@ -659,67 +704,69 @@ SELECT unnest(execution_errors)
 		secondRun, secondStart := waitForEvent(t, id)
 		// Confirm the previous execution error was properly recorded.
 		var firstExecErr parsedError
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			firstExecErr = execErrs[0]
 			// Ensure we see the truncated error in the table but the full error
 			// in the logs.
-			expTruncatedError := "(truncated) " + err1[:maxSize]
+			expTruncatedError := err1[:maxSize]
+			if s == fromSQL {
+				expTruncatedError = "(truncated) " + expTruncatedError
+			}
 			checkExecutionError(t, firstExecErr, jobs.StatusRunning, firstStart, secondStart, expTruncatedError)
 			checkLogEntry(t, id, jobs.StatusRunning, firstStart, secondStart, err1)
-		}
+		})
 		const err2 = "boom2"
 		secondRun.resume <- jobs.MarkAsRetryJobError(errors.New(err2))
 		thirdRun, thirdStart := waitForEvent(t, id)
 		var secondExecErr parsedError
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			secondExecErr = execErrs[0]
 			checkExecutionError(t, secondExecErr, jobs.StatusRunning, secondStart, thirdStart, err2)
 			checkLogEntry(t, id, jobs.StatusRunning, secondStart, thirdStart, err2)
-		}
+		})
 		// Fail the job so we can also test the truncation of reverting retry
 		// errors.
 		const err3 = "boom3"
 		thirdRun.resume <- errors.New(err3)           // not retriable
 		fourthRun, fourthStart := waitForEvent(t, id) // first Reverting run
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			executionErrorEqual(t, secondExecErr, execErrs[0])
-		}
+		})
 		err4 := strings.Repeat("b", largeSize)
 		fourthRun.resume <- jobs.MarkAsRetryJobError(fmt.Errorf("%s", err4))
 		fifthRun, fifthStart := waitForEvent(t, id)
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			// Ensure we see the truncated error in the table but the full error
 			// in the logs.
-			expTruncatedError := "(truncated) " + err4[:maxSize]
+			expTruncatedError := err4[:maxSize]
+			if s == fromSQL {
+				expTruncatedError = "(truncated) " + expTruncatedError
+			}
 			checkExecutionError(t, execErrs[0], jobs.StatusReverting, fourthStart, fifthStart, expTruncatedError)
 			checkLogEntry(t, id, jobs.StatusReverting, fourthStart, fifthStart, err4)
-		}
+		})
 		const err5 = "boom5"
 		fifthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err5))
 		sixthRun, sixthStart := waitForEvent(t, id)
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 1)
 			checkExecutionError(t, execErrs[0], jobs.StatusReverting, fifthStart, sixthStart, err5)
 			checkLogEntry(t, id, jobs.StatusReverting, fifthStart, sixthStart, err5)
-		}
-		const err6 = "boom5"
+		})
+		// Add a regression test for #84139 where a string with a quote in it
+		// caused a failure in the admin API.
+		const err6 = "bo\"om6"
 		tdb.Exec(t, "SET CLUSTER SETTING "+jobs.ExecutionErrorsMaxEntriesKey+" = $1", 0)
 		sixthRun.resume <- jobs.MarkAsRetryJobError(errors.New(err6))
 		seventhRun, seventhStart := waitForEvent(t, id)
-		{
-			execErrs := getExecErrors(t, id)
+		doCheck(t, id, func(execErrs []parsedError, s execErrSource) {
 			require.Len(t, execErrs, 0)
 			checkLogEntry(t, id, jobs.StatusReverting, sixthStart, seventhStart, err6)
-		}
+		})
 		close(seventhRun.resume)
 		require.Regexp(t, err3, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
 	})
