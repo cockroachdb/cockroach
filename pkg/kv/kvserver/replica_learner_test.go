@@ -143,10 +143,16 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	// The happy case! \o/
 
 	blockUntilSnapshotCh := make(chan struct{})
+	var receivedSnap int64
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
-		close(blockUntilSnapshotCh)
+		if atomic.CompareAndSwapInt64(&receivedSnap, 0, 1) {
+			close(blockUntilSnapshotCh)
+		} else {
+			// Do nothing. We aren't interested in subsequent snapshots.
+			return nil
+		}
 		select {
 		case <-blockSnapshotsCh:
 		case <-time.After(10 * time.Second):
