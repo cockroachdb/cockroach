@@ -34,11 +34,13 @@ sql admin
  "execution": {
   "txn_results": [
    {
-    "columns": {
-     "name": "username",
-     "oid": 25,
-     "type": "STRING"
-    },
+    "columns": [
+     {
+      "name": "username",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows": [
      {
@@ -54,6 +56,47 @@ sql admin
  },
  "num_statements": 1
 }
+
+# Regression test for #84385.
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT 1, 2"}]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 2
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
+}
+
 
 
 sql non-admin expect-error
@@ -80,11 +123,13 @@ sql admin
  "execution": {
   "txn_results": [
    {
-    "columns": {
-     "name": "username",
-     "oid": 25,
-     "type": "STRING"
-    },
+    "columns": [
+     {
+      "name": "username",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows": [
      {
@@ -97,11 +142,13 @@ sql admin
     "tag": "SELECT"
    },
    {
-    "columns": {
-     "name": "eventType",
-     "oid": 25,
-     "type": "STRING"
-    },
+    "columns": [
+     {
+      "name": "eventType",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows_affected": 0,
     "start": "1970-01-01T00:00:00Z",
@@ -128,11 +175,13 @@ sql admin
  "execution": {
   "txn_results": [
    {
-    "columns": {
-     "name": "rows_affected",
-     "oid": 20,
-     "type": "INT8"
-    },
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows_affected": 0,
     "start": "1970-01-01T00:00:00Z",
@@ -140,11 +189,13 @@ sql admin
     "tag": "CREATE DATABASE"
    },
    {
-    "columns": {
-     "name": "rows_affected",
-     "oid": 20,
-     "type": "INT8"
-    },
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows_affected": 0,
     "start": "1970-01-01T00:00:00Z",
@@ -152,11 +203,13 @@ sql admin
     "tag": "CREATE TABLE"
    },
    {
-    "columns": {
-     "name": "rows_affected",
-     "oid": 20,
-     "type": "INT8"
-    },
+    "columns": [
+     {
+      "name": "rows_affected",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
     "end": "1970-01-01T00:00:00Z",
     "rows_affected": 1,
     "start": "1970-01-01T00:00:00Z",

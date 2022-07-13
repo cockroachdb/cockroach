@@ -465,6 +465,7 @@ type columnsDefinition colinfo.ResultColumns
 
 func (cd columnsDefinition) MarshalJSON() ([]byte, error) {
 	var jbuf bytes.Buffer
+	jbuf.WriteByte('[')
 	for colIdx, c := range cd {
 		if colIdx > 0 {
 			jbuf.WriteByte(',')
@@ -479,6 +480,7 @@ func (cd columnsDefinition) MarshalJSON() ([]byte, error) {
 		fmt.Fprintf(&jbuf, "%d", c.Typ.Oid())
 		jbuf.WriteByte('}')
 	}
+	jbuf.WriteByte(']')
 	return jbuf.Bytes(), nil
 }
 
