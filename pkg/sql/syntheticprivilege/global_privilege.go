@@ -76,7 +76,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	systemTablePrivilegeObject catalog.SyntheticPrivilegeObject,
 ) (privileges *catpb.PrivilegeDescriptor, retErr error) {
 	query := fmt.Sprintf(
-		`SELECT username, privileges FROM system.%s WHERE path='%s'`,
+		`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
 		catconstants.SystemPrivilegeTableName,
 		systemTablePrivilegeObject.ToString())
 
@@ -102,19 +102,42 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		}
 
 		user := tree.MustBeDString(it.Cur()[0])
-		arr := tree.MustBeDArray(it.Cur()[1])
+		privArr := tree.MustBeDArray(it.Cur()[1])
 		var privilegeStrings []string
-		for _, elem := range arr.Array {
+		for _, elem := range privArr.Array {
 			privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
+		}
+
+		grantOptionArr := tree.MustBeDArray(it.Cur()[2])
+		var grantOptionStrings []string
+		for _, elem := range grantOptionArr.Array {
+			grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
 		}
 		privs, err := privilege.ListFromStrings(privilegeStrings)
 		if err != nil {
 			return nil, err
 		}
+		grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
+		if err != nil {
+			return nil, err
+		}
+		privsWithGrantOption := privilege.ListFromBitField(
+			privs.ToBitField()&grantOptions.ToBitField(),
+			systemTablePrivilegeObject.PrivilegeObjectType(),
+		)
+		privsWithoutGrantOption := privilege.ListFromBitField(
+			privs.ToBitField()&^privsWithGrantOption.ToBitField(),
+			systemTablePrivilegeObject.PrivilegeObjectType(),
+		)
 		privileges.Grant(
 			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-			privs,
-			false,
+			privsWithGrantOption,
+			true, /* withGrantOption */
+		)
+		privileges.Grant(
+			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+			privsWithoutGrantOption,
+			false, /* withGrantOption */
 		)
 	}
 
