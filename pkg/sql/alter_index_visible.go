@@ -37,7 +37,7 @@ func (p *planner) AlterIndexVisible(ctx context.Context, n *tree.AlterIndexVisib
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
-		"ALTER INDEX VISIBLILITY",
+		"ALTER INDEX VISBILITY",
 	); err != nil {
 		return nil, err
 	}
