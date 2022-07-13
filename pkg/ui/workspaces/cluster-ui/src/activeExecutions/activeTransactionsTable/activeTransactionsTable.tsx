@@ -15,17 +15,17 @@ import {
   ColumnDescriptor,
 } from "../../sortedtable";
 import { SortSetting } from "../../sortedtable";
-import { ActiveTransaction } from "../types";
+import { ActiveTransaction, ExecutionType } from "../types";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import {
   getLabel,
   executionsTableTitles,
-  ExecutionType,
   ExecutionsColumn,
+  activeTransactionColumnsFromCommon,
 } from "../execTableCommon";
-import { DATE_FORMAT } from "../../util";
+import { DATE_FORMAT, Duration } from "../../util";
 
 interface ActiveTransactionsTable {
   data: ActiveTransaction[];
@@ -39,52 +39,21 @@ interface ActiveTransactionsTable {
 export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransaction>[] {
   const execType: ExecutionType = "transaction";
   const columns: ColumnDescriptor<ActiveTransaction>[] = [
-    {
-      name: "executionID",
-      title: executionsTableTitles.executionID(execType),
-      cell: (item: ActiveTransaction) => (
-        <Link to={`/execution/transaction/${item.executionID}`}>
-          {item.executionID}
-        </Link>
-      ),
-      sort: (item: ActiveTransaction) => item.executionID,
-      alwaysShow: true,
-    },
+    activeTransactionColumnsFromCommon.executionID,
     {
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
       cell: (item: ActiveTransaction) => (
-        <Link
-          to={`/execution/statement/${item.mostRecentStatement?.executionID}`}
-        >
-          {item.mostRecentStatement?.query}
+        <Link to={`/execution/statement/${item.statementID}`}>
+          {item.query}
         </Link>
       ),
-      sort: (item: ActiveTransaction) => item.mostRecentStatement?.query,
+      sort: (item: ActiveTransaction) => item.query,
     },
-    {
-      name: "status",
-      title: executionsTableTitles.status(execType),
-      cell: (item: ActiveTransaction) => (
-        <span>
-          <StatusIcon status={item.status} />
-          {item.status}
-        </span>
-      ),
-      sort: (item: ActiveTransaction) => item.status,
-    },
-    {
-      name: "startTime",
-      title: executionsTableTitles.startTime(execType),
-      cell: (item: ActiveTransaction) => item.start.format(DATE_FORMAT),
-      sort: (item: ActiveTransaction) => item.start.unix(),
-    },
-    {
-      name: "elapsedTime",
-      title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveTransaction) => `${item.elapsedTimeSeconds} s`,
-      sort: (item: ActiveTransaction) => item.elapsedTimeSeconds,
-    },
+    activeTransactionColumnsFromCommon.status,
+    activeTransactionColumnsFromCommon.startTime,
+    activeTransactionColumnsFromCommon.elapsedTime,
+    activeTransactionColumnsFromCommon.timeSpentWaiting,
     {
       name: "statementCount",
       title: executionsTableTitles.statementCount(execType),
@@ -97,12 +66,7 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
       cell: (item: ActiveTransaction) => item.retries,
       sort: (item: ActiveTransaction) => item.retries,
     },
-    {
-      name: "applicationName",
-      title: executionsTableTitles.applicationName(execType),
-      cell: (item: ActiveTransaction) => item.application,
-      sort: (item: ActiveTransaction) => item.application,
-    },
+    activeTransactionColumnsFromCommon.applicationName,
   ];
   return columns;
 }
@@ -114,7 +78,7 @@ export function getColumnOptions(
     .filter(col => !col.alwaysShow)
     .map(col => ({
       value: col.name,
-      label: getLabel(col.name as ExecutionsColumn, "statement"),
+      label: getLabel(col.name as ExecutionsColumn, "transaction"),
       isSelected: isSelectedColumn(selectedColumns, col),
     }));
 }
