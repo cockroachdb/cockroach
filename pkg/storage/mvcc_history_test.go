@@ -74,7 +74,7 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key>
-// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [predTs=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
@@ -1035,19 +1035,20 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
 	}
-	predicates := &roachpb.DeleteRangePredicates{
-		StartTime: e.getTsWithName("predTs"),
+	predicates := roachpb.DeleteRangePredicates{
+		StartTime: e.getTsWithName("startTime"),
 	}
 	rangeThreshold := 64
 	if e.hasArg("rangeThreshold") {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
-	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		resumeSpan, err := PredicateMVCCDeleteRange(e.ctx, rw, e.ms, key, endKey, ts,
-			localTs, nil, nil, predicates, int64(max), int64(maxBytes), int64(rangeThreshold))
+	return e.withWriter("del_range_pred", func(rw ReadWriter) error {
+		resumeSpan, err := MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts,
+			localTs, nil, nil, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
 
 		if resumeSpan != nil {
-			e.results.buf.Printf("del_range: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
+				resumeSpan.EndKey)
 		}
 		return err
 	},
