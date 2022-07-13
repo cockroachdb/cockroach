@@ -176,6 +176,17 @@ bindir       := $(prefix)/bin
 # Avoid reusing GOFLAGS as that is overwritten by various release processes.
 GOMODVENDORFLAGS := -mod=vendor
 
+# Color support.
+red = $(shell { tput setaf 1 || tput AF 1; } 2>/dev/null)
+yellow = $(shell { tput setaf 3 || tput AF 3; } 2>/dev/null)
+cyan = $(shell { tput setaf 6 || tput AF 6; } 2>/dev/null)
+term-reset = $(shell { tput sgr0 || tput me; } 2>/dev/null)
+$(call make-lazy,yellow)
+$(call make-lazy,cyan)
+$(call make-lazy,term-reset)
+
+$(info $(red)[WARNING] Makefile is deprecated and will be removed shortly.$(term-reset))
+
 ifeq "$(findstring -j,$(shell ps -o args= $$PPID))" ""
 ifdef NCPUS
 MAKEFLAGS += -j$(NCPUS)
@@ -304,14 +315,6 @@ MAKE_TERMERR ?= $(shell [[ -t 2 ]] && echo true)
 
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
-
-# Color support.
-yellow = $(shell { tput setaf 3 || tput AF 3; } 2>/dev/null)
-cyan = $(shell { tput setaf 6 || tput AF 6; } 2>/dev/null)
-term-reset = $(shell { tput sgr0 || tput me; } 2>/dev/null)
-$(call make-lazy,yellow)
-$(call make-lazy,cyan)
-$(call make-lazy,term-reset)
 
 # Warn maintainers for if ccache is not found.
 ifeq (, $(shell which ccache))
@@ -1010,6 +1013,7 @@ SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/setti
 # normal and race test builds.
 .PHONY: go-install
 $(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
+	 $(info $(yellow)[WARNING] Use `dev build $(subst ./pkg/cmd/,,$(BUILDTARGET))` instead.$(term-reset))
 	 $(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
@@ -1144,12 +1148,15 @@ endif
 .PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
 check test testshort testrace testdeadlock bench benchshort:
+	$(info $(yellow)[WARNING] Use `dev $(if $(BENCHES),bench,test)$(if $(GORACE), --race) $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(BENCHES), --filter $(BENCHES))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")` instead.$(term-reset))
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
+	$(info $(yellow)[WARNING] Use `dev test --stress $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 stressrace: ## Run tests under stress with the race detector enabled.
-stress stressrace:
+	$(info $(yellow)[WARNING] Use `dev test --stress --race $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 .PHONY: roachprod-stress roachprod-stressrace
@@ -1203,11 +1210,13 @@ testslow testraceslow:
 acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
 acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
 acceptance: ## Run acceptance tests.
+	$(info $(yellow)[WARNING] Use `dev acceptance $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")` instead.$(term-reset))
 	+@pkg/acceptance/run.sh
 
 .PHONY: compose
 compose: export TESTTIMEOUT := $(TESTTIMEOUT)
 compose: ## Run compose tests.
+	$(info $(yellow)[WARNING] Use `dev compose` instead.$(term-reset))
 	+@pkg/compose/run.sh
 
 .PHONY: dupl
@@ -1225,6 +1234,7 @@ dupl: bin/.bootstrap
 .PHONY: generate
 generate: ## Regenerate generated code.
 generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
+	$(info $(yellow)[WARNING] Use `dev generate` instead.$(term-reset))
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
 
@@ -1234,6 +1244,7 @@ lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
 lint: bin/returncheck bin/roachvet bin/optfmt
+	$(info $(yellow)[WARNING] Use `dev lint$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
@@ -1245,11 +1256,13 @@ lint: bin/returncheck bin/roachvet bin/optfmt
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
 lintshort: bin/roachvet bin/optfmt
+	$(info $(yellow)[WARNING] Use `dev lint --short$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
 	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
 protobuf: $(PROTOBUF_TARGETS)
 protobuf: ## Regenerate generated code for protobuf definitions.
+	$(info $(yellow)[WARNING] Use `dev generate protobuf` instead.$(term-reset))
 
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
@@ -1432,13 +1445,13 @@ ui-lint: pkg/ui/yarn.installed $(ESLINT_PLUGIN_CRDB) $(UI_PROTOS_OSS) $(UI_PROTO
 
 .PHONY: ui-test
 ui-test: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
-	$(info $(yellow)NOTE: consider using `./dev ui test` instead of `make ui-test`$(term-reset))
+	$(info $(yellow)[WARNING]: Use `dev ui test` instead.$(term-reset))
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn test
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
-	$(info $(yellow)NOTE: consider using `./dev ui test --watch` instead of `make ui-test-watch`$(term-reset))
+	$(info $(yellow)[WARNING]: Use `dev ui test --watch` instead.$(term-reset))
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --no-single-run --auto-watch & \
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn test
 
@@ -1472,13 +1485,13 @@ ui-watch ui-watch-secure: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) pkg/ui/yarn.opt.inst
   #
   # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
   # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
-	$(info $(yellow)NOTE: consider using `./dev ui watch [--secure]` instead of `make ui-watch[-secure]`$(term-reset))
+	$(info $(yellow)[WARNING] Use `dev ui watch [--secure]` instead$(term-reset))
 	yarn --cwd pkg/ui/workspaces/cluster-ui build:watch & \
 	yarn --cwd pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
-	$(info $(yellow)NOTE: consider using `./dev ui clean` instead of `make ui-clean`$(term-reset))
+	$(info $(yellow)[WARNING] Use `dev ui clean` instead.$(term-reset))
 	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
@@ -1487,7 +1500,7 @@ ui-clean: ## Remove build artifacts.
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
-	$(info $(yellow)NOTE: consider using `./dev ui clean --all` instead of `make ui-maintainer-clean`$(term-reset))
+	$(info $(yellow)[WARNING] Use `dev ui clean --all` instead.$(term-reset))
 	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules pkg/ui/workspaces/db-console/src/js/node_modules
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
@@ -1670,6 +1683,7 @@ pkg/util/log/log_channels_generated.go: pkg/util/log/gen/main.go pkg/util/log/lo
 .PHONY: execgen
 execgen: ## Regenerate generated code for the vectorized execution engine.
 execgen: $(EXECGEN_TARGETS) bin/execgen
+	$(info $(yellow)[WARNING] Use `dev generate execgen` instead.$(term-reset))
 	for i in $(EXECGEN_TARGETS); do echo EXECGEN $$i && COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true ./bin/execgen -fmt=false $$i > $$i; done
 	goimports -w $(EXECGEN_TARGETS)
 
@@ -1845,6 +1859,7 @@ $(xbins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	$(xgo) build -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
+	$(info $(yellow)[WARNING] Use `dev test $(subst ./,,$($*-package)) $(if $(TESTS), --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")` instead.$(term-reset))
 	@echo go test -c $($*-package)
 	$(PREREQS) -bin-name=$* -test $($*-package) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
@@ -1863,6 +1878,7 @@ fuzz: bin/fuzz
 # `./dev generate bazel`.)
 .PHONY: bazel-generate
 bazel-generate:
+	$(info $(yellow)[WARNING] Use `dev generate bazel` instead.$(term-reset))
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	./build/bazelutil/bazel-generate.sh
 
