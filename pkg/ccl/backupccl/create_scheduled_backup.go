@@ -689,6 +689,9 @@ func dryRunBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Bac
 }
 
 func dryRunInvokeBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
+	// IsDryRun prevents the backup planning from performing operations that
+	// cannot be rolled back.
+	backupNode.IsDryRun = true
 	backupFn, err := planBackup(ctx, p, backupNode)
 	if err != nil {
 		return err

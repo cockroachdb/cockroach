@@ -21,11 +21,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -657,6 +659,78 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMixedVersionScheduledBackupDoesNotLockItself is a regression test for a
+// bug where creating a schedule wrote a lock file on the bucket during the "dry
+// run" backup planning. If a different went to execute the backup job, then it
+// would see this lock file and refuse to run.
+func TestMixedVersionScheduledBackupDoesNotLockItself(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	disableUpgradeCh := make(chan struct{})
+	defer close(disableUpgradeCh)
+	var executeSchedule func() error
+	var srv serverutils.TestServerInterface
+	args := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					TakeOverJobsScheduling: func(f func(ctx context.Context, maxSchedules int64) error) {
+						// Effectively disable scheduled jobs from running on node 0.
+					},
+				},
+			}},
+			1: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
+						executeSchedule = func() error {
+							defer srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+							return fn(context.Background(), allSchedules)
+						}
+					},
+				}},
+			},
+			2: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+			}},
+		},
+	}
+
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 1, InitManualReplication, args)
+	defer cleanupFn()
+
+	srv = tc.Server(1)
+	n0 := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Create the schedule on node 0, the job will be picked up by either node 1
+	// or 2.
+	n0.Exec(t, `
+CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/foo' RECURRING '@hourly' 
+FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS first_run = 'now'
+`)
+	require.NoError(t, executeSchedule())
+
+	query := "SELECT id FROM system.jobs WHERE status=$1 AND created_by_type=$2"
+	testutils.SucceedsSoon(t, func() error {
+		// Force newly created job to be adopted and verify it succeeds.
+		srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return n0.DB.QueryRowContext(context.Background(),
+			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs).Scan(&unused)
+	})
 }
 
 func TestScheduleBackup(t *testing.T) {
