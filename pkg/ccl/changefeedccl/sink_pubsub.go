@@ -18,11 +18,13 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,6 +35,7 @@ const credentialsParam = "CREDENTIALS"
 // GcpScheme to be used in testfeed and sink.go
 const GcpScheme = "gcpubsub"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
+const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
 // TODO: make numOfWorkers configurable
 const numOfWorkers = 128
@@ -110,8 +113,9 @@ type pubsubSink struct {
 
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
 // getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, error) {
+func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, error) {
 	const authParam = "AUTH"
+	const assumeRoleParam = "ASSUME_ROLE"
 	const authSpecified = "specified"
 	const authImplicit = "implicit"
 	const authDefault = "default"
@@ -120,15 +124,21 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 	var creds *google.Credentials
 	var err error
 	authOption := u.consumeParam(authParam)
+	assumeRoleOption := u.consumeParam(assumeRoleParam)
+	authScope := gcpScope
+	if assumeRoleOption != "" {
+		// If we need to assume a role, the credentials need to have the scope to
+		// impersonate instead.
+		authScope = cloudPlatformScope
+	}
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
 	case authImplicit:
-		creds, err = google.FindDefaultCredentials(ctx, gcpScope)
+		creds, err = google.FindDefaultCredentials(ctx, authScope)
 		if err != nil {
 			return nil, err
 		}
-		return creds, nil
 	case authSpecified:
 		fallthrough
 	case authDefault:
@@ -138,12 +148,29 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding credentials json")
 		}
-		creds, err = google.CredentialsFromJSON(ctx, credsJSON, gcpScope)
+		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating credentials")
 		}
-		return creds, nil
 	}
+
+	credsOpt := option.WithCredentials(creds)
+	if assumeRoleOption != "" {
+		assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleOption)
+		cfg := impersonate.CredentialsConfig{
+			TargetPrincipal: assumeRole,
+			Scopes:          []string{gcpScope},
+			Delegates:       delegateRoles,
+		}
+
+		ts, err := impersonate.CredentialsTokenSource(ctx, cfg, credsOpt)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating impersonate credentials")
+		}
+		return option.WithTokenSource(ts), nil
+	}
+
+	return credsOpt, nil
 }
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
@@ -459,7 +486,7 @@ func (p *gcpPubsubClient) init() error {
 	client, err = pubsub.NewClient(
 		p.ctx,
 		p.projectID,
-		option.WithCredentials(creds),
+		creds,
 		option.WithEndpoint(p.region),
 	)
 

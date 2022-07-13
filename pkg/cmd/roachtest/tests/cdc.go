@@ -76,6 +76,7 @@ type cdcTestArgs struct {
 	crdbChaos          bool
 	whichSink          sinkType
 	sinkURI            string
+	assumeRole         string
 
 	// preStartStatements are executed after the workload is initialized but before the
 	// changefeed is created.
@@ -145,6 +146,10 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		kafka.install(ctx)
 		kafka.start(ctx)
 		sinkURI = kafka.sinkURL(ctx)
+	}
+
+	if args.assumeRole != "" {
+		sinkURI = sinkURI + "&ASSUME_ROLE=" + args.assumeRole
 	}
 
 	m := c.NewMonitor(ctx, crdbNodes)
@@ -792,9 +797,7 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
-	// TODO(zinger): uncomment once manual acceptance testing passes
-	// and whatever connectivity/provisioning issue happening here is fixed.
-	/* r.Add(registry.TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/pubsub-sink",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -810,7 +813,61 @@ func registerCDC(r registry.Registry) {
 				targetSteadyLatency:      time.Minute,
 			})
 		},
-	}) */
+	})
+
+	// In order to run this test, the service account corresponding to the
+	// implicit credentials must have the Service Account Token Creator role on
+	// the first account on the assume-role chain:
+	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
+	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
+	//
+	// TODO(rui): Change to a shorter test as it just needs to validate
+	// permissions and shouldn't need to run a full 30m workload.
+	r.Add(registry.TestSpec{
+		Name:            "cdc/pubsub-sink/assume-role",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                pubsubSink,
+				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+
+	// In order to run this test, the service account corresponding to the
+	// implicit credentials must have the Service Account Token Creator role on
+	// the first account on the assume-role chain:
+	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
+	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
+	//
+	// TODO(rui): Change to a shorter test as it just needs to validate
+	// permissions and shouldn't need to run a full 30m workload.
+	r.Add(registry.TestSpec{
+		Name:            "cdc/cloud-sink-gcs/assume-role",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				tpccWarehouseCount:       50,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                cloudStorageSink,
+				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+
 	// TODO(zinger): uncomment once connectivity issue is fixed,
 	// currently fails with "initial scan did not complete" because sink
 	// URI is set as localhost, need to expose it to the other nodes via IP
