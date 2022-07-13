@@ -39,6 +39,7 @@ func init() {
 	initPGBuiltins()
 	initMathBuiltins()
 	initReplicationBuiltins()
+	initProbeRangesBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(builtins))
 	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
