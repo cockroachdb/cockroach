@@ -5204,6 +5204,17 @@ revoke_stmt:
       Grantees: $5.roleSpecList(),
     }
   }
+| REVOKE GRANT OPTION FOR SYSTEM privileges FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $6.privilegeList(),
+      Targets: tree.GrantTargetList{
+        System: true,
+      },
+      Grantees: $8.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
 | REVOKE privileges ON SEQUENCE error
   {
     return unimplemented(sqllex, "revoke privileges on sequence")
