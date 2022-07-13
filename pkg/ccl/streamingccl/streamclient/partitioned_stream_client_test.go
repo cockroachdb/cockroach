@@ -88,7 +88,7 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	client, err := newPartitionedStreamClient(&h.PGUrl)
+	client, err := newPartitionedStreamClient(ctx, &h.PGUrl)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
@@ -164,7 +164,7 @@ INSERT INTO d.t2 VALUES (2);
 	url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
-	subClient, err := newPartitionedStreamClient(url)
+	subClient, err := newPartitionedStreamClient(ctx, url)
 	defer func() {
 		require.NoError(t, subClient.Close(ctx))
 	}()
