@@ -5267,6 +5267,7 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
+	// Perform a write in the txn. This will prevent us from performing 1PC later.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: txn}
 	put := putArgs(key, []byte("value"))
@@ -5276,6 +5277,9 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
+	// Now send the commit with the Require1PC flag set. This is non-sensical and
+	// we check that the server rejects it: since we've written before, this batch
+	// will not qualify for 1PC evaluation.
 	et, etH := endTxnArgs(txn, true)
 	et.Require1PC = true
 	ba = roachpb.BatchRequest{}
