@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,20 +45,21 @@ type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *s
 type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
 
 type tenantStreamingClustersArgs struct {
-	srcTenantID roachpb.TenantID
-	srcInitFunc srcInitExecFunc
-	srcNumNodes int
+	srcTenantID        roachpb.TenantID
+	srcInitFunc        srcInitExecFunc
+	srcNumNodes        int
+	srcClusterSettings map[string]string
 
-	destTenantID roachpb.TenantID
-	destInitFunc destInitExecFunc
-	destNumNodes int
-	testingKnobs *sql.StreamingTestingKnobs
+	destTenantID        roachpb.TenantID
+	destInitFunc        destInitExecFunc
+	destNumNodes        int
+	destClusterSettings map[string]string
+	testingKnobs        *sql.StreamingTestingKnobs
 }
 
 var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
 	srcTenantID: roachpb.MakeTenantID(10),
 	srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		sysSQL.ExecMultiple(t, configureClusterSettings(srcClusterSetting)...)
 		tenantSQL.Exec(t, `
 	CREATE DATABASE d;
 	CREATE TABLE d.t1(i int primary key, a string, b string);
@@ -69,12 +69,11 @@ var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
 	UPDATE d.t1 SET b = 'world' WHERE i = 42;
 	`)
 	},
-	srcNumNodes:  1,
-	destTenantID: roachpb.MakeTenantID(20),
-	destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner) {
-		sysSQL.ExecMultiple(t, configureClusterSettings(destClusterSetting)...)
-	},
-	destNumNodes: 1,
+	srcNumNodes:         1,
+	srcClusterSettings:  defaultSrcClusterSetting,
+	destTenantID:        roachpb.MakeTenantID(20),
+	destNumNodes:        1,
+	destClusterSettings: defaultDestClusterSetting,
 }
 
 type tenantStreamingClusters struct {
@@ -129,8 +128,7 @@ func (c *tenantStreamingClusters) cutover(
 	// Cut over the ingestion job and the job will stop eventually.
 	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-	c.srcSysSQL.CheckQueryResultsRetry(c.t,
-		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", producerJobID), [][]string{{"succeeded"}})
+	jobutils.WaitForJobToSucceed(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 }
 
 // Returns producer job ID and ingestion job ID.
@@ -194,9 +192,11 @@ func createTenantStreamingClusters(
 		destSysServer: destCluster.Server(0),
 	}
 
+	tsc.srcSysSQL.ExecMultiple(t, configureClusterSettings(args.srcClusterSettings)...)
 	if args.srcInitFunc != nil {
 		args.srcInitFunc(t, tsc.srcSysSQL, tsc.srcTenantSQL)
 	}
+	tsc.destSysSQL.ExecMultiple(t, configureClusterSettings(args.destClusterSettings)...)
 	if args.destInitFunc != nil {
 		args.destInitFunc(t, tsc.destSysSQL)
 	}
@@ -213,7 +213,7 @@ func (c *tenantStreamingClusters) srcExec(exec srcInitExecFunc) {
 	exec(c.t, c.srcSysSQL, c.srcTenantSQL)
 }
 
-var srcClusterSetting = map[string]string{
+var defaultSrcClusterSetting = map[string]string{
 	`kv.rangefeed.enabled`:                `true`,
 	`kv.closed_timestamp.target_duration`: `'1s'`,
 	// Large timeout makes test to not fail with unexpected timeout failures.
@@ -225,7 +225,7 @@ var srcClusterSetting = map[string]string{
 	`jobs.registry.interval.adopt`:      `'1s'`,
 }
 
-var destClusterSetting = map[string]string{
+var defaultDestClusterSetting = map[string]string{
 	`stream_replication.consumer_heartbeat_frequency`:      `'1s'`,
 	`stream_replication.job_checkpoint_frequency`:          `'100ms'`,
 	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
@@ -304,12 +304,10 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): now this has the same race issue with
-	// TestPartitionedStreamReplicationClient, please fix them together in the future.
-	skip.UnderRace(t, "disabled under race")
-
 	ctx := context.Background()
-	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	args := defaultTenantStreamingClustersArgs
+	args.srcClusterSettings[`stream_replication.job_liveness_timeout`] = `'1m'`
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
 	// initial scan
@@ -356,12 +354,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 84414, "flaky test")
 	defer log.Scope(t).Close(t)
-
-	// TODO(casper): now this has the same race issue with
-	// TestPartitionedStreamReplicationClient, please fix them together in the future.
-	skip.UnderRace(t, "disabled under race")
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
@@ -412,10 +405,6 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): now this has the same race issue with
-	// TestPartitionedStreamReplicationClient, please fix them together in the future.
-	skip.UnderRace(t, "disabled under race")
-
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
 	args := defaultTenantStreamingClustersArgs
@@ -454,9 +443,6 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 func TestTenantStreamingCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRaceWithIssue(t, 83867)
-	skip.UnderStressRace(t, "slow under stressrace")
 
 	ctx := context.Background()
 

@@ -39,12 +39,14 @@ type partitionedStreamClient struct {
 	}
 }
 
-func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, error) {
+func newPartitionedStreamClient(
+	ctx context.Context, remote *url.URL,
+) (*partitionedStreamClient, error) {
 	config, err := pgx.ParseConfig(remote.String())
 	if err != nil {
 		return nil, err
 	}
-	conn, err := pgx.ConnectConfig(context.Background(), config)
+	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -265,8 +267,7 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 	defer sp.Finish()
 
 	defer close(p.eventsChan)
-	// Each subscription has its own pgx connection instead of
-	// shares one with other Subscription.
+	// Each subscription has its own pgx connection.
 	srcConn, err := pgx.ConnectConfig(ctx, p.srcConnConfig)
 	if err != nil {
 		return err
