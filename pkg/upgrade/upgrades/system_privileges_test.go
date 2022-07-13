@@ -73,7 +73,7 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 ('user2', 'path/1/user', ARRAY['1', '0'], ARRAY['0']),
 ('user2', 'path/2/user', ARRAY['10'], ARRAY['10'])`)
 
-	tdb.CheckQueryResults(t, `SELECT * FROM system.privileges`, [][]string{
+	tdb.CheckQueryResults(t, `SELECT * FROM system.privileges ORDER BY 1, 2`, [][]string{
 		{"user1", "path/1/user", "{10}", "{10}"},
 		{"user1", "path/2/user", "{0,0}", "{1,0}"},
 		{"user2", "path/1/user", "{1,0}", "{0}"},

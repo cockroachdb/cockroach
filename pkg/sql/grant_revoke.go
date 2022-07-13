@@ -117,7 +117,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return &changeNonDescriptorBackedPrivilegesNode{
 			changePrivilegesNode: changePrivilegesNode{
 				isGrant:         false,
-				withGrantOption: false,
+				withGrantOption: n.GrantOptionFor,
 				grantees:        grantees,
 				desiredprivs:    n.Privileges,
 				grantOn:         grantOn,
