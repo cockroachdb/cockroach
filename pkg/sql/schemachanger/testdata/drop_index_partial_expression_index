@@ -159,13 +159,12 @@ upsert descriptor #104
   +          columnId: 3
   +          computeExpr:
   +            expr: lower(j)
-  +          embeddedTypeT:
-  +            type:
-  +              family: StringFamily
-  +              oid: 25
   +          isNullable: true
   +          isVirtual: true
   +          tableId: 104
+  +          type:
+  +            family: StringFamily
+  +            oid: 25
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -191,8 +190,7 @@ upsert descriptor #104
   +      targetStatus: ABSENT
   +    - elementProto:
   +        secondaryIndexPartial:
-  +          embeddedExpr:
-  +            expr: i > 0:::INT8
+  +          expr: i > 0:::INT8
   +          indexId: 2
   +          tableId: 104
   +      metadata:
@@ -201,10 +199,9 @@ upsert descriptor #104
   +      targetStatus: ABSENT
   +    - elementProto:
   +        secondaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            isCreatedExplicitly: true
-  +            tableId: 104
+  +          indexId: 2
+  +          isCreatedExplicitly: true
+  +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -341,13 +338,12 @@ upsert descriptor #104
   -          columnId: 3
   -          computeExpr:
   -            expr: lower(j)
-  -          embeddedTypeT:
-  -            type:
-  -              family: StringFamily
-  -              oid: 25
   -          isNullable: true
   -          isVirtual: true
   -          tableId: 104
+  -          type:
+  -            family: StringFamily
+  -            oid: 25
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -373,8 +369,7 @@ upsert descriptor #104
   -      targetStatus: ABSENT
   -    - elementProto:
   -        secondaryIndexPartial:
-  -          embeddedExpr:
-  -            expr: i > 0:::INT8
+  -          expr: i > 0:::INT8
   -          indexId: 2
   -          tableId: 104
   -      metadata:
@@ -383,10 +378,9 @@ upsert descriptor #104
   -      targetStatus: ABSENT
   -    - elementProto:
   -        secondaryIndex:
-  -          embeddedIndex:
-  -            indexId: 2
-  -            isCreatedExplicitly: true
-  -            tableId: 104
+  -          indexId: 2
+  -          isCreatedExplicitly: true
+  -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
