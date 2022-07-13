@@ -184,8 +184,13 @@ func (ls *Stores) Send(
 	return br, pErr
 }
 
+// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
+// "work is done" is specific to admission control and doesn't need to leak
+// everywhere.
 type StoreWriteBytes = admission.StoreWorkDoneInfo
 
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {

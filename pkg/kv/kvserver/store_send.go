@@ -48,6 +48,8 @@ func (s *Store) Send(
 	return br, pErr
 }
 
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {

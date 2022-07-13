@@ -104,6 +104,8 @@ func (r *Replica) Send(
 	return br, pErr
 }
 
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
 func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {

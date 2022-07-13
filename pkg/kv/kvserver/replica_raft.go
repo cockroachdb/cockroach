@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -70,6 +71,19 @@ func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, kvserverbase.RaftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
 	return kvserverbase.CmdIDKey(idKeyBuf)
+}
+
+var storeWriteBytesPool = sync.Pool{
+	New: func() interface{} { return &StoreWriteBytes{} },
+}
+
+func newStoreWriteBytes() *StoreWriteBytes {
+	return storeWriteBytesPool.Get().(*StoreWriteBytes)
+}
+
+// ReleaseStoreWriteBytes returns the *StoreWriteBytes to the pool.
+func ReleaseStoreWriteBytes(wb *StoreWriteBytes) {
+	storeWriteBytesPool.Put(wb)
 }
 
 // evalAndPropose prepares the necessary pending command struct and initializes
@@ -163,7 +177,12 @@ func (r *Replica) evalAndPropose(
 		proposal.command.ReplicatedEvalResult.Delta.IntentCount,
 		proposal.command.WriteBatch.Size(),
 	)
-	writeBytes := &StoreWriteBytes{}
+	// NB: if ba.AsyncConsensus is true, we will tell admission control about
+	// writes that may not have happened yet. We consider this ok, since (a) the
+	// typical lag in consensus is expected to be small compared to the time
+	// granularity of admission control doing token and size estimation (which
+	// is 15s). Also, admission control corrects for gaps in reporting.
+	writeBytes := newStoreWriteBytes()
 	if proposal.command.WriteBatch != nil {
 		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
 	}

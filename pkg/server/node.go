@@ -1015,10 +1015,11 @@ func (n *Node) batchInternal(
 		return nil, err
 	}
 	var pErr *roachpb.Error
+	// TODO(sumeer): plumb *StoreWriteBytes to admission control.
 	var writeBytes *kvserver.StoreWriteBytes
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, *args)
 	if writeBytes != nil {
-		// TODO: plumb through to AdmittedKVWorkDone.
+		kvserver.ReleaseStoreWriteBytes(writeBytes)
 	}
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
