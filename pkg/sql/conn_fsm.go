@@ -283,8 +283,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		// This is the case where we auto-retry.
 		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {
 			// Rewind and auto-retry - the transaction should stay in the Open state.
+			// Retrying causes the transaction to become "implicit" but if a BEGIN
+			// was sent it will be executed again and upgrade the transaction to
+			// "explicit."
 			Description: "Retriable err; will auto-retry",
-			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
+			Next:        stateOpen{ImplicitTxn: fsm.True},
 			Action:      prepareTxnForRetryWithRewind,
 		},
 	},

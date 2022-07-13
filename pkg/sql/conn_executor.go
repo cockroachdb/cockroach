@@ -2209,17 +2209,14 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		return nil
 	}
 	if advInfo.txnEvent.eventType == txnStart ||
-		advInfo.txnEvent.eventType == txnRestart ||
-		advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+		advInfo.txnEvent.eventType == txnRestart {
 		var nextPos CmdPos
 		switch advInfo.code {
-		case stayInPlace:
+		case stayInPlace, advanceOne:
+			// Setting this pos means that the statement that started the transaction
+			// (i.e. BEGIN) *will* be executed again. This is needed in order to make
+			// the retried transaction get upgraded from implicit to explicit.
 			nextPos = pos
-		case advanceOne:
-			// Future rewinds will refer to the next position; the statement that
-			// started the transaction (i.e. BEGIN) will not be itself be executed
-			// again.
-			nextPos = pos + 1
 		case rewind:
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
 				return errors.AssertionFailedf(
