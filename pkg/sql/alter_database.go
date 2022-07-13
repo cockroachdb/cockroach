@@ -351,6 +351,10 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
+	if err := p.addMissingTableBackReferencesInAllTypeDescriptors(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
 
@@ -1409,6 +1413,10 @@ func (p *planner) AlterDatabaseDropSuperRegion(
 		return nil, err
 	}
 
+	if err := p.addMissingTableBackReferencesInAllTypeDescriptors(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
 	return &alterDatabaseDropSuperRegion{n: n, desc: dbDesc}, nil
 }
 
@@ -1649,4 +1657,72 @@ func (p *planner) addSuperRegion(
 		ctx,
 		desc,
 	)
+}
+
+// addMissingTableBackReferencesInAllTypeDescriptors was introduced to fix
+// instances where, due to bugs, back-references in types would not be properly
+// updated. See github issues #84322 and #84144.
+func (p *planner) addMissingTableBackReferencesInAllTypeDescriptors(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) error {
+	// Collect all table and type descriptors in database.
+	dbTypes := make(map[descpb.ID]catalog.TypeDescriptor)
+	dbTables := make(map[descpb.ID]catalog.TableDescriptor)
+	{
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		_ = all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			if desc.GetParentID() != db.GetID() {
+				return nil
+			}
+			switch t := desc.(type) {
+			case catalog.TypeDescriptor:
+				dbTypes[t.GetID()] = t
+			case catalog.TableDescriptor:
+				dbTables[t.GetID()] = t
+			}
+			return nil
+		})
+	}
+
+	// Check that each forward reference in each table descriptor in the database
+	// has a back-reference in the type descriptor.
+	for _, tbl := range dbTables {
+		if tbl.Dropped() {
+			continue
+		}
+		getType := func(id descpb.ID) (catalog.TypeDescriptor, error) {
+			if typ, ok := dbTypes[id]; ok {
+				return typ, nil
+			}
+			return nil, errors.Wrapf(catalog.WrapTypeDescRefErr(id, catalog.ErrDescriptorNotFound),
+				"relation %q (%d)", tbl.GetName(), tbl.GetID())
+		}
+		typIDs, _, err := tbl.GetAllReferencedTypeIDs(db, getType)
+		if err != nil {
+			return err
+		}
+		for _, typID := range typIDs {
+			typ, err := getType(typID)
+			if err != nil {
+				return err
+			}
+			if catalog.MakeDescriptorIDSet(typ.TypeDesc().ReferencingDescriptorIDs...).Contains(tbl.GetID()) {
+				continue
+			}
+			// Fix missing back-reference in type descriptor to table descriptor.
+			mut, err := p.Descriptors().GetMutableTypeByID(ctx, p.Txn(), typ.GetID(), tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return err
+			}
+			mut.AddReferencingDescriptorID(tbl.GetID())
+			if err := p.writeTypeDesc(ctx, mut); err != nil {
+				return err
+			}
+			dbTypes[typID] = mut
+		}
+	}
+	return nil
 }
