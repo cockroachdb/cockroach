@@ -160,7 +160,7 @@ func runDrainAndDecommission(
 		run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, db)
+		err := WaitForReplication(ctx, t, db, defaultReplicationFactor)
 		require.NoError(t, err)
 	}
 
