@@ -34,7 +34,7 @@ type SSTSnapshotStorage struct {
 	dir     string
 	mu      struct {
 		syncutil.Mutex
-		ranges map[roachpb.RangeID]int
+		rangeRefCount map[roachpb.RangeID]int
 	}
 }
 
@@ -46,8 +46,8 @@ func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnap
 		dir:     filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
 		mu: struct {
 			syncutil.Mutex
-			ranges map[roachpb.RangeID]int
-		}{ranges: make(map[roachpb.RangeID]int)},
+			rangeRefCount map[roachpb.RangeID]int
+		}{rangeRefCount: make(map[roachpb.RangeID]int)},
 	}
 }
 
@@ -57,10 +57,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 	rangeID roachpb.RangeID, snapUUID uuid.UUID,
 ) *SSTSnapshotStorageScratch {
 	s.mu.Lock()
-	rangeStorage := s.mu.ranges[rangeID]
-	if rangeStorage == 0 {
-		s.mu.ranges[rangeID] = 1
-	}
+	s.mu.rangeRefCount[rangeID]++
 	s.mu.Unlock()
 	snapDir := filepath.Join(s.dir, strconv.Itoa(int(rangeID)), snapUUID.String())
 	return &SSTSnapshotStorageScratch{
@@ -82,14 +79,14 @@ func (s *SSTSnapshotStorage) Clear() error {
 func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	val := s.mu.ranges[rangeID]
+	val := s.mu.rangeRefCount[rangeID]
 	if val <= 0 {
 		panic("inconsistent scratch ref count")
 	}
 	val--
-	s.mu.ranges[rangeID] = val
+	s.mu.rangeRefCount[rangeID] = val
 	if val == 0 {
-		delete(s.mu.ranges, rangeID)
+		delete(s.mu.rangeRefCount, rangeID)
 		// Suppressing an error here is okay, as orphaned directories are at worst
 		// a performance issue when we later walk directories in pebble.Capacity()
 		// but not a correctness issue.
