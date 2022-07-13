@@ -12,6 +12,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"google.golang.org/api/impersonate"
 	"hash/crc32"
 	"net/url"
 
@@ -110,8 +112,9 @@ type pubsubSink struct {
 
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
 // getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, error) {
+func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, error) {
 	const authParam = "AUTH"
+	const assumeRoleParam = "ASSUME_ROLE"
 	const authSpecified = "specified"
 	const authImplicit = "implicit"
 	const authDefault = "default"
@@ -120,6 +123,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 	var creds *google.Credentials
 	var err error
 	authOption := u.consumeParam(authParam)
+	option.WithCredentials(creds)
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
@@ -128,7 +132,6 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 		if err != nil {
 			return nil, err
 		}
-		return creds, nil
 	case authSpecified:
 		fallthrough
 	case authDefault:
@@ -142,8 +145,26 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 		if err != nil {
 			return nil, errors.Wrap(err, "creating credentials")
 		}
-		return creds, nil
 	}
+
+	credsOpt := option.WithCredentials(creds)
+	assumeRoleOption := u.consumeParam(assumeRoleParam)
+	if assumeRoleOption != "" {
+		assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleOption)
+		cfg := impersonate.CredentialsConfig{
+			TargetPrincipal: assumeRole,
+			Scopes:          []string{gcpScope}, // TODO: figure out what this should be?
+			Delegates:       delegateRoles,
+		}
+
+		ts, err := impersonate.CredentialsTokenSource(ctx, cfg)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating impersonate credentials")
+		}
+		return option.WithTokenSource(ts), nil
+	}
+
+	return credsOpt, nil
 }
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
@@ -459,7 +480,7 @@ func (p *gcpPubsubClient) init() error {
 	client, err = pubsub.NewClient(
 		p.ctx,
 		p.projectID,
-		option.WithCredentials(creds),
+		creds,
 		option.WithEndpoint(p.region),
 	)
 
