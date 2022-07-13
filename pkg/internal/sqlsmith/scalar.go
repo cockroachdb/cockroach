@@ -401,7 +401,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		return nil, false
 	}
 	fn := fns[s.rnd.Intn(len(fns))]
-	if s.disableImpureFns && fn.overload.Volatility > volatility.Immutable {
+	if s.disableNondeterministicFns && fn.overload.Volatility > volatility.Immutable {
 		return nil, false
 	}
 	for _, ignore := range s.ignoreFNs {
@@ -409,6 +409,9 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			return nil, false
 		}
 	}
+
+	// Some aggregation functions benefit from an order by clause.
+	var orderExpr tree.Expr
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
@@ -421,6 +424,9 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		if class == tree.AggregateClass || class == tree.WindowClass {
 			var ok bool
 			arg, ok = makeColRef(s, argTyp, refs)
+			if ok && len(args) == 0 {
+				orderExpr = arg
+			}
 			if !ok {
 				// If we can't find a col ref for our aggregate function, just use a
 				// constant.
@@ -469,9 +475,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		}
 	}
 
-	// Cast the return and arguments to prevent ambiguity during function
-	// implementation choosing.
-	return castType(tree.NewTypedFuncExpr(
+	funcExpr := tree.NewTypedFuncExpr(
 		tree.ResolvableFunctionReference{FunctionReference: fn.def},
 		0, /* aggQualifier */
 		args,
@@ -480,7 +484,33 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		typ,
 		&fn.def.FunctionProperties,
 		fn.overload,
-	), typ), true
+	)
+
+	// Some aggregation functions need an order by clause to be deterministic.
+	if s.disableNondeterministicFns {
+		switch fn.def.Name {
+		case "array_agg",
+			"concat_agg",
+			"json_agg",
+			"json_object_agg",
+			"jsonb_agg",
+			"jsonb_object_agg",
+			"st_makeline",
+			"string_agg",
+			"xmlagg":
+			if orderExpr != nil {
+				funcExpr.AggType = tree.GeneralAgg
+				funcExpr.OrderBy = tree.OrderBy{{
+					Expr:      orderExpr,
+					Direction: s.randDirection(),
+				}}
+			}
+		}
+	}
+
+	// Cast the return and arguments to prevent ambiguity during function
+	// implementation choosing.
+	return castType(funcExpr, typ), true
 }
 
 var windowFrameModes = []treewindow.WindowFrameMode{
