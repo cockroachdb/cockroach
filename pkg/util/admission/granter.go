@@ -68,23 +68,29 @@ var EnabledSoftSlotGranting = settings.RegisterBoolSetting(
 
 // MinFlushUtilizationFraction is a lower-bound on the dynamically adjusted
 // flush utilization target fraction that attempts to reduce write stalls. Set
-// it to a high fraction (>>1), like 10, to effectively disable flush based
+// it to a high fraction (>>1, e.g. 10), to effectively disable flush based
 // tokens.
 //
 // The target fraction is used to multiply the (measured) peak flush rate, to
-// decide the flush tokens. For example, if the dynamic target fraction (for
+// compute the flush tokens. For example, if the dynamic target fraction (for
 // which this setting provides a lower bound) is currently 0.75, then
 // 0.75*peak-flush-rate will be used to set the flush tokens. The lower bound
-// of 0.5 should not need to be tuned. If the storage.write-stall-nanos
+// of 0.5 should not need to be tuned, and should not be tuned without
+// consultation with a domain expert. If the storage.write-stall-nanos
 // indicates significant write stalls, and the granter logs show that the
 // dynamic target fraction has already reached the lower bound, one can
-// consider lowering it a bit (and discuss with the relevant admission control
-// experts since this is behavior is unexpected).
+// consider lowering it slightly and then observe the effect.
 var MinFlushUtilizationFraction = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.min_flush_util_fraction",
-	"when computing flush tokens, this fraction is used as a lower bound on the dynamic"+
-		"multiplier of the peak flush rate", 0.5, settings.PositiveFloat)
+	"when computing flush tokens, this fraction is a lower bound on the dynamically "+
+		"adjusted flush utilization target fraction that attempts to reduce write stalls. Set "+
+		"it to a high fraction (>>1, e.g. 10), to disable flush based tokens. The dynamic "+
+		"target fraction is used to multiply the (measured) peak flush rate, to compute the flush "+
+		"tokens. If the storage.write-stall-nanos indicates significant write stalls, and the granter "+
+		"logs show that the dynamic target fraction has already reached the lower bound, one can "+
+		"consider lowering it slightly (after consultation with domain experts)", 0.5,
+	settings.PositiveFloat)
 
 // grantChainID is the ID for a grant chain. See continueGrantChain for
 // details.
