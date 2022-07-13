@@ -5,10 +5,11 @@
   "license": "BSL",
   "private": true,
   "scripts": {
-    "movr": "../../../../cockroach demo movr --nodes 4 --insecure",
-    "test": "server-test 'yarn run movr' :8084 'yarn test:run'",
-    "test:run": "cypress run",
-    "test:debug": "cypress open"
+    "movr": "./build/start-crdb-movr.sh",
+    "test": "server-test 'yarn run movr' :8080 'yarn cypress:run'",
+    "test:debug": "server-test 'yarn run movr' :8080 'yarn cypress:debug'",
+    "cypress:run": "cypress run --e2e",
+    "cypress:debug": "cypress open --e2e --browser=chrome"
   },
   "devDependencies": {
     "@testing-library/cypress": "^8.0.2",

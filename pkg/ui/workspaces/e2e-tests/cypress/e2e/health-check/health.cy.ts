@@ -8,13 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-describe("health heck", () => {
-  it("serves a DB Console instance", () => {
-    // Ensure that *something* renders at / as a canary for all other tests.
-    // If this fails, the server probably isn't running.
+describe("health check", () => {
+  it("serves a DB Console login page", () => {
+    // Ensure that *something* renders at / as a canary for all other tests,
+    // making just enough assertions to ensure the right page loaded.
+    // If this test fails, the server probably isn't running.
     cy.visit({
       url: "/",
       failOnStatusCode: true,
     });
-  })
+    cy.findByText("Log in to the DB Console").should("exist");
+    cy.findByPlaceholderText("Username").should("exist");
+    cy.findByPlaceholderText("Password").should("exist");
+  });
 })
