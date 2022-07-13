@@ -644,7 +644,3 @@ func (*mvccGCQueue) timer(_ time.Duration) time.Duration {
 func (*mvccGCQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
-
-func (*mvccGCQueue) updateChan() <-chan time.Time {
-	return nil
-}

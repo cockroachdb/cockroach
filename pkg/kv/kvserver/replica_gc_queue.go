@@ -373,7 +373,3 @@ func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 func (*replicaGCQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
-
-func (*replicaGCQueue) updateChan() <-chan time.Time {
-	return nil
-}

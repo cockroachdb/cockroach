@@ -175,7 +175,3 @@ func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
 func (rq *raftSnapshotQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
-
-func (rq *raftSnapshotQueue) updateChan() <-chan time.Time {
-	return nil
-}
