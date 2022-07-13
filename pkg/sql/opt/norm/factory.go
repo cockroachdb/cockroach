@@ -15,7 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for memo package
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -109,7 +110,7 @@ const maxConstructorStackDepth = 10_000
 // Injecting this builtins dependency in the init function allows the memo
 // package to access builtin properties without importing the builtins package.
 func init() {
-	memo.GetBuiltinProperties = builtins.GetBuiltinProperties
+	memo.GetBuiltinProperties = builtinsregistry.GetBuiltinProperties
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.

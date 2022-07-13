@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -298,7 +298,7 @@ func isAllowedDependentDescInRenameDatabase(
 		if err != nil {
 			return false, "", err
 		}
-		seqIdentifiers, err := seqexpr.GetUsedSequences(typedExpr, builtins.GetBuiltinProperties)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(typedExpr, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			return false, "", err
 		}

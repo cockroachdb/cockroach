@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -303,7 +304,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Skipped due to long execution time.
 					continue
 				}
-				_, variations := builtins.GetBuiltinProperties(name)
+				_, variations := builtinsregistry.GetBuiltinProperties(name)
 				for _, builtin := range variations {
 					select {
 					case <-done:

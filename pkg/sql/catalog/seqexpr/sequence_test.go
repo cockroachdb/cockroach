@@ -17,7 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for seqexpr package
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -50,7 +51,7 @@ func TestGetSequenceFromFunc(t *testing.T) {
 			if !ok {
 				t.Fatal("Expr is not a FuncExpr")
 			}
-			identifier, err := seqexpr.GetSequenceFromFunc(funcExpr, builtins.GetBuiltinProperties)
+			identifier, err := seqexpr.GetSequenceFromFunc(funcExpr, builtinsregistry.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +97,7 @@ func TestGetUsedSequences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			identifiers, err := seqexpr.GetUsedSequences(typedExpr, builtins.GetBuiltinProperties)
+			identifiers, err := seqexpr.GetUsedSequences(typedExpr, builtinsregistry.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -147,7 +148,7 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(typedExpr, namesToID, builtins.GetBuiltinProperties)
+			newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(typedExpr, namesToID, builtinsregistry.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}

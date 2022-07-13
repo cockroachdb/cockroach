@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/golang-commonmark/markdown"
@@ -181,7 +182,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 			continue
 		}
 		seen[name] = struct{}{}
-		props, fns := builtins.GetBuiltinProperties(name)
+		props, fns := builtinsregistry.GetBuiltinProperties(name)
 		if !props.ShouldDocument() {
 			continue
 		}

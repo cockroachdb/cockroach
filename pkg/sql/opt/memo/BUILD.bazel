@@ -90,6 +90,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",

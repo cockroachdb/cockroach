@@ -84,6 +84,7 @@ go_test(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",

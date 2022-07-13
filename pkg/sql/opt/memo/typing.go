@@ -97,7 +97,7 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	return o.NullableArgs
 }
 
-// GetBuiltinProperties is set to builtins.GetBuiltinProperties in an init
+// GetBuiltinProperties is set to builtinsregistry.GetBuiltinProperties in an init
 // function in the norm package. This allows the memo package to resolve builtin
 // functions without importing the builtins package.
 var GetBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload)
