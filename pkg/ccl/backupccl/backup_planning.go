@@ -923,9 +923,13 @@ func backupPlanHook(
 				return err
 			}
 
-			if err := writeLockOnBackupLocation(ctx, p.ExecCfg(), backupDest.defaultURI, nodeID,
-				p.User()); err != nil {
-				return err
+			// We only want to write a BACKUP-LOCK file if this is not a dry-run
+			// backup that is going to be rolled back.
+			if !backupStmt.IsDryRun {
+				if err := writeLockOnBackupLocation(ctx, p.ExecCfg(), backupDest.defaultURI, nodeID,
+					p.User()); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1003,10 +1007,14 @@ func backupPlanHook(
 				return err
 			}
 
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
+			// We only want to write a BACKUP-CHECKPOINT file if this is not a dry-run
+			// backup that is going to be rolled back.
+			if !backupStmt.IsDryRun {
+				if err := writeBackupManifestCheckpoint(
+					ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
+				); err != nil {
+					return err
+				}
 			}
 
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
@@ -1030,10 +1038,14 @@ func backupPlanHook(
 				return err
 			}
 
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
+			// We only want to write a BACKUP-CHECKPOINT file if this is not a dry-run
+			// backup that is going to be rolled back.
+			if !backupStmt.IsDryRun {
+				if err := writeBackupManifestCheckpoint(
+					ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
+				); err != nil {
+					return err
+				}
 			}
 
 			// We commit the transaction here so that the job can be started. This

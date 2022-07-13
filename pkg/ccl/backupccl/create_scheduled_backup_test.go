@@ -21,11 +21,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -657,6 +659,92 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMixedVersionScheduledBackupDoesNotLockItself is a regression test for a
+// mixed version bug in 22.1 that caused scheduled backup jobs to fail.
+//
+// In a 21.2, 22.1 mixed-version state, backup checks for concurrent backups
+// running to the same bucket during the planning phase. If it sees a
+// `BACKUP-LOCK-<nodeID>` file that was not written as part of its planning then
+// it fails the backup statement. During the execution of a `CREATE SCHEDULE` we
+// run a dry-run backup that executes the planning phase of the backup statement
+// and then rolls the txn back. Prior to the fix, this dry run phase would write
+// a `BACKUP-LOCK-<nodeID>` file and not delete it. If another node were to then
+// schedule the backup job to actually run, it would see the `BACKUP-LOCK` file
+// written during the dry-run and incorrectly assume that a concurrent backup is
+// running to the same bucket, therefore causing the scheduled job to fail.
+//
+// This test recreates the above bug by blocking the `BackupResolutionInJob`
+// migration thereby ensuring all nodes write the `BACKUP-LOCK` file during
+// planning. Additionally, it ensures that a node other than the one that ran
+// the dry-run actually schedules the job.
+func TestMixedVersionScheduledBackupDoesNotLockItself(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	disableUpgradeCh := make(chan struct{})
+	defer close(disableUpgradeCh)
+	var executeSchedule func() error
+	var srv serverutils.TestServerInterface
+	args := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					TakeOverJobsScheduling: func(f func(ctx context.Context, maxSchedules int64) error) {
+						// Effectively disable scheduled jobs from running on node 0.
+					},
+				},
+			}},
+			1: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
+						executeSchedule = func() error {
+							defer srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+							return fn(context.Background(), allSchedules)
+						}
+					},
+				}},
+			},
+			2: {Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupResolutionInJob - 1),
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+			}},
+		},
+	}
+
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 1, InitManualReplication, args)
+	defer cleanupFn()
+
+	srv = tc.Server(1)
+	n0 := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Create the schedule on node 0, the job will be picked up by either node 1
+	// or 2.
+	n0.Exec(t, `
+CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/foo' RECURRING '@hourly' 
+FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS first_run = 'now'
+`)
+	require.NoError(t, executeSchedule())
+
+	query := "SELECT id FROM system.jobs WHERE status=$1 AND created_by_type=$2"
+	testutils.SucceedsSoon(t, func() error {
+		// Force newly created job to be adopted and verify it succeeds.
+		srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return n0.DB.QueryRowContext(context.Background(),
+			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs).Scan(&unused)
+	})
 }
 
 func TestScheduleBackup(t *testing.T) {
