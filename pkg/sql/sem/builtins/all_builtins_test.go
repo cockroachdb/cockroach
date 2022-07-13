@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -28,8 +29,8 @@ import (
 
 func TestOverloadsHaveVolatility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for name, builtin := range builtins {
-		for idx, overload := range builtin.overloads {
+	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		for idx, overload := range overloads {
 			assert.NotEqual(
 				t,
 				volatility.V(0),
@@ -39,7 +40,7 @@ func TestOverloadsHaveVolatility(t *testing.T) {
 				idx,
 			)
 		}
-	}
+	})
 }
 
 // TestOverloadsVolatilityMatchesPostgres that our overloads match Postgres'
@@ -140,8 +141,8 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check each builtin against Postgres.
-	for name, builtin := range builtins {
-		for idx, overload := range builtin.overloads {
+	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		for idx, overload := range overloads {
 			if overload.IgnoreVolatilityCheck {
 				continue
 			}
@@ -160,5 +161,5 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 				postgresVolatility,
 			)
 		}
-	}
+	})
 }

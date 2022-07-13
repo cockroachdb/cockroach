@@ -22,6 +22,7 @@ go_test(
         ":seqexpr",
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
     ],

@@ -49,16 +49,11 @@ var _ eval.ValueGenerator = &arrayValueGenerator{}
 func initGeneratorBuiltins() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		if _, exists := builtins[k]; exists {
-			panic("duplicate builtin: " + k)
-		}
-
 		if v.props.Class != tree.GeneratorClass {
 			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
 		}
-
-		builtins[k] = v
+		registerBuiltin(k, v)
 	}
 }
 

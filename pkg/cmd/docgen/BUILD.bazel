@@ -15,6 +15,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/cmd/docgen/extract",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/tree",
         "//pkg/util/envutil",
         "//pkg/util/log",
