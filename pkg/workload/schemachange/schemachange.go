@@ -432,7 +432,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
-
 	w.logger.writeLog("COMMIT")
 	if err = tx.Commit(ctx); err != nil {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
