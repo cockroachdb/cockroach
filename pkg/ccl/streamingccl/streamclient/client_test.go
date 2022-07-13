@@ -50,7 +50,7 @@ func (sc testStreamClient) Heartbeat(
 }
 
 // Close implements the Client interface.
-func (sc testStreamClient) Close() error {
+func (sc testStreamClient) Close(ctx context.Context) error {
 	return nil
 }
 
@@ -109,11 +109,12 @@ func (t testStreamSubscription) Err() error {
 // client could be used.
 func ExampleClient() {
 	client := testStreamClient{}
+	ctx := context.Background()
 	defer func() {
-		_ = client.Close()
+		_ = client.Close(ctx)
 	}()
 
-	id, err := client.Create(context.Background(), roachpb.MakeTenantID(1))
+	id, err := client.Create(ctx, roachpb.MakeTenantID(1))
 	if err != nil {
 		panic(err)
 	}
@@ -125,7 +126,7 @@ func ExampleClient() {
 
 	done := make(chan struct{})
 
-	grp := ctxgroup.WithContext(context.Background())
+	grp := ctxgroup.WithContext(ctx)
 	grp.GoCtx(func(ctx context.Context) error {
 		ticker := time.NewTicker(time.Second * 30)
 		for {
@@ -150,14 +151,14 @@ func ExampleClient() {
 		ts := ingested.ts
 		ingested.Unlock()
 
-		topology, err := client.Plan(context.Background(), id)
+		topology, err := client.Plan(ctx, id)
 		if err != nil {
 			panic(err)
 		}
 
 		for _, partition := range topology {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
-			sub, err := client.Subscribe(context.Background(), id, partition.SubscriptionToken, ts)
+			sub, err := client.Subscribe(ctx, id, partition.SubscriptionToken, ts)
 			if err != nil {
 				panic(err)
 			}
