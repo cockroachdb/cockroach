@@ -8,11 +8,38 @@ ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
 us-east-1       {us-az1,us-az2,us-az3}  {}  {}
 
 statement ok
-CREATE DATABASE mr primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
+CREATE DATABASE mr PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE mr
 
 statement ok
-USE mr;
+CREATE TABLE kv(k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER TABLE kv SET LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO kv (crdb_region, k, v) VALUES ('us-east-1', 1, 1);
+INSERT INTO kv (crdb_region, k, v) VALUES ('ca-central-1', 2, 2)
+
+query I retry
+SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running' AND job_type LIKE '%SCHEMA CHANGE'
+----
+0
+
+statement error pgcode 2BP01 could not remove enum value \"us-east-1\" as it is being used by \"kv\" in row: k=1, v=1, crdb_region=\'us-east-1\'
+ALTER DATABASE mr DROP REGION "us-east-1"
+
+statement error pgcode 42P12 cannot drop region \"ca-central-1\"
+ALTER DATABASE mr DROP REGION "ca-central-1"
+
+statement ok
+DROP TABLE kv
+
+statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
 statement ok
 ALTER DATABASE mr DROP REGION "us-east-1"
+
+statement ok
+DROP DATABASE mr
