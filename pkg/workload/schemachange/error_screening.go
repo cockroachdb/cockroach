@@ -343,8 +343,18 @@ GROUP BY name;
 				continue
 			}
 			evalTxn, err := tx.Begin(ctx)
+			if err != nil {
+				return false, nil, err
+			}
 			newCols[colInfo.name], err = og.generateColumn(ctx, tx, colInfo, columnsToValues)
-			evalTxn.Rollback(ctx)
+			rbkErr := evalTxn.Rollback(ctx)
+			if rbkErr != nil {
+				// If we also failed to generate the column include that error too.
+				if err != nil {
+					return false, nil, errors.WithSecondaryError(err, rbkErr)
+				}
+				return false, nil, rbkErr
+			}
 			if err != nil {
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
@@ -443,7 +453,7 @@ GROUP BY name;
 				}
 				// Only accept known error types for generated expressions.
 				if !isValidGenerationError(pgErr.Code) {
-					return false, generatedCodes, err
+					return false, err
 				}
 				generatedCodes = append(generatedCodes,
 					codesWithConditions{
