@@ -345,6 +345,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		); err != nil {
 			return err
 		}
+		// Add all newly created type back references.
+		if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+			return err
+		}
 
 		// Allow add column mutation to be on the same mutation ID in AlterPrimaryKey.
 		mutationIdx := len(n.tableDesc.Mutations) - 1
