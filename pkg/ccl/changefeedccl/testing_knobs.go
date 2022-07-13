@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -42,6 +43,8 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
+	// ShouldReplan is used to see if a replan for a changefeed should be triggered
+	ShouldReplan func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
