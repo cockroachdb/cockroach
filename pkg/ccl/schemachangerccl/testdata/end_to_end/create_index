@@ -179,11 +179,10 @@ upsert descriptor #104
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        secondaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            sourceIndexId: 1
-  +            tableId: 104
-  +            temporaryIndexId: 3
+  +          indexId: 2
+  +          sourceIndexId: 1
+  +          tableId: 104
+  +          temporaryIndexId: 3
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -214,11 +213,10 @@ upsert descriptor #104
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        temporaryIndex:
-  +          embeddedIndex:
-  +            indexId: 3
-  +            sourceIndexId: 1
-  +            tableId: 104
+  +          indexId: 3
   +          isUsingSecondaryEncoding: true
+  +          sourceIndexId: 1
+  +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -604,11 +602,10 @@ upsert descriptor #104
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        secondaryIndex:
-  -          embeddedIndex:
-  -            indexId: 2
-  -            sourceIndexId: 1
-  -            tableId: 104
-  -            temporaryIndexId: 3
+  -          indexId: 2
+  -          sourceIndexId: 1
+  -          tableId: 104
+  -          temporaryIndexId: 3
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -639,11 +636,10 @@ upsert descriptor #104
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        temporaryIndex:
-  -          embeddedIndex:
-  -            indexId: 3
-  -            sourceIndexId: 1
-  -            tableId: 104
+  -          indexId: 3
   -          isUsingSecondaryEncoding: true
+  -          sourceIndexId: 1
+  -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1

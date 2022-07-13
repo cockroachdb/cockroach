@@ -118,10 +118,9 @@ upsert descriptor #104
   +      targetStatus: ABSENT
   +    - elementProto:
   +        secondaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            isCreatedExplicitly: true
-  +            tableId: 104
+  +          indexId: 2
+  +          isCreatedExplicitly: true
+  +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -233,10 +232,9 @@ upsert descriptor #104
   -      targetStatus: ABSENT
   -    - elementProto:
   -        secondaryIndex:
-  -          embeddedIndex:
-  -            indexId: 2
-  -            isCreatedExplicitly: true
-  -            tableId: 104
+  -          indexId: 2
+  -          isCreatedExplicitly: true
+  -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1

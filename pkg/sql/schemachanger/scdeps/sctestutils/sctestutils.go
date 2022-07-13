@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gojson "encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -109,11 +110,46 @@ func ProtoToYAML(m protoutil.Message, fmtFlags protoreflect.FmtFlags) (string, e
 	if err != nil {
 		return "", err
 	}
+	removeEmbedded(target)
 	out, err := yaml.Marshal(target)
 	if err != nil {
 		return "", err
 	}
 	return string(out), nil
+}
+
+func removeEmbedded(in map[string]interface{}) {
+	embeddedRegexp := regexp.MustCompile("^embedded[A-Z]")
+	containsAnyKeys := func(haystack, needles map[string]interface{}) bool {
+		for k := range needles {
+			if _, exists := haystack[k]; exists {
+				return true
+			}
+		}
+		return false
+	}
+	var walk func(interface{})
+	walk = func(obj interface{}) {
+		switch objV := obj.(type) {
+		case map[string]interface{}:
+			for k, v := range objV {
+				walk(v)
+				m, ok := v.(map[string]interface{})
+				if !ok || !embeddedRegexp.MatchString(k) || containsAnyKeys(objV, m) {
+					continue
+				}
+				delete(objV, k)
+				for mk, mv := range m {
+					objV[mk] = mv
+				}
+			}
+		case []interface{}:
+			for _, v := range objV {
+				walk(v)
+			}
+		}
+	}
+	walk(in)
 }
 
 // DiffArgs defines arguments for the Diff function.

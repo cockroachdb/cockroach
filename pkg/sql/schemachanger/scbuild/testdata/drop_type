@@ -5,86 +5,33 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 build
 DROP TYPE defaultdb.typ
 ----
-- [[AliasType:{DescID: 105}, ABSENT], PUBLIC]
-  details:
-    embeddedTypeT:
-      closedTypeIds:
-      - 104
-      - 105
-      type:
-        arrayContents:
-          family: EnumFamily
-          oid: 100104
-          udtMetadata:
-            arrayTypeOid: 100105
-        arrayElemType: EnumFamily
-        family: ArrayFamily
-        oid: 100105
-    typeId: 105
-- [[EnumType:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    arrayTypeId: 105
-    typeId: 104
-- [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC]
-  details:
-    logicalRepresentation: a
-    physicalRepresentation: gA==
-    typeId: 104
 - [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
-  details:
-    databaseId: 100
-    descriptorId: 104
-    name: typ
-    schemaId: 101
-- [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
-  details:
-    databaseId: 100
-    descriptorId: 105
-    name: _typ
-    schemaId: 101
-- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  details:
-    objectId: 104
-    parentSchemaId: 101
-- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  details:
-    objectId: 105
-    parentSchemaId: 101
+  {databaseId: 100, descriptorId: 104, name: typ, schemaId: 101}
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    owner: root
-- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    owner: root
+  {descriptorId: 104, owner: root}
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    privileges: 2
-    userName: admin
+  {descriptorId: 104, privileges: 2, userName: admin}
 - [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    privileges: 512
-    userName: public
+  {descriptorId: 104, privileges: 512, userName: public}
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    privileges: 2
-    userName: root
+  {descriptorId: 104, privileges: 2, userName: root}
+- [[EnumType:{DescID: 104}, ABSENT], PUBLIC]
+  {arrayTypeId: 105, typeId: 104}
+- [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC]
+  {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 104}
+- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 104, parentSchemaId: 101}
+- [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _typ, schemaId: 101}
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
+  {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    privileges: 2
-    userName: admin
+  {descriptorId: 105, privileges: 2, userName: admin}
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    privileges: 512
-    userName: public
+  {descriptorId: 105, privileges: 512, userName: public}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    privileges: 2
-    userName: root
+  {descriptorId: 105, privileges: 2, userName: root}
+- [[AliasType:{DescID: 105}, ABSENT], PUBLIC]
+  {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105}
+- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 105, parentSchemaId: 101}

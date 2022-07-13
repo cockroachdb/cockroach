@@ -6,341 +6,120 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    pgAttributeNum: 2
-    tableId: 104
+  {columnId: 2, pgAttributeNum: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    name: j
-    tableId: 104
+  {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
+  {columnId: 2, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 1
-    kind: STORED
-    tableId: 104
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    pgAttributeNum: 2
-    tableId: 104
-- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedExpr:
-      expr: 123:::INT8
-    tableId: 104
-- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    name: j
-    tableId: 104
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 2
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    kind: STORED
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    indexId: 1
-    name: foo_pkey
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: foo_pkey
-    tableId: 104
+  {columnId: 1, indexId: 1, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 104
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: foo_pkey, tableId: 104}
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: j, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, expr: '123:::INT8', tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-      temporaryIndexId: 3
+  {constraintId: 1, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: foo_pkey, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
+  {constraintId: 1, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    pgAttributeNum: 2
-    tableId: 104
-- [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    pgAttributeNum: 3
-    tableId: 104
-- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedExpr:
-      expr: 123:::INT8
-    tableId: 104
-- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    embeddedExpr:
-      expr: 456:::INT8
-    tableId: 104
-- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    name: j
-    tableId: 104
-- [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    name: k
-    tableId: 104
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 2
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    indexId: 2
-    kind: STORED
-    ordinalInKind: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    indexId: 3
-    kind: STORED
-    ordinalInKind: 1
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    indexId: 1
-    name: foo_pkey
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: foo_pkey
-    tableId: 104
+  {columnId: 1, indexId: 1, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 104
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: foo_pkey, tableId: 104}
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: j, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, expr: '123:::INT8', tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-      temporaryIndexId: 3
+  {constraintId: 1, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: foo_pkey, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
+  {constraintId: 1, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
+- [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, pgAttributeNum: 3, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, name: k, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, expr: '456:::INT8', tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 3, indexId: 2, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, indexId: 3, kind: STORED, ordinalInKind: 1, tableId: 104}
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    pgAttributeNum: 2
-    tableId: 104
-- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    name: a
-    tableId: 104
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    computeExpr:
-      expr: i + 1:::INT8
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 2
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    kind: STORED
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    indexId: 1
-    name: foo_pkey
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: foo_pkey
-    tableId: 104
+  {columnId: 1, indexId: 1, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 104
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: foo_pkey, tableId: 104}
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: a, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, computeExpr: {expr: 'i + 1:::INT8'}, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-      temporaryIndexId: 3
+  {constraintId: 1, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: foo_pkey, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
+  {constraintId: 1, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
 
 setup
 CREATE TABLE defaultdb.bar (j INT);
@@ -351,55 +130,18 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    pgAttributeNum: 2
-    tableId: 104
-- [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    pgAttributeNum: 3
-    tableId: 105
+  {columnId: 2, pgAttributeNum: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    name: a
-    tableId: 104
-- [[ColumnName:{DescID: 105, Name: b, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    name: b
-    tableId: 105
+  {columnId: 2, name: a, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 104
-- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    embeddedTypeT:
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    isNullable: true
-    tableId: 105
+  {columnId: 2, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 1
-    kind: STORED
-    tableId: 104
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
+- [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, pgAttributeNum: 3, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: b, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, name: b, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}}
 - [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 1}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    indexId: 1
-    kind: STORED
-    ordinalInKind: 1
-    tableId: 105
+  {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 105}
