@@ -245,6 +245,7 @@ func (oc *optCatalog) ResolveDataSource(
 	return ds, oc.tn, nil
 }
 
+// ResolveIndex is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveIndex(
 	ctx context.Context, flags cat.Flags, name *tree.TableIndexName,
 ) (cat.Index, cat.DataSourceName, error) {
