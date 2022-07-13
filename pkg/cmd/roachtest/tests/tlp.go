@@ -147,7 +147,7 @@ func runOneTLP(
 
 	// Initialize a smither that will never generate mutations.
 	tlpSmither, err := sqlsmith.NewSmither(conn, rnd,
-		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns())
+		sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns())
 	if err != nil {
 		t.Fatal(err)
 	}
