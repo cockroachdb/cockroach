@@ -9,7 +9,8 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import { combineReducers } from "redux";
+import { Action, combineReducers } from "redux";
+import { ThunkAction, ThunkDispatch } from "redux-thunk";
 import moment from "moment";
 import { util } from "@cockroachlabs/cluster-ui";
 const { generateStmtDetailsToID } = util;
@@ -27,6 +28,9 @@ import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.
@@ -289,8 +293,8 @@ export const refreshSettings = settingsReducerObj.refresh;
 export const sessionsReducerObj = new CachedDataReducer(
   api.getSessions,
   "sessions",
-  // The sessions page is a real time view, so need a fairly quick update pace.
-  moment.duration(10, "s"),
+  // The sessions page is polled at the usage sites.
+  null,
   moment.duration(1, "m"),
 );
 export const invalidateSessions = sessionsReducerObj.invalidateData;
@@ -374,6 +378,23 @@ const metricMetadataReducerObj = new CachedDataReducer(
 );
 export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
 
+const clusterLocksReducerObj = new CachedDataReducer(
+  clusterUiApi.getClusterLocksState,
+  "clusterLocks",
+  null,
+  moment.duration(30, "s"),
+);
+export const refreshClusterLocks = clusterLocksReducerObj.refresh;
+
+export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
+  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
+    dispatch(
+      refreshSessions(new SessionsRequest({ exclude_closed_sessions: true })),
+    );
+    dispatch(refreshClusterLocks());
+  };
+};
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -408,6 +429,7 @@ export interface APIReducersState {
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
+  clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -448,6 +470,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
+  [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
