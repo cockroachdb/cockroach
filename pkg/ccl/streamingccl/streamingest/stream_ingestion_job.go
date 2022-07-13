@@ -101,7 +101,7 @@ func getStreamIngestionStats(
 	} else {
 		stats.ProducerStatus = &streamStatus
 	}
-	return stats, client.Close()
+	return stats, client.Close(evalCtx.Ctx())
 }
 
 type streamIngestionResumer struct {
@@ -220,7 +220,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		// Completes the producer job in the source cluster.
 		return client.Complete(ctx, streamID)
 	}
-	return errors.CombineErrors(ingestWithClient(), client.Close())
+	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
 }
 
 // Resume is part of the jobs.Resumer interface.

@@ -234,7 +234,7 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 				return streamingccl.NewStreamStatusErr(h.streamID, streamStatus.StreamStatus)
 			}
 		}
-		err := errors.CombineErrors(sendHeartbeats(), h.client.Close())
+		err := errors.CombineErrors(sendHeartbeats(), h.client.Close(ctx))
 		close(h.stoppedChan)
 		return err
 	})

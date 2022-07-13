@@ -359,7 +359,7 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	for _, client := range sip.streamPartitionClients {
-		_ = client.Close()
+		_ = client.Close(sip.Ctx)
 	}
 	if sip.batcher != nil {
 		sip.batcher.Close(sip.Ctx)

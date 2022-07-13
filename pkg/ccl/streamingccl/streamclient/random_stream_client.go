@@ -339,7 +339,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 }
 
 // Close implements the Client interface.
-func (m *randomStreamClient) Close() error {
+func (m *randomStreamClient) Close(ctx context.Context) error {
 	return nil
 }
 
