@@ -326,11 +326,8 @@ GROUP BY name;
 	for range constraints {
 		constraintTuples = append(constraintTuples, make(map[string]struct{}))
 	}
-
 	for _, row := range rows {
-		if err != nil {
-			return false, nil, err
-		}
+		hasGenerationError := false
 		// Put values to be inserted into a column name to value map to simplify lookups.
 		columnsToValues := map[string]string{}
 		for i := 0; i < len(columns); i++ {
@@ -347,15 +344,10 @@ GROUP BY name;
 				return false, nil, err
 			}
 			newCols[colInfo.name], err = og.generateColumn(ctx, tx, colInfo, columnsToValues)
-			rbkErr := evalTxn.Rollback(ctx)
-			if rbkErr != nil {
-				// If we also failed to generate the column include that error too.
-				if err != nil {
+			if err != nil {
+				if rbkErr := evalTxn.Rollback(ctx); rbkErr != nil {
 					return false, nil, errors.WithSecondaryError(err, rbkErr)
 				}
-				return false, nil, rbkErr
-			}
-			if err != nil {
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
 					return false, nil, err
@@ -369,14 +361,20 @@ GROUP BY name;
 						{code: pgcode.MakeCode(pgErr.Code), condition: true},
 					}...,
 				)
+				hasGenerationError = true
 				continue
 			}
+			err = evalTxn.Commit(ctx)
 			if err != nil {
 				return false, nil, err
 			}
 		}
 		for k, v := range newCols {
 			columnsToValues[k] = v
+		}
+		// Skip over constraint validation, since we know an expression is bad here.
+		if hasGenerationError {
+			continue
 		}
 		// Next validate the uniqueness of both constraints and index expressions.
 		for constraintIdx, constraint := range constraints {
