@@ -17,8 +17,11 @@ import {
   ActiveStatementDetails,
   ActiveStatementDetailsDispatchProps,
 } from "./activeStatementDetails";
-import { selectActiveStatement } from "./activeStatementDetails.selectors";
 import { ActiveStatementDetailsStateProps } from ".";
+import {
+  selectActiveStatement,
+  selectContentionDetailsForStatement,
+} from "src/selectors/activeExecutions.selectors";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -27,6 +30,7 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): ActiveStatementDetailsStateProps => {
   return {
+    contentionDetails: selectContentionDetailsForStatement(state, props),
     statement: selectActiveStatement(state, props),
     match: props.match,
   };
@@ -35,7 +39,7 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): ActiveStatementDetailsDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
 export const ActiveStatementDetailsPageConnected = withRouter(

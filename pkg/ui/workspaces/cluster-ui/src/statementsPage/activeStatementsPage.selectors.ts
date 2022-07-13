@@ -8,9 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Dispatch } from "redux";
 import { createSelector } from "reselect";
-import { getActiveStatementsFromSessions } from "../activeExecutions/activeStatementUtils";
-import { localStorageSelector } from "../store/utils/selectors";
 import {
   ActiveStatementFilters,
   ActiveStatementsViewDispatchProps,
@@ -18,26 +17,13 @@ import {
   AppState,
   SortSetting,
 } from "src";
-import { actions as sessionsActions } from "src/store/sessions";
+import {
+  selectActiveStatements,
+  selectAppName,
+} from "src/selectors/activeExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { Dispatch } from "redux";
-
-export const selectActiveStatements = createSelector(
-  (state: AppState) => state.adminUI.sessions,
-  response => {
-    if (!response.data) return [];
-
-    return getActiveStatementsFromSessions(response.data, response.lastUpdated);
-  },
-);
-
-export const selectAppName = createSelector(
-  (state: AppState) => state.adminUI.sessions,
-  response => {
-    if (!response.data) return null;
-    return response.data.internal_app_name_prefix;
-  },
-);
+import { actions as sessionsActions } from "src/store/sessions";
+import { localStorageSelector } from "../store/utils/selectors";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveStatementsPage"];
@@ -73,7 +59,7 @@ export const mapStateToActiveStatementsPageProps = (
 export const mapDispatchToActiveStatementsPageProps = (
   dispatch: Dispatch,
 ): ActiveStatementsViewDispatchProps => ({
-  refreshSessions: () => dispatch(sessionsActions.refresh()),
+  refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
   onColumnsSelect: columns => {
     dispatch(
       localStorageActions.update({
