@@ -247,20 +247,19 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth|password authentication failed")
 
-	url = fmt.Sprintf("postgres://bob:builder@toothless-28.blah:%s/defaultdb?sslmode=require", port)
-	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
-
+	// SNI provides tenant ID.
 	url = fmt.Sprintf("postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require", port)
-	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
-
-	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
 
-	// SNI provides tenant ID.
-	url = fmt.Sprintf("postgres://bob:builder@serverless-28.blah:%s/defaultdb?sslmode=require", port)
+	// SNI tried but doesn't parse to valid tenant ID and DB/Options not provided
+	url = fmt.Sprintf("postgres://bob:builder@tenant_cluster_28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "missing cluster identifier")
+
+	// Database provides valid ID
+	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -268,23 +267,26 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 	// SNI and database provide tenant IDs that match.
 	url = fmt.Sprintf(
-		"postgres://bob:builder@serverless-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require", port,
+		"postgres://bob:builder@tenant-cluster-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require", port,
 	)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
 
-	// SNI and database provide tenant IDs that don't match.
+	// SNI and database provide tenant IDs that don't match. SNI is ignored.
 	url = fmt.Sprintf(
-		"postgres://bob:builder@serverless-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require", port,
+		"postgres://bob:builder@tick-data-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require", port,
 	)
-	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+		require.NoError(t, runTestQuery(ctx, conn))
+	})
 
-	require.Equal(t, int64(3), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(3), s.metrics.ConnectionLatency.TotalCount())
+	require.Equal(t, int64(4), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(4), s.metrics.ConnectionLatency.TotalCount())
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
-	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
+	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
 
 func TestProxyTLSConf(t *testing.T) {
@@ -1739,6 +1741,7 @@ func (te *tester) TestConnectErr(
 	if err == nil {
 		_ = conn.Close(ctx)
 	}
+	require.NotNil(t, err)
 	require.Regexp(t, expErr, err.Error())
 	require.False(t, te.Authenticated())
 	if expCode != 0 {

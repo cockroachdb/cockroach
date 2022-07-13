@@ -542,7 +542,7 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 // We currently support embedding the cluster identifier in three ways:
 //
 // - Through server name identification (SNI) when using TLS connections
-//   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
+//   (e.g. happy-koala-3.5xj.gcp-us-central1.cockroachlabs.cloud)
 //
 // - Within the database param (e.g. "happy-koala-3.defaultdb")
 //
@@ -563,12 +563,29 @@ func clusterNameAndTenantFromParams(
 		return fe.Msg, "", roachpb.MaxTenantID, err
 	}
 
-	sniTenID, sniPresent := parseSNI(fe.SniServerName)
-
+	var clusterName string
+	var tenID roachpb.TenantID
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
-		if sniPresent {
-			return fe.Msg, "", sniTenID, nil
+		var clusterIdentifierSNI string
+		if i := strings.Index(fe.SniServerName, "."); i >= 0 {
+			clusterIdentifierSNI = fe.SniServerName[:i]
+		}
+		if clusterIdentifierSNI != "" {
+			clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierSNI)
+			if err == nil {
+				// Identifier provider via SNI is a bit different from the identifiers
+				// provided via DB (with dot) or options. With SNI it is possible that
+				// the end user doesn't want to use SNI as a cluster identifier and at
+				// the same time the driver or client they are using may be sending SNI
+				// info it anyway. We don't have a way to know if they intended to use
+				// SNI for cluster identification or not. So SNI will be a source of
+				// last resort for cluster identification, tried only when DB and Opts
+				// are blank. If SNI doesn't parse as a valid cluster id, then we assume
+				// that the end user didn't intend to pass cluster info through SNI and
+				// show missing cluster identifier instead of invalid cluster identifier.
+				return fe.Msg, clusterName, tenID, nil
+			}
 		}
 		err := errors.New("missing cluster identifier")
 		err = errors.WithHint(err, clusterIdentifierHint)
@@ -586,47 +603,12 @@ func clusterNameAndTenantFromParams(
 		return fe.Msg, "", roachpb.MaxTenantID, err
 	}
 
-	if clusterIdentifierDB == "" {
-		clusterIdentifierDB = clusterIdentifierOpt
+	if clusterIdentifierDB != "" {
+		clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierDB)
+	} else {
+		clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierOpt)
 	}
-
-	sepIdx := strings.LastIndex(clusterIdentifierDB, clusterTenantSep)
-
-	// Cluster identifier provided without a tenant ID in the end.
-	if sepIdx == -1 || sepIdx == len(clusterIdentifierDB)-1 {
-		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
-		err = errors.WithHint(err, missingTenantIDHint)
-		err = errors.WithHint(err, clusterNameFormHint)
-		return fe.Msg, "", roachpb.MaxTenantID, err
-	}
-
-	clusterName, tenantIDStr := clusterIdentifierDB[:sepIdx], clusterIdentifierDB[sepIdx+1:]
-
-	// Cluster name does not conform to the expected format (e.g. too short).
-	if !clusterNameRegex.MatchString(clusterName) {
-		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
-		err = errors.WithHintf(err, "Is '%s' a valid cluster name?", clusterName)
-		err = errors.WithHint(err, clusterNameFormHint)
-		return fe.Msg, "", roachpb.MaxTenantID, err
-	}
-
-	// Tenant ID cannot be parsed.
-	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
-		// Log these non user-facing errors.
-		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifierDB, err)
-		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
-		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
-		err = errors.WithHint(err, clusterNameFormHint)
-		return fe.Msg, "", roachpb.MaxTenantID, err
-	}
-
-	// This case only happens if tenID is 0 or 1 (system tenant).
-	if tenID < roachpb.MinTenantID.ToUint64() {
-		// Log these non user-facing errors.
-		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifierDB)
-		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
-		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
 		return fe.Msg, "", roachpb.MaxTenantID, err
 	}
 
@@ -645,54 +627,59 @@ func clusterNameAndTenantFromParams(
 		}
 	}
 
-	// Cluster ID provided through one of options or database (or both and the
-	// info is matching). If sni has been provided as well - check for match.
-	if sniPresent && tenID != sniTenID.InternalValue {
-		err := errors.New("multiple different tenant IDs provided")
-		err = errors.WithHintf(err,
-			"Is '%d' (SNI) or '%d' (database/options) the identifier for the cluster that you're connecting to?",
-			sniTenID.InternalValue, tenID)
-		err = errors.WithHint(err, clusterIdentifierHint)
-		return fe.Msg, "", roachpb.MaxTenantID, err
-	}
-
 	outMsg := &pgproto3.StartupMessage{
 		ProtocolVersion: fe.Msg.ProtocolVersion,
 		Parameters:      paramsOut,
 	}
-	return outMsg, clusterName, roachpb.MakeTenantID(tenID), nil
+	return outMsg, clusterName, tenID, nil
 }
 
-// parseSNI parses the sni server name parameter if provided and returns the
-// extracted tenant id. If the extraction was successful the second parameter
-// will be true. If not - false.
-func parseSNI(sniServerName string) (roachpb.TenantID, bool) {
-	if sniServerName == "" {
-		return roachpb.MaxTenantID, false
+// parseClusterIdentifier will parse an identifier received via DB, opts or SNI
+// and extract the tenant cluster name and tenant ID.
+func parseClusterIdentifier(
+	ctx context.Context, clusterIdentifier string,
+) (string, roachpb.TenantID, error) {
+	sepIdx := strings.LastIndex(clusterIdentifier, clusterTenantSep)
+
+	// Cluster identifier provided without a tenant ID in the end.
+	if sepIdx == -1 || sepIdx == len(clusterIdentifier)-1 {
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
+		err = errors.WithHint(err, missingTenantIDHint)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return "", roachpb.MaxTenantID, err
 	}
 
-	// Try to obtain tenant ID from SNI
-	parts := strings.Split(sniServerName, ".")
-	if len(parts) == 0 {
-		return roachpb.MaxTenantID, false
+	clusterName, tenantIDStr := clusterIdentifier[:sepIdx], clusterIdentifier[sepIdx+1:]
+
+	// Cluster name does not conform to the expected format (e.g. too short).
+	if !clusterNameRegex.MatchString(clusterName) {
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
+		err = errors.WithHintf(err, "Is '%s' a valid cluster name?", clusterName)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return "", roachpb.MaxTenantID, err
 	}
 
-	hostname := parts[0]
-	hostnameParts := strings.Split(hostname, "-")
-	// TODO serverless prefix may not be appropriate for all cases where the proxy
-	// is used so it needs to be mad configurable. A better design would be to pass
-	// the options (database, options, sni server name) to the tenant directory
-	// and get back a routing id.
-	if len(hostnameParts) != 2 || !strings.EqualFold("serverless", hostnameParts[0]) {
-		return roachpb.MaxTenantID, false
+	// Tenant ID cannot be parsed.
+	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		// Log these non user-facing errors.
+		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifier, err)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
+		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
+		err = errors.WithHint(err, clusterNameFormHint)
+		return "", roachpb.MaxTenantID, err
 	}
 
-	tenID, err := strconv.ParseUint(hostnameParts[1], 10, 64)
-	if err != nil || tenID < roachpb.MinTenantID.ToUint64() {
-		return roachpb.MaxTenantID, false
+	// This case only happens if tenID is 0 or 1 (system tenant).
+	if tenID < roachpb.MinTenantID.ToUint64() {
+		// Log these non user-facing errors.
+		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifier)
+		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
+		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
+		return "", roachpb.MaxTenantID, err
 	}
 
-	return roachpb.MakeTenantID(tenID), true
+	return clusterName, roachpb.MakeTenantID(tenID), nil
 }
 
 // parseDatabaseParam parses the database parameter from the PG connection
