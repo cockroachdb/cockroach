@@ -328,6 +328,9 @@ GROUP BY name;
 	}
 
 	for _, row := range rows {
+		if err != nil {
+			return false, nil, err
+		}
 		// Put values to be inserted into a column name to value map to simplify lookups.
 		columnsToValues := map[string]string{}
 		for i := 0; i < len(columns); i++ {
@@ -339,7 +342,25 @@ GROUP BY name;
 			if !colInfo.generated {
 				continue
 			}
+			evalTxn, err := tx.Begin(ctx)
 			newCols[colInfo.name], err = og.generateColumn(ctx, tx, colInfo, columnsToValues)
+			evalTxn.Rollback(ctx)
+			if err != nil {
+				var pgErr *pgconn.PgError
+				if !errors.As(err, &pgErr) {
+					return false, nil, err
+				}
+				// Only accept know error types for generated expressions.
+				if !isValidGenerationError(pgErr.Code) {
+					return false, nil, err
+				}
+				generatedCodes = append(generatedCodes,
+					codesWithConditions{
+						{code: pgcode.MakeCode(pgErr.Code), condition: true},
+					}...,
+				)
+				continue
+			}
 			if err != nil {
 				return false, nil, err
 			}
@@ -422,7 +443,7 @@ GROUP BY name;
 				}
 				// Only accept known error types for generated expressions.
 				if !isValidGenerationError(pgErr.Code) {
-					return false, err
+					return false, generatedCodes, err
 				}
 				generatedCodes = append(generatedCodes,
 					codesWithConditions{

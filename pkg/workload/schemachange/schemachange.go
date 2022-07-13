@@ -321,7 +321,8 @@ func (w *schemaChangeWorker) getErrorState() string {
 		"Executed queries for generating errors: %s"+
 		"==========================="+
 		"Previous statements %s",
-		w.opGen.expectedExecErrors.String(),
+		"",
+		//	w.opGen.expectedExecErrors.String(),
 		w.opGen.potentialExecErrors.String(),
 		w.opGen.expectedCommitErrors.String(),
 		w.opGen.potentialCommitErrors.String(),
@@ -363,20 +364,17 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			)
 		}
 
-		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
-		w.logger.writeLog(op)
+		w.logger.addExpectedErrors(op.expectedExecErrors, w.opGen.expectedCommitErrors)
+		w.logger.writeLog(op.String())
 		if !w.dryRun {
 			start := timeutil.Now()
 
-			if _, err = tx.Exec(ctx, op); err != nil {
+			err := op.executeStmt(ctx, tx, w.opGen)
+			if err != nil {
 				// If the error not an instance of pgconn.PgError, then it is unexpected.
 				pgErr := new(pgconn.PgError)
 				if !errors.As(err, &pgErr) {
-					return errors.Mark(
-						errors.Wrapf(err, "***UNEXPECTED ERROR; Received a non pg error. %s",
-							w.getErrorState()),
-						errRunInTxnFatalSentinel,
-					)
+					return err
 				}
 
 				// Transaction retry errors are acceptable. Allow the transaction
@@ -388,33 +386,8 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 						errRunInTxnRbkSentinel,
 					)
 				}
-
-				// Screen for any unexpected errors.
-				if !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
-					!w.opGen.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
-					return errors.Mark(
-						errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error. %s",
-							w.getErrorState()),
-						errRunInTxnFatalSentinel,
-					)
-				}
-
-				// Rollback because the error was anticipated.
-				w.recordInHist(timeutil.Since(start), txnRollback)
-				return errors.Mark(
-					errors.Wrapf(err, "ROLLBACK; Successfully got expected execution error. %s",
-						w.getErrorState()),
-					errRunInTxnRbkSentinel,
-				)
+				return err
 			}
-			if !w.opGen.expectedExecErrors.empty() {
-				return errors.Mark(
-					errors.Newf("***FAIL; Failed to receive an execution error when errors were expected. %s",
-						w.getErrorState()),
-					errRunInTxnFatalSentinel,
-				)
-			}
-			fmt.Printf("OK: %s", op)
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
