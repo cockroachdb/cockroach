@@ -1,0 +1,238 @@
+# Prepare a statement and make sure it works.
+
+send
+Query {"String": "DROP TABLE IF EXISTS drop_cols;"}
+Query {"String": "CREATE TABLE drop_cols (id int PRIMARY KEY NOT NULL, f1 int NOT NULL, f2 int NOT NULL);"}
+Query {"String": "INSERT INTO drop_cols (id, f1, f2) VALUES (1, 1, 2)"}
+Query {"String": "BEGIN"}
+Parse {"Name": "s1", "Query": "SELECT * FROM drop_cols WHERE id = $1"}
+Bind {"PreparedStatement": "s1", "Parameters": [{"text": "1"}]}
+Execute
+Sync
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"},{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Make a schema change that breaks the prepared statement.
+
+send
+Query {"String": "ALTER TABLE drop_cols DROP COLUMN f1"}
+Bind {"PreparedStatement": "s1", "Parameters": [{"text": "1"}]}
+Execute
+Sync
+----
+
+until ignore=BindComplete
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Parse should fail in an aborted transaction.
+
+send
+Parse {"Name": "s2", "Query": "SELECT * FROM drop_cols WHERE id = $1"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Describe should fail in an aborted transaction.
+
+send
+Describe {"Name": "s1", "ObjectType": "S"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Flush should *not* fail in an aborted transaction.
+
+send
+Flush
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Bind should fail in an aborted transaction.
+
+send
+Bind {"PreparedStatement": "s1", "Parameters": [{"text": "1"}]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Rollback the transaction, and make sure prepared statement works.
+
+send
+Query {"String": "ROLLBACK"}
+Parse {"Name": "s3", "Query": "SELECT * FROM drop_cols WHERE id = $1"}
+Bind {"PreparedStatement": "s3", "Parameters": [{"text": "1"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"},{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# ROLLBACK in a prepared statement is allowed.
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "SELECT 1/0"}
+Parse {"Name": "rollback_stmt", "Query": "ROLLBACK"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "rollback_stmt"}
+Describe {"Name": "rollback_stmt", "ObjectType": "S"}
+Describe {"Name": "p3", "ObjectType": "P"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"NoData"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# ROLLBACK TO SAVEPOINT in a prepared statement is allowed.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "savepoint_stmt", "Query": "SAVEPOINT cockroach_restart"}
+Bind {"DestinationPortal": "p5", "PreparedStatement": "savepoint_stmt"}
+Describe {"Name": "savepoint_stmt", "ObjectType": "S"}
+Describe {"Name": "p5", "ObjectType": "P"}
+Execute {"Portal": "p5"}
+Query {"String": "SELECT 1/0"}
+Parse {"Name": "rollback_savepoint_stmt", "Query": "ROLLBACK TO SAVEPOINT cockroach_restart"}
+Bind {"DestinationPortal": "p6", "PreparedStatement": "rollback_savepoint_stmt"}
+Describe {"Name": "rollback_savepoint_stmt", "ObjectType": "S"}
+Describe {"Name": "p6", "ObjectType": "P"}
+Execute {"Portal": "p6"}
+Sync
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"NoData"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"NoData"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# COMMIT in a prepared statement is allowed.
+
+send
+Query {"String": "SELECT 1/0"}
+Parse {"Name": "commit_stmt", "Query": "COMMIT"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "commit_stmt"}
+Describe {"Name": "commit_stmt", "ObjectType": "S"}
+Describe {"Name": "p4", "ObjectType": "P"}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"NoData"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
