@@ -184,7 +184,7 @@ project
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=7e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(6)=7e-07, null(6)=0]
+      │    │                   ├── stats: [rows=7e-07, distinct(3)=2.00000017e-07, null(3)=0, distinct(6)=7e-07, null(6)=0]
       │    │                   │   histogram(6)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(6)
@@ -404,7 +404,7 @@ project
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=7.1e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(6)=7.1e-07, null(6)=0]
+      │    │                   ├── stats: [rows=7.1e-07, distinct(3)=2.00000017e-07, null(3)=0, distinct(6)=7.1e-07, null(6)=0]
       │    │                   │   histogram(6)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(6)
