@@ -329,6 +329,10 @@ func attemptChunkReduction(
 			return "", err
 		}
 
+		if chunkReducer.NumSegments() == 0 {
+			return reduced, nil
+		}
+
 		// Pick two random indexes and remove all statements between them.
 		start := rand.Intn(chunkReducer.NumSegments())
 		end := rand.Intn(chunkReducer.NumSegments()-start) + start + 1
