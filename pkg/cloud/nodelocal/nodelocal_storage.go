@@ -67,6 +67,10 @@ type localFileStorage struct {
 
 var _ cloud.ExternalStorage = &localFileStorage{}
 
+// LocalRequiresExternalIOAccounting is the return falues for
+// (*localFileStorage).RequiresExternalIOAccounting. This is exposed for testing.
+var LocalRequiresExternalIOAccounting = false
+
 // MakeLocalStorageURI converts a local path (should always be relative) to a
 // valid nodelocal URI.
 func MakeLocalStorageURI(path string) string {
@@ -113,6 +117,10 @@ func (l *localFileStorage) Conf() roachpb.ExternalStorage {
 
 func (l *localFileStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return l.ioConf
+}
+
+func (l *localFileStorage) RequiresExternalIOAccounting() bool {
+	return LocalRequiresExternalIOAccounting
 }
 
 func (l *localFileStorage) Settings() *cluster.Settings {

@@ -1575,7 +1575,9 @@ CREATE VIEW crdb_internal.tenant_usage_details (
   total_write_bytes,
   total_write_requests,
   total_sql_pod_seconds,
-  total_pgwire_egress_bytes
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
 ) AS SELECT
     tenant_id,
     (j->>'rU')::FLOAT8 AS total_ru,
@@ -1584,7 +1586,9 @@ CREATE VIEW crdb_internal.tenant_usage_details (
     (j->>'writeBytes')::INT8 AS total_write_bytes,
     (j->>'writeRequests')::INT8 AS total_write_requests,
     (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
-    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
   FROM
     (
        SELECT
@@ -1603,7 +1607,9 @@ CREATE VIEW crdb_internal.tenant_usage_details (
   total_write_bytes,
   total_write_requests,
   total_sql_pod_seconds,
-  total_pgwire_egress_bytes
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
 ) AS SELECT
     tenant_id,
     (j->>'rU')::FLOAT8 AS total_ru,
@@ -1612,7 +1618,9 @@ CREATE VIEW crdb_internal.tenant_usage_details (
     (j->>'writeBytes')::INT8 AS total_write_bytes,
     (j->>'writeRequests')::INT8 AS total_write_requests,
     (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
-    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
   FROM
     (
        SELECT

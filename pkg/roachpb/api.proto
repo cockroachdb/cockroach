@@ -1647,7 +1647,7 @@ message AdminVerifyProtectedTimestampResponse {
 // committed versioned values with non-zero MVCC timestamps (no intents or
 // inline values) and no tombstones. It cannot be used in a transaction, cannot
 // be split across ranges, and must be alone in a batch.
-// 
+//
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
 // guarantees, including ACID, serializability and single-key linearizability:
@@ -1704,7 +1704,7 @@ message AddSSTableRequest {
   // only bumped when the values are subsequently read). Use DisallowConflicts
   // or DisallowShadowing in addition to guarantee MVCC correctness and
   // serializability.
-  // 
+  //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp sst_timestamp_to_request_timestamp = 6 [
     (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
@@ -1749,7 +1749,7 @@ message AddSSTableRequest {
   // resumption or retry. The equal value requirement is to avoid unique
   // constraint violations.
   //
-  // If this parameter is used, the value of DisallowShadowing is ignored, so 
+  // If this parameter is used, the value of DisallowShadowing is ignored, so
   // callers may pass both for forward and backwards compatibility.
   //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
@@ -1780,7 +1780,7 @@ message AddSSTableRequest {
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // RangeSpan is the span of the range which just added this sstable. It is 
+  // RangeSpan is the span of the range which just added this sstable. It is
   // included in the reply along with AvailableBytes so that callers can tell if
   // a file they are about to send would be sent to the same range as a file
   // sent previously (i.e. if it intersects with this span as sent then), and if
@@ -2823,7 +2823,8 @@ message TenantConsumption {
   uint64 write_bytes = 5;
   double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];
   uint64 pgwire_egress_bytes = 7 [(gogoproto.customname) = "PGWireEgressBytes"];
-
+  uint64 external_io_ingress_bytes = 9 [(gogoproto.customname) = "ExternalIOIngressBytes"];
+  uint64 external_io_egress_bytes = 10 [(gogoproto.customname) = "ExternalIOEgressBytes"];
   // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 

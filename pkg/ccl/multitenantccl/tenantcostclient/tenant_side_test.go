@@ -12,6 +12,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -19,20 +23,31 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nullsink"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -40,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -49,6 +65,7 @@ func TestDataDriven(t *testing.T) {
 
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 
 		var ts testState
 		ts.start(t)
@@ -168,6 +185,19 @@ func (ts *testState) stop() {
 type cmdArgs struct {
 	bytes int64
 	label string
+
+	unused int64
+}
+
+func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
+	if len(arg.Vals) != 1 {
+		return 0, errors.Newf("expected one value for bytes")
+	}
+	val, err := strconv.ParseInt(arg.Vals[0], 10, 64)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not convert value to integer")
+	}
+	return val, nil
 }
 
 func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
@@ -175,15 +205,17 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 	for _, args := range d.CmdArgs {
 		switch args.Key {
 		case "bytes":
-			if len(args.Vals) != 1 {
-				d.Fatalf(t, "expected one value for bytes")
-			}
-			val, err := strconv.Atoi(args.Vals[0])
+			v, err := parseBytesVal(args)
 			if err != nil {
-				d.Fatalf(t, "invalid bytes value")
+				d.Fatalf(t, err.Error())
 			}
-			res.bytes = int64(val)
-
+			res.bytes = v
+		case "unused":
+			v, err := parseBytesVal(args)
+			if err != nil {
+				d.Fatalf(t, err.Error())
+			}
+			res.unused = v
 		case "label":
 			if len(args.Vals) != 1 || args.Vals[0] == "" {
 				d.Fatalf(t, "label requires a value")
@@ -197,17 +229,21 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 var testStateCommands = map[string]func(
 	*testState, *testing.T, *datadriven.TestData, cmdArgs,
 ) string{
-	"read":           (*testState).read,
-	"write":          (*testState).write,
-	"await":          (*testState).await,
-	"not-completed":  (*testState).notCompleted,
-	"advance":        (*testState).advance,
-	"wait-for-event": (*testState).waitForEvent,
-	"timers":         (*testState).timers,
-	"cpu":            (*testState).cpu,
-	"pgwire-egress":  (*testState).pgwireEgress,
-	"usage":          (*testState).usage,
-	"configure":      (*testState).configure,
+	"read":                           (*testState).read,
+	"write":                          (*testState).write,
+	"await":                          (*testState).await,
+	"not-completed":                  (*testState).notCompleted,
+	"advance":                        (*testState).advance,
+	"wait-for-event":                 (*testState).waitForEvent,
+	"timers":                         (*testState).timers,
+	"cpu":                            (*testState).cpu,
+	"pgwire-egress":                  (*testState).pgwireEgress,
+	"external-egress":                (*testState).externalEgress,
+	"external-ingress":               (*testState).externalIngress,
+	"enable-external-ru-accounting":  (*testState).enableRUAccounting,
+	"disable-external-ru-accounting": (*testState).disableRUAccounting,
+	"usage":                          (*testState).usage,
+	"configure":                      (*testState).configure,
 }
 
 func (ts *testState) fireRequest(
@@ -270,6 +306,39 @@ func (ts *testState) request(
 	} else {
 		ts.asyncRequest(t, d, reqInfo, respInfo, args.label)
 	}
+	return ""
+}
+
+func (ts *testState) externalIngress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	bytesRead := args.bytes
+	if err := ts.controller.ExternalIOReadWait(context.Background(), bytesRead); err != nil {
+		t.Errorf("ExternalIOReadWait error: %s", err)
+	}
+	return ""
+}
+
+func (ts *testState) externalEgress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	ctx := context.Background()
+	bytesWritten := args.bytes
+	if err := ts.controller.ExternalIOWriteWait(ctx, args.bytes); err != nil {
+		t.Errorf("ExternalIOWriteWait error: %s", err)
+		return ""
+	}
+	if args.unused > 0 {
+		ts.controller.ExternalIOWriteFailure(ctx, bytesWritten-args.unused, args.unused)
+	} else {
+		ts.controller.ExternalIOWriteSuccess(ctx, bytesWritten)
+	}
+	return ""
+}
+
+func (ts *testState) enableRUAccounting(t *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
+	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "on")
+	return ""
+}
+
+func (ts *testState) disableRUAccounting(t *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
+	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "off")
 	return ""
 }
 
@@ -458,7 +527,9 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		"Reads:  %d requests (%d bytes)\n"+
 		"Writes:  %d requests (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
-		"PGWire egress:  %d bytes\n",
+		"PGWire egress:  %d bytes\n"+
+		"ExternalIO egress: %d bytes\n"+
+		"ExternalIO ingress: %d bytes\n",
 		c.RU,
 		c.ReadRequests,
 		c.ReadBytes,
@@ -466,6 +537,8 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		c.WriteBytes,
 		c.SQLPodsCPUSeconds,
 		c.PGWireEgressBytes,
+		c.ExternalIOEgressBytes,
+		c.ExternalIOIngressBytes,
 	)
 }
 
@@ -563,7 +636,6 @@ func (tp *testProvider) TokenBucket(
 		}
 	}
 	res.FallbackRate = tp.mu.cfg.FallbackRate
-
 	return res, nil
 }
 
@@ -694,4 +766,316 @@ func TestSQLLivenessExemption(t *testing.T) {
 			return nil
 		},
 	)
+}
+
+// TestConsumption verifies consumption reporting from a tenant server process.
+func TestConsumptionChangefeeds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer hostServer.Stopper().Stop(context.Background())
+	if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		t.Fatalf("changefeed setup failed: %s", err.Error())
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond*20)
+	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
+
+	testProvider := newTestProvider()
+
+	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
+		TenantID:                    serverutils.TestTenantID(),
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
+					return testProvider
+				},
+			},
+			DistSQL: &execinfra.TestingKnobs{
+				Changefeed: &changefeedccl.TestingKnobs{
+					NullSinkIsExternalIOAccounted: true,
+				},
+			},
+		},
+	})
+	r := sqlutils.MakeSQLRunner(tenantDB)
+	r.Exec(t, "CREATE TABLE t (v STRING)")
+	r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+	beforeChangefeed := testProvider.waitForConsumption(t)
+	r.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	r.Exec(t, "CREATE CHANGEFEED FOR t INTO 'null://'")
+
+	// Make sure some external io usage is reported.
+	testutils.SucceedsSoon(t, func() error {
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&beforeChangefeed)
+		if c.ExternalIOEgressBytes == 0 {
+			return errors.New("no external io usage reported")
+		}
+		return nil
+	})
+}
+
+// TestConsumption verifies consumption reporting from a tenant server process.
+func TestConsumptionExternalStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testSink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			n, err := io.Copy(ioutil.Discard, r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			t.Logf("read %d bytes", n)
+		case http.MethodGet:
+			_, _ = w.Write([]byte("some\ntest\ncsv\ndata\n"))
+		}
+
+	}))
+	defer testSink.Close()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(dir)
+	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer hostServer.Stopper().Stop(context.Background())
+	hostSQL := sqlutils.MakeSQLRunner(hostDB)
+
+	st := cluster.MakeTestingClusterSettings()
+	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond*20)
+	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
+
+	testProvider := newTestProvider()
+	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
+		TenantID:                    serverutils.TestTenantID(),
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
+		ExternalIODir:               dir,
+		TestingKnobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BlobClientFactory: blobClientFactory,
+			},
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
+					return testProvider
+				},
+			},
+		},
+	})
+	r := sqlutils.MakeSQLRunner(tenantDB)
+
+	createTables := func() {
+		r.Exec(t, "CREATE TABLE t (v STRING)")
+		r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+		hostSQL.Exec(t, "CREATE TABLE t (v STRING)")
+		hostSQL.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+	}
+	dropTables := func() {
+		r.Exec(t, "DROP TABLE t")
+		hostSQL.Exec(t, "DROP TABLE t")
+	}
+	t.Run("export in a tenant increments egress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		before := testProvider.waitForConsumption(t)
+		r.Exec(t, fmt.Sprintf("EXPORT INTO CSV '%s' FROM TABLE t", testSink.URL))
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		require.NotEqual(t, uint64(0), c.ExternalIOEgressBytes)
+	})
+	t.Run("export from a host does not increment egress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		before := testProvider.waitForConsumption(t)
+		hostSQL.Exec(t, fmt.Sprintf("EXPORT INTO CSV '%s' FROM TABLE t", testSink.URL))
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		require.Equal(t, uint64(0), c.ExternalIOEgressBytes)
+		require.Equal(t, uint64(0), c.ExternalIOIngressBytes)
+	})
+	t.Run("import from a tenant increments ingress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		before := testProvider.waitForConsumption(t)
+		r.Exec(t, fmt.Sprintf("IMPORT INTO t CSV DATA('%s')", testSink.URL))
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		t.Logf("%v", c)
+		require.NotEqual(t, uint64(0), c.ExternalIOIngressBytes)
+	})
+	t.Run("export from a host does not increment ingress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		before := testProvider.waitForConsumption(t)
+		hostSQL.Exec(t, fmt.Sprintf("IMPORT INTO t CSV DATA('%s')", testSink.URL))
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		require.Equal(t, uint64(0), c.ExternalIOIngressBytes)
+		require.Equal(t, uint64(0), c.ExternalIOEgressBytes)
+
+	})
+	t.Run("backup from tenant increments egress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		nodelocal.LocalRequiresExternalIOAccounting = true
+		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
+		before := testProvider.waitForConsumption(t)
+		r.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/tenant'")
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		require.NotEqual(t, uint64(0), c.ExternalIOEgressBytes)
+	})
+	t.Run("backup from host does not increment ingress or egress bytes", func(t *testing.T) {
+		createTables()
+		defer dropTables()
+		nodelocal.LocalRequiresExternalIOAccounting = true
+		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
+		before := testProvider.waitForConsumption(t)
+		hostSQL.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/host'")
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		require.Equal(t, uint64(0), c.ExternalIOEgressBytes)
+		require.Equal(t, uint64(0), c.ExternalIOIngressBytes)
+	})
+}
+
+func BenchmarkExternalIOAccounting(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	hostServer, hostSQL, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer hostServer.Stopper().Stop(context.Background())
+
+	tenantS, _ := serverutils.StartTenant(b, hostServer, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
+
+	nullsink.NullRequiresExternalIOAccounting = true
+
+	setRUAccountingMode := func(b *testing.B, mode string) {
+		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_external_io_ru_accounting_mode = '%s'", mode))
+		require.NoError(b, err)
+
+		_, err = hostSQL.Exec(`UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES ($1, $2, $3, $4)`,
+			0, "tenant_external_io_ru_accounting_mode", mode, "s")
+		require.NoError(b, err)
+	}
+
+	concurrently := func(b *testing.B, ctx context.Context, concurrency int, op func(context.Context) error) {
+		g := ctxgroup.WithContext(ctx)
+		for i := 0; i < concurrency; i++ {
+			g.GoCtx(op)
+		}
+		require.NoError(b, g.Wait())
+	}
+
+	dataSize := 8 << 20
+	data := bytes.Repeat([]byte{byte(1)}, dataSize)
+
+	readFromExternalStorage := func(b *testing.B, interceptor cloud.ReadWriterInterceptor) (func(context.Context) error, func() error) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				_, _ = w.Write(data)
+			}
+		}))
+		es, err := tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalStorageFromURI(
+			context.Background(), s.URL,
+			security.RootUserName(),
+			cloud.WithIOAccountingInterceptor(interceptor))
+		require.NoError(b, err)
+		return func(ctx context.Context) error {
+				r, err := es.ReadFile(ctx, "")
+				if err != nil {
+					return err
+				}
+				_, err = io.Copy(ioutil.Discard, ioctx.ReaderCtxAdapter(ctx, r))
+				if err != nil {
+					_ = r.Close(ctx)
+					return err
+				}
+				return r.Close(ctx)
+			}, func() error {
+				s.Close()
+				return es.Close()
+			}
+	}
+
+	writeToExternalStorage := func(b *testing.B, interceptor cloud.ReadWriterInterceptor) (func(context.Context) error, func() error) {
+		es, err := tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalStorageFromURI(
+			context.Background(),
+			"null://",
+			security.RootUserName(),
+			cloud.WithIOAccountingInterceptor(interceptor))
+		require.NoError(b, err)
+		return func(ctx context.Context) error {
+			w, err := es.Writer(ctx, "does-not-matter")
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(w, bytes.NewReader(data))
+			if err != nil {
+				_ = w.Close()
+				return err
+			}
+			return w.Close()
+		}, es.Close
+	}
+
+	funcForOp := func(b *testing.B, op string, interceptor cloud.ReadWriterInterceptor) (func(context.Context) error, func() error) {
+		if op == "read" {
+			return readFromExternalStorage(b, interceptor)
+		} else {
+			return writeToExternalStorage(b, interceptor)
+		}
+	}
+	concurrencyCounts := []int{8}
+	for _, op := range []string{"read", "write"} {
+		b.Run(fmt.Sprintf("op=%s/without-interceptor", op), func(b *testing.B) {
+			for _, c := range concurrencyCounts {
+				b.Run(fmt.Sprintf("concurrency=%d", c), func(b *testing.B) {
+					testOp, cleanup := funcForOp(b, op, nil)
+					defer func() { _ = cleanup() }()
+
+					b.SetBytes(int64(dataSize))
+					b.ResetTimer()
+					for n := 0; n < b.N; n++ {
+						concurrently(b, context.Background(), c, testOp)
+					}
+				})
+			}
+		})
+		b.Run(fmt.Sprintf("op=%s/with-interceptor", op), func(b *testing.B) {
+			for _, ruAccountingMode := range []string{"on", "off", "nowait"} {
+				limits := []int{1024, 16384, 16777216}
+				for _, limit := range limits {
+					for _, c := range concurrencyCounts {
+						testName := fmt.Sprintf("ru-accounting=%s/limit=%d/concurrency=%d",
+							ruAccountingMode, limit, c)
+						b.Run(testName, func(b *testing.B) {
+							setRUAccountingMode(b, ruAccountingMode)
+							interceptor := multitenant.NewReadWriteAccounter(tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalIORecorder, int64(limit))
+							testOp, cleanup := funcForOp(b, op, interceptor)
+							defer func() { _ = cleanup() }()
+
+							b.ResetTimer()
+							b.SetBytes(int64(dataSize))
+							for n := 0; n < b.N; n++ {
+								concurrently(b, context.Background(), c, testOp)
+							}
+						})
+					}
+				}
+			}
+		})
+	}
 }

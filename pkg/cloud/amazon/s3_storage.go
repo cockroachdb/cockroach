@@ -439,6 +439,8 @@ func (s *s3Storage) ExternalIOConf() base.ExternalIODirConfig {
 	return s.ioConf
 }
 
+func (s *s3Storage) RequiresExternalIOAccounting() bool { return true }
+
 func (s *s3Storage) Settings() *cluster.Settings {
 	return s.settings
 }

@@ -37,6 +37,7 @@ go_library(
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

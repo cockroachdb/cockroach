@@ -52,6 +52,11 @@ type ExternalStorage interface {
 	// configured options pertaining to an ExternalStorage implementation.
 	ExternalIOConf() base.ExternalIODirConfig
 
+	// RequiresExternalIOAccounting should return true if the
+	// ExternalStorage implementation should be accounted for when
+	// calculating resource usage.
+	RequiresExternalIOAccounting() bool
+
 	// Settings should return the cluster settings used to configure the
 	// ExternalStorage implementation.
 	Settings() *cluster.Settings
@@ -95,11 +100,11 @@ type ExternalStorage interface {
 type ListingFn func(string) error
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
-type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
+type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage, opts ...ExternalStorageOption) (ExternalStorage, error)
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
-	user security.SQLUsername) (ExternalStorage, error)
+	user security.SQLUsername, opts ...ExternalStorageOption) (ExternalStorage, error)
 
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.
@@ -149,6 +154,13 @@ type ExternalStorageContext struct {
 	BlobClientFactory blobs.BlobClientFactory
 	InternalExecutor  sqlutil.InternalExecutor
 	DB                *kv.DB
+}
+
+// ExternalStorageOptions holds dependencies and values that can be
+// overridden by callers of an ExternalStorageFactory via a passed
+// ExternalStorageOption.
+type ExternalStorageOptions struct {
+	ioAccountingInterceptor ReadWriterInterceptor
 }
 
 // ExternalStorageConstructor is a function registered to create instances

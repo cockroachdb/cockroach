@@ -122,7 +122,6 @@ func TestConverterFlushesBatches(t *testing.T) {
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
-
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
@@ -864,7 +863,7 @@ func TestImportWithPartialIndexesErrs(t *testing.T) {
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
-	return func(_ context.Context, es roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+	return func(_ context.Context, es roachpb.ExternalStorage, _ ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 		uri, err := url.Parse(es.HttpPath.BaseUri)
 		if err != nil {
 			return nil, err
@@ -881,7 +880,7 @@ func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFacto
 
 // External storage factory needed to run converters.
 func externalStorageFactory(
-	ctx context.Context, dest roachpb.ExternalStorage,
+	ctx context.Context, dest roachpb.ExternalStorage, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	workdir, err := os.Getwd()
 	if err != nil {

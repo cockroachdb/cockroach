@@ -141,12 +141,13 @@ func ExternalStorageFromURI(
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	limiters Limiters,
+	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, limiters)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, limiters, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -193,6 +194,7 @@ func MakeExternalStorage(
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	limiters Limiters,
+	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	args := ExternalStorageContext{
 		IOConf:            conf,
@@ -204,16 +206,22 @@ func MakeExternalStorage(
 	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
 	}
+	options := ExternalStorageOptions{}
+	for _, o := range opts {
+		o(&options)
+	}
 	if fn, ok := implementations[dest.Provider]; ok {
 		e, err := fn(ctx, args, dest)
 		if err != nil {
 			return nil, err
 		}
-		if l, ok := limiters[dest.Provider]; ok {
-			return &limitWrapper{ExternalStorage: e, lim: l}, nil
-		}
-		return e, nil
+		return &esWrapper{
+			ExternalStorage: e,
+			lim:             limiters[dest.Provider],
+			ioRecorder:      options.ioAccountingInterceptor,
+		}, nil
 	}
+
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
@@ -258,38 +266,60 @@ func MakeLimiters(ctx context.Context, sv *settings.Values) Limiters {
 	return m
 }
 
-type limitWrapper struct {
+type esWrapper struct {
 	ExternalStorage
-	lim rwLimiter
+
+	lim        rwLimiter
+	ioRecorder ReadWriterInterceptor
 }
 
-func (l *limitWrapper) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
-	r, err := l.ExternalStorage.ReadFile(ctx, basename)
+func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
+	if e.lim.read != nil {
+		r = &limitedReader{r: r, lim: e.lim.read}
+	}
+	if e.ioRecorder != nil {
+		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r)
+	}
+	return r
+}
+
+func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCloser {
+	if e.lim.write != nil {
+		w = &limitedWriter{w: w, ctx: ctx, lim: e.lim.write}
+	}
+	if e.ioRecorder != nil {
+		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w)
+	}
+	return w
+}
+
+func (e *esWrapper) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
+	r, err := e.ExternalStorage.ReadFile(ctx, basename)
 	if err != nil {
 		return r, err
 	}
 
-	return &limitedReader{r: r, lim: l.lim.read}, nil
+	return e.wrapReader(ctx, r), nil
 }
 
-func (l *limitWrapper) ReadFileAt(
+func (e *esWrapper) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (ioctx.ReadCloserCtx, int64, error) {
-	r, s, err := l.ExternalStorage.ReadFileAt(ctx, basename, offset)
+	r, s, err := e.ExternalStorage.ReadFileAt(ctx, basename, offset)
 	if err != nil {
 		return r, s, err
 	}
 
-	return &limitedReader{r: r, lim: l.lim.read}, s, nil
+	return e.wrapReader(ctx, r), s, nil
 }
 
-func (l *limitWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	w, err := l.ExternalStorage.Writer(ctx, basename)
+func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	w, err := e.ExternalStorage.Writer(ctx, basename)
 	if err != nil {
 		return nil, err
 	}
 
-	return &limitedWriter{w: w, ctx: ctx, lim: l.lim.write}, nil
+	return e.wrapWriter(ctx, w), nil
 }
 
 type limitedReader struct {
@@ -351,4 +381,11 @@ func (l *limitedWriter) Close() error {
 		log.Warningf(l.ctx, "failed to throttle closing write: %+v", err)
 	}
 	return l.w.Close()
+}
+
+// A ReadWriterInterceptor providers methods that construct Readers and Writers from given Readers
+// and Writers.
+type ReadWriterInterceptor interface {
+	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx) ioctx.ReadCloserCtx
+	Writer(context.Context, ExternalStorage, io.WriteCloser) io.WriteCloser
 }

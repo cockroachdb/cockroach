@@ -247,9 +247,9 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB: kvDB,
-			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil)
+					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil, opts...)
 			},
 			Settings:          s.ClusterSettings(),
 			Codec:             keys.SystemSQLCodec,

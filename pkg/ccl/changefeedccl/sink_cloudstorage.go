@@ -306,7 +306,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-	metrics           *sliMetrics
+	metrics           metricsRecorder
 }
 
 const sinkCompressionGzip = "gzip"
@@ -333,7 +333,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -368,7 +368,6 @@ func makeCloudStorageSink(
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: sessID,
-		metrics:      m,
 		topicNamer:   tn,
 	}
 
@@ -422,10 +421,16 @@ func makeCloudStorageSink(
 		}
 	}
 
-	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
+	// We make the external storage with a nil IOAccountingInterceptor since we
+	// record usage metrics via s.metrics.
+	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
 		return nil, err
 	}
-
+	if mb != nil {
+		s.metrics = mb(s.es.RequiresExternalIOAccounting())
+	} else {
+		s.metrics = (*sliMetrics)(nil)
+	}
 	return s, nil
 }
 
