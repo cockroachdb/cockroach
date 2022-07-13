@@ -84,10 +84,6 @@ func (tq *testQueueImpl) purgatoryChan() <-chan time.Time {
 	return tq.pChan
 }
 
-func (tq *testQueueImpl) updateChan() <-chan time.Time {
-	return nil
-}
-
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.

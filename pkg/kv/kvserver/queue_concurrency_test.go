@@ -151,10 +151,6 @@ func (fakeQueueImpl) purgatoryChan() <-chan time.Time {
 	return time.After(time.Nanosecond)
 }
 
-func (fakeQueueImpl) updateChan() <-chan time.Time {
-	return nil
-}
-
 type fakeReplica struct {
 	rangeID   roachpb.RangeID
 	replicaID roachpb.ReplicaID

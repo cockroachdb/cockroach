@@ -322,7 +322,7 @@ func (ae *allocatorError) Error() string {
 
 func (*allocatorError) purgatoryErrorMarker() {}
 
-var _ PurgatoryError = &allocatorError{}
+var _ purgatoryError = &allocatorError{}
 
 // allocatorRand pairs a rand.Rand with a mutex.
 // NOTE: Allocator is typically only accessed from a single thread (the

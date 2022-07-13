@@ -238,7 +238,3 @@ func (q *consistencyQueue) timer(duration time.Duration) time.Duration {
 func (*consistencyQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
-
-func (*consistencyQueue) updateChan() <-chan time.Time {
-	return nil
-}
