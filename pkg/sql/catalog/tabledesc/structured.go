@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -751,13 +752,35 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 
 		// KeySuffixColumnIDs is only populated for indexes using the secondary
 		// index encoding. It is the set difference of the primary key minus the
-		// index's key.
+		// non-inverted columns in the index's key.
 		colIDs := idx.CollectKeyColumnIDs()
+		isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
+		invID := catid.ColumnID(0)
+		if isInverted {
+			invID = idx.InvertedColumnID()
+		}
 		var extraColumnIDs []descpb.ColumnID
 		for _, primaryColID := range desc.PrimaryIndex.KeyColumnIDs {
 			if !colIDs.Contains(primaryColID) {
 				extraColumnIDs = append(extraColumnIDs, primaryColID)
 				colIDs.Add(primaryColID)
+			} else if invID == primaryColID {
+				// In an inverted index, the inverted column's value is not equal to the
+				// actual data in the row for that column. As a result, if the inverted
+				// column happens to also be in the primary key, it's crucial that
+				// the index key still be suffixed with that full primary key value to
+				// preserve the index semantics.
+				// extraColumnIDs = append(extraColumnIDs, primaryColID)
+				// However, this functionality is not supported by the execution engine,
+				// so prevent it by returning an error.
+				col, err := desc.FindColumnWithID(primaryColID)
+				if err != nil {
+					return err
+				}
+				return unimplemented.NewWithIssuef(84405,
+					"primary key column %s cannot be present in an inverted index",
+					col.GetName(),
+				)
 			}
 		}
 		if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
