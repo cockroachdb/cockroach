@@ -89,6 +89,11 @@ message SessionData {
   // TrigramSimilarityThreshold configures the value that's used to compare
   // trigram similarities to in order to evaluate the string % string overload.
   double trigram_similarity_threshold = 20;
+
+  // Troubleshooting mode determines whether we refuse to do additional work with
+  // the query (i.e. collect & emit telemetry data). Troubleshooting mode is
+  // disabled by default.
+  bool troubleshooting_mode = 21;
 }
 
 // DataConversionConfig contains the parameters that influence the output
