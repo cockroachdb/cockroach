@@ -91,7 +91,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │           oid: 20
 │           │           width: 64
 │           │
-│           └── • scop.AddColumnToIndex
+│           └── • AddColumnToIndex
 │                 ColumnID: 2
 │                 IndexID: 1
 │                 Kind: 2
@@ -173,6 +173,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
 
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
@@ -1969,8 +1970,8 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
       │         ├── RemoveAllTableComments {"TableID":266}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":265}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":266,"Name":"child","SchemaID":105}}
-      │         ├── scop.RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
-      │         ├── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":265}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":266}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -1993,7 +1994,6 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":266}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
-
 
 statement ok
 SET use_declarative_schema_changer = 'on'

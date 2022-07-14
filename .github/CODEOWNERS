@@ -271,6 +271,7 @@
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
 /pkg/cmd/skiperrs/           @cockroachdb/sql-experience
 /pkg/cmd/skipped-tests/      @cockroachdb/test-eng
+/pkg/cmd/smith/              @cockroachdb/sql-queries
 /pkg/cmd/smithcmp/           @cockroachdb/sql-queries
 /pkg/cmd/smithtest/          @cockroachdb/sql-queries
 /pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf

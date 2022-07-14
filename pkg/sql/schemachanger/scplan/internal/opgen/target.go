@@ -31,7 +31,9 @@ type target struct {
 type transition struct {
 	from, to   scpb.Status
 	revertible bool
+	canFail    bool
 	ops        opsFunc
+	opType     scop.Type
 	minPhase   scop.Phase
 }
 
@@ -70,35 +72,57 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 
 func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err error) {
 	tbs := makeTransitionBuildState(spec.from)
+
+	// lastTransitionWhichCanFail tracks the index in ret of the last transition
+	// corresponding to a backfill or validation. We'll use this to add an
+	// annotation to the transitions indicating whether such an operation exists
+	// in the current or any subsequent transitions.
+	lastTransitionWhichCanFail := -1
 	for i, s := range spec.transitionSpecs {
 		var t transition
 		if s.from == scpb.Status_UNKNOWN {
 			t.from = tbs.from
 			t.to = s.to
 			if err := tbs.withTransition(s, i == 0 /* isFirst */); err != nil {
-				return nil, errors.Wrapf(err, "invalid transition %s -> %s", t.from, t.to)
+				return nil, errors.Wrapf(
+					err, "invalid transition %s -> %s", t.from, t.to,
+				)
 			}
 			if len(s.emitFns) > 0 {
-				t.ops, err = makeOpsFunc(e, s.emitFns)
+				t.ops, t.opType, err = makeOpsFunc(e, s.emitFns)
 				if err != nil {
-					return nil, errors.Wrapf(err, "making ops func for transition %s -> %s", t.from, t.to)
+					return nil, errors.Wrapf(
+						err, "making ops func for transition %s -> %s", t.from, t.to,
+					)
 				}
 			}
 		} else {
 			t.from = s.from
 			t.to = tbs.from
 			if err := tbs.withEquivTransition(s); err != nil {
-				return nil, errors.Wrapf(err, "invalid no-op transition %s -> %s", t.from, t.to)
+				return nil, errors.Wrapf(
+					err, "invalid no-op transition %s -> %s", t.from, t.to,
+				)
 			}
 		}
 		t.revertible = tbs.isRevertible
 		t.minPhase = tbs.currentMinPhase
+		if t.opType != scop.MutationType && t.opType != 0 {
+			lastTransitionWhichCanFail = i
+		}
 		ret = append(ret, t)
+	}
+
+	// Mark the transitions which can fail or precede something which can fail.
+	for i := 0; i <= lastTransitionWhichCanFail; i++ {
+		ret[i].canFail = true
 	}
 
 	// Check that the final status has been reached.
 	if tbs.from != spec.to {
-		return nil, errors.Errorf("expected %s as the final status, instead found %s", spec.to, tbs.from)
+		return nil, errors.Errorf(
+			"expected %s as the final status, instead found %s", spec.to, tbs.from,
+		)
 	}
 
 	return ret, nil

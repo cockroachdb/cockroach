@@ -21,7 +21,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableLocalitySecondaryRegion) scop.Op {
+				emit(func(this *scpb.TableLocalitySecondaryRegion) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
@@ -32,7 +32,7 @@ func init() {
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				// TODO(postamar): implement table locality update
-				emit(func(this *scpb.TableLocalitySecondaryRegion) scop.Op {
+				emit(func(this *scpb.TableLocalitySecondaryRegion) *scop.RemoveBackReferenceInTypes {
 					return &scop.RemoveBackReferenceInTypes{
 						TypeIDs:              []catid.DescID{this.RegionEnumTypeID},
 						BackReferencedDescID: this.TableID,

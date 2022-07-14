@@ -110,11 +110,22 @@ func buildStages(bc buildContext) (stages []Stage) {
 	for !bc.isStateTerminal(bs.incumbent) {
 		// Generate a stage builder which can make progress.
 		sb := bc.makeStageBuilder(bs)
-		for !sb.canMakeProgress() {
+		// We allow mixing of revertible and non-revertible operations if there
+		// are no remaining operations which can fail. That being said, we want
+		// to not want to build such a stage as PostCommit but rather as
+		// PostCommitNonRevertible. This condition is used to determine whether
+		// the phase needs to be advanced due to the presence of non-revertible
+		// operations.
+		shouldBeInPostCommitNonRevertible := func() bool {
+			return !bc.isRevertibilityIgnored &&
+				bs.phase == scop.PostCommitPhase &&
+				sb.hasAnyNonRevertibleOps()
+		}
+		for !sb.canMakeProgress() || shouldBeInPostCommitNonRevertible() {
 			// When no further progress is possible, move to the next phase and try
 			// again, until progress is possible. We haven't reached the terminal
 			// state yet, so this is guaranteed (barring any horrible bugs).
-			if bs.phase == scop.PreCommitPhase {
+			if !sb.canMakeProgress() && bs.phase == scop.PreCommitPhase {
 				// This is a special case.
 				// We need to move to the post-commit phase, but this will require
 				// creating a schema changer job, which in turn will require this
@@ -197,11 +208,27 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		lut:        make(map[*scpb.Target]*currentTargetState, numTargets),
 		visited:    make(map[*screl.Node]uint64, numTargets),
 	}
-	for i, n := range bc.nodes(bs.incumbent) {
-		t := sb.makeCurrentTargetState(n)
-		sb.current[i] = t
-		sb.lut[t.n.Target] = &sb.current[i]
+	{
+		nodes := bc.nodes(bs.incumbent)
+
+		// Determine whether there are any backfill or validation operations
+		// remaining which should prevent the scheduling of any non-revertible
+		// operations. This information will be used when building the current
+		// set of targets below.
+		for _, n := range nodes {
+			if oe, ok := bc.g.GetOpEdgeFrom(n); ok && oe.CanFail() {
+				sb.anyRemainingOpsCanFail = true
+				break
+			}
+		}
+
+		for i, n := range nodes {
+			t := sb.makeCurrentTargetState(n)
+			sb.current[i] = t
+			sb.lut[t.n.Target] = &sb.current[i]
+		}
 	}
+
 	// Greedily try to make progress by going down op edges when possible.
 	for isDone := false; !isDone; {
 		isDone = true
@@ -235,6 +262,13 @@ type stageBuilder struct {
 	current    []currentTargetState
 	fulfilling map[*screl.Node]struct{}
 	opEdges    []*scgraph.OpEdge
+
+	// anyRemainingOpsCanFail indicates whether there are any backfill or
+	// validation operations remaining in the schema change. If not, then
+	// revertible operations can be combined with non-revertible operations
+	// in order to move the schema change into the PostCommitNonRevertiblePhase
+	// earlier than it might otherwise.
+	anyRemainingOpsCanFail bool
 
 	// Helper data structures used to improve performance.
 
@@ -283,9 +317,20 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if !e.IsPhaseSatisfied(sb.bs.phase) {
 		return false
 	}
+	// We allow non-revertible ops to be included at stages preceding
+	// PostCommitNonRevertible if nothing left in the schema change at this
+	// point can fail. The caller is responsible for detecting whether any
+	// non-revertible operations are included in a phase before
+	// PostCommitNonRevertible and adjusting the phase accordingly. This is
+	// critical to allow op-edges which might otherwise be revertible to be
+	// grouped with non-revertible operations.
 	if !sb.bc.isRevertibilityIgnored &&
 		sb.bs.phase < scop.PostCommitNonRevertiblePhase &&
-		!e.Revertible() {
+		!e.Revertible() &&
+		// We can't act on the knowledge that nothing remaining can fail while in
+		// StatementPhase because we don't know about what future targets may
+		// show up which could fail.
+		(sb.bs.phase < scop.PostCommitPhase || sb.anyRemainingOpsCanFail) {
 		return false
 	}
 	return true
@@ -456,6 +501,17 @@ func (sb stageBuilder) build() Stage {
 	return s
 }
 
+// hasAnyNonRevertibleOps returns true if there are any ops in the current
+// stage which are not revertible.
+func (sb stageBuilder) hasAnyNonRevertibleOps() bool {
+	for _, e := range sb.opEdges {
+		if !e.Revertible() {
+			return true
+		}
+	}
+	return false
+}
+
 // computeExtraJobOps generates job-related operations to decorate a stage with.
 //
 // TODO(ajwerner): Rather than adding this above the opgen layer, it may be
@@ -552,10 +608,14 @@ func (bc buildContext) removeJobReferenceOp(descID descpb.ID) scop.Op {
 }
 
 func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
-	nodes := make([]*screl.Node, len(bc.targetState.Targets))
+	return nodes(bc.g, bc.targetState.Targets, current)
+}
+
+func nodes(g *scgraph.Graph, targets []scpb.Target, current []scpb.Status) []*screl.Node {
+	nodes := make([]*screl.Node, len(targets))
 	for i, status := range current {
-		t := &bc.targetState.Targets[i]
-		n, ok := bc.g.GetNode(t, status)
+		t := &targets[i]
+		n, ok := g.GetNode(t, status)
 		if !ok {
 			panic(errors.AssertionFailedf("could not find node for element %s, target status %s, current status %s",
 				screl.ElementString(t.Element()), t.TargetStatus, status))

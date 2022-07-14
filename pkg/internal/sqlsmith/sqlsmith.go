@@ -79,7 +79,7 @@ type Smither struct {
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
 	disableWith                bool
-	disableImpureFns           bool
+	disableNondeterministicFns bool
 	disableLimits              bool
 	disableWindowFuncs         bool
 	simpleDatums               bool
@@ -138,9 +138,11 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	s.enableBulkIO()
-	row := s.db.QueryRow("SELECT current_database()")
-	if err := row.Scan(&s.dbName); err != nil {
-		return nil, err
+	if s.db != nil {
+		row := s.db.QueryRow("SELECT current_database()")
+		if err := row.Scan(&s.dbName); err != nil {
+			return nil, err
+		}
 	}
 	return s, s.ReloadSchemas()
 }
@@ -316,9 +318,9 @@ var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
-// DisableImpureFns causes the Smither to disable impure functions.
-var DisableImpureFns = simpleOption("disable impure funcs", func(s *Smither) {
-	s.disableImpureFns = true
+// DisableNondeterministicFns causes the Smither to disable nondeterministic functions.
+var DisableNondeterministicFns = simpleOption("disable nondeterministic funcs", func(s *Smither) {
+	s.disableNondeterministicFns = true
 })
 
 // DisableCRDBFns causes the Smither to disable crdb_internal functions.
@@ -433,7 +435,7 @@ var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither)
 var CompareMode = multiOption(
 	"compare mode",
 	DisableMutations(),
-	DisableImpureFns(),
+	DisableNondeterministicFns(),
 	DisableCRDBFns(),
 	IgnoreFNs("^version"),
 	DisableLimits(),
@@ -474,4 +476,18 @@ var PostgresMode = multiOption(
 	IgnoreFNs("^postgis_.*build_date"),
 	IgnoreFNs("^postgis_.*version"),
 	IgnoreFNs("^postgis_.*scripts"),
+)
+
+// MutatingMode causes the Smither to generate mutation statements in the same
+// way as the query-comparison roachtests (costfuzz and
+// unoptimized-query-oracle).
+var MutatingMode = multiOption(
+	"mutating mode",
+	MutationsOnly(),
+	FavorCommonData(),
+	UnlikelyRandomNulls(),
+	DisableInsertSelect(),
+	DisableCrossJoins(),
+	SetComplexity(.05),
+	SetScalarComplexity(.01),
 )

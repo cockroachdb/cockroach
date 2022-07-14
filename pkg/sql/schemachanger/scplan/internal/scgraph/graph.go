@@ -202,12 +202,16 @@ func (g *Graph) GetOpEdgeFrom(n *screl.Node) (*OpEdge, bool) {
 
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(
-	t *scpb.Target, from, to scpb.Status, revertible bool, minPhase scop.Phase, ops ...scop.Op,
+	t *scpb.Target,
+	from, to scpb.Status,
+	revertible, canFail bool,
+	minPhase scop.Phase,
+	ops ...scop.Op,
 ) (err error) {
-
 	oe := &OpEdge{
 		op:         ops,
 		revertible: revertible,
+		canFail:    canFail,
 		minPhase:   minPhase,
 	}
 	if oe.from, err = g.getOrCreateNode(t, from); err != nil {

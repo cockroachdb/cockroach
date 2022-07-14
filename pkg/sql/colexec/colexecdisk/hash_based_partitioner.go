@@ -308,6 +308,9 @@ func calculateMaxNumberActivePartitions(
 	if maxNumberActivePartitions < numRequiredActivePartitions {
 		maxNumberActivePartitions = numRequiredActivePartitions
 	}
+	if toAcquire := flowCtx.TestingKnobs().VecFDsToAcquire; toAcquire > 0 {
+		maxNumberActivePartitions = toAcquire
+	}
 	return maxNumberActivePartitions
 }
 

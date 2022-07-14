@@ -29,11 +29,20 @@ type Edge interface {
 
 // OpEdge represents an edge changing the state of a target with an op.
 type OpEdge struct {
-	from, to   *screl.Node
-	op         []scop.Op
-	typ        scop.Type
+	from, to *screl.Node
+	op       []scop.Op
+	typ      scop.Type
+
+	// canFail indicates that a backfill or validation operation for this
+	// target has yet to be run as of the originating node for this edge.
+	canFail bool
+
+	// revertible indicates that no operation which destroys information
+	// permanently or publishes new information externally has yet been
+	// run for this target.
 	revertible bool
-	minPhase   scop.Phase
+
+	minPhase scop.Phase
 }
 
 // From implements the Edge interface.
@@ -45,8 +54,13 @@ func (oe *OpEdge) To() *screl.Node { return oe.to }
 // Op returns the scop.Op for execution that is associated with the op edge.
 func (oe *OpEdge) Op() []scop.Op { return oe.op }
 
-// Revertible returns if the dependency edge is revertible
+// Revertible returns if the dependency edge is revertible.
 func (oe *OpEdge) Revertible() bool { return oe.revertible }
+
+// CanFail returns if the dependency edge corresponds to a target in a state
+// which has yet to undergo all of its validation and backfill operations
+// before reaching its targeted status.
+func (oe *OpEdge) CanFail() bool { return oe.canFail }
 
 // Type returns the types of operations associated with this edge.
 func (oe *OpEdge) Type() scop.Type {

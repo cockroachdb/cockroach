@@ -54,6 +54,7 @@ type tableRefs []*tableRef
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
 	if s.db == nil {
+		s.schemas = []*schemaRef{{SchemaName: "public"}}
 		return nil
 	}
 	s.lock.Lock()

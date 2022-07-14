@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -107,22 +106,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 			// Run each query once on each connection.
 			for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 				t.Status("running Q", queryNum)
-				// To aid during the debugging later, we'll print the DistSQL
-				// diagram of the query.
-				rows, err := conn.Query("EXPLAIN (DISTSQL) " + tpch.QueriesByNumber[queryNum])
-				if err != nil {
-					return err
-				}
-				defer rows.Close()
-				for rows.Next() {
-					var line string
-					if err = rows.Scan(&line); err != nil {
-						t.Fatal(err)
-					}
-					if strings.Contains(line, "Diagram:") {
-						t.Status(line)
-					}
-				}
 				// The way --max-ops flag works is as follows: the global ops
 				// counter is incremented **after** each worker completes a
 				// single operation, so it is possible for all connections start

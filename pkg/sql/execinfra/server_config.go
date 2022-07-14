@@ -244,6 +244,15 @@ type TestingKnobs struct {
 	// Cannot be set together with ForceDiskSpill.
 	MemoryLimitBytes int64
 
+	// VecFDsToAcquire, if positive, indicates the number of file descriptors
+	// that should be acquired by a single disk-spilling operator in the
+	// vectorized engine.
+	VecFDsToAcquire int
+	// VecFDsAcquireMaxRetriesCount, if positive, determines the maximum number
+	// of retries done when acquiring the file descriptors for a disk-spilling
+	// operator in the vectorized engine.
+	VecFDsAcquireMaxRetriesCount int
+
 	// TableReaderBatchBytesLimit, if not 0, overrides the limit that the
 	// TableReader will set on the size of results it wants to get for individual
 	// requests.
