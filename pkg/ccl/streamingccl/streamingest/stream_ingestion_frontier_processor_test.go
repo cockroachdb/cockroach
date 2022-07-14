@@ -192,22 +192,32 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name != "existing-job-checkpoint" {
-				return
+
+			topology := jobspb.StreamTopology{
+				PartitionInfo: []jobspb.StreamTopology_PartitionInfo{
+					{
+						PartitionID:       pa1,
+						SubscriptionToken: []byte(pa1),
+						Address:           pa1,
+						Spans:             []roachpb.Span{pa1Span},
+					},
+					{
+						PartitionID:       pa2,
+						SubscriptionToken: []byte(pa2),
+						Address:           pa2,
+						Spans:             []roachpb.Span{pa2Span},
+					},
+				},
 			}
-			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
-				pa1: {
-					PartitionID:       pa1,
-					SubscriptionToken: pa1,
-					Address:           pa1,
-					Spans:             []roachpb.Span{pa1Span},
-				},
-				pa2: {
-					PartitionID:       pa2,
-					SubscriptionToken: pa2,
-					Address:           pa2,
-					Spans:             []roachpb.Span{pa2Span},
-				},
+
+			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{}
+			for _, partition := range topology.PartitionInfo {
+				spec.PartitionSpecs[partition.PartitionID] = execinfrapb.StreamIngestionPartitionSpec{
+					PartitionID:       partition.PartitionID,
+					SubscriptionToken: string(partition.SubscriptionToken),
+					Address:           partition.Address,
+					Spans:             partition.Spans,
+				}
 			}
 			spec.TenantRekey = execinfrapb.TenantRekey{
 				OldID: roachpb.MakeTenantID(tenantID),
@@ -231,7 +241,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 			// Create a frontier processor.
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
-			frontierSpec.StreamAddress = spec.StreamAddress
+			frontierSpec.StreamTopology = topology
 			frontierSpec.TrackedSpans = []roachpb.Span{pa1Span, pa2Span}
 			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 

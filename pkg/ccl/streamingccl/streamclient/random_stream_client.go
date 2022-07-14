@@ -248,6 +248,10 @@ func (m *randomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, er
 	return tableDesc, err
 }
 
+func (m *randomStreamClient) Dial(ctx context.Context) error {
+	return nil
+}
+
 // Plan implements the Client interface.
 func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
 	topology := make(Topology, 0, m.config.numPartitions)
