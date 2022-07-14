@@ -11,6 +11,7 @@ SELECT * FROM system.namespace
 1    29  database_role_settings           44
 1    29  descriptor                       3
 1    29  eventlog                         12
+1    29  external_connections             52
 1    29  jobs                             15
 1    29  join_tokens                      41
 1    29  lease                            11
@@ -66,6 +67,7 @@ SELECT * FROM system.namespace
 1    29  descriptor                       3
 1    29  descriptor_id_seq                7
 1    29  eventlog                         12
+1    29  external_connections             52
 1    29  jobs                             15
 1    29  join_tokens                      41
 1    29  lease                            11
