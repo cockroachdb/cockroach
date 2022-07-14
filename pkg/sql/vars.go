@@ -1160,6 +1160,23 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`troubleshooting_mode_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`troubleshooting_mode_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("troubleshooting_mode_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetTroubleshootingModeEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().TroubleshootingModeEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// This is read-only in Postgres also.
 	// See https://www.postgresql.org/docs/14/sql-show.html and
 	// https://www.postgresql.org/docs/14/locale.html
