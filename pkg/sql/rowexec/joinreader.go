@@ -1047,8 +1047,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 	log.VEvent(jr.Ctx, 1, "done joining rows")
 	jr.strategy.prepareToEmit(jr.Ctx)
 
+	// Check if the strategy spilled to disk and reduce the batch size if it
+	// did.
+	if jr.strategy.spilled() && jr.batchSizeBytes > joinReaderMinBatchSize {
+		jr.batchSizeBytes = jr.batchSizeBytes / 2
+		if jr.batchSizeBytes < joinReaderMinBatchSize {
+			jr.batchSizeBytes = joinReaderMinBatchSize
+		}
+	}
+
 	return jrEmittingRows, nil
 }
+
+const joinReaderMinBatchSize = 10 << 10 /* 10 KiB */
 
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
