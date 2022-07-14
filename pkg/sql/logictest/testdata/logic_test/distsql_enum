@@ -70,20 +70,9 @@ EXPLAIN (VEC)
 SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
 ----
 │
-├ Node 1
-│ └ *colrpc.Outbox
-│   └ *rowexec.joinReader
-│     └ *colfetcher.ColBatchScan
-├ Node 2
-│ └ *colexec.ParallelUnorderedSynchronizer
-│   ├ *colrpc.Inbox
-│   ├ *rowexec.joinReader
-│   │ └ *colfetcher.ColBatchScan
-│   └ *colrpc.Inbox
-└ Node 3
-  └ *colrpc.Outbox
-    └ *rowexec.joinReader
-      └ *colfetcher.ColBatchScan
+└ Node 2
+  └ *rowexec.joinReader
+    └ *colfetcher.ColBatchScan
 
 query I nodeidx=1
 SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
