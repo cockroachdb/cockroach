@@ -543,6 +543,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.DescIDSequence.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.SystemJobInfoTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(
