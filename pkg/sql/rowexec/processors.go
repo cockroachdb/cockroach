@@ -359,6 +359,12 @@ func NewProcessor(
 		}
 		return backfill.NewIndexBackfillMerger(ctx, flowCtx, *core.IndexBackfillMerger, outputs[0])
 	}
+	if core.Ttl != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return NewTTLProcessor(flowCtx, processorID, *core.Ttl, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -391,3 +397,6 @@ var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.Chang
 
 // NewStreamIngestionFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewStreamIngestionFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewTTLProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewTTLProcessor func(*execinfra.FlowCtx, int32, execinfrapb.TTLSpec, execinfra.RowReceiver) (execinfra.Processor, error)
