@@ -215,9 +215,13 @@ func createRowLevelTTLJob(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	jobRegistry *jobs.Registry,
-	ttlDetails catpb.ScheduledRowLevelTTLArgs,
+	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
-	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, ttlDetails.TableID)
+	tableDesc, err := descsCol.GetImmutableTableByID(ctx, txn, ttlArgs.TableID, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return 0, err
+	}
+	tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, tableDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -225,8 +229,9 @@ func createRowLevelTTLJob(
 		Description: fmt.Sprintf("ttl for %s", tn.FQString()),
 		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
-			TableID: ttlDetails.TableID,
-			Cutoff:  timeutil.Now(),
+			TableID:      ttlArgs.TableID,
+			Cutoff:       timeutil.Now(),
+			TableVersion: tableDesc.GetVersion(),
 		},
 		Progress:  jobspb.RowLevelTTLProgress{},
 		CreatedBy: createdByInfo,

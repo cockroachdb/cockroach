@@ -15,20 +15,25 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -36,22 +41,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (t rowLevelTTLResumer) work(
-	ctx context.Context,
-	db *kv.DB,
-	rangeConcurrency int64,
-	execCfg *sql.ExecutorConfig,
-	details jobspb.RowLevelTTLDetails,
-	descsCol *descs.Collection,
-	knobs sql.TTLTestingKnobs,
-	tableVersion descpb.DescriptorVersion,
-	selectBatchSize int64,
-	deleteBatchSize int64,
-	deleteRateLimit int64,
-	aost time.Time,
-	ttlExpr catpb.Expression,
-) (int64, error) {
+type ttlProcessor struct {
+	execinfra.ProcessorBase
+	ttlSpec execinfrapb.TTLSpec
+}
 
+func (ttl *ttlProcessor) Start(ctx context.Context) {
+	ctx = ttl.StartInternal(ctx, "ttl")
+	err := ttl.work(ctx)
+	ttl.MoveToDraining(err)
+}
+
+func (ttl *ttlProcessor) work(ctx context.Context) error {
+
+	ttlSpec := ttl.ttlSpec
+	flowCtx := ttl.FlowCtx
+	descsCol := flowCtx.Descriptors
+	serverCfg := flowCtx.Cfg
+	db := serverCfg.DB
+	codec := serverCfg.Codec
+	details := ttlSpec.RowLevelTTLDetails
+	ttlExpr := ttlSpec.TTLExpr
+	rangeConcurrency := ttlSpec.RangeConcurrency
+	selectBatchSize := ttlSpec.SelectBatchSize
+	deleteBatchSize := ttlSpec.DeleteBatchSize
+
+	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
 		"ttl-delete",
 		quotapool.Limit(deleteRateLimit),
@@ -63,7 +78,6 @@ func (t rowLevelTTLResumer) work(
 	var relationName string
 	var pkColumns []string
 	var pkTypes []*types.T
-	var rangeSpan, entirePKSpan roachpb.Span
 	var labelMetrics bool
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
@@ -99,43 +113,42 @@ func (t rowLevelTTLResumer) work(
 		}
 
 		relationName = tn.FQString()
-		entirePKSpan = desc.PrimaryIndexSpan(execCfg.Codec)
-		rangeSpan = entirePKSpan
 		return nil
 	}); err != nil {
-		return rowCount, err
+		return err
 	}
 
-	metrics := execCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
+	metrics := serverCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 		labelMetrics,
 		relationName,
 	)
 
 	group := ctxgroup.WithContext(ctx)
-	if err := func() error {
+	err := func() error {
 		rangeChan := make(chan rangeToProcess, rangeConcurrency)
 		defer close(rangeChan)
 		for i := int64(0); i < rangeConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
-				for r := range rangeChan {
+				for rangeToProcess := range rangeChan {
 					start := timeutil.Now()
 					rangeRowCount, err := runTTLOnRange(
 						ctx,
-						execCfg,
 						details,
+						db,
+						serverCfg.Executor,
+						serverCfg.Settings,
 						descsCol,
-						knobs,
 						metrics,
-						tableVersion,
-						r.startPK,
-						r.endPK,
+						rangeToProcess,
 						pkColumns,
 						relationName,
 						selectBatchSize,
 						deleteBatchSize,
 						deleteRateLimiter,
-						aost,
+						ttlSpec.AOST,
 						ttlExpr,
+						ttlSpec.PreDeleteChangeTableVersion,
+						ttlSpec.PreSelectStatement,
 					)
 					// add before returning err in case of partial success
 					atomic.AddInt64(&rowCount, rangeRowCount)
@@ -143,7 +156,7 @@ func (t rowLevelTTLResumer) work(
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
-						for r = range rangeChan {
+						for rangeToProcess = range rangeChan {
 						}
 						return err
 					}
@@ -154,106 +167,124 @@ func (t rowLevelTTLResumer) work(
 
 		// Iterate over every range to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
-		ri := kvcoord.MakeRangeIterator(execCfg.DistSender)
-		ri.Seek(ctx, roachpb.RKey(entirePKSpan.Key), kvcoord.Ascending)
-		for done := false; ri.Valid() && !done; ri.Next(ctx) {
-			// Send range info to each goroutine worker.
-			rangeDesc := ri.Desc()
-			var nextRange rangeToProcess
-			// A single range can contain multiple tables or indexes.
-			// If this is the case, the rangeDesc.StartKey would be less than entirePKSpan.Key
-			// or the rangeDesc.EndKey would be greater than the entirePKSpan.EndKey, meaning
-			// the range contains the start or the end of the range respectively.
-			// Trying to decode keys outside the PK range will lead to a decoding error.
-			// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
-			// (by default, a 0 element startPK or endPK means the beginning or end).
-			if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
-				var err error
-				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, execCfg.Codec, pkTypes, &alloc)
-				if err != nil {
-					return errors.Wrapf(
-						err,
-						"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-						rangeDesc.RangeID,
-						rangeDesc.StartKey.AsRawKey(),
-						entirePKSpan.Key,
-					)
+		ri := kvcoord.MakeRangeIterator(serverCfg.DistSender)
+		for _, span := range ttlSpec.Spans {
+			rangeSpan := span
+			ri.Seek(ctx, roachpb.RKey(span.Key), kvcoord.Ascending)
+			for done := false; ri.Valid() && !done; ri.Next(ctx) {
+				// Send range info to each goroutine worker.
+				rangeDesc := ri.Desc()
+				var nextRange rangeToProcess
+				// A single range can contain multiple tables or indexes.
+				// If this is the case, the rangeDesc.StartKey would be less than span.Key
+				// or the rangeDesc.EndKey would be greater than the span.EndKey, meaning
+				// the range contains the start or the end of the range respectively.
+				// Trying to decode keys outside the PK range will lead to a decoding error.
+				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
+				// (by default, a 0 element startPK or endPK means the beginning or end).
+				if rangeDesc.StartKey.AsRawKey().Compare(span.Key) > 0 {
+					var err error
+					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, codec, pkTypes, &alloc)
+					if err != nil {
+						return errors.Wrapf(
+							err,
+							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
+							rangeDesc.RangeID,
+							rangeDesc.StartKey.AsRawKey(),
+							span.Key,
+						)
+					}
 				}
-			}
-			if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
-				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-				var err error
-				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, execCfg.Codec, pkTypes, &alloc)
-				if err != nil {
-					return errors.Wrapf(
-						err,
-						"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-						rangeDesc.RangeID,
-						rangeDesc.EndKey.AsRawKey(),
-						entirePKSpan.EndKey,
-					)
+				if rangeDesc.EndKey.AsRawKey().Compare(span.EndKey) < 0 {
+					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
+					var err error
+					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, codec, pkTypes, &alloc)
+					if err != nil {
+						return errors.Wrapf(
+							err,
+							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
+							rangeDesc.RangeID,
+							rangeDesc.EndKey.AsRawKey(),
+							span.EndKey,
+						)
+					}
+				} else {
+					done = true
 				}
-			} else {
-				done = true
+				rangeChan <- nextRange
 			}
-			rangeChan <- nextRange
 		}
 		return nil
-	}(); err != nil {
-		return rowCount, err
+	}()
+	if err != nil {
+		return err
 	}
 
-	return rowCount, group.Wait()
+	if err := group.Wait(); err != nil {
+		return err
+	}
+
+	job, err := serverCfg.JobRegistry.LoadJob(ctx, ttlSpec.JobID)
+	if err != nil {
+		return err
+	}
+	return db.Txn(ctx, func(_ context.Context, txn *kv.Txn) error {
+		return job.Update(ctx, txn, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			progress := md.Progress
+			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += rowCount
+			ju.UpdateProgress(progress)
+			return nil
+		})
+	})
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
 func runTTLOnRange(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
 	details jobspb.RowLevelTTLDetails,
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	settings *cluster.Settings,
 	descsCol *descs.Collection,
-	knobs sql.TTLTestingKnobs,
 	metrics rowLevelTTLMetrics,
-	tableVersion descpb.DescriptorVersion,
-	startPK tree.Datums,
-	endPK tree.Datums,
+	rangeToProcess rangeToProcess,
 	pkColumns []string,
 	relationName string,
 	selectBatchSize, deleteBatchSize int64,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost time.Time,
 	ttlExpr catpb.Expression,
+	preDeleteChangeTableVersion bool,
+	preSelectStatement string,
 ) (rangeRowCount int64, err error) {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
 
-	ie := execCfg.InternalExecutor
-	db := execCfg.DB
-
 	// TODO(#76914): look at using a dist sql flow job, utilize any existing index
 	// on crdb_internal_expiration.
 
+	tableID := details.TableID
+	cutoff := details.Cutoff
 	selectBuilder := makeSelectQueryBuilder(
-		details.TableID,
-		details.Cutoff,
+		tableID,
+		cutoff,
 		pkColumns,
 		relationName,
-		startPK,
-		endPK,
+		rangeToProcess,
 		aost,
 		selectBatchSize,
 		ttlExpr,
 	)
 	deleteBuilder := makeDeleteQueryBuilder(
-		details.TableID,
-		details.Cutoff,
+		tableID,
+		cutoff,
 		pkColumns,
 		relationName,
 		deleteBatchSize,
 		ttlExpr,
 	)
 
-	if preSelectDeleteStatement := knobs.PreSelectDeleteStatement; preSelectDeleteStatement != "" {
+	if preSelectStatement != "" {
 		if _, err := ie.ExecEx(
 			ctx,
 			"pre-select-delete-statement",
@@ -261,7 +292,7 @@ func runTTLOnRange(
 			sessiondata.InternalExecutorOverride{
 				User: username.RootUserName(),
 			},
-			preSelectDeleteStatement,
+			preSelectStatement,
 		); err != nil {
 			return rangeRowCount, err
 		}
@@ -269,7 +300,7 @@ func runTTLOnRange(
 
 	for {
 		// Check the job is enabled on every iteration.
-		if err := checkEnabled(execCfg.SV()); err != nil {
+		if err := checkEnabled(&settings.SV); err != nil {
 			return rangeRowCount, err
 		}
 
@@ -304,11 +335,7 @@ func runTTLOnRange(
 				if err != nil {
 					return err
 				}
-				version := desc.GetVersion()
-				if mockVersion := knobs.MockTableDescriptorVersionDuringDelete; mockVersion != nil {
-					version = *mockVersion
-				}
-				if version != tableVersion {
+				if preDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
 					return errors.Newf(
 						"table has had a schema change since the job has started at %s, aborting",
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
@@ -395,4 +422,36 @@ func keyToDatums(
 		datums[i] = encDatum.Datum
 	}
 	return datums, nil
+}
+
+func (ttl *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	return nil, ttl.DrainHelper()
+}
+
+func newTTLProcessor(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec execinfrapb.TTLSpec,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
+	ttlProcessor := &ttlProcessor{
+		ttlSpec: spec,
+	}
+	if err := ttlProcessor.Init(
+		ttlProcessor,
+		&execinfrapb.PostProcessSpec{},
+		[]*types.T{},
+		flowCtx,
+		processorID,
+		output,
+		nil, /* memMonitor */
+		execinfra.ProcStateOpts{},
+	); err != nil {
+		return nil, err
+	}
+	return ttlProcessor, nil
+}
+
+func init() {
+	rowexec.NewTTLProcessor = newTTLProcessor
 }

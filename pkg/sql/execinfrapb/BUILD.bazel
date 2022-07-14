@@ -105,6 +105,7 @@ proto_library(
         "processors_changefeeds.proto",
         "processors_sql.proto",
         "processors_table_stats.proto",
+        "processors_ttl.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
