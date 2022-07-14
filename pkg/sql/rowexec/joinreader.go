@@ -1047,8 +1047,27 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 	log.VEvent(jr.Ctx, 1, "done joining rows")
 	jr.strategy.prepareToEmit(jr.Ctx)
 
+	// Check if the strategy spilled to disk and reduce the batch size if it
+	// did.
+	// TODO(yuzefovich): we should probably also grow the batch size bytes limit
+	// dynamically if we haven't spilled and are not close to spilling (say not
+	// exceeding half of the memory limit of the disk-backed container), up to
+	// some limit. (This would only apply to the joinReaderOrderingStrategy
+	// since other strategies cannot spill in the first place.) Probably it'd be
+	// good to look at not just the current batch of input rows, but to keep
+	// some statistics over the last several batches to make a more informed
+	// decision.
+	if jr.strategy.spilled() && jr.batchSizeBytes > joinReaderMinBatchSize {
+		jr.batchSizeBytes = jr.batchSizeBytes / 2
+		if jr.batchSizeBytes < joinReaderMinBatchSize {
+			jr.batchSizeBytes = joinReaderMinBatchSize
+		}
+	}
+
 	return jrEmittingRows, nil
 }
+
+const joinReaderMinBatchSize = 10 << 10 /* 10 KiB */
 
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
