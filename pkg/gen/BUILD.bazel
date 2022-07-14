@@ -1,6 +1,7 @@
 load(
     ":gen.bzl",
     "bindata",
+    "diagrams",
     "docs",
     "execgen",
     "gen",
@@ -32,6 +33,8 @@ docs()
 parser()
 
 schemachanger()
+
+diagrams()
 
 gen(
     name = "gen",

@@ -54,10 +54,12 @@ in let og = labels("outs",  $targets)
 in $og - filter(".*:.*(-gen|gen-).*", $og)`,
 	},
 	{
+		target: "diagrams",
+		query:  `labels("outs", //docs/generated/sql/bnf:svg)`,
+	},
+	{
 		target: "docs",
-		query: `
-kind("generated file", //docs/...:*)
-  - labels("outs", //docs/generated/sql/bnf:svg)`,
+		query:  `kind("generated file", //docs/...:*) - ({{ template "diagrams" $ }})`,
 	},
 	{
 		target: "parser",
@@ -79,7 +81,6 @@ in ($all ^ labels("out", kind("_gomock_prog_gen rule",  {{ .All }})))
   + //pkg/testutils/lint/passes/errcheck:errcheck_excludes.txt
   + //build/bazelutil:test_force_build_cdeps.txt
   + //build/bazelutil:test_stamping.txt
-  + labels("outs", //docs/generated/sql/bnf:svg)
 `,
 		doNotGenerate: true,
 	},
@@ -101,6 +102,7 @@ kind("generated file", {{ .All }}) - (
   + ({{ template "excluded" $ }})
   + ({{ template "parser" $ }})
   + ({{ template "schemachanger" $ }})
+  + ({{ template "diagrams" $ }})
 )`,
 	},
 }
