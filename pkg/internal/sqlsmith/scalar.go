@@ -48,6 +48,9 @@ var (
 		{1, scalarNoContext(makeOr)},
 		{1, scalarNoContext(makeNot)},
 		{1, scalarNoContext(makeCompareOp)},
+		// Binary operators can return boolean sometimes, so make sure to sample
+		// from the available binary operators as well.
+		{1, scalarNoContext(makeBinOp)},
 		{1, scalarNoContext(makeIn)},
 		{1, scalarNoContext(makeStringComparison)},
 		{1, func(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -277,16 +280,18 @@ func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return typedParen(tree.NewTypedNotExpr(expr), types.Bool), true
 }
 
-// TODO(mjibson): add the other operators somewhere.
-var compareOps = [...]treecmp.ComparisonOperatorSymbol{
-	treecmp.EQ,
-	treecmp.LT,
-	treecmp.GT,
-	treecmp.LE,
-	treecmp.GE,
-	treecmp.NE,
-	treecmp.IsDistinctFrom,
-	treecmp.IsNotDistinctFrom,
+var compareOps []treecmp.ComparisonOperatorSymbol
+
+func init() {
+	for i := 0; i < int(treecmp.NumComparisonOperatorSymbols); i++ {
+		op := treecmp.ComparisonOperatorSymbol(i)
+		switch op {
+		// Ignore ANY/SOME/ALL which are special (need sub operators).
+		case treecmp.Any, treecmp.All, treecmp.Some:
+			continue
+		}
+		compareOps = append(compareOps, op)
+	}
 }
 
 func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {

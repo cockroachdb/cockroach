@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -216,6 +217,12 @@ func FormatIndexElements(
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
 		f.WriteByte(' ')
+		if index.Type == descpb.IndexDescriptor_INVERTED && len(index.InvertedColumnKinds) > 0 {
+			switch index.InvertedColumnKinds[0] {
+			case catpb.InvertedIndexColumnKind_TRIGRAM:
+				f.WriteString("gin_trgm_ops ")
+			}
+		}
 		f.WriteString(index.KeyColumnDirections[i].String())
 	}
 	return nil
