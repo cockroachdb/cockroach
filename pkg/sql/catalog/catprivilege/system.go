@@ -64,6 +64,7 @@ var (
 		catconstants.SpanCountTableName,
 		catconstants.SystemPrivilegeTableName,
 		catconstants.SystemExternalConnectionsTableName,
+		catconstants.SystemJobInfoTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
