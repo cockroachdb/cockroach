@@ -99,6 +99,23 @@ func (dt *Map) IterateByName(f EntryIterator) error {
 	return dt.byName.ascend(f)
 }
 
+// IterateDatabasesByName iterates the database descriptors by name, ascending.
+func (dt *Map) IterateDatabasesByName(f EntryIterator) error {
+	if !dt.initialized() {
+		return nil
+	}
+	return dt.byName.ascendDatabases(f)
+}
+
+// IterateSchemasForDatabaseByName iterates the schema descriptors for the
+// database by name, ascending.
+func (dt *Map) IterateSchemasForDatabaseByName(dbID descpb.ID, f EntryIterator) error {
+	if !dt.initialized() {
+		return nil
+	}
+	return dt.byName.ascendSchemasForDatabase(dbID, f)
+}
+
 // Len returns the number of descriptors in the tree.
 func (dt *Map) Len() int {
 	if !dt.initialized() {

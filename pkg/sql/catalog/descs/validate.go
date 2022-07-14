@@ -54,7 +54,7 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
-	descs := tc.uncommitted.getUncommittedDescriptorsForValidation()
+	descs := tc.stored.getUncommittedDescriptorsForValidation()
 	if len(descs) == 0 {
 		return nil
 	}
@@ -109,8 +109,8 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 			if desc == nil {
 				continue
 			}
-			if uc, _ := c.tc.uncommitted.getImmutableByID(desc.GetID()); uc == nil {
-				desc, err = c.tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
+			if uc, _ := c.tc.stored.getCachedByID(desc.GetID()); uc == nil {
+				desc, err = c.tc.stored.add(ctx, desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
 				if err != nil {
 					return nil, err
 				}
@@ -124,7 +124,7 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if uc, _ := c.tc.uncommitted.getImmutableByID(id); uc != nil {
+	if uc, _ := c.tc.stored.getCachedByID(id); uc != nil {
 		return uc, nil
 	}
 	return nil, nil
@@ -178,7 +178,7 @@ func (c collectionBackedDereferencer) fastNamespaceLookup(
 		}
 	case keys.SystemDatabaseID:
 		// Looking up system database objects, which are cached.
-		id = c.tc.kv.systemNamespace.lookup(req.ParentSchemaID, req.Name)
+		id = c.tc.stored.systemNamespace.lookup(req.ParentSchemaID, req.Name)
 		return id != descpb.InvalidID, id, nil
 	}
 	return false, descpb.InvalidID, nil

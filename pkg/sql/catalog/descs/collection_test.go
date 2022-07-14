@@ -271,7 +271,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
-			require.NoError(t, descriptors.AddUncommittedDescriptor(mut))
+			require.NoError(t, descriptors.AddUncommittedDescriptor(ctx, mut))
 
 			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
@@ -598,7 +598,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 
 // TestCollectionProperlyUsesMemoryMonitoring ensures that memory monitoring
 // on Collection is working properly.
-// Namely, we are currently only tracking memory usage on Collection.kvDescriptors
+// Namely, we are currently only tracking memory usage on Collection.storedDescriptors
 // since it reads all descriptors from storage, which can be huge.
 //
 // The testing strategy is to
@@ -610,7 +610,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 // 3. Change the monitor budget to something small. Repeat step 2 and expect an error
 //    being thrown out when reading all those descriptors into memory to validate the
 //    memory monitor indeed kicked in and had an effect.
-func TestKVDescriptorsProperlyUsesMemoryMonitoring(t *testing.T) {
+func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -662,4 +662,124 @@ func TestKVDescriptorsProperlyUsesMemoryMonitoring(t *testing.T) {
 	col.ReleaseAll(ctx)
 	require.Equal(t, int64(0), monitor.AllocBytes())
 	monitor.Stop(ctx)
+}
+
+// TestDescriptorCache ensures that when descriptors are modified, a batch
+// lookup on the Collection views the latest changes.
+func TestDescriptorCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
+
+	s0 := tc.Server(0)
+	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+	t.Run("all descriptors", func(t *testing.T) {
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			// Warm up cache.
+			_, err := descriptors.GetAllDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			// Modify table descriptor.
+			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.RequireMutable = true
+			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, mut)
+			mut.Name = "new_name"
+			err = descriptors.AddUncommittedDescriptor(ctx, mut)
+			if err != nil {
+				return err
+			}
+			// The collection's all descriptors should include the modification.
+			cat, err := descriptors.GetAllDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			found := cat.LookupDescriptorEntry(mut.ID)
+			require.NotEmpty(t, found)
+			require.Equal(t, found, mut.ImmutableCopy())
+			return nil
+		}))
+	})
+	t.Run("all db descriptors", func(t *testing.T) {
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			// Warm up cache.
+			_, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			// Modify database descriptor.
+			flags := tree.DatabaseLookupFlags{}
+			flags.RequireMutable = true
+			mut, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, mut)
+			mut.Version += 1
+			err = descriptors.AddUncommittedDescriptor(ctx, mut)
+			if err != nil {
+				return err
+			}
+			// The collection's all database descriptors should reflect the
+			// modification.
+			dbDescs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Len(t, dbDescs, 4)
+			require.Equal(t, mut.ImmutableCopy(), dbDescs[0])
+			return nil
+		}))
+	})
+	t.Run("schemas for database", func(t *testing.T) {
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			// Warm up cache.
+			dbDesc, err := descriptors.GetDatabaseDesc(ctx, txn, "db", tree.DatabaseLookupFlags{})
+			if err != nil {
+				return err
+			}
+			_, err = descriptors.GetSchemasForDatabase(ctx, txn, dbDesc)
+			if err != nil {
+				return err
+			}
+			// Modify schema name.
+			schemaDesc, err := descriptors.GetMutableSchemaByName(ctx, txn, dbDesc, "schema", tree.SchemaLookupFlags{Required: true})
+			if err != nil {
+				return err
+			}
+			schemaDesc.SchemaDesc().Name = "new_name"
+			err = descriptors.AddUncommittedDescriptor(ctx, schemaDesc.(catalog.MutableDescriptor))
+			if err != nil {
+				return err
+			}
+			// The collection's schemas for database should reflect the modification.
+			schemas, err := descriptors.GetSchemasForDatabase(ctx, txn, dbDesc)
+			if err != nil {
+				return err
+			}
+			require.Len(t, schemas, 2)
+			require.Equal(t, schemaDesc.GetName(), schemas[schemaDesc.GetID()])
+			return nil
+		}))
+	})
 }

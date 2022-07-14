@@ -48,3 +48,27 @@ func (t byNameMap) ascend(f EntryIterator) error {
 		return f(k.(catalog.NameEntry))
 	})
 }
+
+func (t byNameMap) ascendDatabases(f EntryIterator) error {
+	min, max := byNameItem{}.get(), byNameItem{parentSchemaID: 1}.get()
+	defer min.put()
+	defer max.put()
+	return ascendRange(t.t, min, max, func(k interface{}) error {
+		return f(k.(catalog.NameEntry))
+	})
+}
+
+func (t byNameMap) ascendSchemasForDatabase(dbID descpb.ID, f EntryIterator) error {
+	min := byNameItem{
+		parentID: dbID,
+	}.get()
+	max := byNameItem{
+		parentID:       dbID,
+		parentSchemaID: 1,
+	}.get()
+	defer min.put()
+	defer max.put()
+	return ascendRange(t.t, min, max, func(k interface{}) error {
+		return f(k.(catalog.NameEntry))
+	})
+}
