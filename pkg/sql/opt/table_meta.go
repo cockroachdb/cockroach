@@ -11,6 +11,11 @@
 package opt
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -111,7 +116,9 @@ var tableAnnIDCount TableAnnID
 // called. Calling more than this number of times results in a panic. Having
 // a maximum enables a static annotation array to be inlined into the metadata
 // table struct.
-const maxTableAnnIDCount = 2
+const maxTableAnnIDCount = 3
+
+var regionConfigAnnID = NewTableAnnID()
 
 // TableMeta stores information about one of the tables stored in the metadata.
 //
@@ -186,6 +193,23 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+}
+
+// TableAnnotation returns the given annotation that is associated with the
+// given table. If the table has no such annotation, TableAnnotation returns
+// nil.
+func (tm *TableMeta) TableAnnotation(annID TableAnnID) interface{} {
+	return tm.anns[annID]
+}
+
+// SetTableAnnotation associates the given annotation with the given table. The
+// annotation is associated by the given ID, which was allocated by calling
+// NewTableAnnID. If an annotation with the ID already exists on the table, then
+// it is overwritten.
+//
+// See the TableAnnID comment for more details and a usage example.
+func (tm *TableMeta) SetTableAnnotation(tabAnnID TableAnnID, ann interface{}) {
+	tm.anns[tabAnnID] = ann
 }
 
 // copyFrom initializes the receiver with a copy of the given TableMeta, which
@@ -417,6 +441,59 @@ func (tm *TableMeta) VirtualComputedColumns() ColSet {
 		}
 	}
 	return virtualCols
+}
+
+// GetRegionsInDatabase finds the full set of regions in the multiregion
+// database owning the table described by `tm`, or returns ok=false if not
+// multiregion. The result is cached in TableMeta.
+func (tm *TableMeta) GetRegionsInDatabase(
+	ctx context.Context, planner eval.Planner,
+) (regionNames catpb.RegionNames, ok bool) {
+	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
+	if ok {
+		if multiregionConfig == nil {
+			return nil /* regionNames */, false
+		}
+		return multiregionConfig.Regions(), true
+	}
+	dbID := tm.Table.GetDatabaseID()
+	if dbID == 0 {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return nil /* regionNames */, false
+	}
+
+	regionConfig, ok := planner.GetMultiregionConfig(dbID)
+	if !ok {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return nil /* regionNames */, false
+	}
+	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
+	tm.SetTableAnnotation(regionConfigAnnID, multiregionConfig)
+	return multiregionConfig.Regions(), true
+}
+
+// GetDatabaseSurvivalGoal finds the survival goal of the multiregion database
+// owning the table described by `tm`, or returns ok=false if not multiregion.
+// The result is cached in TableMeta.
+func (tm *TableMeta) GetDatabaseSurvivalGoal(
+	ctx context.Context, planner eval.Planner,
+) (survivalGoal descpb.SurvivalGoal, ok bool) {
+	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
+	if ok {
+		if multiregionConfig == nil {
+			return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
+		}
+		return multiregionConfig.SurvivalGoal(), true
+	}
+	dbID := tm.Table.GetDatabaseID()
+	regionConfig, ok := planner.GetMultiregionConfig(dbID)
+	if !ok {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
+	}
+	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
+	tm.SetTableAnnotation(regionConfigAnnID, multiregionConfig)
+	return multiregionConfig.SurvivalGoal(), true
 }
 
 // TableAnnotation returns the given annotation that is associated with the

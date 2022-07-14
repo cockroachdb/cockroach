@@ -3281,6 +3281,10 @@ func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }
 
+func (m *sessionDataMutator) SetErrorOnRemoteScan(val bool) {
+	m.data.ErrorOnRemoteScan = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

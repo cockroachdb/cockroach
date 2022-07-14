@@ -274,6 +274,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = false
 	notStale()
 
+	// Stale error on remote scan.
+	evalCtx.SessionData().ErrorOnRemoteScan = true
+	stale()
+	evalCtx.SessionData().ErrorOnRemoteScan = false
+	notStale()
+
 	// Stale testing_optimizer_random_seed.
 	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
 	stale()

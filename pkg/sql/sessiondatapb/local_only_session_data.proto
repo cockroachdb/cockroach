@@ -271,6 +271,9 @@ message LocalOnlySessionData {
   // given probability. This should only be used in test scenarios and is very
   // much a non-production setting.
   double testing_optimizer_disable_rule_probability = 73;
+  // ErrorOnRemoteScan, when true, causes queries which scan rows from remote
+  // regions (regions other than the gateway region) to error out.
+  bool error_on_remote_scan = 74;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

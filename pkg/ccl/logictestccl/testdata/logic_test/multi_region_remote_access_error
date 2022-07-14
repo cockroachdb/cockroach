@@ -1,0 +1,354 @@
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs !metamorphic
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+# Start with SURVIVE ZONE FAILURE for positive tests.
+# SURVIVE REGION FAILURE cases will always error out.
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE;
+
+statement ok
+USE multi_region_test_db
+
+query T
+SELECT gateway_region();
+----
+ap-southeast-2
+
+statement ok
+CREATE TABLE messages_global (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    crdb_region crdb_internal_region NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE messages_rbt (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    crdb_region crdb_internal_region NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE TABLE messages_rbr (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    crdb_region crdb_internal_region NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+)
+LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE customers (
+    id     UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    name   STRING NOT NULL
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE customers INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["crdb_region","id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+CREATE TABLE orders (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    cust_id UUID   NOT NULL,
+    items   STRING NOT NULL,
+    INDEX (cust_id),
+    FOREIGN KEY (cust_id, crdb_region) REFERENCES customers (id, crdb_region) ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE orders INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["cust_id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["crdb_region","id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+SET error_on_remote_scan = true
+
+statement ok
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+
+# Non-locality-optimized lookup join should error out.
+statement error pq: Query may access remote regions. Try removing the join expression.
+EXPLAIN(OPT) SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
+p.crdb_region = c.crdb_region LIMIT 1
+
+# Locality optimized join is allowed with the error_on_remote_scan setting.
+# EXPLAIN(OPT) SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
+# p.crdb_region = c.crdb_region LIMIT 1
+query T
+EXPLAIN(OPT) SELECT * FROM parent p, child c WHERE c_id = 10 AND p_id = c_p_id
+----
+project
+ └── inner-join (lookup parent [as=p])
+      ├── lookup columns are key
+      ├── locality-optimized-search
+      │    ├── scan child [as=c]
+      │    │    └── constraint: /13/11: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+      │    └── scan child [as=c]
+      │         └── constraint: /18/16
+      │              ├── [/'ca-central-1'/10 - /'ca-central-1'/10]
+      │              └── [/'us-east-1'/10 - /'us-east-1'/10]
+      └── filters (true)
+
+
+# Locality optimized lookup join is allowed in phase 1, though it is
+# not guaranteed to run with low latency.
+query T
+EXPLAIN(OPT) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+anti-join (lookup parent)
+ ├── lookup columns are key
+ ├── anti-join (lookup parent)
+ │    ├── lookup columns are key
+ │    ├── locality-optimized-search
+ │    │    ├── scan child
+ │    │    │    └── constraint: /13/11: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+ │    │    └── scan child
+ │    │         └── constraint: /18/16
+ │    │              ├── [/'ca-central-1'/10 - /'ca-central-1'/10]
+ │    │              └── [/'us-east-1'/10 - /'us-east-1'/10]
+ │    └── filters (true)
+ └── filters (true)
+
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# This query should error out because it is not locality optimized.
+statement error pq: Query may access remote regions. Try removing the join expression.
+EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+
+statement ok
+RESET locality_optimized_partitioned_index_scan
+
+# Locality optimized search is allowed.
+query T
+EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
+----
+locality-optimized-search
+ ├── scan parent
+ │    ├── constraint: /7/6: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    └── limit: 1
+ └── scan parent
+      ├── constraint: /11/10: [/'ca-central-1' - /'us-east-1']
+      └── limit: 1
+
+# Locality optimized search with lookup join will be supported in phase 2 or 3
+# when we can dynamically determine if the lookup will access a remote region.
+statement error pq: Query may access remote regions. Try removing the join expression.
+EXPLAIN SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+  (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+
+# Select from a global table is OK with ZONE survivability.
+query T
+EXPLAIN SELECT * FROM messages_global@messages_global_pkey
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: messages_global@messages_global_pkey
+  spans: FULL SCAN
+
+# Select from REGIONAL BY TABLE is OK with ZONE survivability.
+query T
+EXPLAIN SELECT message from messages_rbt@messages_rbt_pkey
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: messages_rbt@messages_rbt_pkey
+  spans: FULL SCAN
+
+statement ok
+ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Select from REGIONAL BY TABLE should indicate the gateway region to use.
+statement error pq: Query accesses remote regions. Try running the query from region 'ap-southeast-2'.
+EXPLAIN SELECT message from messages_rbt@messages_rbt_pkey WHERE crdb_region = 'ap-southeast-2'
+
+# Logging in through the appropriate gateway region allows reading from an RBR
+# table with a span on crdb_region.
+query T nodeidx=4
+SET error_on_remote_scan = true;
+USE multi_region_test_db;
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+----
+project
+ └── scan messages_rbr@msg_idx
+      ├── constraint: /4/3/1: [/'ca-central-1' - /'ca-central-1']
+      └── flags: force-index=msg_idx
+
+# Equality predicate on crdb_region of an RBR table is allowed.
+query T
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+----
+project
+ └── scan messages_rbr@msg_idx
+      ├── constraint: /4/3/1: [/'ap-southeast-2' - /'ap-southeast-2']
+      └── flags: force-index=msg_idx
+
+statement ok
+PREPARE s AS EXPLAIN SELECT message from messages_rbr@msg_idx WHERE crdb_region = $1
+
+# Prepared statement accessing the local span is allowed.
+query T
+EXECUTE s('ap-southeast-2')
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: messages_rbr@msg_idx
+  spans: [/'ap-southeast-2' - /'ap-southeast-2']
+
+# Prepared statement accessing a remote span is disallowed.
+statement error pq: Query accesses remote regions. Try running the query from region 'ap-southeast-2'.
+EXECUTE s('us-east-1')
+
+statement ok
+RESET error_on_remote_scan
+
+statement ok
+CREATE DATABASE non_multiregion_test_db;
+
+statement ok
+USE non_multiregion_test_db
+
+statement ok
+CREATE TABLE messages (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+)
+
+statement ok
+SET error_on_remote_scan = true
+
+# Tables in non-multiregion databases have no home region.
+statement error pq: Query accesses remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN SELECT * FROM messages
+
+# If any table in a query has no home region, error out.
+statement error pq: Query accesses remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN SELECT * FROM non_multiregion_test_db.messages, multi_region_test_db.messages_global
+
+# Scans with contradictions in predicates are allowed.
+query T
+EXPLAIN SELECT * FROM messages WHERE account_id = 1 AND account_id = 2
+----
+distribution: local
+vectorized: true
+·
+• norows
+
+# A lookup join from a multiregion table to non-multiregion table is not
+# allowed.
+statement error pq: Query accesses remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN SELECT * FROM multi_region_test_db.messages_global mr INNER LOOKUP JOIN non_multiregion_test_db.messages nmr
+  ON mr.account_id = nmr.account_id
+
+statement ok
+ALTER DATABASE multi_region_test_db SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+# Statements which previously succeeded should now fail under REGION survivability.
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN(OPT) SELECT * FROM parent p, child c WHERE c_id = 10 AND p_id = c_p_id
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN(OPT) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN SELECT * FROM messages_global@messages_global_pkey
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN SELECT message from messages_rbt@messages_rbt_pkey
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+
+statement error pq: Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.
+EXECUTE s('ap-southeast-2')
+
+statement ok
+RESET error_on_remote_scan

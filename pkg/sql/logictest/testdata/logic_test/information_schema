@@ -4690,6 +4690,7 @@ enable_multiregion_placement_policy                   off
 enable_seqscan                                        on
 enable_super_regions                                  off
 enable_zigzag_join                                    on
+error_on_remote_scan                                  off
 escape_string_warning                                 on
 expect_and_ignore_not_visible_columns_in_copy         off
 experimental_computed_column_rewrites                 ·

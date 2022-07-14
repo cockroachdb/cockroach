@@ -846,6 +846,21 @@ func (tt *Table) IsPartitionAllBy() bool {
 	return false
 }
 
+// HomeRegion is part of the cat.Table interface.
+func (tt *Table) HomeRegion() (region string, ok bool) {
+	return "", false
+}
+
+// IsGlobalTable is part of the cat.Table interface.
+func (tt *Table) IsGlobalTable() bool {
+	return false
+}
+
+// GetDatabaseID is part of the cat.Table interface.
+func (tt *Table) GetDatabaseID() descpb.ID {
+	return 0
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {

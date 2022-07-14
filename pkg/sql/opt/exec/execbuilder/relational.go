@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -1666,19 +1667,31 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
-func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (execPlan, error) {
-	input, err := b.buildRelational(distribute.Input)
+func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPlan, err error) {
+	input, err = b.buildRelational(distribute.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	distribution := distribute.ProvidedPhysical().Distribution
-	inputDistribution := distribute.Input.ProvidedPhysical().Distribution
-	if distribution.Equals(inputDistribution) {
+	if distribute.NoOpDistribution() {
 		// Don't bother creating a no-op distribution. This likely exists because
 		// the input is a Sort expression, and this is an artifact of how physical
 		// properties are enforced.
 		return input, err
+	}
+
+	if b.evalCtx.SessionData().ErrorOnRemoteScan {
+		localRegion := distribute.GetRegionOfDistribution()
+		var errorStringBuilder strings.Builder
+		errorStringBuilder.WriteString("Query accesses remote regions.")
+		if localRegion != "" {
+			errorStringBuilder.WriteString(fmt.Sprintf(` Try running the query from region '%s'.`, localRegion))
+		} else {
+			errorStringBuilder.WriteString(` Try adding a LIMIT clause.`)
+		}
+		msgString := errorStringBuilder.String()
+		err = pgerror.Newf(pgcode.InvalidRemoteAccess, "%s", msgString)
+		return execPlan{}, err
 	}
 
 	// TODO(rytaft): This is currently a no-op. We should pass this distribution
@@ -1754,7 +1767,6 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 			telemetry.Inc(sqltelemetry.PartialIndexLookupJoinUseCounter)
 		}
 	}
-
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err

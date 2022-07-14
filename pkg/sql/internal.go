@@ -649,6 +649,9 @@ func (ie *InternalExecutor) execInternal(
 	if ie.sessionDataStack != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
+		// Even if session queries are told to error on remote region accesses,
+		// internal queries spawned from the same context should never do so.
+		sd.LocalOnlySessionData.ErrorOnRemoteScan = false
 	} else {
 		sd = ie.s.newSessionData(SessionArgs{})
 	}

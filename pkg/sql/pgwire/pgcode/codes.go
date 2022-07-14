@@ -202,6 +202,7 @@ var (
 	Windowing                          = MakeCode("42P20")
 	InvalidRecursion                   = MakeCode("42P19")
 	InvalidForeignKey                  = MakeCode("42830")
+	InvalidRemoteAccess                = MakeCode("42899")
 	InvalidName                        = MakeCode("42602")
 	NameTooLong                        = MakeCode("42622")
 	ReservedName                       = MakeCode("42939")

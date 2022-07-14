@@ -11,8 +11,12 @@
 package distribution
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -34,18 +38,45 @@ func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Dis
 		return true
 
 	case *memo.LocalityOptimizedSearchExpr:
+		// Locality optimized search is legal with the ErrorOnRemoteScan flag,
+		// but only with the SURVIVE ZONE FAILURE option.
+		if evalCtx.SessionData().ErrorOnRemoteScan && t.Local.Op() == opt.ScanOp {
+			scanExpr := t.Local.(*memo.ScanExpr)
+			tabMeta := t.Memo().Metadata().TableMeta(scanExpr.Table)
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		// Tables in database that don't use the SURVIVE ZONE FAILURE option are
+		// disallowed when ErrorOnRemoteScan is true.
+		if evalCtx.SessionData().ErrorOnRemoteScan {
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
 
 	default:
 		// Other operators can pass through the distribution to their children.
 	}
-
 	return provided.Any() || provided.Equals(*required)
+}
+
+// errorOnInvalidMultiregionDB panics if the table described by tabMeta is owned
+// by a non-multiregion database or a multiregion database with SURVIVE REGION
+// FAILURE goal.
+func errorOnInvalidMultiregionDB(evalCtx *eval.Context, tabMeta *opt.TableMeta) {
+	survivalGoal, ok := tabMeta.GetDatabaseSurvivalGoal(evalCtx.Ctx(), evalCtx.Planner)
+	// non-multiregional database or SURVIVE REGION FAILURE option
+	if !ok {
+		err := pgerror.New(pgcode.InvalidRemoteAccess,
+			"Query accesses remote regions. Try accessing only tables in multi-region databases with ZONE survivability.")
+		panic(err)
+	} else if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		err := pgerror.New(pgcode.InvalidRemoteAccess,
+			"Query may access remote regions. Try accessing only tables in multi-region databases with ZONE survivability.")
+		panic(err)
+	}
 }
 
 // BuildChildRequired returns the distribution that must be required of its
@@ -89,12 +120,23 @@ func BuildProvided(
 		return *required
 
 	case *memo.LocalityOptimizedSearchExpr:
+		// Locality optimized search is legal with the ErrorOnRemoteScan flag,
+		// but only with the SURVIVE ZONE FAILURE option.
+		if evalCtx.SessionData().ErrorOnRemoteScan && t.Local.Op() == opt.ScanOp {
+			scanExpr := t.Local.(*memo.ScanExpr)
+			tabMeta := t.Memo().Metadata().TableMeta(scanExpr.Table)
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		// Tables in database that don't use the SURVIVE ZONE FAILURE option are
+		// disallowed when ErrorOnRemoteScan is true.
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		if evalCtx.SessionData().ErrorOnRemoteScan {
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
 
 	default:
 		for i, n := 0, expr.ChildCount(); i < n; i++ {

@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -196,7 +197,7 @@ func (md *Metadata) Init() {
 // This metadata can then be modified independent of the copied metadata.
 //
 // Table annotations are not transferred over; all annotations are unset on
-// the copy.
+// the copy, except for regionConfig, which is read-only, and can be shared.
 //
 // copyScalarFn must be a function that returns a copy of the given scalar
 // expression.
@@ -226,8 +227,17 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		md.tables = make([]TableMeta, len(from.tables))
 	}
 	for i := range from.tables {
-		// Note: annotations inside TableMeta are not retained.
+		// Note: annotations inside TableMeta are not retained...
 		md.tables[i].copyFrom(&from.tables[i], copyScalarFn)
+
+		// ...except for the regionConfig annotation.
+		tabID := from.tables[i].MetaID
+		regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
+		if ok {
+			// Don't waste time looking up a database descriptor and constructing a
+			// RegionConfig more than once for a given table.
+			md.SetTableAnnotation(tabID, regionConfigAnnID, regionConfig)
+		}
 	}
 
 	md.sequences = append(md.sequences, from.sequences...)
@@ -485,7 +495,7 @@ func (md *Metadata) DuplicateTable(
 		}
 	}
 
-	md.tables = append(md.tables, TableMeta{
+	newTabMeta := TableMeta{
 		MetaID:                   newTabID,
 		Table:                    tabMeta.Table,
 		Alias:                    tabMeta.Alias,
@@ -495,7 +505,14 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:   partialIndexPredicates,
 		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:    checkConstraintsStats,
-	})
+	}
+	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
+	if ok {
+		// Don't waste time looking up a database descriptor and constructing a
+		// RegionConfig more than once for a given table.
+		md.SetTableAnnotation(newTabID, regionConfigAnnID, regionConfig)
+	}
+	md.tables = append(md.tables, newTabMeta)
 
 	return newTabID
 }

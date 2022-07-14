@@ -2120,6 +2120,22 @@ var varGen = map[string]sessionVar{
 			return formatFloatAsPostgresSetting(0)
 		},
 	},
+	// CockroachDB extension.
+	`error_on_remote_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`error_on_remote_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("error_on_remote_scan", s)
+			if err != nil {
+				return err
+			}
+			m.SetErrorOnRemoteScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ErrorOnRemoteScan), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
