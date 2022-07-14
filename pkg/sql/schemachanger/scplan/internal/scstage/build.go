@@ -283,7 +283,9 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if !e.IsPhaseSatisfied(sb.bs.phase) {
 		return false
 	}
-	if !sb.bc.isRevertibilityIgnored && sb.bs.phase == scop.PostCommitPhase && !e.Revertible() {
+	if !sb.bc.isRevertibilityIgnored &&
+		sb.bs.phase < scop.PostCommitNonRevertiblePhase &&
+		!e.Revertible() {
 		return false
 	}
 	return true
