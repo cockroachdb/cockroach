@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -193,13 +192,12 @@ func TestRowLevelTTLInterruptDuringExecution(t *testing.T) {
 ALTER TABLE t SPLIT AT VALUES (1), (2);
 INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`
 
-	mockVersion := descpb.DescriptorVersion(0)
 	testCases := []struct {
-		desc                                   string
-		expectedTTLError                       string
-		aostDuration                           time.Duration
-		mockTableDescriptorVersionDuringDelete *descpb.DescriptorVersion
-		preSelectDeleteStatement               string
+		desc                           string
+		expectedTTLError               string
+		aostDuration                   time.Duration
+		changeTableVersionDuringDelete bool
+		preSelectDeleteStatement       string
 	}{
 		{
 			desc:             "schema change too recent to start TTL job",
@@ -213,7 +211,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			// We cannot use a schema change to change the version in this test as
 			// we overtook the job adoption method, which means schema changes get
 			// blocked and may not run.
-			mockTableDescriptorVersionDuringDelete: &mockVersion,
+			changeTableVersionDuringDelete: true,
 		},
 		{
 			desc:                     "disable cluster setting",
@@ -225,9 +223,9 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
-				AOSTDuration:                           &tc.aostDuration,
-				MockTableDescriptorVersionDuringDelete: tc.mockTableDescriptorVersionDuringDelete,
-				PreSelectDeleteStatement:               tc.preSelectDeleteStatement,
+				AOSTDuration:                             &tc.aostDuration,
+				ChangeTableDescriptorVersionDuringDelete: tc.changeTableVersionDuringDelete,
+				PreSelectDeleteStatement:                 tc.preSelectDeleteStatement,
 			}, false /* testMultiTenant */)
 			defer cleanupFunc()
 			th.sqlDB.Exec(t, createTable)

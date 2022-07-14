@@ -34,7 +34,7 @@ type selectQueryBuilder struct {
 	tableID         descpb.ID
 	pkColumns       []string
 	selectOpName    string
-	startPK, endPK  tree.Datums
+	rangeToProcess  rangeToProcess
 	selectBatchSize int64
 	aost            time.Time
 	ttlExpr         catpb.Expression
@@ -53,12 +53,16 @@ type selectQueryBuilder struct {
 	endPKColumnNamesSQL string
 }
 
+type rangeToProcess struct {
+	startPK, endPK tree.Datums
+}
+
 func makeSelectQueryBuilder(
 	tableID descpb.ID,
 	cutoff time.Time,
 	pkColumns []string,
 	relationName string,
-	startPK, endPK tree.Datums,
+	rangeToProcess rangeToProcess,
 	aost time.Time,
 	selectBatchSize int64,
 	ttlExpr catpb.Expression,
@@ -67,10 +71,11 @@ func makeSelectQueryBuilder(
 	// is reserved for AOST, and len(pkColumns) for both start and end key.
 	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*2)
 	cachedArgs = append(cachedArgs, cutoff)
+	endPK := rangeToProcess.endPK
 	for _, d := range endPK {
 		cachedArgs = append(cachedArgs, d)
 	}
-	for _, d := range startPK {
+	for _, d := range rangeToProcess.startPK {
 		cachedArgs = append(cachedArgs, d)
 	}
 
@@ -78,8 +83,7 @@ func makeSelectQueryBuilder(
 		tableID:         tableID,
 		pkColumns:       pkColumns,
 		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
-		startPK:         startPK,
-		endPK:           endPK,
+		rangeToProcess:  rangeToProcess,
 		aost:            aost,
 		selectBatchSize: selectBatchSize,
 		ttlExpr:         ttlExpr,
@@ -96,9 +100,10 @@ func (b *selectQueryBuilder) buildQuery() string {
 	// Start from $2 as $1 is for the now clause.
 	// The end key of a range is exclusive, so use <.
 	var endFilterClause string
-	if len(b.endPK) > 0 {
+	endPK := b.rangeToProcess.endPK
+	if len(endPK) > 0 {
 		endFilterClause = fmt.Sprintf(" AND (%s) < (", b.endPKColumnNamesSQL)
-		for i := range b.endPK {
+		for i := range endPK {
 			if i > 0 {
 				endFilterClause += ", "
 			}
@@ -107,6 +112,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 		endFilterClause += ")"
 	}
 
+	startPK := b.rangeToProcess.startPK
 	var filterClause string
 	if !b.isFirst {
 		// After the first query, we always want (col1, ...) > (cursor_col_1, ...)
@@ -117,19 +123,19 @@ func (b *selectQueryBuilder) buildQuery() string {
 			}
 			// We start from 2 if we don't have an endPK clause, but add len(b.endPK)
 			// if there is.
-			filterClause += fmt.Sprintf("$%d", 2+len(b.endPK)+i)
+			filterClause += fmt.Sprintf("$%d", 2+len(endPK)+i)
 		}
 		filterClause += ")"
-	} else if len(b.startPK) > 0 {
+	} else if len(startPK) > 0 {
 		// For the the first query, we want (col1, ...) >= (cursor_col_1, ...)
-		filterClause = fmt.Sprintf(" AND (%s) >= (", makeColumnNamesSQL(b.pkColumns[:len(b.startPK)]))
-		for i := range b.startPK {
+		filterClause = fmt.Sprintf(" AND (%s) >= (", makeColumnNamesSQL(b.pkColumns[:len(startPK)]))
+		for i := range startPK {
 			if i > 0 {
 				filterClause += ", "
 			}
 			// We start from 2 if we don't have an endPK clause, but add len(b.endPK)
 			// if there is.
-			filterClause += fmt.Sprintf("$%d", 2+len(b.endPK)+i)
+			filterClause += fmt.Sprintf("$%d", 2+len(endPK)+i)
 		}
 		filterClause += ")"
 	}
@@ -197,7 +203,7 @@ func (b *selectQueryBuilder) moveCursor(rows []tree.Datums) error {
 	// Move the cursor forward.
 	if len(rows) > 0 {
 		lastRow := rows[len(rows)-1]
-		b.cachedArgs = b.cachedArgs[:1+len(b.endPK)]
+		b.cachedArgs = b.cachedArgs[:1+len(b.rangeToProcess.endPK)]
 		if len(lastRow) != len(b.pkColumns) {
 			return errors.AssertionFailedf("expected %d columns for last row, got %d", len(b.pkColumns), len(lastRow))
 		}
