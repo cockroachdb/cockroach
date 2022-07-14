@@ -29,14 +29,15 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column name set right after column existence"
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │   │         rule: "column named right before column type becomes public"
+│       │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │         rule: "column named before column type becomes public"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
 │       │       │ ABSENT → PUBLIC
@@ -1923,21 +1924,17 @@ EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 8 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 2, IndexID: 2}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 1, IndexID: 2}
+ │         ├── 6 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT     IndexName:{DescID: 265, Name: idx, IndexID: 2}
  │         │    ├── PUBLIC → OFFLINE    View:{DescID: 266}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967295}
  │         │    └── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
- │         └── 5 Mutation operations
+ │         └── 3 Mutation operations
  │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":265}
  │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":265}
- │              ├── MarkDescriptorAsOffline {"DescID":266,"Reason":"DROP INDEX test...."}
- │              ├── scop.RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
- │              └── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
+ │              └── MarkDescriptorAsOffline {"DescID":266,"Reason":"DROP INDEX test...."}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 3 Mutation operations
@@ -1946,7 +1943,9 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 17 elements transitioning toward ABSENT
+      │    ├── 19 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 265, ColumnID: 2, IndexID: 2}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 265, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
       │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 266, Name: child, ReferencedDescID: 104}
       │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 266}
@@ -1964,12 +1963,14 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
       │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 266, Name: tableoid, ColumnID: 4294967294}
       │    │    └── PUBLIC     → ABSENT      ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967294}
-      │    └── 8 Mutation operations
+      │    └── 10 Mutation operations
       │         ├── MarkDescriptorAsDropped {"DescID":266}
       │         ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":266}
       │         ├── RemoveAllTableComments {"TableID":266}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":265}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":266,"Name":"child","SchemaID":105}}
+      │         ├── scop.RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
+      │         ├── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":265}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":266}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -1992,6 +1993,7 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":266}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
 
 statement ok
 SET use_declarative_schema_changer = 'on'

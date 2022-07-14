@@ -12,7 +12,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...
          family: StringFamily
@@ -114,8 +114,8 @@ upsert descriptor #104
   +    - WRITE_ONLY
   +    - ABSENT
   +    - PUBLIC
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - VALIDATED
   +    - ABSENT
@@ -159,6 +159,8 @@ upsert descriptor #104
   +          columnId: 3
   +          computeExpr:
   +            expr: lower(j)
+  +            referencedColumnIds:
+  +            - 2
   +          isNullable: true
   +          isVirtual: true
   +          tableId: 104
@@ -192,6 +194,8 @@ upsert descriptor #104
   +        secondaryIndexPartial:
   +          expr: i > 0:::INT8
   +          indexId: 2
+  +          referencedColumnIds:
+  +          - 1
   +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
@@ -235,7 +239,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
          userName: root
@@ -244,9 +248,11 @@ upsert descriptor #104
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
-  ...
-       - ABSENT
+  +    - ABSENT
+  +    - ABSENT
        - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - VALIDATED
   +    - DELETE_ONLY
        - ABSENT
@@ -338,6 +344,8 @@ upsert descriptor #104
   -          columnId: 3
   -          computeExpr:
   -            expr: lower(j)
+  -            referencedColumnIds:
+  -            - 2
   -          isNullable: true
   -          isVirtual: true
   -          tableId: 104
@@ -371,6 +379,8 @@ upsert descriptor #104
   -        secondaryIndexPartial:
   -          expr: i > 0:::INT8
   -          indexId: 2
+  -          referencedColumnIds:
+  -          - 1
   -          tableId: 104
   -      metadata:
   -        sourceElementId: 1

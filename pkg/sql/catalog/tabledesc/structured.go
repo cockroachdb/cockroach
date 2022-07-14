@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -2208,12 +2209,13 @@ func (desc *Mutable) addMutationWithNextID(m descpb.DescriptorMutation) {
 
 // MakeFirstMutationPublic implements the TableDescriptor interface.
 func (desc *wrapper) MakeFirstMutationPublic(
-	includeConstraints catalog.MutationPublicationFilter,
+	filters ...catalog.MutationPublicationFilter,
 ) (catalog.TableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := desc.NewBuilder().(TableDescriptorBuilder).BuildExistingMutableTable()
 	mutationID := desc.Mutations[0].MutationID
 	i := 0
+	policy := makeMutationPublicationPolicy(filters...)
 	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
 			// Mutations are applied in a FIFO order. Only apply the first set
@@ -2221,9 +2223,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 			break
 		}
 		i++
-		if mutation.GetPrimaryKeySwap() != nil && includeConstraints == catalog.IgnoreConstraintsAndPKSwaps {
-			continue
-		} else if mutation.GetConstraint() != nil && includeConstraints > catalog.IncludeConstraints {
+		if policy.shouldSkip(&mutation) {
 			continue
 		}
 		if err := table.MakeMutationComplete(mutation); err != nil {
@@ -2233,6 +2233,35 @@ func (desc *wrapper) MakeFirstMutationPublic(
 	table.Mutations = table.Mutations[i:]
 	table.Version++
 	return table, nil
+}
+
+type mutationPublicationPolicy struct {
+	policy util.FastIntSet
+}
+
+func makeMutationPublicationPolicy(
+	filters ...catalog.MutationPublicationFilter,
+) mutationPublicationPolicy {
+	var p mutationPublicationPolicy
+	for _, f := range filters {
+		p.policy.Add(int(f))
+	}
+	return p
+}
+
+func (p mutationPublicationPolicy) includes(f catalog.MutationPublicationFilter) bool {
+	return p.policy.Contains(int(f))
+}
+
+func (p mutationPublicationPolicy) shouldSkip(m *descpb.DescriptorMutation) bool {
+	switch {
+	case m.GetPrimaryKeySwap() != nil:
+		return p.includes(catalog.IgnorePKSwaps)
+	case m.GetConstraint() != nil:
+		return p.includes(catalog.IgnoreConstraints)
+	default:
+		return false
+	}
 }
 
 // MakePublic implements the TableDescriptor interface.

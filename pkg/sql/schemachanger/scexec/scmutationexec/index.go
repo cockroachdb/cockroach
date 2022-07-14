@@ -178,6 +178,9 @@ func (m *visitor) MakeAddedSecondaryIndexPublic(
 	for idx, idxMutation := range tbl.GetMutations() {
 		if idxMutation.GetIndex() != nil &&
 			idxMutation.GetIndex().ID == op.IndexID {
+			// If this is a rollback of a drop, we are trying to add the index back,
+			// so swap the direction before making it complete.
+			idxMutation.Direction = descpb.DescriptorMutation_ADD
 			err := tbl.MakeMutationComplete(idxMutation)
 			if err != nil {
 				return err

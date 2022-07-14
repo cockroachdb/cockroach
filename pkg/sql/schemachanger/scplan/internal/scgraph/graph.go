@@ -247,20 +247,29 @@ func (g *Graph) GetOpEdgeFromOp(op scop.Op) *OpEdge {
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
-	rule RuleName,
+	ruleName RuleName,
 	kind DepEdgeKind,
 	fromTarget *scpb.Target,
 	fromStatus scpb.Status,
 	toTarget *scpb.Target,
 	toStatus scpb.Status,
 ) (err error) {
-	de := &DepEdge{rule: rule, kind: kind}
+	de := &DepEdge{kind: kind}
+	rule := Rule{Name: ruleName, Kind: kind}
 	if de.from, err = g.getOrCreateNode(fromTarget, fromStatus); err != nil {
 		return err
 	}
 	if de.to, err = g.getOrCreateNode(toTarget, toStatus); err != nil {
 		return err
 	}
+	if got := g.depEdgesFrom.get(de); got != nil {
+		if got.kind == Precedence && kind == SameStagePrecedence {
+			got.kind = SameStagePrecedence
+		}
+		got.rules = append(got.rules, rule)
+		return
+	}
+	de.rules = []Rule{rule}
 	g.edges = append(g.edges, de)
 	g.depEdgesFrom.insert(de)
 	g.depEdgesTo.insert(de)
@@ -363,7 +372,7 @@ func cycleErrorDetail(target *screl.Node, edge Edge, pred map[*screl.Node]Edge) 
 		sb.WriteString(screl.NodeString(e.From()))
 		sb.WriteString(" --> ")
 		if de, ok := e.(*DepEdge); ok {
-			sb.WriteString(string(de.rule))
+			sb.WriteString(de.RuleNames().String())
 		} else {
 			sb.WriteString("op edge")
 		}

@@ -12,6 +12,7 @@ package scgraph
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -91,9 +92,34 @@ type DepEdge struct {
 	from, to *screl.Node
 	kind     DepEdgeKind
 
-	// TODO(ajwerner): Deal with the possibility that multiple rules could
-	// generate the same edge.
-	rule RuleName
+	rules []Rule
+}
+
+// Rule describes a reason for a DepEdge to exist.
+type Rule struct {
+	Name RuleName
+	Kind DepEdgeKind
+}
+
+// RuleNames is a slice of RuleName.
+type RuleNames []RuleName
+
+// String makes RuleNames a fmt.Stringer.
+func (rn RuleNames) String() string {
+	var sb strings.Builder
+	if len(rn) == 1 {
+		sb.WriteString(string(rn[0]))
+	} else {
+		sb.WriteString("[")
+		for i, r := range rn {
+			if i > 0 {
+				sb.WriteString("; ")
+			}
+			sb.WriteString(string(r))
+		}
+		sb.WriteString("]")
+	}
+	return sb.String()
 }
 
 // From implements the Edge interface.
@@ -102,10 +128,21 @@ func (de *DepEdge) From() *screl.Node { return de.from }
 // To implements the Edge interface.
 func (de *DepEdge) To() *screl.Node { return de.to }
 
-// Name returns the name of the rule which generated this edge.
-func (de *DepEdge) Name() RuleName { return de.rule }
+// RuleNames returns the names of the rules which generated this edge.
+func (de *DepEdge) RuleNames() RuleNames {
+	ret := make(RuleNames, len(de.rules))
+	for i, r := range de.rules {
+		ret[i] = r.Name
+	}
+	return ret
+}
 
-// Kind returns the kind of the DepEdge.
+// Rules returns the metadata about the rules which generated this edge.
+func (de *DepEdge) Rules() []Rule { return de.rules }
+
+// Kind returns the kind of the DepEdge. Note that it returns the strongest
+// kind implied by a rule; if one rule which created this edge is Precedence,
+// and another is SameStagePrecedence, this will return SameStagePrecedence.
 func (de *DepEdge) Kind() DepEdgeKind { return de.kind }
 
 // String returns a string representation of this edge

@@ -12,21 +12,19 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
-   table:
-  -  checks:
-  -  - columnIds:
-  -    - 3
-  -    constraintId: 4
+  ...
+       - 3
+       constraintId: 4
   -    expr: crdb_internal_j_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8,
   -      5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8,
   -      13:::INT8, 14:::INT8, 15:::INT8)
-  -    hidden: true
-  -    name: check_crdb_internal_j_shard_16
-  +  checks: []
-     columns:
-     - id: 1
+  +    expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
+  +      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
+  +      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+       hidden: true
+       name: check_crdb_internal_j_shard_16
   ...
          oid: 20
          width: 64
@@ -140,13 +138,13 @@ upsert descriptor #104
   +    - WRITE_ONLY
   +    - ABSENT
   +    - PUBLIC
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - VALIDATED
   +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -189,6 +187,8 @@ upsert descriptor #104
   +          columnId: 3
   +          computeExpr:
   +            expr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
+  +            referencedColumnIds:
+  +            - 2
   +          isVirtual: true
   +          tableId: 104
   +          type:
@@ -260,6 +260,8 @@ upsert descriptor #104
   +          expr: crdb_internal_j_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8,
   +            4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
   +            11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  +          referencedColumnIds:
+  +          - 3
   +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
@@ -294,8 +296,21 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 3
+  -    constraintId: 4
+  -    expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
+  -      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
+  -      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  -    hidden: true
+  -    name: check_crdb_internal_j_shard_16
+  +  checks: []
+     columns:
+     - id: 1
   ...
          userName: root
        currentStatuses:
@@ -303,13 +318,21 @@ upsert descriptor #104
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
-  ...
-       - ABSENT
-       - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - VALIDATED
+       - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
   +    - DELETE_ONLY
-       - ABSENT
-       - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
   ...
      id: 104
      indexes: []
@@ -401,6 +424,8 @@ upsert descriptor #104
   -          columnId: 3
   -          computeExpr:
   -            expr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
+  -            referencedColumnIds:
+  -            - 2
   -          isVirtual: true
   -          tableId: 104
   -          type:
@@ -472,6 +497,8 @@ upsert descriptor #104
   -          expr: crdb_internal_j_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8,
   -            4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
   -            11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  -          referencedColumnIds:
+  -          - 3
   -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
