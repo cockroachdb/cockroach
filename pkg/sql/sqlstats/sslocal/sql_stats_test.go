@@ -444,7 +444,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
-		outliers.NewMetrics(),
+		outliers.New(st, outliers.NewMetrics()),
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
@@ -554,7 +554,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
-			outliers.NewMetrics(),
+			outliers.New(st, outliers.NewMetrics()),
 			monitor,
 			nil,
 			nil,
