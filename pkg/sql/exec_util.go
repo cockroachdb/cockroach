@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1520,13 +1519,15 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
-	// ReturnStatsError causes stats errors to be returned instead of logged as warnings.
+	// ReturnStatsError causes stats errors to be returned instead of logged as
+	// warnings.
 	ReturnStatsError bool
-	// MockTableDescriptorVersionDuringDelete is a version to mock the table descriptor
-	// as during delete.
-	MockTableDescriptorVersionDuringDelete *descpb.DescriptorVersion
-	// PreSelectDeleteStatement runs before the start of the TTL select-delete loop
-	PreSelectDeleteStatement string
+	// PreDeleteChangeTableVersion is a flag to change the table descriptor
+	// during a delete.
+	PreDeleteChangeTableVersion bool
+	// PreSelectStatement runs before the start of the TTL select-delete
+	// loop.
+	PreSelectStatement string
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.

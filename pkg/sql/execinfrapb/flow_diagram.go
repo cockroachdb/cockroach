@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -578,6 +579,29 @@ func (s *ChangeAggregatorSpec) summary() (string, []string) {
 // summary implements the diagramCellType interface.
 func (s *ChangeFrontierSpec) summary() (string, []string) {
 	return "ChangeFrontier", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *TTLSpec) summary() (string, []string) {
+	details := s.RowLevelTTLDetails
+	spans := s.Spans
+	spanStrings := make([]string, len(spans))
+	for _, span := range spans {
+		spanStrings = append(spanStrings, span.String())
+	}
+	return "TTL", []string{
+		fmt.Sprintf("JobID: %d", s.JobID),
+		fmt.Sprintf("TableID: %d", details.TableID),
+		fmt.Sprintf("Cutoff: %s", details.Cutoff.Format(time.RFC3339)),
+		fmt.Sprintf("TableVersion: %s", details.TableVersion),
+		fmt.Sprintf("AS OF SYSTEM TIME: %s", s.AOST.Format(time.RFC3339)),
+		fmt.Sprintf("TTL Expression: %s", s.TTLExpr),
+		fmt.Sprintf("Spans: %s", strings.Join(spanStrings, ", ")),
+		fmt.Sprintf("RangeConcurrency: %d", s.RangeConcurrency),
+		fmt.Sprintf("SelectBatchSize: %d", s.SelectBatchSize),
+		fmt.Sprintf("DeleteBatchSize: %d", s.DeleteBatchSize),
+		fmt.Sprintf("DeleteRateLimit: %d", s.DeleteRateLimit),
+	}
 }
 
 type diagramCell struct {
