@@ -21,12 +21,12 @@ func init() {
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Table) scop.Op {
+				emit(func(this *scpb.Table) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Table) scop.Op {
+				emit(func(this *scpb.Table) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescID: this.TableID,
 					}
@@ -36,7 +36,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Table, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
 					return &scop.MarkDescriptorAsOffline{
 						DescID: this.TableID,
 						Reason: statementForDropJob(this, md).Statement,
@@ -45,22 +45,22 @@ func init() {
 			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.Table) scop.Op {
+				emit(func(this *scpb.Table) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
 						DescID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.Table) scop.Op {
+				emit(func(this *scpb.Table) *scop.RemoveAllTableComments {
 					return &scop.RemoveAllTableComments{
 						TableID: this.TableID,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Table, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Table, md *targetsWithElementMap) *scop.CreateGcJobForTable {
 					return &scop.CreateGcJobForTable{
 						TableID:             this.TableID,
 						StatementForDropJob: statementForDropJob(this, md),

@@ -20,14 +20,14 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.IndexComment) scop.Op {
+				emit(func(this *scpb.IndexComment) *scop.UpsertIndexComment {
 					return &scop.UpsertIndexComment{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 						Comment: this.Comment,
 					}
 				}),
-				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -35,13 +35,13 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.IndexComment) scop.Op {
+				emit(func(this *scpb.IndexComment) *scop.RemoveIndexComment {
 					return &scop.RemoveIndexComment{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
-				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

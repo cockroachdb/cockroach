@@ -21,12 +21,12 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.AddColumnOnUpdateExpression {
 					return &scop.AddColumnOnUpdateExpression{
 						OnUpdate: *protoutil.Clone(this).(*scpb.ColumnOnUpdateExpression),
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateTableBackReferencesInTypes {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
@@ -35,7 +35,7 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}
@@ -50,13 +50,13 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.RemoveColumnOnUpdateExpression {
 					return &scop.RemoveColumnOnUpdateExpression{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateTableBackReferencesInTypes {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
@@ -65,7 +65,7 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) scop.Op {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}

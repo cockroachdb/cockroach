@@ -21,12 +21,12 @@ func init() {
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Schema) scop.Op {
+				emit(func(this *scpb.Schema) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Schema) scop.Op {
+				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescID: this.SchemaID,
 					}
@@ -35,7 +35,7 @@ func init() {
 		),
 		toAbsent(scpb.Status_PUBLIC,
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Schema, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Schema, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
 					return &scop.MarkDescriptorAsOffline{
 						DescID: this.SchemaID,
 						Reason: statementForDropJob(this, md).Statement,
@@ -44,17 +44,17 @@ func init() {
 			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.Schema) scop.Op {
+				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
 						DescID: this.SchemaID,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Schema, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Schema, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Schema) scop.Op {
+				emit(func(this *scpb.Schema) *scop.DeleteDescriptor {
 					return &scop.DeleteDescriptor{
 						DescriptorID: this.SchemaID,
 					}

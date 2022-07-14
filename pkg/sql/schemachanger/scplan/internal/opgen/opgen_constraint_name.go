@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ConstraintName) scop.Op {
+				emit(func(this *scpb.ConstraintName) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
@@ -30,7 +30,7 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.ConstraintName) scop.Op {
+				emit(func(this *scpb.ConstraintName) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),

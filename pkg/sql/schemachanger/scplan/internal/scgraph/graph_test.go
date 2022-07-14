@@ -111,12 +111,13 @@ func TestGraphRanks(t *testing.T) {
 		require.NoError(t, err)
 		// Setup op edges for all the nodes.
 		for idx := range tc.addNode {
+			const revertible, canFail = true, false
 			if tc.addNode[idx] {
 				require.NoError(t, graph.AddOpEdges(
 					&ts.Targets[idx],
 					scpb.Status_ABSENT,
 					scpb.Status_PUBLIC,
-					true,
+					revertible, canFail,
 					scop.StatementPhase,
 					&scop.MakeColumnAbsent{},
 				))
@@ -125,7 +126,7 @@ func TestGraphRanks(t *testing.T) {
 					&ts.Targets[idx],
 					scpb.Status_PUBLIC,
 					scpb.Status_ABSENT,
-					true,
+					revertible, canFail,
 					scop.StatementPhase,
 					&scop.MakeColumnAbsent{},
 				))

@@ -21,7 +21,7 @@ func init() {
 		toTransientAbsent(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.TemporaryIndex) scop.Op {
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeAddedTempIndexDeleteOnly {
 					return &scop.MakeAddedTempIndexDeleteOnly{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
@@ -29,7 +29,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.TemporaryIndex) scop.Op {
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeAddedIndexDeleteAndWriteOnly {
 					return &scop.MakeAddedIndexDeleteAndWriteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -41,7 +41,7 @@ func init() {
 			scpb.Status_WRITE_ONLY,
 			to(scpb.Status_DELETE_ONLY,
 				revertible(false),
-				emit(func(this *scpb.TemporaryIndex) scop.Op {
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeDroppedIndexDeleteOnly {
 					return &scop.MakeDroppedIndexDeleteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -49,13 +49,13 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TemporaryIndex) scop.Op {
+				emit(func(this *scpb.TemporaryIndex) *scop.CreateGcJobForIndex {
 					return &scop.CreateGcJobForIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
-				emit(func(this *scpb.TemporaryIndex) scop.Op {
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
