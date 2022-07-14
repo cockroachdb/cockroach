@@ -116,8 +116,10 @@ type SSTBatcher struct {
 	// will not raise a DuplicateKeyError.
 	skipDuplicates bool
 	// ingestAll can only be set when disallowShadowingBelow is empty and
-	// skipDuplicates is false. It will never return a duplicateKey error and
-	// continue ingesting all data provided to it.
+	// skipDuplicates is false.
+	//
+	// It will only ever return a duplicateKey error if the key and timestamp are
+	// the same as en existing key but the value differs.
 	ingestAll bool
 
 	// batchTS is the timestamp that will be set on batch requests used to send
@@ -137,13 +139,14 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
-	sstWriter       storage.SSTWriter
-	sstFile         *storage.MemFile
-	batchStartKey   []byte
-	batchEndKey     []byte
-	batchEndValue   []byte
-	flushKeyChecked bool
-	flushKey        roachpb.Key
+	sstWriter         storage.SSTWriter
+	sstFile           *storage.MemFile
+	batchStartKey     []byte
+	batchEndKey       []byte
+	batchEndValue     []byte
+	batchEndTimestamp hlc.Timestamp
+	flushKeyChecked   bool
+	flushKey          roachpb.Key
 	// lastRange is the span and remaining capacity of the last range added to,
 	// for checking if the next addition would overfill it.
 	lastRange struct {
@@ -207,6 +210,29 @@ func MakeStreamSSTBatcher(
 	return b, err
 }
 
+// MakeTestingSSTBatcher creates a batcher for testing, allowing setting options
+// that are typically only set when constructing a batcher in BufferingAdder.
+func MakeTestingSSTBatcher(
+	ctx context.Context,
+	db *kv.DB,
+	settings *cluster.Settings,
+	skipDuplicates bool,
+	ingestAll bool,
+	mem mon.BoundAccount,
+	sendLimiter limit.ConcurrentRequestLimiter,
+) (*SSTBatcher, error) {
+	b := &SSTBatcher{
+		db:             db,
+		settings:       settings,
+		skipDuplicates: skipDuplicates,
+		ingestAll:      ingestAll,
+		mem:            mem,
+		limiter:        sendLimiter,
+	}
+	err := b.Reset(ctx)
+	return b, err
+}
+
 func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)
@@ -228,15 +254,26 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
-		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
+	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
+		if b.ingestAll && key.Timestamp.Equal(b.batchEndTimestamp) {
+			if bytes.Equal(b.batchEndValue, value) {
+				// If ingestAll is set, we allow and skip (key, timestamp, value)
+				// matches. We expect this from callers who may need to deal with
+				// duplicates caused by retransmission.
+				return nil
+			}
+			// Despite ingestAll, we raise an error in the case of a because a new value
+			// at the exact key and timestamp is unexpected and one of the two values
+			// would be completely lost.
+			return kvserverbase.NewDuplicateKeyError(key.Key, value)
+		} else if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
+			// If skipDuplicates is set, we allow and skip (key, value) matches.
 			return nil
 		}
 
-		err := &kvserverbase.DuplicateKeyError{}
-		err.Key = append(err.Key, key.Key...)
-		err.Value = append(err.Value, value...)
-		return err
+		if !b.ingestAll {
+			return kvserverbase.NewDuplicateKeyError(key.Key, value)
+		}
 	}
 	// Check if we need to flush current batch *before* adding the next k/v --
 	// the batcher may want to flush the keys it already has, either because it
@@ -256,6 +293,8 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	if len(b.batchStartKey) == 0 {
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
 	}
+
+	b.batchEndTimestamp = key.Timestamp
 	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 	b.batchEndValue = append(b.batchEndValue[:0], value...)
 
@@ -286,6 +325,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
+	b.batchEndTimestamp = hlc.Timestamp{}
 	b.flushKey = nil
 	b.flushKeyChecked = false
 	b.ms.Reset()
