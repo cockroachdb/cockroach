@@ -1019,7 +1019,12 @@ func (n *Node) batchInternal(
 		return nil, err
 	}
 	var pErr *roachpb.Error
-	br, pErr = n.stores.Send(ctx, *args)
+	// TODO(sumeer): plumb *StoreWriteBytes to admission control.
+	var writeBytes *kvserver.StoreWriteBytes
+	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, *args)
+	if writeBytes != nil {
+		writeBytes.Release()
+	}
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
 		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)

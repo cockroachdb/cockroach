@@ -37,14 +37,14 @@ import (
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
-) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, _ *concurrency.Guard, _ *StoreWriteBytes, pErr *roachpb.Error) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
@@ -68,7 +68,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
 	if err := rw.PinEngineStateForIterators(); err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
@@ -76,7 +76,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer rw.Close()
 
 	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 	// TODO(nvanbenschoten): once all replicated intents are pulled into the
 	// concurrency manager's lock-table, we can be sure that if we reached this
@@ -112,11 +112,11 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
-				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 			}
 		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, g, pErr
+		return nil, g, nil, pErr
 	}
 
 	if g.EvalKind == concurrency.OptimisticEval {
@@ -126,17 +126,17 @@ func (r *Replica) executeReadOnlyBatch(
 			// the response.
 			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 			if err != nil {
-				return nil, g, roachpb.NewError(err)
+				return nil, g, nil, roachpb.NewError(err)
 			}
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
 			// There was an error, that was not classified as a concurrency retry
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
-			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
@@ -192,7 +192,7 @@ func (r *Replica) executeReadOnlyBatch(
 		r.loadStats.readBytes.RecordCount(bytesRead, 0)
 		log.Event(ctx, "read completed")
 	}
-	return br, nil, pErr
+	return br, nil, nil, pErr
 }
 
 // evalContextWithAccount wraps an EvalContext to provide a non-nil

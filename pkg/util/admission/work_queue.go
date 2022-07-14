@@ -1552,6 +1552,16 @@ func makeWorkQueueMetrics(name string) WorkQueueMetrics {
 // seeking admission from a StoreWorkQueue.
 type StoreWriteWorkInfo struct {
 	WorkInfo
+
+	// TODO(sumeer): remove these 2 fields. No such info will be provided at
+	// admission time. The token subtraction at admission time will be
+	// completely based on estimation. This will be partially fixed at the time
+	// of AdmittedWorkDone via StoreWorkDoneInfo. StoreWorkDoneInfo does not
+	// specify how many of the ingested bytes went into L0 (for the
+	// leaseholder), since we don't want to plumb information through the raft
+	// replication and state machine application path. So we will continue to
+	// use estimates to decide what went into L0.
+
 	// WriteBytes should be populated if the caller knows the bytes that will be
 	// written, else this should be set to 0, and the callee will use an
 	// estimate. For large writes, typically generated for index backfills,
@@ -1627,6 +1637,24 @@ func (q *StoreWorkQueue) Admit(
 	}
 	h.admissionEnabled = enabled
 	return h, nil
+}
+
+// StoreWorkDoneInfo provides information about the work size after the work
+// is done. This allows for correction of estimates made at admission time.
+type StoreWorkDoneInfo struct {
+	// The size of the Pebble write-batch, for normal writes. It is zero when
+	// the write-batch is empty, which happens when all the bytes are being
+	// added via sstable ingestion.
+	//
+	// TODO(sumeer): WriteBytes will under count the actual effect on the Pebble
+	// store shared by the raft log and the state machine, since this only
+	// reflects the changes to the raft log. We compensate for this with an
+	// additive adjustment which is the same across all writes regardless of
+	// bytes. We should consider using an adjustment that is proportional to the
+	// WriteBytes.
+	WriteBytes int64
+	// The size of the sstables, for ingests. Zero if there were no ingests.
+	SSTableBytes int64
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has

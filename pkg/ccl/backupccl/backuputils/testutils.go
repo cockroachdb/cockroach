@@ -11,6 +11,8 @@ package backuputils
 import (
 	"context"
 	gosql "database/sql"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -113,4 +118,57 @@ func BackupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+}
+
+// VerifyBackupRestoreStatementResult conducts a Backup or Restore and verifies
+// it was properly written to the jobs table
+func VerifyBackupRestoreStatementResult(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
+) error {
+	t.Helper()
+	rows := sqlDB.Query(t, query, args...)
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	if e, a := columns, []string{
+		"job_id", "status", "fraction_completed", "rows", "index_entries", "bytes",
+	}; !reflect.DeepEqual(e, a) {
+		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+	}
+
+	type job struct {
+		id                int64
+		status            string
+		fractionCompleted float32
+	}
+
+	var expectedJob job
+	var actualJob job
+	var unused int64
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return errors.New("zero rows in result")
+	}
+	if err := rows.Scan(
+		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused, &unused, &unused,
+	); err != nil {
+		return err
+	}
+	if rows.Next() {
+		return errors.New("more than one row in result")
+	}
+
+	sqlDB.QueryRow(t,
+		`SELECT job_id, status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`, actualJob.id,
+	).Scan(
+		&expectedJob.id, &expectedJob.status, &expectedJob.fractionCompleted,
+	)
+	require.Equal(t, expectedJob, actualJob, "result does not match system.jobs")
+
+	return nil
 }
