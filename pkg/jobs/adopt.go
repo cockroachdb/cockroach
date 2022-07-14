@@ -291,14 +291,6 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return err
 	}
 
-	// In version 20.1, the registry must not adopt 19.2-style schema change jobs
-	// until they've undergone a migration.
-	// TODO(lucy): Remove this in 20.2.
-	if deprecatedIsOldSchemaChangeJob(payload) {
-		log.VEventf(ctx, 2, "job %d: skipping adoption because schema change job has not been migrated", jobID)
-		return nil
-	}
-
 	progress, err := UnmarshalProgress(row[2])
 	if err != nil {
 		return err
