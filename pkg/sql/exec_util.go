@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1522,9 +1521,9 @@ type TTLTestingKnobs struct {
 	AOSTDuration *time.Duration
 	// ReturnStatsError causes stats errors to be returned instead of logged as warnings.
 	ReturnStatsError bool
-	// MockTableDescriptorVersionDuringDelete is a version to mock the table descriptor
+	// ChangeTableDescriptorVersionDuringDelete flag to change the table descriptor
 	// as during delete.
-	MockTableDescriptorVersionDuringDelete *descpb.DescriptorVersion
+	ChangeTableDescriptorVersionDuringDelete bool
 	// PreSelectDeleteStatement runs before the start of the TTL select-delete loop
 	PreSelectDeleteStatement string
 }
