@@ -507,6 +507,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
 
+	s.outliers.Start(ctx, stopper)
+
 	s.txnIDCache.Start(ctx, stopper)
 }
 
