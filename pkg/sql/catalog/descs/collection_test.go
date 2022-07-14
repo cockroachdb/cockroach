@@ -239,7 +239,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			mut := db
 			mut.MaybeIncrementVersion()
-			mut.Schemas["foo"] = descpb.DatabaseDescriptor_SchemaInfo{ID: 2, Dropped: true}
 
 			flags.RequireMutable = false
 

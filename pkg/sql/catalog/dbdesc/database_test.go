@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
@@ -160,15 +159,6 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 2
-			desc: descpb.DatabaseDescriptor{
-				ID:   51,
-				Name: "db1",
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 53, Dropped: true},
-				},
-			},
-		},
-		{ // 3
 			err: `schema mapping entry "schema1" (500): referenced schema ID 500: referenced descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -178,7 +168,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 4
+		{ // 3
 			err: `schema mapping entry "schema1" (52): schema name is actually "foo"`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -195,7 +185,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 5
+		{ // 4
 			err: `schema mapping entry "schema1" (52): schema parentID is actually 500`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -212,7 +202,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 6
+		{ // 5
 			err: `multi-region enum: referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -223,7 +213,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 7
+		{ // 6
 			err: `multi-region enum: parentID is actually 500`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -238,7 +228,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ParentID: 500,
 			},
 		},
-		{ // 8
+		{ // 7
 			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -252,7 +242,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ParentID: 51,
 			},
 		},
-		{ // 9
+		{ // 8
 			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -298,34 +288,6 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
 		}
 	}
-}
-
-// TestFixDroppedSchemaName tests fixing a corrupted descriptor as part of
-// RunPostDeserializationChanges. It tests for a particular corruption that
-// happened when a schema was dropped that had the same name as its parent
-// database name.
-func TestFixDroppedSchemaName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const (
-		dbName = "foo"
-		dbID   = 1
-	)
-	dbDesc := descpb.DatabaseDescriptor{
-		Name: dbName,
-		ID:   dbID,
-		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-			dbName: {ID: dbID, Dropped: true},
-		},
-		Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
-	}
-	b := NewBuilder(&dbDesc)
-	require.NoError(t, b.RunPostDeserializationChanges())
-	desc := b.BuildCreatedMutableDatabase()
-	require.Truef(t, desc.GetPostDeserializationChanges().HasChanges(),
-		"expected changes in descriptor, found none")
-	_, ok := desc.Schemas[dbName]
-	require.Falsef(t, ok, "erroneous entry exists")
 }
 
 func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {

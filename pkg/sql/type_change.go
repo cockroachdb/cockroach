@@ -250,16 +250,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		return err
 	}
 
-	// If there are any names to drain, then do so.
-	if len(typeDesc.GetDrainingNames()) > 0 {
-		if err := drainNamesForDescriptor(
-			ctx, typeDesc.GetID(), t.execCfg.CollectionFactory, t.execCfg.DB,
-			t.execCfg.InternalExecutor, codec, nil,
-		); err != nil {
-			return err
-		}
-	}
-
 	// Make sure all of the leases have dropped before attempting to validate.
 	if err := refreshTypeDescriptorLeases(ctx, leaseMgr, typeDesc); err != nil {
 		return err
@@ -1308,14 +1298,6 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 
 	if rollbackErr := func() error {
 		if err := tc.cleanupEnumValues(ctx); err != nil {
-			return err
-		}
-
-		if err := drainNamesForDescriptor(
-			ctx, tc.typeID, tc.execCfg.CollectionFactory, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.Codec,
-			nil, /* beforeDrainNames */
-		); err != nil {
 			return err
 		}
 

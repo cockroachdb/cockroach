@@ -13,11 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -25,14 +23,14 @@ func (p *planner) dropNamespaceEntry(
 	ctx context.Context, b *kv.Batch, desc catalog.MutableDescriptor,
 ) {
 	// Delete current namespace entry.
-	deleteNamespaceEntryAndMaybeAddDrainingName(ctx, b, p, desc, desc)
+	deleteNamespaceEntry(ctx, b, p, desc, desc)
 }
 
 func (p *planner) renameNamespaceEntry(
 	ctx context.Context, b *kv.Batch, oldNameKey catalog.NameKey, desc catalog.MutableDescriptor,
 ) {
 	// Delete old namespace entry.
-	deleteNamespaceEntryAndMaybeAddDrainingName(ctx, b, p, oldNameKey, desc)
+	deleteNamespaceEntry(ctx, b, p, oldNameKey, desc)
 
 	// Write new namespace entry.
 	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, desc)
@@ -42,21 +40,13 @@ func (p *planner) renameNamespaceEntry(
 	b.CPut(marshalledKey, desc.GetID(), nil)
 }
 
-func deleteNamespaceEntryAndMaybeAddDrainingName(
+func deleteNamespaceEntry(
 	ctx context.Context,
 	b *kv.Batch,
 	p *planner,
 	nameKeyToDelete catalog.NameKey,
 	desc catalog.MutableDescriptor,
 ) {
-	if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.AvoidDrainingNames) {
-		desc.AddDrainingName(descpb.NameInfo{
-			ParentID:       nameKeyToDelete.GetParentID(),
-			ParentSchemaID: nameKeyToDelete.GetParentSchemaID(),
-			Name:           nameKeyToDelete.GetName(),
-		})
-		return
-	}
 	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKeyToDelete)
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", marshalledKey)

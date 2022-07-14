@@ -314,7 +314,6 @@ func (vdg *validationDescGetterImpl) addNamespaceEntries(
 			ParentSchemaID: desc.GetParentSchemaID(),
 			Name:           desc.GetName(),
 		})
-		reqs = append(reqs, desc.GetDrainingNames()...)
 	}
 
 	ids, err := vd.DereferenceDescriptorIDs(ctx, reqs)
@@ -439,18 +438,6 @@ func validateNamespace(
 			vea.Report(errors.Errorf("expected matching namespace entry, found none"))
 		} else if id != desc.GetID() {
 			vea.Report(errors.Errorf("expected matching namespace entry value, instead found %d", id))
-		}
-	}
-
-	// Check that all draining name entries exist and are correct.
-	for _, dn := range desc.GetDrainingNames() {
-		id := namespace[dn]
-		if id == descpb.InvalidID {
-			vea.Report(errors.Errorf("expected matching namespace entry for draining name (%d, %d, %s), found none",
-				dn.ParentID, dn.ParentSchemaID, dn.Name))
-		} else if id != desc.GetID() {
-			vea.Report(errors.Errorf("expected matching namespace entry value for draining name (%d, %d, %s), instead found %d",
-				dn.ParentID, dn.ParentSchemaID, dn.Name, id))
 		}
 	}
 }
