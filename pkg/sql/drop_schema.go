@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -206,16 +205,7 @@ func (p *planner) dropSchemaImpl(
 ) error {
 
 	// Update parent database schemas mapping.
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.AvoidDrainingNames) {
-		delete(parentDB.Schemas, sc.GetName())
-	} else {
-		// TODO (rohany): This can be removed once RESTORE installs schemas into
-		//  the parent database.
-		parentDB.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{
-			ID:      sc.GetID(),
-			Dropped: true,
-		})
-	}
+	delete(parentDB.Schemas, sc.GetName())
 
 	// Update the schema descriptor as dropped.
 	sc.SetDropped()

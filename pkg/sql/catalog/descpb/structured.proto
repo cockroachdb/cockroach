@@ -818,13 +818,11 @@ message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
-  // The following 5 fields: name, id, version, modification_time, and
-  // draining_names are metadata fields required by all descriptors to be
-  // leasable. The reason that they do not exist in a message of their own is
-  // to ease the migration burden as not all descriptors initially had all of
-  // these fields but many had some.
-  //
-  // TODO(postamar): remove draining_names from this comment in 22.2
+  // The following 4 fields: name, id, version and modification_time
+  // are metadata fields required by all descriptors to be leaseable
+  // The reason that they do not exist in a message of their own is
+  // to ease the migration burden as not all descriptors initially
+  // had all of these fields but many had some.
 
   // The table name. It should be normalized using NormalizeName() before
   // comparing it.
@@ -859,14 +857,7 @@ message TableDescriptor {
   // a Descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
 
-  // A list of draining names. The draining name entries are drained from
-  // the cluster wide name caches by incrementing the version for this
-  // descriptor and ensuring that there are no leases on prior
-  // versions of the descriptor. This field is then cleared and the version
-  // of the descriptor incremented.
-  //
-  // TODO(postamar): remove draining_names field in 22.2
-  repeated NameInfo draining_names = 21 [deprecated = true, (gogoproto.nullable) = false];
+  reserved 21; // draining_names
 
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
@@ -1219,8 +1210,7 @@ message DatabaseDescriptor {
   optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false];
   optional uint64 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
 
-  // TODO(postamar): remove draining_names field in 22.2
-  repeated NameInfo draining_names = 6 [deprecated = true, (gogoproto.nullable) = false];
+  reserved 6; // draining_names
 
   optional PrivilegeDescriptor privileges = 3;
 
@@ -1229,11 +1219,8 @@ message DatabaseDescriptor {
     option (gogoproto.equal) = true;
     // ID is the ID of the schema.
     optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-    // dropped represents whether the schema is dropped or not. This field
-    // is used in a similar way as the draining_names.
-    //
-    // TODO(postamar): remove dropped field in 22.2
-    optional bool dropped = 2 [deprecated = true, (gogoproto.nullable) = false];
+
+    reserved 2; // dropped
   }
 
   // schemas is a mapping from child schema name to ID. It is used during
@@ -1341,8 +1328,7 @@ message TypeDescriptor {
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
 
-  // TODO(postamar): remove draining_names field in 22.2
-  repeated NameInfo draining_names = 11 [deprecated = true, (gogoproto.nullable) = false];
+  reserved 11; // draining_names
 
   // privileges contains the privileges for the type.
   optional PrivilegeDescriptor privileges = 14;
@@ -1477,8 +1463,7 @@ message SchemaDescriptor {
   optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
   optional uint64 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
 
-  // TODO(postamar): remove draining_names field in 22.2
-  repeated NameInfo draining_names = 7 [deprecated = true, (gogoproto.nullable) = false];
+  reserved 7; // draining_names
 
   // parent_id refers to the database the schema is in.
   optional uint32 parent_id = 1

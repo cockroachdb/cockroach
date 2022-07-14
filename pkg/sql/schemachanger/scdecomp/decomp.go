@@ -128,7 +128,7 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 			RegionEnumTypeID: db.GetRegionConfig().RegionEnumID,
 		})
 	}
-	_ = db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
+	_ = db.ForEachSchema(func(id descpb.ID, name string) error {
 		w.backRefs.Add(id)
 		return nil
 	})

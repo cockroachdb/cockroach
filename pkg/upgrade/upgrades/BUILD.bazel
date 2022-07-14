@@ -9,7 +9,6 @@ go_library(
         "alter_table_statistics_avg_size.go",
         "comment_on_index_migration.go",
         "descriptor_utils.go",
-        "ensure_no_draining_names.go",
         "insert_missing_public_schema_namespace_entry.go",
         "migrate_span_configs.go",
         "precondition_before_starting_an_upgrade.go",
@@ -76,7 +75,6 @@ go_test(
         "builtins_test.go",
         "comment_on_index_migration_external_test.go",
         "descriptor_utils_test.go",
-        "ensure_no_draining_names_external_test.go",
         "helpers_test.go",
         "main_test.go",
         "migrate_span_configs_test.go",
@@ -94,7 +92,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",

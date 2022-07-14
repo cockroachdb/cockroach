@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -507,73 +506,6 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 	})
 }
 
-// drainNamesForDescriptor will drain remove the draining names from the
-// descriptor with the specified ID. If it is a schema, it will also remove the
-// names from the parent database.
-//
-// If there are no draining names, this call will not update any descriptors.
-func drainNamesForDescriptor(
-	ctx context.Context,
-	descID descpb.ID,
-	cf *descs.CollectionFactory,
-	db *kv.DB,
-	ie sqlutil.InternalExecutor,
-	codec keys.SQLCodec,
-	beforeDrainNames func(),
-) error {
-	log.Info(ctx, "draining previous names")
-	// Publish a new version with all the names drained after everyone
-	// has seen the version with the new name. All the draining names
-	// can be reused henceforth.
-	run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		if beforeDrainNames != nil {
-			beforeDrainNames()
-		}
-
-		// Free up the old name(s) for reuse.
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, descID)
-		if err != nil {
-			return err
-		}
-		namesToReclaim := mutDesc.GetDrainingNames()
-		if len(namesToReclaim) == 0 {
-			return nil
-		}
-		b := txn.NewBatch()
-		mutDesc.SetDrainingNames(nil)
-
-		// Reclaim all old names.
-		for _, drain := range namesToReclaim {
-			b.Del(catalogkeys.EncodeNameKey(codec, drain))
-		}
-
-		// If the descriptor to drain is a schema, then we need to delete the
-		// draining names from the parent database's schema mapping.
-		if _, isSchema := mutDesc.(catalog.SchemaDescriptor); isSchema {
-			mutDB, err := descsCol.GetMutableDescriptorByID(ctx, txn, mutDesc.GetParentID())
-			if err != nil {
-				return err
-			}
-			db := mutDB.(*dbdesc.Mutable)
-			for _, name := range namesToReclaim {
-				delete(db.Schemas, name.Name)
-			}
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, db, b,
-			); err != nil {
-				return err
-			}
-		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, mutDesc, b,
-		); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	}
-	return cf.Txn(ctx, ie, db, run)
-}
-
 func startGCJob(
 	ctx context.Context,
 	db *kv.DB,
@@ -732,16 +664,6 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		"schema change on %q (v%d) starting execution...",
 		desc.GetName(), desc.GetVersion(),
 	)
-
-	// If there are any names to drain, then drain them.
-	if len(desc.GetDrainingNames()) > 0 {
-		if err := drainNamesForDescriptor(
-			ctx, desc.GetID(), sc.execCfg.CollectionFactory, sc.db, sc.execCfg.InternalExecutor,
-			sc.execCfg.Codec, sc.testingKnobs.OldNamesDrainedNotification,
-		); err != nil {
-			return err
-		}
-	}
 
 	// Wait for the schema change to propagate to all nodes after this function
 	// returns, so that the new schema is live everywhere. This is not needed for

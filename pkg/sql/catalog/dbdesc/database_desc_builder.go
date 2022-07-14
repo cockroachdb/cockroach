@@ -239,10 +239,7 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 		// not have a descriptor.
 		if publicSchemaID != keys.PublicSchemaID {
 			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {
-					ID:      publicSchemaID,
-					Dropped: false,
-				},
+				tree.PublicSchema: {ID: publicSchemaID},
 			}
 		}
 	}
