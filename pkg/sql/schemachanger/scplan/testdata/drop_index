@@ -54,11 +54,11 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 2
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 2
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 2
       Kind: 1
@@ -210,11 +210,11 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 4
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 4
       IndexID: 4
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 4
       Kind: 1
@@ -415,16 +415,16 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 6
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 5
       IndexID: 6
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 6
       Ordinal: 1
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 6
       Kind: 1
@@ -634,11 +634,11 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
         DescriptorID: 105
         Name: v
         SchemaID: 101
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 2
       IndexID: 8
       TableID: 104
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 8
       Kind: 1

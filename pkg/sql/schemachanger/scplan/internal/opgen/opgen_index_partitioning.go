@@ -31,7 +31,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.IndexPartitioning) scop.Op {
+				emit(func(this *scpb.IndexPartitioning) *scop.AddIndexPartitionInfo {
 					return &scop.AddIndexPartitionInfo{
 						Partitioning: *protoutil.Clone(this).(*scpb.IndexPartitioning),
 					}

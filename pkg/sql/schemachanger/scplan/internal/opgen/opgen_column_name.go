@@ -22,7 +22,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ColumnName) scop.Op {
+				emit(func(this *scpb.ColumnName) *scop.SetColumnName {
 					return &scop.SetColumnName{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
@@ -34,7 +34,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.ColumnName) scop.Op {
+				emit(func(this *scpb.ColumnName) *scop.SetColumnName {
 					return &scop.SetColumnName{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,

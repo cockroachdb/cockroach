@@ -100,12 +100,19 @@ func makeTargetsWithElementMap(cs scpb.CurrentState) targetsWithElementMap {
 // given an element value.
 type opsFunc func(element scpb.Element, md *targetsWithElementMap) []scop.Op
 
-func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
+func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, scop.Type, error) {
+	var opType scop.Type
 	var funcValues []reflect.Value
 	for _, fn := range fns {
-		if err := checkOpFunc(el, fn); err != nil {
-			return nil, err
+		typ, err := checkOpFunc(el, fn)
+		if err != nil {
+			return nil, 0, err
 		}
+		if len(funcValues) > 0 && typ != opType {
+			return nil, 0, errors.Errorf("conflicting operation types for %T: %s != %s",
+				el, opType, typ)
+		}
+		opType = typ
 		funcValues = append(funcValues, reflect.ValueOf(fn))
 	}
 	return func(element scpb.Element, md *targetsWithElementMap) []scop.Op {
@@ -124,16 +131,21 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 			}
 		}
 		return ret
-	}, nil
+	}, opType, nil
 }
 
-var opType = reflect.TypeOf((*scop.Op)(nil)).Elem()
+var (
+	opInterfaceType           = reflect.TypeOf((*scop.Op)(nil)).Elem()
+	mutationOpInterfaceType   = reflect.TypeOf((*scop.MutationOp)(nil)).Elem()
+	validationOpInterfaceType = reflect.TypeOf((*scop.ValidationOp)(nil)).Elem()
+	backfillOpInterfaceType   = reflect.TypeOf((*scop.BackfillOp)(nil)).Elem()
+)
 
-func checkOpFunc(el scpb.Element, fn interface{}) error {
+func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 	fnV := reflect.ValueOf(fn)
 	fnT := fnV.Type()
 	if fnT.Kind() != reflect.Func {
-		return errors.Errorf(
+		return 0, errors.Errorf(
 			"%v is a %s, expected %s", fnT, fnT.Kind(), reflect.Func,
 		)
 	}
@@ -141,14 +153,33 @@ func checkOpFunc(el scpb.Element, fn interface{}) error {
 	if !(fnT.NumIn() == 1 && fnT.In(0) == elType) &&
 		!(fnT.NumIn() == 2 && fnT.In(0) == elType &&
 			fnT.In(1) == reflect.TypeOf((*targetsWithElementMap)(nil))) {
-		return errors.Errorf(
+		return 0, errors.Errorf(
 			"expected %v to be a func with one argument of type %s", fnT, elType,
 		)
 	}
-	if fnT.NumOut() != 1 || !fnT.Out(0).Implements(opType) {
+	returnTypeError := func() error {
 		return errors.Errorf(
-			"expected %v to be a func with one return value of type %s", fnT, opType,
+			"expected %v to be a func with one return value of a "+
+				"pointer type which implements %s", fnT, opType,
 		)
 	}
-	return nil
+	if fnT.NumOut() != 1 {
+		return 0, returnTypeError()
+	}
+	out := fnT.Out(0)
+	if out.Kind() != reflect.Ptr || !out.Implements(opInterfaceType) {
+		return 0, returnTypeError()
+	}
+	switch {
+	case out.Implements(mutationOpInterfaceType):
+		opType = scop.MutationType
+	case out.Implements(validationOpInterfaceType):
+		opType = scop.ValidationType
+	case out.Implements(backfillOpInterfaceType):
+		opType = scop.BackfillType
+	default:
+		return 0, errors.AssertionFailedf("%s implemented %s but does not conform to any known type",
+			out, opInterfaceType)
+	}
+	return opType, nil
 }

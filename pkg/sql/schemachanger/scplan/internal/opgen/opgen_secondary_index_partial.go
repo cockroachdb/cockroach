@@ -20,14 +20,14 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SecondaryIndexPartial) scop.Op {
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.SetAddedIndexPartialPredicate {
 					return &scop.SetAddedIndexPartialPredicate{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 						Expr:    this.Expr,
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndexPartial) scop.Op {
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.UpdateTableBackReferencesInTypes {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
@@ -42,13 +42,13 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(this *scpb.SecondaryIndexPartial) scop.Op {
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.RemoveDroppedIndexPartialPredicate {
 					return &scop.RemoveDroppedIndexPartialPredicate{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndexPartial) scop.Op {
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.UpdateTableBackReferencesInTypes {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
