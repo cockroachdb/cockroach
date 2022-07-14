@@ -49,6 +49,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

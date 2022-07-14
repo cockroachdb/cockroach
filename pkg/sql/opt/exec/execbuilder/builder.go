@@ -157,6 +157,14 @@ type Builder struct {
 	// The default can be overridden by calling SetBuiltinFuncWrapper method to provide
 	// custom search path implementation.
 	wrapFunctionOverride func(fnName string) tree.ResolvableFunctionReference
+
+	// builtScans collects all scans in the operation tree so post-build checking
+	// for non-local execution can be done.
+	builtScans []*memo.ScanExpr
+
+	// doScanExprCollection, when true, causes buildScan to add any ScanExprs it
+	// processes to the builtScans slice.
+	doScanExprCollection bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -329,8 +337,7 @@ func (b *Builder) findBuiltWithExpr(id opt.WithID) *builtWithExpr {
 
 // boundedStaleness returns true if this query uses bounded staleness.
 func (b *Builder) boundedStaleness() bool {
-	return b.evalCtx != nil && b.evalCtx.AsOfSystemTime != nil &&
-		b.evalCtx.AsOfSystemTime.BoundedStaleness
+	return b.evalCtx != nil && b.evalCtx.BoundedStaleness()
 }
 
 // mdVarContainer is an IndexedVarContainer implementation used by BuildScalar -

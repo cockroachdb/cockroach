@@ -107,43 +107,50 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9Fq1EAUffcrL
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 ----
-project
+distribute
  ├── columns: a:1
  ├── stats: [rows=10]
- ├── cost: 1121.819
+ ├── cost: 1121.849
+ ├── distribution: test
+ ├── input distribution:
  ├── prune: (1)
- └── inner-join (merge)
-      ├── columns: c.a:1 d.b:8
-      ├── flags: force merge join
-      ├── left ordering: +1
-      ├── right ordering: +8
-      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-      ├── cost: 1121.699
-      ├── fd: (1)==(8), (8)==(1)
-      ├── sort
-      │    ├── columns: c.a:1
-      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      │    ├── cost: 25.95
-      │    ├── ordering: +1
-      │    ├── prune: (1)
-      │    ├── interesting orderings: (+1)
-      │    ├── unfiltered-cols: (1-6)
-      │    └── scan c@sec
-      │         ├── columns: c.a:1
-      │         ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      │         ├── cost: 25.9
-      │         ├── prune: (1)
-      │         ├── interesting orderings: (+1)
-      │         └── unfiltered-cols: (1-6)
-      ├── scan d
-      │    ├── columns: d.b:8
-      │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
-      │    ├── cost: 1084.62
-      │    ├── ordering: +8
-      │    ├── prune: (8)
-      │    ├── interesting orderings: (+8)
-      │    └── unfiltered-cols: (7-10)
-      └── filters (true)
+ └── project
+      ├── columns: c.a:1
+      ├── stats: [rows=10]
+      ├── cost: 1121.819
+      ├── prune: (1)
+      └── inner-join (merge)
+           ├── columns: c.a:1 d.b:8
+           ├── flags: force merge join
+           ├── left ordering: +1
+           ├── right ordering: +8
+           ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+           ├── cost: 1121.699
+           ├── fd: (1)==(8), (8)==(1)
+           ├── sort
+           │    ├── columns: c.a:1
+           │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+           │    ├── cost: 25.95
+           │    ├── ordering: +1
+           │    ├── prune: (1)
+           │    ├── interesting orderings: (+1)
+           │    ├── unfiltered-cols: (1-6)
+           │    └── scan c@sec
+           │         ├── columns: c.a:1
+           │         ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+           │         ├── cost: 25.9
+           │         ├── prune: (1)
+           │         ├── interesting orderings: (+1)
+           │         └── unfiltered-cols: (1-6)
+           ├── scan d
+           │    ├── columns: d.b:8
+           │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
+           │    ├── cost: 1084.62
+           │    ├── ordering: +8
+           │    ├── prune: (8)
+           │    ├── interesting orderings: (+8)
+           │    └── unfiltered-cols: (7-10)
+           └── filters (true)
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b

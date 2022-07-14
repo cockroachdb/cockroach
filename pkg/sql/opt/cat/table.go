@@ -13,6 +13,7 @@ package cat
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -149,6 +150,28 @@ type Table interface {
 	// created with the NO DATA option and is yet to be refreshed. Accessing
 	// such a view prior to running refresh returns an error.
 	IsRefreshViewRequired() bool
+
+	// HomeRegion returns the home region of the table, if any, for example if
+	// a table is defined with LOCALITY REGIONAL BY TABLE.
+	HomeRegion() (region string, ok bool)
+
+	// IsGlobalTable returns true if the table is defined with LOCALITY GLOBAL.
+	IsGlobalTable() bool
+
+	// IsRegionalByRow returns true if the table is defined with LOCALITY REGIONAL
+	// BY ROW.
+	IsRegionalByRow() bool
+
+	// HomeRegionColName returns the name of the crdb_internal_region column name
+	// specifying the home region of each row in the table, if this table is a
+	// REGIONAL BY ROW TABLE, otherwise "", false is returned.
+	// This column is name `crdb_region` by default, but may be overridden with a
+	// different name in a `REGIONAL BY ROW AS` DDL clause.
+	HomeRegionColName() (colName string, ok bool)
+
+	// GetDatabaseID returns the owning database id of the table, or zero, if the
+	// owning database could not be determined.
+	GetDatabaseID() descpb.ID
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check

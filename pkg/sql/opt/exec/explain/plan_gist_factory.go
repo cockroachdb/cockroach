@@ -572,6 +572,31 @@ func (u *unknownTable) IsRefreshViewRequired() bool {
 	return false
 }
 
+// HomeRegion is part of the cat.Table interface.
+func (u *unknownTable) HomeRegion() (region string, ok bool) {
+	return "", false
+}
+
+// IsGlobalTable is part of the cat.Table interface.
+func (u *unknownTable) IsGlobalTable() bool {
+	return false
+}
+
+// IsRegionalByRow is part of the cat.Table interface.
+func (u *unknownTable) IsRegionalByRow() bool {
+	return false
+}
+
+// HomeRegionColName is part of the cat.Table interface.
+func (u *unknownTable) HomeRegionColName() (colName string, ok bool) {
+	return "", false
+}
+
+// GetDatabaseID is part of the cat.Table interface.
+func (u *unknownTable) GetDatabaseID() descpb.ID {
+	return 0
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
