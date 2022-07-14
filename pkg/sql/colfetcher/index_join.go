@@ -483,9 +483,10 @@ func NewColIndexJoin(
 	cFetcherMemoryLimit := totalMemoryLimit
 
 	var kvFetcher *row.KVFetcher
-	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		flowCtx.MakeLeafTxn != nil && row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
-	txn := flowCtx.Txn
+	useStreamer, txn, err := flowCtx.UseStreamer()
+	if err != nil {
+		return nil, err
+	}
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
@@ -497,10 +498,6 @@ func NewColIndexJoin(
 		// and we'll give the remaining memory to the streamer budget below.
 		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 8.0))
 		streamerBudgetLimit := 7 * cFetcherMemoryLimit
-		txn, err = flowCtx.MakeLeafTxn()
-		if err != nil {
-			return nil, err
-		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),

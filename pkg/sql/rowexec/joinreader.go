@@ -302,8 +302,10 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
-	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		flowCtx.MakeLeafTxn != nil && row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
+	useStreamer, txn, err := flowCtx.UseStreamer()
+	if err != nil {
+		return nil, err
+	}
 
 	jr := &joinReader{
 		fetchSpec:                         spec.FetchSpec,
@@ -314,22 +316,13 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
 		shouldLimitBatches:                shouldLimitBatches,
 		readerType:                        readerType,
+		txn:                               txn,
 		usesStreamer:                      useStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
-	}
-
-	if useStreamer {
-		var err error
-		jr.txn, err = flowCtx.MakeLeafTxn()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		jr.txn = flowCtx.Txn
 	}
 
 	// Make sure the key column types are hydrated. The fetched column types will
