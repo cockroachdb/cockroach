@@ -123,3 +123,23 @@ SELECT * FROM a@a_t_idx WHERE t = 'foozoopa' OR t = 'Foo' ORDER BY a
 ----
 1  foozoopa
 2  Foo
+
+# Ensure that it's not possible to create a trigram index on a column that is also
+# part of the primary key.
+
+statement ok
+CREATE TABLE pkt (a TEXT PRIMARY KEY); INSERT INTO pkt VALUES ('abcd'), ('bcde')
+
+statement error primary key column a cannot be present in an inverted index
+CREATE INVERTED INDEX ON pkt(a gin_trgm_ops)
+
+# Ensure that it's not possible to ALTER PRIMARY KEY to a column that's already
+# inverted indexed.
+
+statement ok
+DROP TABLE pkt;
+CREATE TABLE pkt (a INT PRIMARY KEY, b TEXT NOT NULL, INVERTED INDEX(b gin_trgm_ops));
+INSERT INTO pkt VALUES (1, 'abcd'), (2, 'bcde')
+
+statement error primary key column b cannot be present in an inverted index
+ALTER TABLE pkt ALTER PRIMARY KEY USING COLUMNS (b)
