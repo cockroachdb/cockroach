@@ -1,67 +1,89 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -euo pipefail
 
-CRDB=${COCKROACH:-../../../../cockroach}
-WORKDIR=$(mktemp -d)
-CERTS="$WORKDIR/certs"
-CERTS_SAFE="$WORKDIR/certs-safe"
-COCKROACH_DATA="$WORKDIR/cockroach-data"
-PIDFILE="$WORKDIR/crdb.pid"
+print_usage() {
+  cat<< EOF
+USAGE: $0 COMMAND
 
-mkdir $CERTS $CERTS_SAFE $COCKROACH_DATA
+Starts a CockroachDB 'movr' demo, executing COMMAND when the database serves
+HTTP traffic on port 8080. The path to a file containing the connection URL
+(from which a username and password can be extracted with standard URL parsing)
+is provided to COMMAND via the \$CONN_URL_FILE environment variable.
 
-printf "Temporary files stored in '${WORKDIR}'\n"
-cleanup() {
-  rm -rf $WORKDIR
+When COMMAND exits, the database is stopped.
+
+EXAMPLES:
+    $0 'curl http://localhost:8080'
+        Load index.html once the database has started.
+
+    $0 'cat \$CONN_URL_FILE'
+        Print the connection string once the database has started.
+EOF
 }
 
-trap 'cleanup' EXIT;
+EXIT_CODE=-1
+cleanup() {
+  # Send an exit signal to the background CRDB job.
+  kill %1
 
-printf "Creating certificates..."
-$CRDB cert create-ca --certs-dir=$CERTS --ca-key=$CERTS_SAFE/ca.key
-$CRDB cert create-node localhost --certs-dir=$CERTS --ca-key=$CERTS_SAFE/ca.key
-$CRDB cert create-client root --certs-dir=$CERTS --ca-key=$CERTS_SAFE/ca.key
-printf " DONE\n"
+  # Wait for the background CRDB job to exit, using 'set +e' to allow 'wait' to
+  # exit with non-zero. CRDB will exit non-zero (and 'wait' will too), but with
+  # 'set -e' this entire script would normally exit *immediately*.
+  set +e; wait %1; set -e
 
-# Start a temporary single-node cluster in the background (listening on port
-# 9090 to hide it from the tests).
-printf "Starting temporary cluster..."
-$CRDB start-single-node \
-  --certs-dir=$CERTS \
-  --listen-addr=localhost \
-  --http-addr=localhost:9090 \
-  --store=$COCKROACH_DATA \
-  --accept-sql-without-tls \
-  --pid-file=$PIDFILE \
-  --background > /dev/null
-printf " DONE\n"
+  # Forward the exit code from COMMAND to the calling shell.
+  exit $EXIT_CODE;
+}
 
-# Set a known password for the root user.
-printf "Setting root user's password..."
-$CRDB sql --certs-dir=$CERTS -e "ALTER USER root WITH PASSWORD 'cypress'" >/dev/null
-printf " DONE\n"
+# Command used improperly; print help and exit non-zero.
+if [ $# -lt 1 ] || [ -z "$1" ]; then
+  print_usage
+  exit 1
+fi
 
-# Initialize some tables with the "movr" workload.
-printf "Initializing 'movr' workload..."
-$CRDB workload init movr --secure --password 'cypress' 2>/dev/null
-printf " DONE\n"
+# Help explicitly requested; print help and exit zero.
+if [ "$1" == "help" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+  print_usage
+  exit 0
+fi
 
-# Kill the initial CRDB cluster and wait for it to exit.
-printf "Waiting for cluster to stop..."
-kill $(cat $PIDFILE)
-while pgrep -F $PIDFILE > /dev/null; do
-  sleep 1
+if curl --silent --head http://localhost:8080 > /dev/null; then
+  cat<< EOF
+ERROR: Another process is already listening on port 8080.  It may be a CRDB
+       instance, but to be safe, this script is exiting early.
+
+       Here's what we know about that process, courtesy of 'ps':\n
+EOF
+
+  ps -o pid -o command -p $(lsof -t -i :8080)
+  exit 2
+fi
+
+# Accept an arbitrary Cockroach binary via the $COCKROACH environment variable
+CRDB=${COCKROACH:-../../../../cockroach}
+
+# Start a 'movr' demo cluster, writing the connection URL to a file.
+export CONN_URL_FILE=$(mktemp)
+$CRDB demo movr \
+  --nodes=1 \
+  --multitenant=false \
+  --http-port=8080 \
+  --listening-url-file=$CONN_URL_FILE \
+  --execute 'select pg_sleep(1000000)' &
+
+# Close that cluster whenever this script exits.
+trap 'cleanup' EXIT
+
+# Wait for the connection URL file to exist and for the database's HTTP server
+# to be available.
+until [ -s $CONN_URL_FILE ] && curl --fail --silent --head http://localhost:8080 > /dev/null; do
+  sleep 0.25
 done
-printf " DONE\n"
 
-# Restart the single-node cluster (listening on port 8080 this time) so tests
-# know when to start executing.
-printf "Restarting cluster for testing...\n"
-$CRDB start-single-node \
-  --certs-dir=$CERTS \
-  --listen-addr=localhost \
-  --http-addr=localhost:8080 \
-  --accept-sql-without-tls \
-  --unencrypted-localhost-http \
-  --store=$COCKROACH_DATA \
-  --pid-file=${CERTS}/crdb.pid >/dev/null 2>&1
+# Use eval() to execute the provided command so that environment variables are
+# expanded properly (e.g. `$0 'cat $CONN_URL_FILE'`, where $CONN_URL_FILE must
+# be evaluated after this file is executed, not before).
+eval $1
+
+# Stash COMMAND's exit code so we can return it in the cleanup hook.
+EXIT_CODE=$?
