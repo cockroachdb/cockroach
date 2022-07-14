@@ -328,6 +328,9 @@ const (
 	// SystemExternalConnectionsTable adds system.external_connections table.
 	SystemExternalConnectionsTable
 
+	// CreateSystemJobInfoTable creates the system.job_info table.
+	CreateSystemJobInfoTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -563,6 +566,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
+	},
+
+	{
+		Key:     CreateSystemJobInfoTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
 
 	// *************************************************
