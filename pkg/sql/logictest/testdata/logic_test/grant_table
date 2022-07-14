@@ -947,6 +947,14 @@ system         public        external_connections             root     DELETE   
 system         public        external_connections             root     INSERT          true
 system         public        external_connections             root     SELECT          true
 system         public        external_connections             root     UPDATE          true
+system         public        job_info                         admin    DELETE          true
+system         public        job_info                         admin    INSERT          true
+system         public        job_info                         admin    SELECT          true
+system         public        job_info                         admin    UPDATE          true
+system         public        job_info                         root     DELETE          true
+system         public        job_info                         root     INSERT          true
+system         public        job_info                         root     SELECT          true
+system         public        job_info                         root     UPDATE          true
 a              pg_extension  NULL                             public   USAGE           false
 a              public        NULL                             admin    ALL             true
 a              public        NULL                             public   CREATE          false
@@ -1315,6 +1323,10 @@ system         public       external_connections             root     DELETE    
 system         public       external_connections             root     INSERT          true
 system         public       external_connections             root     SELECT          true
 system         public       external_connections             root     UPDATE          true
+system         public       job_info                         root     DELETE          true
+system         public       job_info                         root     INSERT          true
+system         public       job_info                         root     SELECT          true
+system         public       job_info                         root     UPDATE          true
 system         public       jobs                             root     DELETE          true
 system         public       jobs                             root     INSERT          true
 system         public       jobs                             root     SELECT          true

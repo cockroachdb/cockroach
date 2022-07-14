@@ -358,6 +358,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SystemExternalConnectionsTable)
 	target.AddDescriptor(systemschema.RoleIDSequence)
 
+	// Tables introduced in 23.1.
+	target.AddDescriptor(systemschema.SystemJobInfoTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
