@@ -580,6 +580,21 @@ func (s *ChangeFrontierSpec) summary() (string, []string) {
 	return "ChangeFrontier", []string{}
 }
 
+// summary implements the diagramCellType interface.
+func (s *TTLSpec) summary() (string, []string) {
+	details := s.RowLevelTTLDetails
+	spans := s.Spans
+	spanStrings := make([]string, len(spans))
+	for _, span := range spans {
+		spanStrings = append(spanStrings, span.String())
+	}
+	return "TTL", []string{
+		fmt.Sprintf("JobID: %d", s.JobID),
+		fmt.Sprintf("TableID: %d", details.TableID),
+		fmt.Sprintf("TableVersion: %d", details.TableVersion),
+	}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
