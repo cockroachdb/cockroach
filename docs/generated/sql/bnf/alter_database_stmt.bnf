@@ -12,3 +12,4 @@ alter_database_stmt ::=
 	| alter_database_drop_super_region
 	| alter_database_set_secondary_region_stmt
 	| alter_database_drop_secondary_region
+	| alter_database_set_zone_config_extension_stmt

@@ -1030,7 +1030,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> alter_database_drop_super_region
 %type <tree.Statement> alter_database_set_secondary_region_stmt
 %type <tree.Statement> alter_database_drop_secondary_region
-
+%type <tree.Statement> alter_database_set_zone_config_extension_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1845,6 +1845,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> PLACEMENT { RESTRICTED | DEFAULT }
 // ALTER DATABASE <name> SET var { TO | = } { value | DEFAULT }
 // ALTER DATABASE <name> RESET { var | ALL }
+// ALTER DATABASE <name> ALTER LOCALITY { GLOBAL | REGIONAL [IN <region>] } CONFIGURE ZONE <zone config>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
@@ -1862,6 +1863,7 @@ alter_database_stmt:
 | alter_database_drop_super_region
 | alter_database_set_secondary_region_stmt
 | alter_database_drop_secondary_region
+| alter_database_set_zone_config_extension_stmt
 
 alter_func_stmt:
   alter_func_options_stmt
@@ -1962,7 +1964,6 @@ alter_database_primary_region_stmt:
     }
   }
 
-
 alter_database_add_super_region:
   ALTER DATABASE database_name ADD SUPER REGION name VALUES name_list
   {
@@ -2006,6 +2007,48 @@ alter_database_drop_secondary_region:
   {
     $$.val = &tree.AlterDatabaseDropSecondaryRegion{
       DatabaseName: tree.Name($3),
+    }
+  }
+
+alter_database_set_zone_config_extension_stmt:
+  ALTER DATABASE database_name ALTER LOCALITY GLOBAL set_zone_config
+  {
+    s := $7.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelGlobal,
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault:    s.SetDefault,
+        YAMLConfig:    s.YAMLConfig,
+        Options:       s.Options,
+      },
+    }
+  }
+| ALTER DATABASE database_name ALTER LOCALITY REGIONAL set_zone_config
+  {
+    s := $7.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelTable,
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault:    s.SetDefault,
+        YAMLConfig:    s.YAMLConfig,
+        Options:       s.Options,
+      },
+    }
+  }
+| ALTER DATABASE database_name ALTER LOCALITY REGIONAL IN region_name set_zone_config
+  {
+    s := $9.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:  tree.Name($3),
+      LocalityLevel: tree.LocalityLevelTable,
+      RegionName:    tree.Name($8),
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault:    s.SetDefault,
+        YAMLConfig:    s.YAMLConfig,
+        Options:       s.Options,
+      },
     }
   }
 
@@ -2269,20 +2312,36 @@ set_zone_config:
   CONFIGURE ZONE to_or_eq a_expr
   {
     /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{YAMLConfig: $4.expr()}
+    $$.val = &tree.SetZoneConfig{
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        YAMLConfig:    $4.expr(),
+      },
+    }
   }
 | CONFIGURE ZONE USING var_set_list
   {
-    $$.val = &tree.SetZoneConfig{Options: $4.kvOptions()}
+    $$.val = &tree.SetZoneConfig{
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        Options: $4.kvOptions(),
+      },
+    }
   }
 | CONFIGURE ZONE USING DEFAULT
   {
     /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{SetDefault: true}
+    $$.val = &tree.SetZoneConfig{
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault: true,
+      },
+    }
   }
 | CONFIGURE ZONE DISCARD
   {
-    $$.val = &tree.SetZoneConfig{YAMLConfig: tree.DNull}
+    $$.val = &tree.SetZoneConfig{
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        YAMLConfig: tree.DNull,
+      },
+    }
   }
 
 alter_zone_database_stmt:
