@@ -18,6 +18,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:alter_database_owner.html",
   "//docs/generated/sql/bnf:alter_database_primary_region.html",
   "//docs/generated/sql/bnf:alter_database_set_secondary_region.html",
+  "//docs/generated/sql/bnf:alter_database_set_zone_config_extension.html",
   "//docs/generated/sql/bnf:alter_database_survival_goal.html",
   "//docs/generated/sql/bnf:alter_database_to_schema.html",
   "//docs/generated/sql/bnf:alter_ddl.html",
