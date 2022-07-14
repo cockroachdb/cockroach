@@ -306,6 +306,9 @@ const (
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption
+	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
+	V23_1_CreateSystemJobInfoTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -496,6 +499,13 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
+
+	// TODO(dt): Add 23_1_Start
+	{
+		Key:     V23_1_CreateSystemJobInfoTable,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

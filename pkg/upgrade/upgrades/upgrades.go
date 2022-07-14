@@ -164,6 +164,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
 	),
+	upgrade.NewTenantUpgrade(
+		"create system.job_info table",
+		toCV(clusterversion.V23_1_CreateSystemJobInfoTable),
+		NoPrecondition,
+		systemJobInfoTableMigration,
+	),
 }
 
 func init() {

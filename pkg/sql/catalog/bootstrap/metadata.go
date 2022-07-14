@@ -340,6 +340,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SystemPrivilegeTable)
 	target.AddDescriptor(systemschema.SystemExternalConnectionsTable)
 	target.AddDescriptor(systemschema.RoleIDSequence)
+	target.AddDescriptor(systemschema.SystemJobInfoTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
