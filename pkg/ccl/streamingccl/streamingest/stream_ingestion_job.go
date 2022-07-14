@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,6 +109,42 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
+// Ping the producer job and waits until it is active/running, returns nil when
+// the job is active.
+func waitUntilProducerActive(
+	ctx context.Context,
+	client streamclient.Client,
+	streamID streaming.StreamID,
+	heartbeatTimestamp hlc.Timestamp,
+	ingestionJobID jobspb.JobID,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     4,
+	}
+	// Make sure the producer job is active before start the stream replication.
+	var status streampb.StreamReplicationStatus
+	var err error
+	for r := retry.Start(ro); r.Next(); {
+		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
+				ingestionJobID)
+		}
+		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+			break
+		}
+		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
+	}
+	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
+		return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
+			"and in status %s", ingestionJobID, status.StreamStatus)
+	}
+	return nil
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
@@ -127,29 +164,8 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		return err
 	}
 	ingestWithClient := func() error {
-		ro := retry.Options{
-			InitialBackoff: 1 * time.Second,
-			Multiplier:     2,
-			MaxBackoff:     10 * time.Second,
-			MaxRetries:     5,
-		}
-		// Make sure the producer job is active before start the stream replication.
-		var status streampb.StreamReplicationStatus
-		for r := retry.Start(ro); r.Next(); {
-			status, err = client.Heartbeat(ctx, streamID, startTime)
-			if err != nil {
-				return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
-					ingestionJob.ID())
-			}
-			if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-				break
-			}
-			log.Warningf(ctx,
-				"producer job %d has status %s, retrying", streamID, status.StreamStatus)
-		}
-		if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-			return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
-				"and in status %s", ingestionJob.ID(), status.StreamStatus)
+		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
+			return err
 		}
 
 		log.Infof(ctx, "producer job %d is active, creating a stream replication plan", streamID)
@@ -217,8 +233,11 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
-		// Completes the producer job in the source cluster.
-		return client.Complete(ctx, streamID, true /* successfulIngestion */)
+		// Completes the producer job in the source cluster on best effort.
+		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
+			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
+		}
+		return nil
 	}
 	return errors.CombineErrors(ingestWithClient(), client.Close())
 }
@@ -320,6 +339,24 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 	})
 }
 
+func (s *streamIngestionResumer) cancelProducerJob(
+	ctx context.Context, streamID streaming.StreamID, addr streamingccl.StreamAddress,
+) {
+	client, err := streamclient.NewStreamClient(addr)
+	if err != nil {
+		log.Warningf(ctx, "encountered error when creating the stream client: %v", err)
+		return
+	}
+	log.Infof(ctx, "canceling the producer job %d as stream ingestion job %d is being canceled",
+		streamID, s.job.ID())
+	if err = client.Complete(ctx, streamID, false /* ingestionCutover*/); err != nil {
+		log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
+	}
+	if err = client.Close(); err != nil {
+		log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
+	}
+}
+
 // OnFailOrCancel is part of the jobs.Resumer interface.
 // There is a know race between the ingestion processors shutting down, and
 // OnFailOrCancel being invoked. As a result of which we might see some keys
@@ -329,7 +366,38 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	p := s.job.Payload()
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
+	// Cancel the producer job on best effort. The source job's protected timestamp is no
+	// longer needed as this ingestion job is in 'reverting' status and we won't resume
+	// ingestion anymore.
+	s.cancelProducerJob(ctx,
+		streaming.StreamID(details.StreamID), streamingccl.StreamAddress(details.StreamAddress))
+
+	tr, err := sql.GetTenantRecord(ctx, jobExecCtx.ExecCfg(), jobExecCtx.Txn(), details.NewTenantID.ToUint64())
+	if err != nil {
+		return err
+	}
+
+	if tr.State == descpb.TenantInfo_ACTIVE {
+		return errors.Errorf("error in cancel stream ingestion: cannot delete an active tenant %s",
+			details.NewTenantID)
+	}
+
+	// TODO(casper): deal with very large tenant.
+	tenantInfo := descpb.TenantInfo{
+		ID:    p.GetStreamIngestion().NewTenantID.ToUint64(),
+		State: descpb.TenantInfo_DROP,
+	}
+	// GC the tenant's data as well as the system tenant's knowledge about this tenant.
+	if err = sql.GCTenantSync(ctx, jobExecCtx.ExecCfg(), &tenantInfo); err != nil {
+		log.Warningf(ctx,
+			"encountered error when clearing tenant key ranges for ingestion job %d", s.job.ID())
+		return err
+	}
 	return nil
 }
 
