@@ -2057,8 +2057,7 @@ func (s *adminServer) jobsHelper(
               when ` + retryRevertingCondition + ` then 'retry-reverting' 
               else status
             end as status, running_status, created, started, finished, modified, fraction_completed,
-            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string::bytes,
-            coordinator_id
+            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string, coordinator_id
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -2143,7 +2142,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	var fractionCompletedOrNil *float32
 	var highwaterOrNil *apd.Decimal
 	var runningStatusOrNil *string
-	var executionFailures []byte
+	var executionFailuresOrNil *string
 	var coordinatorOrNil *int64
 	if err := scanner.ScanAll(
 		row,
@@ -2165,7 +2164,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&job.LastRun,
 		&job.NextRun,
 		&job.NumRuns,
-		&executionFailures,
+		&executionFailuresOrNil,
 		&coordinatorOrNil,
 	); err != nil {
 		return errors.Wrap(err, "scan")
@@ -2185,8 +2184,8 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	if runningStatusOrNil != nil {
 		job.RunningStatus = *runningStatusOrNil
 	}
-	{
-		failures, err := jobs.ParseRetriableExecutionErrorLogFromJSON(executionFailures)
+	if executionFailuresOrNil != nil {
+		failures, err := jobs.ParseRetriableExecutionErrorLogFromJSON([]byte(*executionFailuresOrNil))
 		if err != nil {
 			return errors.Wrap(err, "parse")
 		}
@@ -2233,7 +2232,7 @@ func (s *adminServer) jobHelper(
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 	  						 running_status, created, started, finished, modified,
 	  						 fraction_completed, high_water_timestamp, error, last_run,
-								 next_run, num_runs, execution_events::string::bytes,
+								 next_run, num_runs, execution_events::string,
                  coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
