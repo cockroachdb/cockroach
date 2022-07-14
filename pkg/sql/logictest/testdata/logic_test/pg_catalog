@@ -4117,6 +4117,7 @@ transaction_rows_read_log                              0                   NULL 
 transaction_rows_written_err                           0                   NULL      NULL        NULL        string
 transaction_rows_written_log                           0                   NULL      NULL        NULL        string
 transaction_status                                     NoTxn               NULL      NULL        NULL        string
+troubleshooting_mode                                   off                 NULL      NULL        NULL        string
 vectorize                                              on                  NULL      NULL        NULL        string
 
 query TTTTTTT colnames
@@ -4220,6 +4221,7 @@ transaction_rows_read_log                              0                   NULL 
 transaction_rows_written_err                           0                   NULL  user     NULL      0                   0
 transaction_rows_written_log                           0                   NULL  user     NULL      0                   0
 transaction_status                                     NoTxn               NULL  user     NULL      NoTxn               NoTxn
+troubleshooting_mode                                   off                 NULL  user     NULL      off                 off
 vectorize                                              on                  NULL  user     NULL      on                  on
 
 query TTTTTT colnames
@@ -4321,6 +4323,7 @@ transaction_rows_read_log                              NULL    NULL     NULL    
 transaction_rows_written_err                           NULL    NULL     NULL     NULL        NULL
 transaction_rows_written_log                           NULL    NULL     NULL     NULL        NULL
 transaction_status                                     NULL    NULL     NULL     NULL        NULL
+troubleshooting_mode                                  NULL    NULL     NULL     NULL        NULL
 vectorize                                              NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence

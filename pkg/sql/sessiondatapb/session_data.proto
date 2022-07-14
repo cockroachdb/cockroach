@@ -79,6 +79,11 @@ message SessionData {
   // OnUpdateRehomeRowEnabled controls whether the ON UPDATE rehome_row()
   // will actually trigger on row updates.
   bool on_update_rehome_row_enabled = 17;
+
+  // Troubleshooting mode determines whether we refuse to do additional work with
+  // the query (i.e. collect & emit telemetry data). Troubleshooting mode is
+  // disabled by default.
+  bool troubleshooting_mode = 21;
 }
 
 // DataConversionConfig contains the parameters that influence the output

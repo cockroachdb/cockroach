@@ -80,6 +80,12 @@ end_test
 start_test "Check that --debug-sql-cli sets suitable simplified client-side options."
 send "$argv sql --debug-sql-cli\r"
 eexpect "Welcome"
+
+# Check that troubleshooting mode is enabled in debug mode.
+eexpect "root@"
+send "show troubleshooting_mode;\r"
+eexpect "on"
+
 eexpect "root@"
 send "\\set display_format csv\r\\set\r"
 eexpect "check_syntax,false"

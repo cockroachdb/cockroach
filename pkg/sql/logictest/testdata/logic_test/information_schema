@@ -4690,6 +4690,7 @@ transaction_rows_read_log                              0
 transaction_rows_written_err                           0
 transaction_rows_written_log                           0
 transaction_status                                     NoTxn
+troubleshooting_mode                                   off
 
 # information_schema can be used with the anonymous database.
 # It should show information across all databases.
