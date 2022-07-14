@@ -3340,6 +3340,10 @@ func (m *sessionDataMutator) SetCopyFastPathEnabled(val bool) {
 	m.data.CopyFastPathEnabled = val
 }
 
+func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
+	m.data.EnforceHomeRegion = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
