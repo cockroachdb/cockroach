@@ -28,8 +28,6 @@ var (
 		catconstants.ProtectedTimestampsRecordsTableName,
 		catconstants.StatementStatisticsTableName,
 		catconstants.TransactionStatisticsTableName,
-		// TODO(postamar): remove in 21.2
-		catconstants.PreMigrationNamespaceTableName,
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
