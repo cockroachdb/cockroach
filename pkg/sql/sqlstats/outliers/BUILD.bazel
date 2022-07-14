@@ -21,6 +21,7 @@ go_library(
         "//pkg/util/cache",
         "//pkg/util/metric",
         "//pkg/util/quantile",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_prometheus_client_model//go",
     ],

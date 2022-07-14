@@ -12,6 +12,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -62,9 +64,15 @@ func TestOutliersIntegration(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", 2*latencyThreshold.Seconds())
 	require.NoError(t, err)
 
-	// See one recorded outlier.
-	row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_outliers")
-	err = row.Scan(&count)
-	require.NoError(t, err)
-	require.Equal(t, 1, count)
+	// Eventually see one recorded outlier.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_outliers")
+		if err = row.Scan(&count); err != nil {
+			return err
+		}
+		if count != 1 {
+			return fmt.Errorf("expected 1, but was %d", count)
+		}
+		return nil
+	}, 1*time.Second)
 }

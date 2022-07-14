@@ -11,6 +11,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlstats/outliers",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
