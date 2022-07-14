@@ -89,18 +89,32 @@ type tenantStreamingClusters struct {
 	destCluster   *testcluster.TestCluster
 	destSysServer serverutils.TestServerInterface
 	destSysSQL    *sqlutils.SQLRunner
+	destTenantSQL *sqlutils.SQLRunner
 }
 
+// Creates a dest tenant SQL runner and returns a cleanup function that shuts
+// tenant SQL instance and closes all sessions.
 // This function will fail the test if ran prior to the Replication stream
 // closing as the tenant will not yet be active
-func (c *tenantStreamingClusters) getDestTenantSQL() *sqlutils.SQLRunner {
-	_, destTenantConn := serverutils.StartTenant(c.t, c.destSysServer, base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
-	return sqlutils.MakeSQLRunner(destTenantConn)
+func (c *tenantStreamingClusters) createDestTenantSQL(ctx context.Context) func() error {
+	testTenant, destTenantConn := serverutils.StartTenant(c.t, c.destSysServer,
+		base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	c.destTenantSQL = sqlutils.MakeSQLRunner(destTenantConn)
+	return func() error {
+		if err := destTenantConn.Close(); err != nil {
+			return err
+		}
+		testTenant.Stopper().Stop(ctx)
+		return nil
+	}
 }
 
+// This function has to be called after createTenantSQL.
 func (c *tenantStreamingClusters) compareResult(query string) {
+	require.NotNil(c.t, c.destTenantSQL,
+		"destination tenant SQL runner should be created first")
 	sourceData := c.srcTenantSQL.QueryStr(c.t, query)
-	destData := c.getDestTenantSQL().QueryStr(c.t, query)
+	destData := c.destTenantSQL.QueryStr(c.t, query)
 	require.Equal(c.t, sourceData, destData)
 }
 
@@ -288,6 +302,11 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 
 	c.cutover(producerJobID, ingestionJobID, cutoverTime)
 
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
 	c.compareResult("SELECT * FROM d.x")
@@ -297,7 +316,7 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	})
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
-	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+	require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
 }
 
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
@@ -312,7 +331,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
 	defer cleanup()
 
-	// initial scan
 	producerJobID, ingestionJobID := c.startStreamReplication()
 
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
@@ -321,6 +339,10 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	srcTime := c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
 
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
 
@@ -345,7 +367,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"0"}},
-		c.getDestTenantSQL().QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
+		c.destTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
 
 	// After resumed, the ingestion job paused on failure again.
 	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -372,6 +394,11 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 
 	srcTime := c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
 
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
@@ -440,6 +467,12 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	// Check dest has caught up the previous updates.
 	srcTime := c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
 
@@ -519,6 +552,11 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 		return nil
 	})
 
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
 	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	// Clear out the map to ignore the initial client starts
@@ -547,5 +585,81 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	})
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
-	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+	require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingCancelIngestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
+		producerJobID, ingestionJobID := c.startStreamReplication()
+
+		jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+		srcTime := c.srcCluster.Server(0).Clock().Now()
+		c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+		cleanUpTenant := c.createDestTenantSQL(ctx)
+		c.compareResult("SELECT * FROM d.t1")
+		c.compareResult("SELECT * FROM d.t2")
+
+		if cancelAfterPaused {
+			c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+			jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		}
+
+		// Close all tenant SQL sessions before we cancel the job so that
+		// we don't have any process still writing to 'sqlliveness' table after
+		// the tenant key range is cleared.
+		require.NoError(t, cleanUpTenant())
+
+		c.destSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", ingestionJobID))
+		jobutils.WaitForJobToCancel(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+
+		// Check if the producer job has released protected timestamp.
+		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		require.NotNil(t, stats.ProducerStatus)
+		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+
+		// Check if dest tenant key ranges are not cleaned up.
+		destTenantPrefix := keys.MakeTenantPrefix(args.destTenantID)
+
+		rows, err := c.destCluster.Server(0).DB().
+			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+		require.NoError(t, err)
+		require.NotEmpty(t, rows)
+
+		// Check if the tenant record still exits.
+		c.destSysSQL.CheckQueryResults(t,
+			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.destTenantID),
+			[][]string{{"1"}})
+
+		// Check if we can successfully GC the tenant.
+		c.destSysSQL.Exec(t, "SELECT crdb_internal.destroy_tenant($1, true)",
+			args.destTenantID.ToUint64())
+		rows, err = c.destCluster.Server(0).DB().
+			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+
+		c.destSysSQL.CheckQueryResults(t,
+			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.destTenantID),
+			[][]string{{"0"}})
+	}
+
+	t.Run("cancel-ingestion-after-paused", func(t *testing.T) {
+		testCancelIngestion(t, true)
+	})
+
+	t.Run("cancel-ingestion-while-running", func(t *testing.T) {
+		testCancelIngestion(t, false)
+	})
 }

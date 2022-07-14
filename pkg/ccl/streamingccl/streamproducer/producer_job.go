@@ -81,14 +81,9 @@ func (p *producerJobResumer) releaseProtectedTimestamp(
 func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
-	isTimedOut := func(job *jobs.Job) bool {
-		progress := job.Progress()
-		return progress.GetStreamReplication().Expiration.Before(p.timeSource.Now())
-	}
-	if isTimedOut(p.job) {
-		return errors.Errorf("replication stream %d timed out", p.job.ID())
-	}
-	p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
+
+	// Fire the timer immediately to start an initial progress check
+	p.timer.Reset(0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -111,7 +106,8 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 					return nil
 				})
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
-				if isTimedOut(j) {
+				// Check if the job timed out.
+				if prog.GetStreamReplication().Expiration.Before(p.timeSource.Now()) {
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
 				}
 			default:
