@@ -451,7 +451,7 @@ var partialJoinSentinel = []int{-1}
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to
-// joinReaderOderingStrategy.processLookedUpRow(), which will match it against
+// joinReaderOrderingStrategy.processLookedUpRow(), which will match it against
 // all the corresponding input rows, producing (1, x), (4, x). These two rows
 // are not emitted because that would violate the input ordering (well, (1, x)
 // could be emitted, but we're not smart enough). So, they are buffered until
@@ -535,7 +535,7 @@ type joinReaderOrderingStrategy struct {
 	testingInfoSpilled bool
 }
 
-const joinReaderOrderingStrategyBatchSizeDefault = 10 << 10 /* 10 KiB */
+const joinReaderOrderingStrategyBatchSizeDefault = 100 << 10 /* 100 KiB */
 
 // JoinReaderOrderingStrategyBatchSize determines the size of input batches used
 // to construct a single lookup KV batch by joinReaderOrderingStrategy.
@@ -548,8 +548,6 @@ var JoinReaderOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
 )
 
 func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint(sd *sessiondata.SessionData) int64 {
-	// TODO(asubiotto): Eventually we might want to adjust this batch size
-	//  dynamically based on whether the result row container spilled or not.
 	if sd.JoinReaderOrderingStrategyBatchSize == 0 {
 		// In some tests the session data might not be set - use the default
 		// value then.
