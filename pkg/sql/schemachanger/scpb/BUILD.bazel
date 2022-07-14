@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
@@ -99,3 +100,5 @@ genrule(
         "//pkg/gen:__pkg__",
     ],
 )
+
+get_x_data(name = "get_x_data")
