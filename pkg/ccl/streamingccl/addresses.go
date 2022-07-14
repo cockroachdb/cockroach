@@ -19,6 +19,16 @@ func (sa StreamAddress) URL() (*url.URL, error) {
 	return url.Parse(string(sa))
 }
 
+// String returns only the Host of the StreamAddress in order to avoid leaking
+// credentials.  If the URL is invalid, "<invalidURL>" is returned.
+func (sa StreamAddress) String() string {
+	streamURL, parseErr := sa.URL()
+	if parseErr != nil {
+		return "<invalidURL>"
+	}
+	return streamURL.Host
+}
+
 // PartitionAddress is the address where the stream client should be able to
 // read the events produced by a partition of a stream.
 //

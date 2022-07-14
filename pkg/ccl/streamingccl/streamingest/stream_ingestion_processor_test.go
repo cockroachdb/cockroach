@@ -66,6 +66,11 @@ func (m *mockStreamClient) Create(
 	panic("unimplemented")
 }
 
+// Dial implements the Client interface.
+func (m *mockStreamClient) Dial(ctx context.Context) error {
+	panic("unimplemented")
+}
+
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
 	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,

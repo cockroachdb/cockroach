@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -192,22 +193,30 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name != "existing-job-checkpoint" {
-				return
-			}
-			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
-				pa1: {
-					PartitionID:       pa1,
-					SubscriptionToken: pa1,
-					Address:           pa1,
+
+			topology := streamclient.Topology{
+				{
+					ID:                pa1,
+					SubscriptionToken: []byte(pa1),
+					SrcAddr:           streamingccl.PartitionAddress(pa1),
 					Spans:             []roachpb.Span{pa1Span},
 				},
-				pa2: {
-					PartitionID:       pa2,
-					SubscriptionToken: pa2,
-					Address:           pa2,
+				{
+					ID:                pa2,
+					SubscriptionToken: []byte(pa2),
+					SrcAddr:           streamingccl.PartitionAddress(pa2),
 					Spans:             []roachpb.Span{pa2Span},
 				},
+			}
+
+			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{}
+			for _, partition := range topology {
+				spec.PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
+					PartitionID:       partition.ID,
+					SubscriptionToken: string(partition.SubscriptionToken),
+					Address:           string(partition.SrcAddr),
+					Spans:             partition.Spans,
+				}
 			}
 			spec.TenantRekey = execinfrapb.TenantRekey{
 				OldID: roachpb.MakeTenantID(tenantID),
@@ -231,7 +240,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 			// Create a frontier processor.
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
-			frontierSpec.StreamAddress = spec.StreamAddress
+			frontierSpec.StreamAddresses = topology.StreamAddresses()
 			frontierSpec.TrackedSpans = []roachpb.Span{pa1Span, pa2Span}
 			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 
