@@ -11,8 +11,12 @@
 package opt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -111,10 +115,13 @@ var tableAnnIDCount TableAnnID
 // called. Calling more than this number of times results in a panic. Having
 // a maximum enables a static annotation array to be inlined into the metadata
 // table struct.
-const maxTableAnnIDCount = 3
+const maxTableAnnIDCount = 4
 
 // NotNullAnnID is the annotation ID for table not null columns.
 var NotNullAnnID = NewTableAnnID()
+
+// regionConfigAnnID is the annotation ID for multiregion table config.
+var regionConfigAnnID = NewTableAnnID()
 
 // TableMeta stores information about one of the tables stored in the metadata.
 //
@@ -193,6 +200,23 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+}
+
+// TableAnnotation returns the given annotation that is associated with the
+// given table. If the table has no such annotation, TableAnnotation returns
+// nil.
+func (tm *TableMeta) TableAnnotation(annID TableAnnID) interface{} {
+	return tm.anns[annID]
+}
+
+// SetTableAnnotation associates the given annotation with the given table. The
+// annotation is associated by the given ID, which was allocated by calling
+// NewTableAnnID. If an annotation with the ID already exists on the table, then
+// it is overwritten.
+//
+// See the TableAnnID comment for more details and a usage example.
+func (tm *TableMeta) SetTableAnnotation(tabAnnID TableAnnID, ann interface{}) {
+	tm.anns[tabAnnID] = ann
 }
 
 // copyFrom initializes the receiver with a copy of the given TableMeta, which
@@ -416,6 +440,64 @@ func (tm *TableMeta) VirtualComputedColumns() ColSet {
 		}
 	}
 	return virtualCols
+}
+
+// GetRegionsInDatabase finds the full set of regions in the multiregion
+// database owning the table described by `tm`, or returns ok=false if not
+// multiregion. The result is cached in TableMeta.
+func (tm *TableMeta) GetRegionsInDatabase(
+	planner eval.Planner,
+) (regionNames catpb.RegionNames, ok bool) {
+	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
+	if ok {
+		if multiregionConfig == nil {
+			return nil /* regionNames */, false
+		}
+		return multiregionConfig.Regions(), true
+	}
+	dbID := tm.Table.GetDatabaseID()
+	if dbID == 0 {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return nil /* regionNames */, false
+	}
+
+	regionConfig, ok := planner.GetMultiregionConfig(dbID)
+	if !ok {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return nil /* regionNames */, false
+	}
+	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
+	tm.SetTableAnnotation(regionConfigAnnID, multiregionConfig)
+	return multiregionConfig.Regions(), true
+}
+
+// GetDatabaseSurvivalGoal finds the survival goal of the multiregion database
+// owning the table described by `tm`, or returns ok=false if not multiregion.
+// The result is cached in TableMeta.
+func (tm *TableMeta) GetDatabaseSurvivalGoal(
+	planner eval.Planner,
+) (survivalGoal descpb.SurvivalGoal, ok bool) {
+	// If planner is nil, we could be running an internal query or something else
+	// which is not a user query, so make sure we don't error out this case.
+	if planner == nil {
+		return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, true
+	}
+	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
+	if ok {
+		if multiregionConfig == nil {
+			return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
+		}
+		return multiregionConfig.SurvivalGoal(), true
+	}
+	dbID := tm.Table.GetDatabaseID()
+	regionConfig, ok := planner.GetMultiregionConfig(dbID)
+	if !ok {
+		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
+	}
+	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
+	tm.SetTableAnnotation(regionConfigAnnID, multiregionConfig)
+	return multiregionConfig.SurvivalGoal(), true
 }
 
 // TableAnnotation returns the given annotation that is associated with the

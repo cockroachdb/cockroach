@@ -245,21 +245,21 @@ func (i importDatabaseRegionConfig) PrimaryRegionString() string {
 
 var _ eval.DatabaseRegionConfig = &importDatabaseRegionConfig{}
 
-// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
+// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
 }
 
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
 func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForTable is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	_ context.Context, _ int64,
@@ -267,7 +267,7 @@ func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForDatabase is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
 // interface.
 func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, _ int64,
