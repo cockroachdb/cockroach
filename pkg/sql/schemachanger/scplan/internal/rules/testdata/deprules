@@ -158,9 +158,9 @@ deprules
     - $index-dependent-node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($index-dependent, $index-dependent-target, $index-dependent-node)
-- name: temp index exists right before columns, partitioning, and partial
+- name: temp index exists before columns, partitioning, and partial
   from: temp-index-node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: index-partitioning-node
   query:
     - $temp-index[Type] = '*scpb.TemporaryIndex'
@@ -200,16 +200,55 @@ deprules
     - joinOnIndexID($index-name, $index, $table-id, $index-id)
     - joinTargetNode($index-name, $index-name-target, $index-name-node)
     - joinTargetNode($index, $index-target, $index-node)
-- name: temp and secondary index columns removed just before removing the index
+- name: secondary index columns removed before removing the index
+  from: index-column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - joinOnIndexID($index-column, $index, $table-id, $index-id)
+    - toAbsent($index-column-target, $index-target)
+    - $index-column-node[CurrentStatus] = ABSENT
+    - $index-node[CurrentStatus] = ABSENT
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+    - joinTargetNode($index, $index-target, $index-node)
+- name: secondary index in DELETE_ONLY before removing columns
   from: index-node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: index-column-node
   query:
-    - $index[Type] = '*scpb.IndexColumn'
-    - $index-column[Type] IN ['*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - $index-column[Type] = '*scpb.IndexColumn'
     - joinOnIndexID($index, $index-column, $table-id, $index-id)
     - toAbsent($index-target, $index-column-target)
-    - $index-node[CurrentStatus] = ABSENT
+    - $index-node[CurrentStatus] = DELETE_ONLY
+    - $index-column-node[CurrentStatus] = ABSENT
+    - joinTargetNode($index, $index-target, $index-node)
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+- name: temp index columns removed before removing the index
+  from: index-column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index[Type] = '*scpb.TemporaryIndex'
+    - joinOnIndexID($index-column, $index, $table-id, $index-id)
+    - toAbsent($index-column-target, $index-target)
+    - $index-column-node[CurrentStatus] = ABSENT
+    - $index-node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+    - joinTargetNode($index, $index-target, $index-node)
+- name: temp index in DELETE_ONLY before removing columns
+  from: index-node
+  kind: Precedence
+  to: index-column-node
+  query:
+    - $index[Type] = '*scpb.TemporaryIndex'
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
+    - toAbsent($index-target, $index-column-target)
+    - $index-node[CurrentStatus] = TRANSIENT_DELETE_ONLY
     - $index-column-node[CurrentStatus] = ABSENT
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($index-column, $index-column-target, $index-column-node)
@@ -294,9 +333,9 @@ deprules
     - $column-node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-target, $expr-node)
     - joinTargetNode($column, $column-target, $column-node)
-- name: column named right before column type becomes public
+- name: column named before column type becomes public
   from: column-name-node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-type-node
   query:
     - $column-name[Type] = '*scpb.ColumnName'
@@ -484,19 +523,19 @@ deprules
     - joinTargetNode($primary-index, $primary-index-target, $primary-index-node)
     - joinTargetNode($second-index, $second-index-target, $second-index-node)
 - name: column name and type to public after all index column to public
-  from: index-column-node
+  from: column-name-or-type-node
   kind: Precedence
-  to: column-name-node
+  to: index-column-node
   query:
-    - $index-column[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType']
-    - $column-name[Type] = '*scpb.IndexColumn'
-    - joinOnColumnID($index-column, $column-name, $table-id, $column-id)
+    - $column-name-or-type[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType']
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - joinOnColumnID($column-name-or-type, $index-column, $table-id, $column-id)
+    - $column-name-or-type-target[TargetStatus] = PUBLIC
     - $index-column-target[TargetStatus] = PUBLIC
-    - $column-name-target[TargetStatus] = PUBLIC
+    - $column-name-or-type-node[CurrentStatus] = PUBLIC
     - $index-column-node[CurrentStatus] = PUBLIC
-    - $column-name-node[CurrentStatus] = PUBLIC
+    - joinTargetNode($column-name-or-type, $column-name-or-type-target, $column-name-or-type-node)
     - joinTargetNode($index-column, $index-column-target, $index-column-node)
-    - joinTargetNode($column-name, $column-name-target, $column-name-node)
 - name: index-column added to index after index exists
   from: index-node
   kind: Precedence

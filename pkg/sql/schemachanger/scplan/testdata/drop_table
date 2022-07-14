@@ -184,12 +184,36 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 32 MutationType ops
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
+      DescID: 111
+    *scop.RemoveViewBackReferencesInRelations
+      BackReferencedViewID: 111
+      RelationIDs:
+      - 109
+    *scop.RemoveAllTableComments
+      TableID: 111
+    *scop.MarkDescriptorAsDropped
+      DescID: 110
+    *scop.RemoveAllTableComments
+      TableID: 110
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 111
+        Name: v1
+        SchemaID: 101
+    *scop.MarkDescriptorAsDropped
       DescID: 109
     *scop.RemoveAllTableComments
       TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 109
+    *scop.RemoveSequenceOwner
+      ColumnID: 2
+      OwnedSequenceID: 110
+      TableID: 109
+    *scop.RemoveOwnerBackReferenceInSequence
+      SequenceID: 110
     *scop.RemoveDroppedColumnType
       ColumnID: 3
       TableID: 109
@@ -228,30 +252,6 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 32 MutationType ops
     *scop.RemoveForeignKeyConstraint
       ConstraintID: 3
       TableID: 109
-    *scop.MarkDescriptorAsDropped
-      DescID: 110
-    *scop.RemoveAllTableComments
-      TableID: 110
-    *scop.MarkDescriptorAsDropped
-      DescID: 111
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
-      RelationIDs:
-      - 109
-    *scop.RemoveAllTableComments
-      TableID: 111
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 100
-        DescriptorID: 109
-        Name: shipments
-        SchemaID: 101
-    *scop.RemoveSequenceOwner
-      ColumnID: 2
-      OwnedSequenceID: 110
-      TableID: 109
-    *scop.RemoveOwnerBackReferenceInSequence
-      SequenceID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -261,8 +261,8 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 32 MutationType ops
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 111
-        Name: v1
+        DescriptorID: 109
+        Name: shipments
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -709,7 +709,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -721,7 +721,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -729,7 +729,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
-  rule: dependents removed before index
+  rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -774,6 +774,18 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents removed
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: secondary index in DELETE_ONLY before removing columns
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: secondary index in DELETE_ONLY before removing columns
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: secondary index in DELETE_ONLY before removing columns
 - from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence

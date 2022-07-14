@@ -283,7 +283,9 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if !e.IsPhaseSatisfied(sb.bs.phase) {
 		return false
 	}
-	if !sb.bc.isRevertibilityIgnored && sb.bs.phase == scop.PostCommitPhase && !e.Revertible() {
+	if !sb.bc.isRevertibilityIgnored &&
+		sb.bs.phase < scop.PostCommitNonRevertiblePhase &&
+		!e.Revertible() {
 		return false
 	}
 	return true
@@ -353,7 +355,7 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	}
 	// The dependency constraint is somehow unsatisfiable.
 	panic(errors.AssertionFailedf("failed to satisfy %s rule %q",
-		de.String(), de.Name()))
+		de.String(), de.RuleNames()))
 }
 
 // hasUnmeetableOutboundDeps returns true iff the candidate node has outbound

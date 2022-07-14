@@ -52,7 +52,7 @@ func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
 	}
 	undropped.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		b.CheckPrivilege(e, privilege.DROP)
-		dropElement(b, e)
+		dropElementWhenDroppingDescriptor(b, e)
 	})
 	return true
 }
@@ -125,8 +125,12 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 	return fmt.Sprintf("%s %q", typ, name)
 }
 
-func dropElement(b BuildCtx, e scpb.Element) {
-	// TODO(postamar): remove this dirty hack ASAP, see column/index dep rules.
+// dropElementWhenDroppingDescriptor is a helper to drop an element when
+// dropping a descriptor which sets the bit to indicate that the descriptor
+// is being dropped.
+//
+// TODO(postamar): remove this dirty hack ASAP, see column/index dep rules.
+func dropElementWhenDroppingDescriptor(b BuildCtx, e scpb.Element) {
 	switch t := e.(type) {
 	case *scpb.ColumnType:
 		t.IsRelationBeingDropped = true
@@ -183,7 +187,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			// Don't actually drop any elements of virtual schemas.
 			return
 		}
-		dropElement(b, e)
+		dropElementWhenDroppingDescriptor(b, e)
 		switch t := e.(type) {
 		case *scpb.EnumType:
 			dropCascadeDescriptor(next, t.ArrayTypeID)
@@ -217,7 +221,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ForeignKeyConstraint,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
-			dropElement(b, e)
+			dropElementWhenDroppingDescriptor(b, e)
 		}
 	})
 }
@@ -298,4 +302,40 @@ func getSortedColumnIDsInIndex(
 		}
 	}
 	return keyColumnIDs, keySuffixColumnIDs, storingColumnIDs
+}
+
+func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target == scpb.ToPublic
+}
+
+func statusAbsentOrBackfillOnly(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_ABSENT || status == scpb.Status_BACKFILL_ONLY
+}
+
+func statusPublic(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_PUBLIC
+}
+
+// getPrimaryIndexes returns the primary indexes of the current table.
+// Note that it assumes that there are at most two primary indexes and at
+// least one. The existing primary index is the primary index which is
+// currently public. The freshlyAdded primary index is one which is targeting
+// public.
+//
+// TODO(ajwerner): This will not be true at some point in the near future when
+// we need an intermediate primary index to support adding and dropping columns
+// in the same transaction.
+func getPrimaryIndexes(
+	b BuildCtx, tableID catid.DescID,
+) (existing, freshlyAdded *scpb.PrimaryIndex) {
+	allTargets := b.QueryByID(tableID)
+	_, _, freshlyAdded = scpb.FindPrimaryIndex(allTargets.
+		Filter(publicTargetFilter).
+		Filter(statusAbsentOrBackfillOnly))
+	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(statusPublic))
+	if existing == nil {
+		// TODO(postamar): can this even be possible?
+		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
+	}
+	return existing, freshlyAdded
 }
