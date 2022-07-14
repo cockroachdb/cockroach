@@ -95,6 +95,11 @@ eexpect "prompt1,%n@%M>"
 eexpect "root@"
 send "\\q\r"
 eexpect ":/# "
+
+# Check that troubleshooting mode is enabled in debug mode.
+send "show troubleshooting_mode\r"
+eexpect "on"
+eexpect "root@"
 end_test
 
 send "exit 0\r"
