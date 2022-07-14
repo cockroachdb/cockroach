@@ -1,0 +1,149 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package main
+
+import (
+	gosql "database/sql"
+	"flag"
+	"fmt"
+	"os"
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
+)
+
+// smith is a command-line wrapper around sqlsmith-go, useful for examining
+// sqlsmith output when making changes to the random query generator.
+
+const description = `
+%[1]s prints random SQL statements to stdout, using a random SQL statement
+generator inspired by SQLsmith. See https://github.com/anse1/sqlsmith for more
+about the SQLsmith project.
+
+Usage:
+  [COCKROACH_RANDOM_SEED=1234] %[1]s [options] [sqlsmith-go options]
+
+Options:
+`
+
+var (
+	flags         = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	expr          = flags.Bool("expr", false, "generate expressions instead of statements")
+	num           = flags.Int("num", 1, "number of statements / expressions to generate")
+	url           = flags.String("url", "", "database to fetch schema from")
+	smitherOptMap = map[string]sqlsmith.SmitherOption{
+		"DisableMutations":                        sqlsmith.DisableMutations(),
+		"DisableDDLs":                             sqlsmith.DisableDDLs(),
+		"OnlyNoDropDDLs":                          sqlsmith.OnlyNoDropDDLs(),
+		"MultiRegionDDLs":                         sqlsmith.MultiRegionDDLs(),
+		"DisableWith":                             sqlsmith.DisableWith(),
+		"DisableNondeterministicFns":              sqlsmith.DisableNondeterministicFns(),
+		"DisableCRDBFns":                          sqlsmith.DisableCRDBFns(),
+		"SimpleDatums":                            sqlsmith.SimpleDatums(),
+		"MutationsOnly":                           sqlsmith.MutationsOnly(),
+		"InsUpdOnly":                              sqlsmith.InsUpdOnly(),
+		"DisableLimits":                           sqlsmith.DisableLimits(),
+		"AvoidConsts":                             sqlsmith.AvoidConsts(),
+		"DisableWindowFuncs":                      sqlsmith.DisableWindowFuncs(),
+		"OutputSort":                              sqlsmith.OutputSort(),
+		"UnlikelyConstantPredicate":               sqlsmith.UnlikelyConstantPredicate(),
+		"FavorCommonData":                         sqlsmith.FavorCommonData(),
+		"UnlikelyRandomNulls":                     sqlsmith.UnlikelyRandomNulls(),
+		"DisableCrossJoins":                       sqlsmith.DisableCrossJoins(),
+		"DisableIndexHints":                       sqlsmith.DisableIndexHints(),
+		"LowProbabilityWhereClauseWithJoinTables": sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
+		"DisableInsertSelect":                     sqlsmith.DisableInsertSelect(),
+		"CompareMode":                             sqlsmith.CompareMode(),
+		"PostgresMode":                            sqlsmith.PostgresMode(),
+		"MutatingMode":                            sqlsmith.MutatingMode(),
+	}
+	smitherOpts []string
+)
+
+func usage() {
+	fmt.Fprintf(flags.Output(), description, os.Args[0])
+	flags.PrintDefaults()
+	fmt.Fprint(flags.Output(), "\nSqlsmith-go options:\n")
+	for _, opt := range smitherOpts {
+		fmt.Fprintln(flags.Output(), "  ", opt)
+	}
+}
+
+func init() {
+	smitherOpts = make([]string, 0, len(smitherOptMap))
+	for opt := range smitherOptMap {
+		smitherOpts = append(smitherOpts, opt)
+	}
+	sort.Strings(smitherOpts)
+	flags.Usage = usage
+}
+
+func main() {
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		} else {
+			os.Exit(1)
+		}
+	}
+
+	rng, seed := randutil.NewPseudoRand()
+	fmt.Print("-- COCKROACH_RANDOM_SEED=", seed, "\n")
+
+	var smitherOpts []sqlsmith.SmitherOption
+	for _, arg := range flags.Args() {
+		if opt, ok := smitherOptMap[arg]; ok {
+			fmt.Print("-- ", arg, ": ", opt, "\n")
+			smitherOpts = append(smitherOpts, opt)
+		} else {
+			fmt.Fprintf(flags.Output(), "unrecognized sqlsmith-go option: %v\n", arg)
+			usage()
+			os.Exit(2)
+		}
+	}
+
+	var db *gosql.DB
+	if *url != "" {
+		var err error
+		db, err = gosql.Open("postgres", *url)
+		if err != nil {
+			fmt.Fprintf(flags.Output(), "could not connect to database\n")
+			os.Exit(3)
+		}
+		defer db.Close()
+		if err := db.Ping(); err != nil {
+			fmt.Fprintf(flags.Output(), "could not ping database\n")
+			os.Exit(4)
+		}
+		fmt.Println("-- connected to", *url)
+	}
+
+	smither, err := sqlsmith.NewSmither(db, rng, smitherOpts...)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer smither.Close()
+
+	fmt.Println("-- num", *num)
+	if *expr {
+		fmt.Println("-- expr")
+		for i := 0; i < *num; i++ {
+			fmt.Print("\n", smither.GenerateExpr(), "\n")
+		}
+	} else {
+		for i := 0; i < *num; i++ {
+			fmt.Print("\n", smither.Generate(), ";\n")
+		}
+	}
+}

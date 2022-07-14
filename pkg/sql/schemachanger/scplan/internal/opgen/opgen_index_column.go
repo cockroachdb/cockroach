@@ -19,8 +19,8 @@ func init() {
 	opRegistry.register((*scpb.IndexColumn)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			to(scpb.Status_PUBLIC, emit(func(column *scpb.IndexColumn) scop.Op {
-				return scop.AddColumnToIndex{
+			to(scpb.Status_PUBLIC, emit(func(column *scpb.IndexColumn) *scop.AddColumnToIndex {
+				return &scop.AddColumnToIndex{
 					TableID:   column.TableID,
 					ColumnID:  column.ColumnID,
 					IndexID:   column.IndexID,
@@ -34,8 +34,8 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(column *scpb.IndexColumn) scop.Op {
-					return scop.RemoveColumnFromIndex{
+				emit(func(column *scpb.IndexColumn) *scop.RemoveColumnFromIndex {
+					return &scop.RemoveColumnFromIndex{
 						TableID:  column.TableID,
 						ColumnID: column.ColumnID,
 						IndexID:  column.IndexID,

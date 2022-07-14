@@ -592,6 +592,35 @@ deprules
     - $index-node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($index-column, $index-column-target, $index-column-node)
     - joinTargetNode($index, $index-target, $index-node)
+- name: temp indexes reach absent at the same time as other indexes
+  from: index-a-node
+  kind: SameStagePrecedence
+  to: index-b-node
+  query:
+    - $index-a[Type] = '*scpb.TemporaryIndex'
+    - $index-b[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - joinOnDescID($index-a, $index-b, $descID)
+    - $index-a-target[TargetStatus] = TRANSIENT_ABSENT
+    - $index-b-target[TargetStatus] = ABSENT
+    - $index-a-node[CurrentStatus] = TRANSIENT_ABSENT
+    - $index-b-node[CurrentStatus] = ABSENT
+    - joinTargetNode($index-a, $index-a-target, $index-a-node)
+    - joinTargetNode($index-b, $index-b-target, $index-b-node)
+- name: indexes reach absent at the same time as other indexes
+  from: index-a-node
+  kind: SameStagePrecedence
+  to: index-b-node
+  query:
+    - $index-a[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $index-b[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - joinOnDescID($index-a, $index-b, $descID)
+    - $index-a-target[TargetStatus] = ABSENT
+    - $index-b-target[TargetStatus] = ABSENT
+    - $index-a-node[CurrentStatus] = ABSENT
+    - $index-b-node[CurrentStatus] = ABSENT
+    - indexes-id-less(scpb.Element, scpb.Element)($a, $b)
+    - joinTargetNode($index-a, $index-a-target, $index-a-node)
+    - joinTargetNode($index-b, $index-b-target, $index-b-node)
 - name: ensure columns are in increasing order
   from: later-column-node
   kind: SameStagePrecedence

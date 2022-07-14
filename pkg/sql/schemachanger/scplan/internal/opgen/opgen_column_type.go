@@ -23,12 +23,12 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ColumnType) scop.Op {
+				emit(func(this *scpb.ColumnType) *scop.SetAddedColumnType {
 					return &scop.SetAddedColumnType{
 						ColumnType: *protoutil.Clone(this).(*scpb.ColumnType),
 					}
 				}),
-				emit(func(this *scpb.ColumnType) scop.Op {
+				emit(func(this *scpb.ColumnType) *scop.UpdateTableBackReferencesInTypes {
 					if ids := referencedTypeIDs(this); len(ids) > 0 {
 						return &scop.UpdateTableBackReferencesInTypes{
 							TypeIDs:               ids,
@@ -43,7 +43,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(this *scpb.ColumnType) scop.Op {
+				emit(func(this *scpb.ColumnType) *scop.RemoveDroppedColumnType {
 					if ids := referencedTypeIDs(this); len(ids) > 0 {
 						return &scop.RemoveDroppedColumnType{
 							TableID:  this.TableID,
@@ -52,7 +52,7 @@ func init() {
 					}
 					return nil
 				}),
-				emit(func(this *scpb.ColumnType) scop.Op {
+				emit(func(this *scpb.ColumnType) *scop.UpdateTableBackReferencesInTypes {
 					if ids := referencedTypeIDs(this); len(ids) > 0 {
 						return &scop.UpdateTableBackReferencesInTypes{
 							TypeIDs:               ids,

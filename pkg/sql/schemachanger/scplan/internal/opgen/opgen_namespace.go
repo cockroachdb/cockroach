@@ -22,7 +22,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Namespace) scop.Op {
+				emit(func(this *scpb.Namespace) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
@@ -32,7 +32,7 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.Namespace) scop.Op {
+				emit(func(this *scpb.Namespace) *scop.DrainDescriptorName {
 					return &scop.DrainDescriptorName{
 						Namespace: *protoutil.Clone(this).(*scpb.Namespace),
 					}

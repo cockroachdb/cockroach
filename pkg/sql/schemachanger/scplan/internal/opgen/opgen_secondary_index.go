@@ -21,7 +21,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_BACKFILL_ONLY,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeAddedIndexBackfilling {
 					return &scop.MakeAddedIndexBackfilling{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
 						IsSecondaryIndex: true,
@@ -29,7 +29,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_BACKFILLED,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.BackfillIndex {
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
 						SourceIndexID: this.SourceIndexID,
@@ -38,7 +38,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeBackfillingIndexDeleteOnly {
 					return &scop.MakeBackfillingIndexDeleteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -46,7 +46,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_MERGE_ONLY,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeAddedIndexDeleteAndWriteOnly {
 					return &scop.MakeAddedIndexDeleteAndWriteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -55,7 +55,7 @@ func init() {
 			),
 			equiv(scpb.Status_WRITE_ONLY),
 			to(scpb.Status_MERGED,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MergeIndex {
 					return &scop.MergeIndex{
 						TableID:           this.TableID,
 						TemporaryIndexID:  this.TemporaryIndexID,
@@ -64,7 +64,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.ValidateUniqueIndex {
 					// TODO(ajwerner): Should this say something other than
 					// ValidateUniqueIndex for a non-unique index?
 					return &scop.ValidateUniqueIndex{
@@ -74,7 +74,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeAddedSecondaryIndexPublic {
 					return &scop.MakeAddedSecondaryIndexPublic{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -85,7 +85,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
 						TableID: this.TableID,
@@ -99,7 +99,7 @@ func init() {
 			equiv(scpb.Status_MERGE_ONLY),
 			equiv(scpb.Status_MERGED),
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeDroppedIndexDeleteOnly {
 					return &scop.MakeDroppedIndexDeleteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -109,17 +109,17 @@ func init() {
 			equiv(scpb.Status_BACKFILLED),
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) *scop.CreateGcJobForIndex {
 					return &scop.CreateGcJobForIndex{
 						TableID:             this.TableID,
 						IndexID:             this.IndexID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
