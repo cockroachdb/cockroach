@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,7 +65,7 @@ type Client interface {
 
 	// Plan returns a Topology for this stream.
 	// TODO(dt): separate target argument from address argument.
-	Plan(ctx context.Context, streamID streaming.StreamID) (Topology, error)
+	Plan(ctx context.Context, streamID streaming.StreamID) (*jobspb.StreamTopology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
 	// the specified remote address. This is used by each consumer processor to
@@ -82,21 +83,6 @@ type Client interface {
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streaming.StreamID) error
-}
-
-// Topology is a configuration of stream partitions. These are particular to a
-// stream. It specifies the number and addresses of partitions of the stream.
-type Topology []PartitionInfo
-
-// PartitionInfo describes a partition of a replication stream, i.e. a set of key
-// spans in a source cluster in which changes will be emitted.
-type PartitionInfo struct {
-	ID string
-	SubscriptionToken
-	SrcInstanceID int
-	SrcAddr       streamingccl.PartitionAddress
-	SrcLocality   roachpb.Locality
-	Spans         []roachpb.Span
 }
 
 // Subscription represents subscription to a replication stream partition.

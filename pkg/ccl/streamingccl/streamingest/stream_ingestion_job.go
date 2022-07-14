@@ -163,6 +163,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
 				md.Progress.GetStreamIngest().StartTime = startTime
 			}
+			md.Progress.GetStreamIngest().Topology = *topology
 			ju.UpdateProgress(md.Progress)
 			return nil
 		})

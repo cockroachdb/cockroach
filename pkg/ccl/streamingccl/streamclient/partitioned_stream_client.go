@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -120,7 +121,7 @@ func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, erro
 // Plan implements Client interface.
 func (p *partitionedStreamClient) Plan(
 	ctx context.Context, streamID streaming.StreamID,
-) (Topology, error) {
+) (*jobspb.StreamTopology, error) {
 	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return nil, err
@@ -140,7 +141,7 @@ func (p *partitionedStreamClient) Plan(
 		return nil, err
 	}
 
-	topology := Topology{}
+	topology := jobspb.StreamTopology{PartitionInfo: make([]jobspb.StreamTopology_PartitionInfo, 0, len(spec.Partitions))}
 	for _, sp := range spec.Partitions {
 		pgURL, err := p.postgresURL(sp.SQLAddress.String())
 		if err != nil {
@@ -150,16 +151,16 @@ func (p *partitionedStreamClient) Plan(
 		if err != nil {
 			return nil, err
 		}
-		topology = append(topology, PartitionInfo{
-			ID:                sp.NodeID.String(),
+		topology.PartitionInfo = append(topology.PartitionInfo, jobspb.StreamTopology_PartitionInfo{
+			PartitionID:       sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
-			SrcInstanceID:     int(sp.NodeID),
-			SrcAddr:           streamingccl.PartitionAddress(pgURL.String()),
-			SrcLocality:       sp.Locality,
+			InstanceID:        int64(sp.NodeID),
+			Address:           pgURL.String(),
+			Locality:          &sp.Locality,
 			Spans:             sp.PartitionSpec.Spans,
 		})
 	}
-	return topology, nil
+	return &topology, nil
 }
 
 // Close implements Client interface.

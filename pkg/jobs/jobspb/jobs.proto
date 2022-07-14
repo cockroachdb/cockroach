@@ -72,6 +72,31 @@ message EncryptionInfo {
   map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
 }
 
+// StreamTopology describes the configuration of source cluster connections
+message StreamTopology {
+  // PartitionInfo describes a partition of a replication stream, i.e. a set of
+  // key spans in a source cluster in which changes will be emitted.
+  message PartitionInfo {
+    string partition_id = 1 [(gogoproto.customname) = "PartitionID"];
+    int64 instance_id = 2 [(gogoproto.customname) = "InstanceID"];
+
+    // SubscriptionToken is an opaque identifier which can be used to subscribe
+    // to a given partition
+    bytes subscription_token = 3;
+
+    // Address is the address to connect to the partition client
+    string address = 4;
+
+    // Locality describes the location of the source node
+    roachpb.Locality locality = 5;
+
+    // Spans are the spans this partition is responsible for streaming
+    repeated roachpb.Span spans = 6 [(gogoproto.nullable) = false];
+  }
+
+  repeated PartitionInfo partition_info = 1 [(gogoproto.nullable) = false];
+}
+
 message StreamIngestionDetails {
   // StreamAddress locates the stream. It enables the client to find the
   // addresses of the stream's partitions.
@@ -91,7 +116,8 @@ message StreamIngestionDetails {
 
   // Stream of tenant data will be ingested as a new tenant with 'new_tenant_id'.
   roachpb.TenantID new_tenant_id = 7 [(gogoproto.customname) = "NewTenantID", (gogoproto.nullable) = false];
-  // NEXT ID: 8.
+ 
+  // NEXT ID: 9.
 }
 
 message StreamIngestionCheckpoint {
@@ -127,6 +153,9 @@ message StreamIngestionProgress {
 
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 4 [(gogoproto.nullable) = false];
+
+  // Topology stores how the stream is partitioned across different source nodes
+  StreamTopology topology = 5 [(gogoproto.nullable) = false];
 }
 
 message StreamReplicationDetails {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -31,7 +30,7 @@ import (
 
 func distStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
-	topology streamclient.Topology,
+	topology *jobspb.StreamTopology,
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
@@ -45,7 +44,7 @@ func distStreamIngestionPlanSpecs(
 
 	trackedSpans := make([]roachpb.Span, 0)
 	subscribingSQLInstances := make(map[string]uint32)
-	for i, partition := range topology {
+	for i, partition := range topology.PartitionInfo {
 		// Round robin assign the stream partitions to nodes. Partitions 0 through
 		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
 		// the partition addresses.
@@ -66,11 +65,11 @@ func distStreamIngestionPlanSpecs(
 		}
 		n := i % len(sqlInstanceIDs)
 
-		subscribingSQLInstances[partition.ID] = uint32(sqlInstanceIDs[n])
-		streamIngestionSpecs[n].PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
-			PartitionID:       partition.ID,
+		subscribingSQLInstances[partition.PartitionID] = uint32(sqlInstanceIDs[n])
+		streamIngestionSpecs[n].PartitionSpecs[partition.PartitionID] = execinfrapb.StreamIngestionPartitionSpec{
+			PartitionID:       partition.PartitionID,
 			SubscriptionToken: string(partition.SubscriptionToken),
-			Address:           string(partition.SrcAddr),
+			Address:           partition.Address,
 			Spans:             partition.Spans,
 		}
 

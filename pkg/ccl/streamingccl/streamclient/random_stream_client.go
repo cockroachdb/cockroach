@@ -249,8 +249,10 @@ func (m *randomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, er
 }
 
 // Plan implements the Client interface.
-func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
-	topology := make(Topology, 0, m.config.numPartitions)
+func (m *randomStreamClient) Plan(
+	ctx context.Context, id streaming.StreamID,
+) (*jobspb.StreamTopology, error) {
+	topology := jobspb.StreamTopology{PartitionInfo: make([]jobspb.StreamTopology_PartitionInfo, 0, m.config.numPartitions)}
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
 	// Allocate table IDs and return one per partition address in the topology.
@@ -264,16 +266,16 @@ func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (T
 		partitionURI := m.config.URL(tableID)
 		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
 
-		topology = append(topology,
-			PartitionInfo{
-				ID:                strconv.Itoa(i),
-				SrcAddr:           streamingccl.PartitionAddress(partitionURI),
+		topology.PartitionInfo = append(topology.PartitionInfo,
+			jobspb.StreamTopology_PartitionInfo{
+				PartitionID:       strconv.Itoa(i),
+				Address:           partitionURI,
 				SubscriptionToken: []byte(partitionURI),
 				Spans:             []roachpb.Span{tableDesc.TableSpan(keys.SystemSQLCodec)},
 			})
 	}
 
-	return topology, nil
+	return &topology, nil
 }
 
 // Create implements the Client interface.
