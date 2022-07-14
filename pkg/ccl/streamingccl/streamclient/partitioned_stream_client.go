@@ -82,6 +82,14 @@ func (p *partitionedStreamClient) Create(
 	return streamID, err
 }
 
+// Dial implements Client interface.
+func (p *partitionedStreamClient) Dial(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	err := p.mu.srcConn.Ping(ctx)
+	return errors.Wrap(err, "failed to dial client")
+}
+
 // Heartbeat implements Client interface.
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,

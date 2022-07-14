@@ -231,11 +231,13 @@ message StreamIngestionFrontierSpec {
 
   // StreamID is the ID of the stream.
   optional uint64 stream_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
-  // StreamAddress locate the stream so that a stream client can be initialized.
-  optional string stream_address = 5 [(gogoproto.nullable) = false];
+  reserved 5;
 
   // Checkpoint stores a set of resolved spans denoting completed progress
   optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
+
+  // StreamAddresses are the addresses that can be connected to to interact with the source job
+  repeated string stream_addresses = 8;
 }
 
 message BackupDataSpec {
