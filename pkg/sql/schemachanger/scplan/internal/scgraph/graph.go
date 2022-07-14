@@ -208,7 +208,6 @@ func (g *Graph) AddOpEdges(
 	minPhase scop.Phase,
 	ops ...scop.Op,
 ) (err error) {
-
 	oe := &OpEdge{
 		op:         ops,
 		revertible: revertible,

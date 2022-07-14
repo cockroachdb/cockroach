@@ -60,7 +60,7 @@ func (oe *OpEdge) Revertible() bool { return oe.revertible }
 // CanFail returns if the dependency edge corresponds to a target in a state
 // which has yet to undergo all of its validation and backfill operations
 // before reaching its targeted status.
-func (oe *OpEdge) CanFail() bool { return oe.revertible }
+func (oe *OpEdge) CanFail() bool { return oe.canFail }
 
 // Type returns the types of operations associated with this edge.
 func (oe *OpEdge) Type() scop.Type {

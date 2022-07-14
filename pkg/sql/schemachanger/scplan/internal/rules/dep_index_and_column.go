@@ -743,6 +743,47 @@ func init() {
 				currentStatus(to.node, scpb.Status_WRITE_ONLY),
 			}
 		})
+
+	// This is a pair of somewhat brute-force hack to ensure that we only create
+	// a single GC job for all the indexes of a table being dropped by a
+	// transaction.
+	registerDepRule("temp indexes reach absent at the same time as other indexes",
+		scgraph.SameStagePrecedence,
+		"index-a", "index-b",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.TemporaryIndex)(nil)),
+				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from.el, to.el, "descID"),
+				targetStatus(from.target, scpb.Transient),
+				targetStatus(to.target, scpb.ToAbsent),
+				currentStatus(from.node, scpb.Status_TRANSIENT_ABSENT),
+				currentStatus(to.node, scpb.Status_ABSENT),
+			}
+		})
+	registerDepRule("indexes reach absent at the same time as other indexes",
+		scgraph.SameStagePrecedence,
+		"index-a", "index-b",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from.el, to.el, "descID"),
+				targetStatusEq(from.target, to.target, scpb.ToAbsent),
+				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
+
+				// Use the index ID to provide an ordering for dropping the indexes
+				// to ensure that there is no cycle in the edges.
+				//
+				// TODO(ajwerner): It'd be nice to be able to express this in rel
+				// directly.
+				rel.Filter("indexes-id-less", "a", "b")(func(a, b scpb.Element) bool {
+					aID, _ := screl.GetIndexID(a)
+					bID, _ := screl.GetIndexID(b)
+					return aID < bID
+				}),
+			}
+		})
 }
 
 // This rule ensures that columns depend on each other in increasing order.

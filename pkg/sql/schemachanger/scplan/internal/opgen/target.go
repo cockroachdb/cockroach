@@ -107,19 +107,15 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 		}
 		t.revertible = tbs.isRevertible
 		t.minPhase = tbs.currentMinPhase
-		if t.opType != scop.MutationType {
+		if t.opType != scop.MutationType && t.opType != 0 {
 			lastTransitionWhichCanFail = i
 		}
 		ret = append(ret, t)
 	}
 
 	// Mark the transitions which can fail or precede something which can fail.
-	for i := range ret {
-		if i <= lastTransitionWhichCanFail {
-			ret[i].canFail = true
-		} else {
-			break
-		}
+	for i := 0; i <= lastTransitionWhichCanFail; i++ {
+		ret[i].canFail = true
 	}
 
 	// Check that the final status has been reached.
