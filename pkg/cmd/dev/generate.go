@@ -37,6 +37,8 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate bazel         # DEPS.bzl and BUILD.bazel files
         dev generate cgo           # files that help non-Bazel systems (IDEs, go) link to our C dependencies
         dev generate docs          # generates documentation
+        dev generate diagrams      # generates syntax diagrams
+        dev generate bnf           # generates syntax bnf files
         dev generate go            # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
         dev generate go_nocgo      # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf      # *.pb.go files (subset of 'dev generate go')
@@ -73,6 +75,8 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"parser":        d.generateParser,
 		"optgen":        d.generateOptGen,
 		"schemachanger": d.generateSchemaChanger,
+		"diagrams":      d.generateDiagrams,
+		"bnf":           d.generateBNF,
 	}
 
 	if len(targets) == 0 {
@@ -197,6 +201,14 @@ func (d *dev) generateOptGen(cmd *cobra.Command) error {
 
 func (d *dev) generateSchemaChanger(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:schemachanger")
+}
+
+func (d *dev) generateDiagrams(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:diagrams")
+}
+
+func (d *dev) generateBNF(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:bnf")
 }
 
 func (d *dev) generateTarget(ctx context.Context, target string) error {
