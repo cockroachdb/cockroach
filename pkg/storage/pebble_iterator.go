@@ -892,10 +892,11 @@ func (p *pebbleIterator) destroy() {
 		panic("iterator still in use")
 	}
 	if p.iter != nil {
-		err := p.iter.Close()
-		if err != nil {
-			panic(err)
-		}
+		_ = p.iter.Close()
+		// TODO(jackson): The error returned by iter.Close() may be an ephemeral
+		// error, or it may a misuse of the Iterator or corruption. Only swallow
+		// ephemeral errors (eg, DeadlineExceeded, etc), panic-ing on errors
+		// that are not known to be ephemeral/retriable.
 		p.iter = nil
 	}
 	// Reset all fields except for the key and option buffers. Holding onto their
