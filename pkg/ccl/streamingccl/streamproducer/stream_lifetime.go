@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -263,6 +264,7 @@ func completeReplicationStream(
 					md.Progress.RunningStatus = "succeeding this producer job as the corresponding " +
 						"stream ingestion finished successfully"
 				} else {
+					fmt.Println("producer update stream ingestion status")
 					md.Progress.GetStreamReplication().StreamIngestionStatus =
 						jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
 					md.Progress.RunningStatus = "canceling this producer job as the corresponding " +
