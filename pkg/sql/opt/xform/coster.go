@@ -156,6 +156,10 @@ const (
 	// stale.
 	largeMaxCardinalityScanCostPenalty = unboundedMaxCardinalityScanCostPenalty / 2
 
+	// largeDistributeCost is the cost to use for Distribute operations when a
+	// session mode is set to error out on access of rows from remote regions.
+	largeDistributeCost = hugeCost
+
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
 	preferLookupJoinFactor = 1e-6
@@ -657,6 +661,14 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 func (c *coster) computeDistributeCost(
 	distribute *memo.DistributeExpr, required *physical.Required,
 ) memo.Cost {
+	if distribute.NoOpDistribution() {
+		// If the distribution will be elided, the cost is zero.
+		return memo.Cost(0)
+	}
+	if c.evalCtx.SessionData().EnforceHomeRegion {
+		return largeDistributeCost
+	}
+
 	// TODO(rytaft): Compute a real cost here. Currently we just add a tiny cost
 	// as a placeholder.
 	return cpuCostFactor
@@ -911,7 +923,7 @@ func (c *coster) computeLookupJoinCost(
 	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return hugeCost
 	}
-	return c.computeIndexLookupJoinCost(
+	cost := c.computeIndexLookupJoinCost(
 		join,
 		required,
 		join.LookupColsAreTableKey,
@@ -922,6 +934,7 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
+	return cost
 }
 
 func (c *coster) computeIndexLookupJoinCost(

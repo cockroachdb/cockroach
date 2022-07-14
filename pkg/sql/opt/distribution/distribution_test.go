@@ -48,7 +48,7 @@ func TestBuildProvided(t *testing.T) {
 		{
 			leftDist:  []string{},
 			rightDist: []string{"west"},
-			expected:  []string{"west"},
+			expected:  []string{},
 		},
 		{
 			leftDist: []string{"east", "west"},
