@@ -59,14 +59,17 @@ CREATE TABLE system.descriptor (
 	// Note: 48 is the ID of the system.role_id_seq sequence.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING,
-  "hashedPassword" BYTES,
-  "isRole"         BOOL NOT NULL DEFAULT false,
-  user_id          OID NOT NULL DEFAULT oid(nextval(48:::OID)), 
-  CONSTRAINT "primary" PRIMARY KEY (username),
-  UNIQUE INDEX (user_id)
+  username STRING NOT NULL,
+  "hashedPassword" BYTES NULL,
+  "isRole" BOOL NOT NULL DEFAULT false,
+  user_id OID NOT NULL DEFAULT oid(nextval('system.public.role_id_seq'::REGCLASS)),
+  CONSTRAINT "primary" PRIMARY KEY (username ASC),
+  UNIQUE INDEX users_user_id_idx (user_id ASC),
+  FAMILY "primary" (username),
+  FAMILY "fam_2_hashedPassword" ("hashedPassword"),
+  FAMILY "fam_3_isRole" ("isRole"),
+  FAMILY fam_4_user_id (user_id)
 );`
-
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
 	username STRING NOT NULL,

@@ -94,9 +94,6 @@ func alterSystemUsersAddUserIDColumn(
 		       UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ('%s', '', true,  %d)
 		       `, username.AdminRole, username.AdminRoleID)
 
-	const updateSequenceValues = `
-					UPDATE system.users SET user_id = nextval(48:::OID) WHERE user_id IS NULL`
-
 	_, err := d.InternalExecutor.ExecEx(ctx, "upsert-root-user-in-role-id-migration", nil,
 		sessiondata.NodeUserSessionDataOverride, upsertRootStmt)
 	if err != nil {
@@ -108,10 +105,55 @@ func alterSystemUsersAddUserIDColumn(
 	if err != nil {
 		return err
 	}
-	_, err = d.InternalExecutor.ExecEx(ctx, "update user ids", nil,
-		sessiondata.NodeUserSessionDataOverride, updateSequenceValues)
-	if err != nil {
-		return err
+
+	// Try to be smart about batching, every query on NULL IDs is a full
+	// table scan.
+	// Let's query all the usernames upfront, and update per username.
+	// Update 1000 usernames at a time.
+	// Using usernames leverages the primary index.
+	// This let's us do one full table scan whereas doing
+	// UPDATE ... WHERE user_id IS NULL LIMIT 1000 requires
+	// O(num users) table scans.
+	// Run setting NULL values in a loop for batching.
+	for {
+		it, err := d.InternalExecutor.QueryIteratorEx(ctx, "get null user ids", nil, sessiondata.NodeUserSessionDataOverride,
+			`SELECT username FROM system.users WHERE user_id IS NULL`)
+		if err != nil {
+			return err
+		}
+		usernames := make([]string, 0)
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			username := fmt.Sprintf("'%s'", string(tree.MustBeDString(it.Cur()[0])))
+			usernames = append(usernames, username)
+		}
+
+		if len(usernames) == 0 {
+			break
+		}
+		batchSize := 100
+		for i := 0; i < len(usernames); i += batchSize {
+			// Update the usernames 100 at a time.
+			end := i + batchSize
+			if i+batchSize > len(usernames) {
+				end = len(usernames)
+			}
+			updateSequenceValues := fmt.Sprintf(`
+UPDATE system.users SET user_id = oid(nextval('system.public.role_id_seq'::REGCLASS)) WHERE
+ username IN (%s)`, strings.Join(usernames[i:end], ","))
+
+			_, err = d.InternalExecutor.ExecEx(ctx, "update user ids", nil,
+				sessiondata.NodeUserSessionDataOverride, updateSequenceValues)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	for _, op := range []operation{

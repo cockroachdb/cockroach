@@ -13,6 +13,8 @@ package upgrades_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -99,8 +101,32 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		{"100", "0", "true"},
 	})
 
-	for i := 0; i < numUsers; i++ {
-		tdb.Exec(t, fmt.Sprintf(`CREATE USER testuser%d`, i))
+	if numUsers > 100 {
+		// Always create first user as testuser0.
+		tdb.Exec(t, `INSERT INTO system.users VALUES ('testuser0', NULL, false)`)
+		numUsers += 1
+		var wg sync.WaitGroup
+		wg.Add(100)
+		// Make creating users faster.
+		for i := 0; i < 100; i++ {
+			// Each goroutine creates 100 users.
+			capI := i
+			go func() {
+				defer wg.Done()
+				// This is hacky but INSERT into is faster
+				// than CREATE USER due to not having schema
+				// changes. This really affect our migration
+				// so let's insert to go faster.
+				for j := 0; j < numUsers/100; j++ {
+					tdb.Exec(t, fmt.Sprintf(`INSERT INTO system.users VALUES ('testuser%dx%d', '', false)`, capI, j))
+				}
+			}()
+		}
+		wg.Wait()
+	} else {
+		for i := 0; i < numUsers; i++ {
+			tdb.Exec(t, fmt.Sprintf(`CREATE USER testuser%d`, i))
+		}
 	}
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
@@ -115,17 +141,23 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		{"testuser0", "NULL", "false", "101"},
 		{"testuser_last", "NULL", "false", fmt.Sprint(101 + numUsers)},
 	})
+	modifiedSystemUsersSchema := strings.Replace(strings.TrimPrefix(strings.Replace(systemschema.UsersTableSchema, "\n  ", "\n	", -1), "\n"), "system.users", "public.users", -1)
+	tdb.CheckQueryResults(t, `SELECT CONCAT(create_statement, ';') FROM system.crdb_internal.create_statements WHERE descriptor_id = 4`,
+		[][]string{{modifiedSystemUsersSchema}})
 
-	tdb.CheckQueryResults(t, `SHOW CREATE TABLE system.users`, [][]string{{systemschema.UsersTableSchema}})
 }
 
 func TestRoleIDMigration1User(t *testing.T) {
 	runTestRoleIDMigration(t, 1)
 }
 
-func TestRoleIDMigration10000Users(t *testing.T) {
+func TestRoleIDMigration100User(t *testing.T) {
+	runTestRoleIDMigration(t, 100)
+}
+
+func TestRoleIDMigration100000Users(t *testing.T) {
 	skip.UnderStress(t)
-	runTestRoleIDMigration(t, 10000)
+	runTestRoleIDMigration(t, 100000)
 }
 
 func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
@@ -154,7 +186,7 @@ func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"username"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		NextIndexID:      2,
