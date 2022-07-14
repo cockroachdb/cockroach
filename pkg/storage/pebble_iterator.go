@@ -892,10 +892,24 @@ func (p *pebbleIterator) destroy() {
 		panic("iterator still in use")
 	}
 	if p.iter != nil {
-		err := p.iter.Close()
-		if err != nil {
-			panic(err)
-		}
+		// If an error is encountered during iteration, it'll already have been
+		// surfaced by p.iter.Error() through Valid()'s error return value.
+		// Closing a pebble iterator that's in an error state surfaces that same
+		// error again. The client should've already handled the error when
+		// surfaced through Valid(), but wants to close the iterator (eg,
+		// potentially through a defer) and so we don't want to re-surface the
+		// error.
+		_ = p.iter.Close()
+
+		// TODO(jackson): In addition to errors accumulated during iteration,
+		// Close also returns errors encountered during the act of closing the
+		// iterator. Currently, these errors are swallowed. The error returned
+		// by iter.Close() may be an ephemeral error, or it may a misuse of the
+		// Iterator or corruption. Only swallow ephemeral errors (eg,
+		// DeadlineExceeded, etc), panic-ing on Close errors that are not known
+		// to be ephemeral/retriable.
+		//
+		// See cockroachdb/pebble#1811.
 		p.iter = nil
 	}
 	// Reset all fields except for the key and option buffers. Holding onto their
