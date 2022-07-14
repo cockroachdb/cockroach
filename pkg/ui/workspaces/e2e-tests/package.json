@@ -6,10 +6,10 @@
   "private": true,
   "scripts": {
     "movr": "../../../../cockroach demo movr --multitenant=false",
-    "test": "./build/start-crdb-movr.sh 'yarn cypress:run'",
-    "test:debug": "./build/start-crdb-movr.sh 'yarn cypress:run'",
-    "cypress:run": "cypress run --e2e",
-    "cypress:debug": "cypress open --e2e --browser=chrome"
+    "test": "./build/start-crdb-movr.sh 'yarn cy:run'",
+    "test:debug": "./build/start-crdb-movr.sh 'yarn cy:run'",
+    "cy:run": "cypress run --e2e",
+    "cy:debug": "cypress open --e2e --browser=chrome"
   },
   "devDependencies": {
     "@testing-library/cypress": "^8.0.2",
