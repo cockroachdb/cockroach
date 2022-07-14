@@ -11,9 +11,14 @@
 package distribution
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,18 +39,45 @@ func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Dis
 		return true
 
 	case *memo.LocalityOptimizedSearchExpr:
+		// Locality optimized search is legal with the EnforceHomeRegion flag,
+		// but only with the SURVIVE ZONE FAILURE option.
+		if evalCtx.SessionData().EnforceHomeRegion && t.Local.Op() == opt.ScanOp {
+			scanExpr := t.Local.(*memo.ScanExpr)
+			tabMeta := t.Memo().Metadata().TableMeta(scanExpr.Table)
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		// Tables in database that don't use the SURVIVE ZONE FAILURE option are
+		// disallowed when EnforceHomeRegion is true.
+		if evalCtx.SessionData().EnforceHomeRegion {
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
 
 	default:
 		// Other operators can pass through the distribution to their children.
 	}
-
 	return provided.Any() || provided.Equals(*required)
+}
+
+// errorOnInvalidMultiregionDB panics if the table described by tabMeta is owned
+// by a non-multiregion database or a multiregion database with SURVIVE REGION
+// FAILURE goal.
+func errorOnInvalidMultiregionDB(evalCtx *eval.Context, tabMeta *opt.TableMeta) {
+	survivalGoal, ok := tabMeta.GetDatabaseSurvivalGoal(evalCtx.Planner)
+	// non-multiregional database or SURVIVE REGION FAILURE option
+	if !ok {
+		err := pgerror.New(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.")
+		panic(err)
+	} else if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		err := pgerror.New(pgcode.QueryHasNoHomeRegion,
+			"The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.")
+		panic(err)
+	}
 }
 
 // BuildChildRequired returns the distribution that must be required of its
@@ -89,17 +121,37 @@ func BuildProvided(
 		return *required
 
 	case *memo.LocalityOptimizedSearchExpr:
+		// Locality optimized search is legal with the EnforceHomeRegion flag,
+		// but only with the SURVIVE ZONE FAILURE option.
+		if evalCtx.SessionData().EnforceHomeRegion && t.Local.Op() == opt.ScanOp {
+			scanExpr := t.Local.(*memo.ScanExpr)
+			tabMeta := t.Memo().Metadata().TableMeta(scanExpr.Table)
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		// Tables in database that don't use the SURVIVE ZONE FAILURE option are
+		// disallowed when EnforceHomeRegion is true.
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		if evalCtx.SessionData().EnforceHomeRegion {
+			errorOnInvalidMultiregionDB(evalCtx, tabMeta)
+		}
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
 
 	default:
 		for i, n := 0, expr.ChildCount(); i < n; i++ {
 			if relExpr, ok := expr.Child(i).(memo.RelExpr); ok {
-				provided = provided.Union(relExpr.ProvidedPhysical().Distribution)
+				childDistribution := relExpr.ProvidedPhysical().Distribution
+				if len(childDistribution.Regions) == 0 {
+					// An empty distribution currently means the same as a distribution
+					// to all regions in the database, and the Union function does not
+					// encapsulate this meaning in its implementation, so we manually
+					// handle unioning of this case here.
+					provided.Regions = provided.Regions[:0]
+					break
+				}
+				provided = provided.Union(childDistribution)
 			}
 		}
 	}
@@ -109,6 +161,25 @@ func BuildProvided(
 	}
 
 	return provided
+}
+
+// GetProjectedEnumConstant looks for the projection with target colID in
+// projectExpr, and if it contains a constant enum, returns its string
+// representation, or the empty string if not found.
+func GetProjectedEnumConstant(projectExpr *memo.ProjectExpr, colID opt.ColumnID) string {
+	for _, projection := range projectExpr.Projections {
+		if projection.Col == colID {
+			if projection.Element.Op() == opt.ConstOp {
+				constExpr := projection.Element.(*memo.ConstExpr)
+				if regionName, ok := constExpr.Value.(*tree.DEnum); ok {
+					return regionName.LogicalRep
+				}
+			} else {
+				return ""
+			}
+		}
+	}
+	return ""
 }
 
 func checkRequired(required *physical.Distribution) {
