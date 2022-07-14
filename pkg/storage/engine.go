@@ -940,6 +940,12 @@ type Engine interface {
 	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
 	// storage min version is at least the target version.
 	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
+
+	// GetInternalIntervalMetrics returns low-level metrics from Pebble, that
+	// are reset at every interval, where an interval is defined over successive
+	// calls to this method. Hence, this should be used with care, with only one
+	// caller, which is currently the admission control subsystem.
+	GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics
 }
 
 // Batch is the interface for batch specific operations.
@@ -978,7 +984,8 @@ type Metrics struct {
 	//
 	// We do not split this metric across these two reasons, but they can be
 	// distinguished in the pebble logs.
-	WriteStallCount int64
+	WriteStallCount    int64
+	WriteStallDuration time.Duration
 	// DiskSlowCount counts the number of times Pebble records disk slowness.
 	DiskSlowCount int64
 	// DiskStallCount counts the number of times Pebble observes slow writes
