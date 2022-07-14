@@ -109,7 +109,7 @@ func (tc *Collection) getDescriptorsByID(
 		for _, fn := range []func(id descpb.ID) (catalog.Descriptor, error){
 			q.lookupVirtual,
 			q.lookupSynthetic,
-			q.lookupUncommitted,
+			q.lookupCached,
 			q.lookupLeased,
 		} {
 			for i, id := range ids {
@@ -138,13 +138,13 @@ func (tc *Collection) getDescriptorsByID(
 		// No KV lookup necessary, return early.
 		return descs, nil
 	}
-	kvDescs, err := tc.withReadFromStore(flags.RequireMutable, func() ([]catalog.Descriptor, error) {
+	kvDescs, err := tc.withReadFromStore(ctx, flags.RequireMutable, func() ([]catalog.Descriptor, error) {
 		ret := make([]catalog.Descriptor, len(remainingIDs))
 		// Try to re-use any unvalidated descriptors we may have.
 		kvIDs := make([]descpb.ID, 0, len(remainingIDs))
 		kvIndexes := make([]int, 0, len(remainingIDs))
 		for i, id := range remainingIDs {
-			if imm, status := tc.uncommitted.getImmutableByID(id); imm != nil && status == notValidatedYet {
+			if imm, status := tc.stored.getCachedByID(id); imm != nil && status == notValidatedYet {
 				err := tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
 				if err != nil {
 					return nil, err
@@ -158,7 +158,7 @@ func (tc *Collection) getDescriptorsByID(
 		// Read all others from the store.
 		if len(kvIDs) > 0 {
 			vd := tc.newValidationDereferencer(txn)
-			kvDescs, err := tc.kv.getByIDs(ctx, tc.version, txn, vd, kvIDs)
+			kvDescs, err := tc.stored.getByIDs(ctx, tc.version, txn, vd, kvIDs)
 			if err != nil {
 				return nil, err
 			}
@@ -224,24 +224,37 @@ func (q *byIDLookupContext) lookupSynthetic(id descpb.ID) (catalog.Descriptor, e
 	return sd, nil
 }
 
-func (q *byIDLookupContext) lookupUncommitted(id descpb.ID) (_ catalog.Descriptor, err error) {
-	ud, status := q.tc.uncommitted.getImmutableByID(id)
-	if ud == nil || status == notValidatedYet {
+func (q *byIDLookupContext) lookupCached(id descpb.ID) (_ catalog.Descriptor, err error) {
+	sd, status := q.tc.stored.getCachedByID(id)
+	if sd == nil {
 		return nil, nil
 	}
-	log.VEventf(q.ctx, 2, "found uncommitted descriptor %d", id)
-	// Hydrate any types in the descriptor if necessary, for uncomitted
-	// descriptors we are going to include offline and get non-cached view.
-	if tableDesc, isTableDesc := ud.(catalog.TableDescriptor); isTableDesc {
-		ud, err = q.tc.hydrateTypesInTableDescWithOptions(q.ctx, q.txn, tableDesc, true, true)
+	if status == notValidatedYet {
+		err := q.tc.Validate(q.ctx, q.txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, sd)
+		if err != nil {
+			return nil, err
+		}
+		err = q.tc.stored.upgradeToValidated(sd.GetID())
 		if err != nil {
 			return nil, err
 		}
 	}
-	if !q.flags.RequireMutable {
-		return ud, nil
+	log.VEventf(q.ctx, 2, "found cached descriptor %d", id)
+	if q.flags.RequireMutable {
+		sd, err = q.tc.stored.checkOut(id)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return q.tc.uncommitted.checkOut(id)
+	// Hydrate any types in the descriptor if necessary, for uncomitted
+	// descriptors we are going to include offline and get non-cached view.
+	if tableDesc, isTableDesc := sd.(catalog.TableDescriptor); isTableDesc {
+		sd, err = q.tc.hydrateTypesInTableDescWithOptions(q.ctx, q.txn, tableDesc, true, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return sd, nil
 }
 
 func (q *byIDLookupContext) lookupLeased(id descpb.ID) (catalog.Descriptor, error) {
@@ -253,7 +266,7 @@ func (q *byIDLookupContext) lookupLeased(id descpb.ID) (catalog.Descriptor, erro
 	//
 	// TODO(ajwerner): More generally leverage this set of kv descriptors on
 	// the resolution path.
-	if q.tc.kv.idDefinitelyDoesNotExist(id) {
+	if q.tc.stored.idDefinitelyDoesNotExist(id) {
 		return nil, catalog.ErrDescriptorNotFound
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
@@ -321,19 +334,16 @@ func (tc *Collection) getByName(
 	}
 
 	{
-		refuseFurtherLookup, ud := tc.uncommitted.getByName(parentID, parentSchemaID, name)
+		ud := tc.stored.getCachedByName(parentID, parentSchemaID, name)
 		if ud != nil {
-			log.VEventf(ctx, 2, "found uncommitted descriptor %d", ud.GetID())
+			log.VEventf(ctx, 2, "found cached descriptor %d", ud.GetID())
 			if mutable {
-				ud, err = tc.uncommitted.checkOut(ud.GetID())
+				ud, err = tc.stored.checkOut(ud.GetID())
 				if err != nil {
 					return false, nil, err
 				}
 			}
 			return true, ud, nil
-		}
-		if refuseFurtherLookup {
-			return false, nil, nil
 		}
 	}
 
@@ -349,18 +359,18 @@ func (tc *Collection) getByName(
 	}
 
 	var descs []catalog.Descriptor
-	descs, err = tc.withReadFromStore(mutable, func() ([]catalog.Descriptor, error) {
+	descs, err = tc.withReadFromStore(ctx, mutable, func() ([]catalog.Descriptor, error) {
 		// Try to re-use an unvalidated descriptor if there is one.
-		if imm := tc.uncommitted.getUnvalidatedByName(parentID, parentSchemaID, name); imm != nil {
+		if imm := tc.stored.getUnvalidatedByName(parentID, parentSchemaID, name); imm != nil {
 			return []catalog.Descriptor{imm},
 				tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
 		}
 		// If not possible, read it from the store.
-		uncommittedParent, _ := tc.uncommitted.getImmutableByID(parentID)
+		uncommittedParent, _ := tc.stored.getCachedByID(parentID)
 		uncommittedDB, _ := catalog.AsDatabaseDescriptor(uncommittedParent)
 		version := tc.settings.Version.ActiveVersion(ctx)
 		vd := tc.newValidationDereferencer(txn)
-		imm, err := tc.kv.getByName(ctx, version, txn, vd, uncommittedDB, parentID, parentSchemaID, name)
+		imm, err := tc.stored.getByName(ctx, version, txn, vd, uncommittedDB, parentID, parentSchemaID, name)
 		if err != nil {
 			return nil, err
 		}
@@ -373,11 +383,11 @@ func (tc *Collection) getByName(
 }
 
 // withReadFromStore updates the state of the Collection, especially its
-// uncommitted descriptors layer, after reading a descriptor from the storage
+// stored descriptors layer, after reading a descriptor from the storage
 // layer. The logic is the same regardless of whether the descriptor was read
 // by name or by ID.
 func (tc *Collection) withReadFromStore(
-	requireMutable bool, readFn func() ([]catalog.Descriptor, error),
+	ctx context.Context, requireMutable bool, readFn func() ([]catalog.Descriptor, error),
 ) (descs []catalog.Descriptor, _ error) {
 	descs, err := readFn()
 	if err != nil {
@@ -387,12 +397,12 @@ func (tc *Collection) withReadFromStore(
 		if desc == nil {
 			continue
 		}
-		desc, err = tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notCheckedOutYet)
+		desc, err = tc.stored.add(ctx, desc.NewBuilder().BuildExistingMutable(), notCheckedOutYet)
 		if err != nil {
 			return nil, err
 		}
 		if requireMutable {
-			desc, err = tc.uncommitted.checkOut(desc.GetID())
+			desc, err = tc.stored.checkOut(desc.GetID())
 			if err != nil {
 				return nil, err
 			}
@@ -453,7 +463,7 @@ func getSchemaByName(
 		if isDone, sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil || isDone {
 			return sc != nil, sc, nil
 		}
-		scID, err := tc.kv.lookupName(ctx, txn, nil /* maybeDB */, db.GetID(), keys.RootNamespaceID, name)
+		scID, err := tc.stored.lookupName(ctx, txn, nil /* maybeDB */, db.GetID(), keys.RootNamespaceID, name)
 		if err != nil || scID == descpb.InvalidID {
 			return false, nil, err
 		}

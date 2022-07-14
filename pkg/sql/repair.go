@@ -661,7 +661,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 	if mut != nil {
 		mut.MaybeIncrementVersion()
 		mut.SetDropped()
-		if err := p.Descriptors().AddUncommittedDescriptor(mut); err != nil {
+		if err := p.Descriptors().AddUncommittedDescriptor(ctx, mut); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
 		if force {

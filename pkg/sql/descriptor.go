@@ -275,7 +275,7 @@ func (p *planner) createDescriptorWithID(
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
 	}
 	if addUncommitted {
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+		if err := p.Descriptors().AddUncommittedDescriptor(ctx, mutDesc); err != nil {
 			return err
 		}
 	}
