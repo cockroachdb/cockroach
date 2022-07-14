@@ -4186,7 +4186,7 @@ inject_retry_errors_enabled                           off                 NULL  
 integer_datetimes                                     on                  NULL      NULL        NULL        string
 intervalstyle                                         postgres            NULL      NULL        NULL        string
 is_superuser                                          on                  NULL      NULL        NULL        string
-join_reader_ordering_strategy_batch_size              10 KiB              NULL      NULL        NULL        string
+join_reader_ordering_strategy_batch_size              100 KiB             NULL      NULL        NULL        string
 large_full_scan_rows                                  1000                NULL      NULL        NULL        string
 lc_collate                                            C.UTF-8             NULL      NULL        NULL        string
 lc_ctype                                              C.UTF-8             NULL      NULL        NULL        string
@@ -4310,7 +4310,7 @@ inject_retry_errors_enabled                           off                 NULL  
 integer_datetimes                                     on                  NULL  user     NULL      on                  on
 intervalstyle                                         postgres            NULL  user     NULL      postgres            postgres
 is_superuser                                          on                  NULL  user     NULL      on                  on
-join_reader_ordering_strategy_batch_size              10 KiB              NULL  user     NULL      10 KiB              10 KiB
+join_reader_ordering_strategy_batch_size              100 KiB             NULL  user     NULL      100 KiB             100 KiB
 large_full_scan_rows                                  1000                NULL  user     NULL      1000                1000
 lc_collate                                            C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_ctype                                              C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
