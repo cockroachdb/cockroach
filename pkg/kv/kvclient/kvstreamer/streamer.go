@@ -498,10 +498,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// of singleRangeBatch objects in flight is limited by the number of ranges
 	// of a single table, so it doesn't seem urgent to fix the accounting here.
 	var requestsToServe []singleRangeBatch
-	seekKey := rs.Key
 	const scanDir = kvcoord.Ascending
 	ri := kvcoord.MakeRangeIterator(s.distSender)
-	ri.Seek(ctx, seekKey, scanDir)
+	ri.Seek(ctx, rs.Key, scanDir)
 	if !ri.Valid() {
 		return ri.Error()
 	}
@@ -534,7 +533,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	}
 	var reqsKeysScratch []roachpb.Key
 	var newNumRangesPerScanRequestMemoryUsage int64
-	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
+	for {
 		// Find all requests that touch the current range.
 		var singleRangeReqs []roachpb.RequestUnion
 		var positions []int
@@ -546,19 +545,18 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			for i := range positions {
 				positions[i] = i
 			}
-			seekKey = roachpb.RKeyMax
+			rs.Key = roachpb.RKeyMax
 		} else {
 			// Truncate the request span to the current range.
 			singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
 			if err != nil {
 				return err
 			}
-			singleRangeReqs, positions, seekKey, err = s.truncationHelper.Truncate(singleRangeSpan)
+			singleRangeReqs, positions, rs.Key, err = s.truncationHelper.Truncate(singleRangeSpan)
 			if err != nil {
 				return err
 			}
 		}
-		rs.Key = seekKey
 		var subRequestIdx []int32
 		var subRequestIdxOverhead int64
 		if !s.hints.SingleRowLookup {
@@ -632,6 +630,12 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 
 		requestsToServe = append(requestsToServe, r)
 		s.enqueuedSingleRangeRequests += len(singleRangeReqs)
+
+		if !ri.NeedAnother(rs) {
+			// This was the last range.
+			break
+		}
+		ri.Seek(ctx, rs.Key, scanDir)
 	}
 
 	if streamerLocked {
