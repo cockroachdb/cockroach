@@ -24,7 +24,7 @@ log_into_gcloud
 export GCE_PROJECT=${GCE_PROJECT-cockroach-roachstress}
 
 build/teamcity-roachtest-invoke.sh \
-  --cloud=gce \
+  --cloud="${CLOUD-gce}" \
   --zones="${GCE_ZONES-us-east4-b,us-west4-a,europe-west4-c}" \
   --debug="${DEBUG-false}" \
   --count="${COUNT-16}" \
