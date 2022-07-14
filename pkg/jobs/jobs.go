@@ -226,16 +226,6 @@ func HasErrJobCanceled(err error) bool {
 	return errors.Is(err, errJobCanceled)
 }
 
-// deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
-// job that is a 19.2-style schema change, and therefore cannot be run or
-// updated in 20.1 (without first having undergone a migration).
-// TODO (lucy): The plan is to mark all 19.2 jobs as failed in a 20.2 startup
-// migration. Once we do that, this can remain as an assertion.
-func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
-	schemaChangeDetails, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
-	return ok && schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion
-}
-
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
@@ -442,19 +432,6 @@ func (j *Job) cancelRequested(
 	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		// Don't allow 19.2-style schema change jobs to undergo changes in job state
-		// before they undergo a migration to make them properly runnable in 20.1 and
-		// later versions. While we could support cancellation in principle, the
-		// point is to cut down on the number of possible states that the migration
-		// could encounter.
-		//
-		// TODO (lucy): Remove this in 20.2.
-		if deprecatedIsOldSchemaChangeJob(md.Payload) {
-			return errors.Newf(
-				"schema change job was created in earlier version, and cannot be " +
-					"canceled in this version until the upgrade is finalized and an internal migration is complete")
-		}
-
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", j.ID())
 		}
@@ -493,22 +470,6 @@ func (j *Job) PauseRequested(
 	ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc, reason string,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		// Don't allow 19.2-style schema change jobs to undergo changes in job state
-		// before they undergo a migration to make them properly runnable in 20.1 and
-		// later versions.
-		//
-		// In particular, schema change jobs could not be paused in 19.2, so allowing
-		// pausing here could break backward compatibility during an upgrade by
-		// forcing 19.2 nodes to deal with a schema change job in a state that wasn't
-		// possible in 19.2.
-		//
-		// TODO (lucy): Remove this in 20.2.
-		if deprecatedIsOldSchemaChangeJob(md.Payload) {
-			return errors.Newf(
-				"schema change job was created in earlier version, and cannot be " +
-					"paused in this version until the upgrade is finalized and an internal migration is complete")
-		}
-
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
