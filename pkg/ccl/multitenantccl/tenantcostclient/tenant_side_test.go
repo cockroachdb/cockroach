@@ -524,6 +524,7 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 	c := ts.provider.waitForConsumption(t)
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
+		"KVRU:  %.2f\n"+
 		"Reads:  %d requests (%d bytes)\n"+
 		"Writes:  %d requests (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
@@ -531,6 +532,7 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		"ExternalIO egress: %d bytes\n"+
 		"ExternalIO ingress: %d bytes\n",
 		c.RU,
+		c.KVRU,
 		c.ReadRequests,
 		c.ReadBytes,
 		c.WriteRequests,

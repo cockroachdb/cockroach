@@ -356,6 +356,7 @@ func (c *tenantSideCostController) updateRunState(ctx context.Context) {
 		ru += float64(deltaPGWireEgressBytes) * float64(c.costCfg.PGWireEgressByte)
 	}
 
+	// KV RUs are not included here, these metrics correspond only to the SQL pod.
 	c.mu.Lock()
 	c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
 	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
@@ -665,12 +666,16 @@ func (c *tenantSideCostController) OnResponse(
 	if isWrite, writeBytes := req.IsWrite(); isWrite {
 		c.mu.consumption.WriteRequests++
 		c.mu.consumption.WriteBytes += uint64(writeBytes)
-		c.mu.consumption.RU += float64(c.costCfg.KVWriteCost(writeBytes))
+		writeRU := float64(c.costCfg.KVWriteCost(writeBytes))
+		c.mu.consumption.KVRU += writeRU
+		c.mu.consumption.RU += writeRU
 	} else {
 		c.mu.consumption.ReadRequests++
 		readBytes := resp.ReadBytes()
 		c.mu.consumption.ReadBytes += uint64(readBytes)
-		c.mu.consumption.RU += float64(c.costCfg.KVReadCost(readBytes))
+		readRU := float64(c.costCfg.KVReadCost(readBytes))
+		c.mu.consumption.KVRU += readRU
+		c.mu.consumption.RU += readRU
 	}
 }
 

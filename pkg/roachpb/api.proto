@@ -2817,6 +2817,7 @@ message TenantSetting {
 // tenant, which directly factors into their bill.
 message TenantConsumption {
   double r_u = 1;
+  double kv_r_u = 8 [(gogoproto.customname) = "KVRU"];
   uint64 read_requests = 2;
   uint64 read_bytes = 3;
   uint64 write_requests = 4;

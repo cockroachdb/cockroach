@@ -1677,6 +1677,7 @@ var _ = (*TenantConsumption).Equal
 // Add consumption from the given structure.
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU
+	c.KVRU += other.KVRU
 	c.ReadRequests += other.ReadRequests
 	c.ReadBytes += other.ReadBytes
 	c.WriteRequests += other.WriteRequests
@@ -1693,6 +1694,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.RU = 0
 	} else {
 		c.RU -= other.RU
+	}
+
+	if c.KVRU < other.KVRU {
+		c.KVRU = 0
+	} else {
+		c.KVRU -= other.KVRU
 	}
 
 	if c.ReadRequests < other.ReadRequests {

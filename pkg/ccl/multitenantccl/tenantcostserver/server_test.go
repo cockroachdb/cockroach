@@ -140,6 +140,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		SeqNum             int64  `yaml:"seq_num"`
 		Consumption        struct {
 			RU                     float64 `yaml:"ru"`
+			KVRU                   float64 `yaml:"kvru"`
 			ReadReq                uint64  `yaml:"read_req"`
 			ReadBytes              uint64  `yaml:"read_bytes"`
 			WriteReq               uint64  `yaml:"write_req"`
@@ -175,6 +176,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		SeqNum:             args.SeqNum,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                     args.Consumption.RU,
+			KVRU:                   args.Consumption.KVRU,
 			ReadRequests:           args.Consumption.ReadReq,
 			ReadBytes:              args.Consumption.ReadBytes,
 			WriteRequests:          args.Consumption.WriteReq,

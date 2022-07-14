@@ -21,7 +21,7 @@ ru: 10
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=-10  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=0 kvru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
@@ -40,7 +40,7 @@ ru: 500
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=490  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=0 kvru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
@@ -71,7 +71,7 @@ ru: 10
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=0 kvru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=5  shares=0.0  next-instance=2  last-update=00:00:09.000
@@ -90,7 +90,7 @@ instance_id: 1
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=0 kvru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=6  shares=0.0  next-instance=2  last-update=00:00:10.000
@@ -109,7 +109,7 @@ instance_id: 1
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=330  current-share-sum=0
-Consumption: ru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=0 kvru=0  reads=0 req/0 bytes  writes=0 req/0 bytes  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:11.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=7  shares=0.0  next-instance=2  last-update=00:00:11.000
