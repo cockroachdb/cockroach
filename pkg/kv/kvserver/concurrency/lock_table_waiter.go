@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -220,9 +221,15 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// still active.
 				timeoutPush := req.LockTimeout != 0
 
+				// If the pushee has the minimum priority or if the pusher has the
+				// maximum priority, push immediately to proceed without queueing.
+				// The push should succeed without entering the txn wait-queue.
+				priorityPush := canPushWithPriority(req, state)
+
 				// If the request doesn't want to perform a delayed push for any
 				// reason, continue waiting without a timer.
-				if !livenessPush && !deadlockPush && !timeoutPush {
+				if !(livenessPush || deadlockPush || timeoutPush || priorityPush) {
+					log.Eventf(ctx, "not pushing")
 					continue
 				}
 
@@ -249,14 +256,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 					}
 					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
-
-				// However, if the pushee has the minimum priority or if the
-				// pusher has the maximum priority, push immediately.
-				// TODO(nvanbenschoten): flesh these interactions out more and
-				// add some testing.
-				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
+				if priorityPush {
 					delay = 0
 				}
+
+				log.Eventf(ctx, "pushing after %s for: "+
+					"liveness detection = %t, deadlock detection = %t, "+
+					"timeout enforcement = %t, priority enforcement = %t",
+					delay, livenessPush, deadlockPush, timeoutPush, priorityPush)
 
 				if delay > 0 {
 					if timer == nil {
@@ -648,7 +655,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	h := roachpb.Header{
 		Timestamp:    req.Timestamp,
-		UserPriority: req.Priority,
+		UserPriority: req.NonTxnPriority,
 	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
@@ -1118,12 +1125,19 @@ func newWriteIntentErr(
 	return err
 }
 
-func hasMinPriority(txn *enginepb.TxnMeta) bool {
-	return txn != nil && txn.Priority == enginepb.MinTxnPriority
-}
-
-func hasMaxPriority(txn *roachpb.Transaction) bool {
-	return txn != nil && txn.Priority == enginepb.MaxTxnPriority
+func canPushWithPriority(req Request, s waitingState) bool {
+	var pusher, pushee enginepb.TxnPriority
+	if req.Txn != nil {
+		pusher = req.Txn.Priority
+	} else {
+		pusher = roachpb.MakePriority(req.NonTxnPriority)
+	}
+	if s.txn == nil {
+		// Can't push a non-transactional request.
+		return false
+	}
+	pushee = s.txn.Priority
+	return txnwait.CanPushWithPriority(pusher, pushee)
 }
 
 func minDuration(a, b time.Duration) time.Duration {

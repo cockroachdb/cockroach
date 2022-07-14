@@ -1,0 +1,590 @@
+new-txn name=txnLowPushee ts=10,1 priority=low
+----
+
+new-txn name=txnNormalPushee ts=10,1 priority=normal
+----
+
+new-txn name=txnHighPushee ts=10,1 priority=high
+----
+
+new-txn name=txnLowPusher1 ts=10,1 priority=low
+----
+
+new-txn name=txnLowPusher2 ts=10,1 priority=low
+----
+
+new-txn name=txnLowPusher3 ts=10,1 priority=low
+----
+
+new-txn name=txnNormalPusher1 ts=10,1 priority=normal
+----
+
+new-txn name=txnNormalPusher2 ts=10,1 priority=normal
+----
+
+new-txn name=txnHighPusher ts=10,1 priority=high
+----
+
+# -------------------------------------------------------------
+# Prep: "Pushee" txns acquire 2 locks each.
+# -------------------------------------------------------------
+
+new-request name=req1 txn=txnLowPushee ts=10,1
+  put key=kLow1  value=v
+  put key=kLow2  value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=kLow1
+----
+[-] acquire lock: txn 00000001 @ kLow1
+
+on-lock-acquired req=req1 key=kLow2
+----
+[-] acquire lock: txn 00000001 @ kLow2
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txnNormalPushee ts=10,1
+  put key=kNormal1  value=v
+  put key=kNormal2  value=v
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=kNormal1
+----
+[-] acquire lock: txn 00000002 @ kNormal1
+
+on-lock-acquired req=req2 key=kNormal2
+----
+[-] acquire lock: txn 00000002 @ kNormal2
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+new-request name=req3 txn=txnHighPushee ts=10,1
+  put key=kHigh1  value=v
+  put key=kHigh2  value=v
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=kHigh1
+----
+[-] acquire lock: txn 00000003 @ kHigh1
+
+on-lock-acquired req=req3 key=kHigh2
+----
+[-] acquire lock: txn 00000003 @ kHigh2
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=6
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow2"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal2"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (timestamp) the low priority txn using:
+# - a low priority transactional request
+# - a normal priority transactional request
+# -------------------------------------------------------------
+
+new-request name=req4 txn=txnLowPusher1 ts=10,1
+  get key=kLow1
+----
+
+new-request name=req5 txn=txnNormalPusher1 ts=10,1
+  get key=kLow1
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: waiting in lock wait-queues
+[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kLow1" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[4] sequence req4: pushing timestamp of txn 00000001 above 10.000000000,1
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req5
+----
+[4] sequence req4: resolving intent "kLow1" for txn 00000001 with PENDING status
+[4] sequence req4: lock wait-queue event: done waiting
+[4] sequence req4: conflicted with 00000001-0000-0000-0000-000000000000 on "kLow1" for 0.000s
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+[5] sequence req5: sequencing request
+[5] sequence req5: acquiring latches
+[5] sequence req5: scanning lock table for conflicting locks
+[5] sequence req5: waiting in lock wait-queues
+[5] sequence req5: lock wait-queue event: wait for txn 00000001 holding lock @ key "kLow1" (queuedWriters: 0, queuedReaders: 2)
+[5] sequence req5: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[5] sequence req5: pushing timestamp of txn 00000001 above 10.000000000,1
+[5] sequence req5: pusher pushed pushee to 10.000000000,2
+[5] sequence req5: resolving intent "kLow1" for txn 00000001 with PENDING status
+[5] sequence req5: lock wait-queue event: done waiting
+[5] sequence req5: conflicted with 00000001-0000-0000-0000-000000000000 on "kLow1" for 0.000s
+[5] sequence req5: acquiring latches
+[5] sequence req5: scanning lock table for conflicting locks
+[5] sequence req5: sequencing complete, returned guard
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+finish req=req5
+----
+[-] finish req5: finishing request
+
+debug-lock-table
+----
+global: num=6
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow2"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal2"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (abort) the low priority txn using:
+# - a low priority transactional request
+# - a normal priority non-transactional request
+# -------------------------------------------------------------
+
+new-request name=req6 txn=txnLowPusher1 ts=10,1
+  put key=kLow2  value=v
+----
+
+new-request name=req7 txn=none ts=10,1 priority=normal
+  put key=kLow2  value=v
+----
+
+sequence req=req6
+----
+[6] sequence req6: sequencing request
+[6] sequence req6: acquiring latches
+[6] sequence req6: scanning lock table for conflicting locks
+[6] sequence req6: waiting in lock wait-queues
+[6] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kLow2" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req6: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[6] sequence req6: pushing txn 00000001 to abort
+[6] sequence req6: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req7
+----
+[6] sequence req6: resolving intent "kLow2" for txn 00000001 with ABORTED status
+[6] sequence req6: lock wait-queue event: done waiting
+[6] sequence req6: conflicted with 00000001-0000-0000-0000-000000000000 on "kLow2" for 0.000s
+[6] sequence req6: acquiring latches
+[6] sequence req6: scanning lock table for conflicting locks
+[6] sequence req6: sequencing complete, returned guard
+[7] sequence req7: sequencing request
+[7] sequence req7: acquiring latches
+[7] sequence req7: scanning lock table for conflicting locks
+[7] sequence req7: waiting in lock wait-queues
+[7] sequence req7: lock wait-queue event: wait for txn 00000001 holding lock @ key "kLow2" (queuedWriters: 2, queuedReaders: 0)
+[7] sequence req7: pushing after 0s for: liveness detection = false, deadlock detection = false, timeout enforcement = false, priority enforcement = true
+[7] sequence req7: pushing txn 00000001 to abort
+[7] sequence req7: pusher aborted pushee
+[7] sequence req7: resolving intent "kLow2" for txn 00000001 with ABORTED status
+[7] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "kLow2" (queuedWriters: 1, queuedReaders: 0)
+[7] sequence req7: conflicted with 00000001-0000-0000-0000-000000000000 on "kLow2" for 0.000s
+[7] sequence req7: pushing after 0s for: liveness detection = false, deadlock detection = false, timeout enforcement = false, priority enforcement = true
+[7] sequence req7: pushing txn 00000004 to detect request deadlock
+[7] sequence req7: pusher aborted pushee
+[7] sequence req7: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+finish req=req6
+----
+[-] finish req6: finishing request
+[7] sequence req7: lock wait-queue event: done waiting
+[7] sequence req7: conflicted with 00000004-0000-0000-0000-000000000000 on "kLow2" for 0.000s
+[7] sequence req7: acquiring latches
+[7] sequence req7: scanning lock table for conflicting locks
+[7] sequence req7: sequencing complete, returned guard
+
+finish req=req7
+----
+[-] finish req7: finishing request
+
+debug-lock-table
+----
+global: num=5
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal2"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (timestamp) the normal priority txn using:
+# - a normal priority transactional request
+# - a high priority transactional request
+# -------------------------------------------------------------
+
+new-request name=req8 txn=txnNormalPusher1 ts=10,1
+  get key=kNormal1
+----
+
+new-request name=req9 txn=txnHighPusher ts=10,1
+  get key=kNormal1
+----
+
+sequence req=req8
+----
+[8] sequence req8: sequencing request
+[8] sequence req8: acquiring latches
+[8] sequence req8: scanning lock table for conflicting locks
+[8] sequence req8: waiting in lock wait-queues
+[8] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kNormal1" (queuedWriters: 0, queuedReaders: 1)
+[8] sequence req8: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[8] sequence req8: pushing timestamp of txn 00000002 above 10.000000000,1
+[8] sequence req8: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req9
+----
+[8] sequence req8: resolving intent "kNormal1" for txn 00000002 with PENDING status
+[8] sequence req8: lock wait-queue event: done waiting
+[8] sequence req8: conflicted with 00000002-0000-0000-0000-000000000000 on "kNormal1" for 0.000s
+[8] sequence req8: acquiring latches
+[8] sequence req8: scanning lock table for conflicting locks
+[8] sequence req8: sequencing complete, returned guard
+[9] sequence req9: sequencing request
+[9] sequence req9: acquiring latches
+[9] sequence req9: scanning lock table for conflicting locks
+[9] sequence req9: waiting in lock wait-queues
+[9] sequence req9: lock wait-queue event: wait for txn 00000002 holding lock @ key "kNormal1" (queuedWriters: 0, queuedReaders: 2)
+[9] sequence req9: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[9] sequence req9: pushing timestamp of txn 00000002 above 10.000000000,1
+[9] sequence req9: pusher pushed pushee to 10.000000000,2
+[9] sequence req9: resolving intent "kNormal1" for txn 00000002 with PENDING status
+[9] sequence req9: lock wait-queue event: done waiting
+[9] sequence req9: conflicted with 00000002-0000-0000-0000-000000000000 on "kNormal1" for 0.000s
+[9] sequence req9: acquiring latches
+[9] sequence req9: scanning lock table for conflicting locks
+[9] sequence req9: sequencing complete, returned guard
+
+finish req=req8
+----
+[-] finish req8: finishing request
+
+finish req=req9
+----
+[-] finish req9: finishing request
+
+debug-lock-table
+----
+global: num=5
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "kNormal2"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (abort) the normal priority txn using:
+# - a normal priority transactional request
+# - a high priority non-transactional request
+# -------------------------------------------------------------
+
+new-request name=req10 txn=txnNormalPusher1 ts=10,1
+  put key=kNormal2  value=v
+----
+
+new-request name=req11 txn=none ts=10,1 priority=high
+  put key=kNormal2  value=v
+----
+
+sequence req=req10
+----
+[10] sequence req10: sequencing request
+[10] sequence req10: acquiring latches
+[10] sequence req10: scanning lock table for conflicting locks
+[10] sequence req10: waiting in lock wait-queues
+[10] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kNormal2" (queuedWriters: 1, queuedReaders: 0)
+[10] sequence req10: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[10] sequence req10: pushing txn 00000002 to abort
+[10] sequence req10: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req11
+----
+[10] sequence req10: resolving intent "kNormal2" for txn 00000002 with ABORTED status
+[10] sequence req10: lock wait-queue event: done waiting
+[10] sequence req10: conflicted with 00000002-0000-0000-0000-000000000000 on "kNormal2" for 0.000s
+[10] sequence req10: acquiring latches
+[10] sequence req10: scanning lock table for conflicting locks
+[10] sequence req10: sequencing complete, returned guard
+[11] sequence req11: sequencing request
+[11] sequence req11: acquiring latches
+[11] sequence req11: scanning lock table for conflicting locks
+[11] sequence req11: waiting in lock wait-queues
+[11] sequence req11: lock wait-queue event: wait for txn 00000002 holding lock @ key "kNormal2" (queuedWriters: 2, queuedReaders: 0)
+[11] sequence req11: pushing after 0s for: liveness detection = false, deadlock detection = false, timeout enforcement = false, priority enforcement = true
+[11] sequence req11: pushing txn 00000002 to abort
+[11] sequence req11: pusher aborted pushee
+[11] sequence req11: resolving intent "kNormal2" for txn 00000002 with ABORTED status
+[11] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000007 running request @ key "kNormal2" (queuedWriters: 1, queuedReaders: 0)
+[11] sequence req11: conflicted with 00000002-0000-0000-0000-000000000000 on "kNormal2" for 0.000s
+[11] sequence req11: pushing after 0s for: liveness detection = false, deadlock detection = false, timeout enforcement = false, priority enforcement = true
+[11] sequence req11: pushing txn 00000007 to detect request deadlock
+[11] sequence req11: pusher aborted pushee
+[11] sequence req11: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+finish req=req10
+----
+[-] finish req10: finishing request
+[11] sequence req11: lock wait-queue event: done waiting
+[11] sequence req11: conflicted with 00000007-0000-0000-0000-000000000000 on "kNormal2" for 0.000s
+[11] sequence req11: acquiring latches
+[11] sequence req11: scanning lock table for conflicting locks
+[11] sequence req11: sequencing complete, returned guard
+
+finish req=req11
+----
+[-] finish req11: finishing request
+
+debug-lock-table
+----
+global: num=4
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (timestamp) the high priority txn using:
+# - a normal priority transactional request
+# - a high priority transactional request
+# -------------------------------------------------------------
+
+new-request name=req12 txn=txnNormalPusher2 ts=10,1
+  get key=kHigh1
+----
+
+new-request name=req13 txn=txnHighPusher ts=10,1
+  get key=kHigh1
+----
+
+sequence req=req12
+----
+[12] sequence req12: sequencing request
+[12] sequence req12: acquiring latches
+[12] sequence req12: scanning lock table for conflicting locks
+[12] sequence req12: waiting in lock wait-queues
+[12] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kHigh1" (queuedWriters: 0, queuedReaders: 1)
+[12] sequence req12: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[12] sequence req12: pushing timestamp of txn 00000003 above 10.000000000,1
+[12] sequence req12: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req13
+----
+[13] sequence req13: sequencing request
+[13] sequence req13: acquiring latches
+[13] sequence req13: scanning lock table for conflicting locks
+[13] sequence req13: waiting in lock wait-queues
+[13] sequence req13: lock wait-queue event: wait for txn 00000003 holding lock @ key "kHigh1" (queuedWriters: 0, queuedReaders: 2)
+[13] sequence req13: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[13] sequence req13: pushing timestamp of txn 00000003 above 10.000000000,1
+[13] sequence req13: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txnHighPushee status=pending ts=10,2
+----
+[-] update txn: increasing timestamp of txnHighPushee
+[12] sequence req12: resolving intent "kHigh1" for txn 00000003 with PENDING status
+[12] sequence req12: lock wait-queue event: done waiting
+[12] sequence req12: conflicted with 00000003-0000-0000-0000-000000000000 on "kHigh1" for 0.000s
+[12] sequence req12: acquiring latches
+[12] sequence req12: scanning lock table for conflicting locks
+[12] sequence req12: sequencing complete, returned guard
+[13] sequence req13: resolving intent "kHigh1" for txn 00000003 with PENDING status
+[13] sequence req13: lock wait-queue event: done waiting
+[13] sequence req13: conflicted with 00000003-0000-0000-0000-000000000000 on "kHigh1" for 0.000s
+[13] sequence req13: acquiring latches
+[13] sequence req13: scanning lock table for conflicting locks
+[13] sequence req13: sequencing complete, returned guard
+
+finish req=req12
+----
+[-] finish req12: finishing request
+
+finish req=req13
+----
+[-] finish req13: finishing request
+
+debug-lock-table
+----
+global: num=4
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "kHigh2"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Push (abort) the high priority txn using:
+# - a normal priority transactional request
+# - a high priority non-transactional request
+# -------------------------------------------------------------
+
+new-request name=req14 txn=txnNormalPusher2 ts=10,1
+  put key=kHigh2  value=v
+----
+
+new-request name=req15 txn=none ts=10,1 priority=high
+  put key=kHigh2  value=v
+----
+
+sequence req=req14
+----
+[14] sequence req14: sequencing request
+[14] sequence req14: acquiring latches
+[14] sequence req14: scanning lock table for conflicting locks
+[14] sequence req14: waiting in lock wait-queues
+[14] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kHigh2" (queuedWriters: 1, queuedReaders: 0)
+[14] sequence req14: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[14] sequence req14: pushing txn 00000003 to abort
+[14] sequence req14: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req15
+----
+[15] sequence req15: sequencing request
+[15] sequence req15: acquiring latches
+[15] sequence req15: scanning lock table for conflicting locks
+[15] sequence req15: waiting in lock wait-queues
+[15] sequence req15: lock wait-queue event: wait for txn 00000003 holding lock @ key "kHigh2" (queuedWriters: 2, queuedReaders: 0)
+[15] sequence req15: not pushing
+[15] sequence req15: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+on-txn-updated txn=txnHighPushee status=committed
+----
+[-] update txn: committing txnHighPushee
+[14] sequence req14: resolving intent "kHigh2" for txn 00000003 with COMMITTED status
+[14] sequence req14: lock wait-queue event: done waiting
+[14] sequence req14: conflicted with 00000003-0000-0000-0000-000000000000 on "kHigh2" for 0.000s
+[14] sequence req14: acquiring latches
+[14] sequence req14: scanning lock table for conflicting locks
+[14] sequence req14: sequencing complete, returned guard
+[15] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000008 running request @ key "kHigh2" (queuedWriters: 1, queuedReaders: 0)
+[15] sequence req15: conflicted with 00000003-0000-0000-0000-000000000000 on "kHigh2" for 0.000s
+[15] sequence req15: pushing after 0s for: liveness detection = false, deadlock detection = false, timeout enforcement = false, priority enforcement = true
+[15] sequence req15: pushing txn 00000008 to detect request deadlock
+[15] sequence req15: pusher aborted pushee
+[15] sequence req15: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+finish req=req14
+----
+[-] finish req14: finishing request
+[15] sequence req15: lock wait-queue event: done waiting
+[15] sequence req15: conflicted with 00000008-0000-0000-0000-000000000000 on "kHigh2" for 0.000s
+[15] sequence req15: acquiring latches
+[15] sequence req15: scanning lock table for conflicting locks
+[15] sequence req15: sequencing complete, returned guard
+
+finish req=req15
+----
+[-] finish req15: finishing request
+
+debug-lock-table
+----
+global: num=3
+ lock: "kHigh1"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: committed] epoch: 0, seqs: [0]
+ lock: "kLow1"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "kNormal1"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Scan across keyspace to clear out all aborted locks.
+# -------------------------------------------------------------
+
+new-request name=req16 txn=none ts=11,1
+  scan key=a endkey=z
+----
+
+sequence req=req16
+----
+[16] sequence req16: sequencing request
+[16] sequence req16: acquiring latches
+[16] sequence req16: scanning lock table for conflicting locks
+[16] sequence req16: sequencing complete, returned guard
+
+finish req=req16
+----
+[-] finish req16: finishing request
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+reset
+----
