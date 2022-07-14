@@ -315,6 +315,20 @@ func (o *OS) CopyFile(src, dst string) error {
 	return err
 }
 
+// Symlink wraps around os.Symlink, creating a symbolic link to and from the
+// named paths.
+func (o *OS) Symlink(to, from string) error {
+	command := fmt.Sprintf("ln -s %s %s", to, from)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.Symlink(to, from)
+	})
+	return err
+}
+
 // CopyAll recursively copies a directory from one location to another.
 // Uses OS.ListFilesWithSuffix, OS.MkdirAll, and OS.CopyFile to discover files, create directories,
 // and move files, respectively
