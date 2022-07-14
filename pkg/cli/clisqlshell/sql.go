@@ -2104,6 +2104,18 @@ func (c *cliState) configurePreShellDefaults(
 		}
 	}
 
+	if c.sqlConnCtx.DebugMode {
+		// If we are in debug mode, enable "troubleshooting mode".
+		c.exitErr = c.conn.Exec(
+			context.Background(),
+			"SET troubleshooting_mode = on")
+		if c.exitErr != nil {
+			if c.exitErr != nil {
+				return cleanupFn, c.exitErr
+			}
+		}
+	}
+
 	// If any --set flags were set through the command line,
 	// synthetize '-e set=xxx' statements for them at the beginning.
 	c.iCtx.quitAfterExecStmts = len(c.sqlCtx.ExecStmts) > 0
