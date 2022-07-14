@@ -176,7 +176,15 @@ func createTenantStreamingClusters(
 
 	// Start the source cluster and tenant.
 	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.srcNumNodes)
-	_, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), base.TestTenantArgs{TenantID: args.srcTenantID})
+
+	tenantArgs := base.TestTenantArgs{
+		TenantID: args.srcTenantID,
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				AllowSplitAndScatter: true,
+			}},
+	}
+	_, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
 
 	// Start the destination cluster.
 	destCluster, _, destCleanup := startTestCluster(ctx, t, serverArgs, args.destNumNodes)
@@ -550,4 +558,82 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	args.srcNumNodes = 4
+	args.destNumNodes = 4
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	// Create a source table with multiple ranges spread across multiple nodes
+	numRanges := 10
+	rowsPerRange := 20
+	c.srcTenantSQL.Exec(t, fmt.Sprintf(`
+  CREATE TABLE d.scattered (key INT PRIMARY KEY);
+  INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, %d);
+  ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+  ALTER TABLE d.scattered SCATTER;
+  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+
+	// Once srcCluster.Server(0) is shut down queries must be ran against a different server
+	alternateSrcExec := func(exec srcInitExecFunc) {
+		srcSysSQL := sqlutils.MakeSQLRunner(c.srcCluster.ServerConn(1))
+		_, srcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1), base.TestTenantArgs{TenantID: c.args.srcTenantID})
+		srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
+		exec(c.t, srcSysSQL, srcTenantSQL)
+	}
+
+	alternateCompareResult := func(query string) {
+		_, srcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1), base.TestTenantArgs{TenantID: c.args.srcTenantID})
+		srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
+		sourceData := srcTenantSQL.QueryStr(c.t, query)
+		destData := c.getDestTenantSQL().QueryStr(c.t, query)
+		require.Equal(c.t, sourceData, destData)
+	}
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
+	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// We should've persisted the original topology
+	progress := jobutils.GetJobProgress(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	topology := progress.GetStreamIngest().Topology
+	require.Greater(t, len(topology.PartitionInfo), 1)
+
+	c.srcCluster.Server(0).Stopper().Stop(ctx)
+
+	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
+	jobutils.WaitForJobToRun(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	alternateSrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+		tenantSQL.Exec(t, `INSERT INTO d.x VALUES (3);`)
+	})
+
+	var cutoverTime time.Time
+	alternateSrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	})
+
+	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
+	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	alternateCompareResult("SELECT * FROM d.t1")
+	alternateCompareResult("SELECT * FROM d.t2")
+	alternateCompareResult("SELECT * FROM d.x")
+	alternateCompareResult("SELECT * FROM d.scattered")
 }

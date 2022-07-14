@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,6 +49,9 @@ type Client interface {
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
 	Create(ctx context.Context, tenantID roachpb.TenantID) (streaming.StreamID, error)
+
+	// Dial checks if the source is able to be connected to for queries
+	Dial(ctx context.Context) error
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -131,6 +135,39 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	}
 
 	return streamClient, nil
+}
+
+// NewClientFromTopology iterates through each stream address in the topology
+// and returns the first client it's able to successfully connect to.
+func NewClientFromTopology(ctx context.Context, topology *jobspb.StreamTopology) (Client, error) {
+	streamAddresses := make(map[string]struct{})
+	for _, partition := range topology.PartitionInfo {
+		streamAddresses[partition.Address] = struct{}{}
+	}
+
+	var combinedError error = nil
+	for address := range streamAddresses {
+		streamAddress := streamingccl.StreamAddress(address)
+		client, err := NewStreamClient(streamAddress)
+		if err == nil {
+			dialErr := client.Dial(ctx)
+
+			if dialErr == nil {
+				return client, err
+			}
+
+			err = errors.CombineErrors(err, dialErr)
+		}
+
+		// Note the failure and attempt the next address
+		streamURL, parseErr := streamAddress.URL()
+		if parseErr == nil {
+			log.Infof(ctx, "failed to connect to address %s: %s", streamURL.Host, err.Error())
+		}
+		combinedError = errors.CombineErrors(combinedError, err)
+	}
+
+	return nil, errors.Wrap(combinedError, "failed to connect to any partition address")
 }
 
 /*

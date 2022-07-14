@@ -77,6 +77,11 @@ func (p *partitionedStreamClient) Create(
 	return streamID, err
 }
 
+func (p *partitionedStreamClient) Dial(ctx context.Context) error {
+	_, err := p.srcDB.Conn(ctx)
+	return err
+}
+
 // Heartbeat implements Client interface.
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,

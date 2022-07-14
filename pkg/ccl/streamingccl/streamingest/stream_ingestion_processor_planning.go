@@ -83,7 +83,7 @@ func distStreamIngestionPlanSpecs(
 		TrackedSpans:            trackedSpans,
 		JobID:                   int64(jobID),
 		StreamID:                uint64(streamID),
-		StreamAddress:           string(streamAddress),
+		StreamTopology:          *topology,
 		SubscribingSQLInstances: subscribingSQLInstances,
 		Checkpoint:              checkpoint,
 	}

@@ -91,7 +91,7 @@ func getStreamIngestionStats(
 		stats.ReplicationLagInfo = lagInfo
 	}
 
-	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(details.StreamAddress))
+	client, err := streamclient.NewClientFromTopology(evalCtx.Ctx(), &progress.GetStreamIngest().Topology)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +108,31 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
+func connectToActiveClient(
+	ctx context.Context, ingestionJob *jobs.Job,
+) (streamclient.Client, error) {
+	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
+	progress := ingestionJob.Progress()
+	topology := progress.GetStreamIngest().Topology
+
+	if len(topology.PartitionInfo) > 0 {
+		log.Infof(ctx, "ingestion job %d has existing topology, attempting to connect to topology addresses", ingestionJob.ID())
+		client, err := streamclient.NewClientFromTopology(ctx, &topology)
+		if err == nil {
+			return client, err
+		}
+
+		// fall through to streamAddress, as even though it is likely part of the
+		// topology it may have been changed to a new valid address via an ALTER
+		// statement
+	}
+
+	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
+	client, err := streamclient.NewStreamClient(streamAddress)
+
+	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
@@ -122,7 +147,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	// If there is an existing stream ID, reconnect to it.
 	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
-	client, err := streamclient.NewStreamClient(streamAddress)
+	client, err := connectToActiveClient(ctx, ingestionJob)
 	if err != nil {
 		return err
 	}
