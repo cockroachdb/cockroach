@@ -89,6 +89,11 @@ message SessionData {
   // increase the speed of lookup joins when each input row might get multiple
   // looked up rows at the cost of increased memory usage.
   bool parallelize_multi_key_lookup_joins_enabled = 19;
+
+  // Troubleshooting mode determines whether we refuse to do additional work with
+  // the query (i.e. collect & emit telemetry data). Troubleshooting mode is
+  // disabled by default.
+  bool troubleshooting_mode = 21;
 }
 
 // DataConversionConfig contains the parameters that influence the output

@@ -87,6 +87,11 @@ eexpect "\"\".crdb_internal.node_build_info"
 eexpect "you might want to set the current database"
 eexpect "to the empty string"
 
+# Check that troubleshooting mode is enabled in debug mode.
+eexpect "root@"
+send "show troubleshooting_mode;\r"
+eexpect "on"
+
 eexpect "root@"
 send "\\set display_format csv\r\\set\r"
 eexpect "check_syntax,false"
