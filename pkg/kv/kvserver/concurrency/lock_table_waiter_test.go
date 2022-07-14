@@ -234,8 +234,8 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
 	makeReq := func() Request {
 		return Request{
-			Timestamp: reqHeaderTS,
-			Priority:  roachpb.NormalUserPriority,
+			Timestamp:      reqHeaderTS,
+			NonTxnPriority: roachpb.NormalUserPriority,
 		}
 	}
 

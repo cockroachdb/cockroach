@@ -357,7 +357,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,
-			Priority:        ba.UserPriority,
+			NonTxnPriority:  ba.UserPriority,
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			LockTimeout:     ba.LockTimeout,
