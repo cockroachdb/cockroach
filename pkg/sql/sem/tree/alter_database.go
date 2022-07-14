@@ -10,6 +10,8 @@
 
 package tree
 
+import "fmt"
+
 // AlterDatabaseOwner represents a ALTER DATABASE OWNER TO statement.
 type AlterDatabaseOwner struct {
 	Name  Name
@@ -209,4 +211,39 @@ func (node *AlterDatabaseDropSecondaryRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.DatabaseName)
 	ctx.WriteString(" DROP SECONDARY REGION ")
+}
+
+// AlterDatabaseSetZoneConfigExtension represents a
+// ALTER DATABASE ... ALTER LOCALITY ... CONFIGURE ZONE ... statement.
+type AlterDatabaseSetZoneConfigExtension struct {
+	// ALTER DATABASE ...
+	DatabaseName Name
+	// ALTER LOCALITY ...
+	LocalityLevel LocalityLevel
+	RegionName    Name
+	// CONFIGURE ZONE ...
+	ZoneConfigSettings
+}
+
+var _ Statement = &AlterDatabaseSetZoneConfigExtension{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseSetZoneConfigExtension) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ALTER LOCALITY")
+	switch node.LocalityLevel {
+	case LocalityLevelGlobal:
+		ctx.WriteString(" GLOBAL")
+	case LocalityLevelTable:
+		ctx.WriteString(" REGIONAL")
+		if node.RegionName != "" {
+			ctx.WriteString(" IN ")
+			ctx.FormatNode(&node.RegionName)
+		}
+	default:
+		panic(fmt.Sprintf("unexpected locality: %#v", node.LocalityLevel))
+	}
+	ctx.WriteString(" CONFIGURE ZONE ")
+	node.ZoneConfigSettings.Format(ctx)
 }
