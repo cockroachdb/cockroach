@@ -2527,9 +2527,11 @@ func (t *logicTest) processSubtest(
 
 				for i := 0; i < repeat; i++ {
 					if query.retry && !*rewriteResultsInTestfiles {
-						testutils.SucceedsSoon(t.rootT, func() error {
+						if err := testutils.SucceedsSoonError(func() error {
 							return t.execQuery(query)
-						})
+						}); err != nil {
+							t.Error(err)
+						}
 					} else {
 						if query.retry && *rewriteResultsInTestfiles {
 							// The presence of the retry flag indicates that we expect this
