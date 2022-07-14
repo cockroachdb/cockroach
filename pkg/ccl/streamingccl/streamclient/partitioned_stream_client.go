@@ -223,7 +223,7 @@ func (p *partitionedStreamClient) Complete(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT crdb_internal.complete_replication_stream($1)`, streamID)
+		`SELECT crdb_internal.complete_replication_stream($1, $2)`, streamID, successfulIngestion)
 	if err := row.Scan(&streamID); err != nil {
 		return errors.Wrapf(err, "error completing replication stream %d", streamID)
 	}

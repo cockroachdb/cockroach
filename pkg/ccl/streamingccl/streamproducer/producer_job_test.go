@@ -121,8 +121,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	ptp := source.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 	timeout, usr := 1*time.Second, username.MakeSQLUsernameFromPreNormalizedString("user")
 
-	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func(), func()) {
-		mt := timeutil.NewManualTime(initialTime)
+	registerConstructor := func() (*timeutil.ManualTime, func(), func(), func()) {
+		mt := timeutil.NewManualTime(timeutil.Now())
 		waitJobFinishReverting := make(chan struct{})
 		in, out := make(chan struct{}, 1), make(chan struct{}, 1)
 		jobs.RegisterConstructor(jobspb.TypeStreamReplication, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -181,9 +181,14 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ptsID := uuid.MakeV4()
 			jr := makeProducerJobRecord(registry, 10, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
-			_, _, _, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
 
+			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor()
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
+
+			// Coordinate the job to get a new time.
+			waitForTimeRequest()
+			mt.AdvanceTo(expirationTime(jr).Add(1 * time.Millisecond))
+			timeGiven()
 
 			waitJobFinishReverting()
 
@@ -210,10 +215,14 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			jr := makeProducerJobRecord(registry, 20, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting :=
-				registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
-
+				registerConstructor()
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
+
+			// Coordinate the job to get a new time.
 			waitForTimeRequest()
+			mt.AdvanceTo(expirationTime(jr).Add(-5 * time.Millisecond))
+			timeGiven()
+
 			sql.CheckQueryResults(t, jobsQuery(jr.JobID), [][]string{{"running"}})
 
 			updatedFrontier := hlc.Timestamp{
@@ -238,7 +247,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			// Ensure the timestamp is updated on the PTS record
 			require.Equal(t, updatedFrontier, r.Timestamp)
 
-			// Reset the time to be after the timeout
+			// Coordinate the job to get a new time. Reset the time to be after the timeout.
+			waitForTimeRequest()
 			mt.AdvanceTo(expire.Add(12 * time.Millisecond))
 			timeGiven()
 			waitJobFinishReverting()
