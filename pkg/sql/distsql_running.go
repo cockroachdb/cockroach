@@ -477,7 +477,7 @@ func (dsp *DistSQLPlanner) Run(
 			// given a LeafTxn. In order for that LeafTxn to be created later,
 			// during the flow setup, we need to populate leafInputState below,
 			// so we tell the localState that there is concurrency.
-			if row.CanUseStreamer(ctx, dsp.st) {
+			if row.CanUseStreamer(dsp.st) {
 				for _, proc := range plan.Processors {
 					if jr := proc.Spec.Core.JoinReader; jr != nil {
 						// Both index and lookup joins, with and without

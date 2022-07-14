@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,9 +26,30 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CanUseStreamer returns whether the kvstreamer.Streamer API should be used.
-func CanUseStreamer(ctx context.Context, settings *cluster.Settings) bool {
+// CanUseStreamer returns whether the kvstreamer.Streamer API should be used if
+// possible.
+func CanUseStreamer(settings *cluster.Settings) bool {
 	return useStreamerEnabled.Get(&settings.SV)
+}
+
+// UseStreamer returns whether the kvstreamer.Streamer API should be used as
+// well as the txn that should be used (regardless of the boolean return value)
+// TODO(yuzefovich): make this a method on the execinfra.FlowContext once the
+// useStreamerEnabled cluster setting is removed.
+func UseStreamer(
+	txn *kv.Txn, makeLeaf func() (*kv.Txn, error), settings *cluster.Settings,
+) (bool, *kv.Txn, error) {
+	useStreamer := CanUseStreamer(settings) && txn != nil && txn.Type() == kv.LeafTxn && makeLeaf != nil
+	if !useStreamer {
+		return false, txn, nil
+	}
+	leafTxn, err := makeLeaf()
+	if leafTxn == nil || err != nil {
+		// leafTxn might be nil in some flows which run outside of the txn, the
+		// streamer should not be used in such cases.
+		return false, txn, err
+	}
+	return true, leafTxn, nil
 }
 
 // useStreamerEnabled determines whether the Streamer API should be used.
