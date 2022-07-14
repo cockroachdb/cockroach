@@ -107,19 +107,19 @@ func (r *Replica) evalAndPropose(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
-) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
+) (chan proposalResult, func(), kvserverbase.CmdIDKey, *StoreWriteBytes, *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
 	log.Event(proposal.ctx, "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately
-	// proagate the error. Don't assume ownership of the concurrency guard.
+	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, nil, "", pErr
+		return nil, nil, "", nil, pErr
 	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		return nil, nil, "", pErr
+		return nil, nil, "", nil, pErr
 	}
 
 	// Attach the endCmds to the proposal and assume responsibility for
@@ -138,7 +138,7 @@ func (r *Replica) evalAndPropose(
 	//    in an error.
 	if proposal.command == nil {
 		if proposal.Local.RequiresRaft() {
-			return nil, nil, "", roachpb.NewError(errors.AssertionFailedf(
+			return nil, nil, "", nil, roachpb.NewError(errors.AssertionFailedf(
 				"proposal resulting from batch %s erroneously bypassed Raft", ba))
 		}
 		intents := proposal.Local.DetachEncounteredIntents()
@@ -152,7 +152,7 @@ func (r *Replica) evalAndPropose(
 			EndTxns:            endTxns,
 		}
 		proposal.finishApplication(ctx, pr)
-		return proposalCh, func() {}, "", nil
+		return proposalCh, func() {}, "", nil, nil
 	}
 
 	log.VEventf(proposal.ctx, 2,
@@ -163,7 +163,18 @@ func (r *Replica) evalAndPropose(
 		proposal.command.ReplicatedEvalResult.Delta.IntentCount,
 		proposal.command.WriteBatch.Size(),
 	)
-
+	// NB: if ba.AsyncConsensus is true, we will tell admission control about
+	// writes that may not have happened yet. We consider this ok, since (a) the
+	// typical lag in consensus is expected to be small compared to the time
+	// granularity of admission control doing token and size estimation (which
+	// is 15s). Also, admission control corrects for gaps in reporting.
+	writeBytes := newStoreWriteBytes()
+	if proposal.command.WriteBatch != nil {
+		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
+	}
+	if proposal.command.ReplicatedEvalResult.AddSSTable != nil {
+		writeBytes.SSTableBytes = int64(len(proposal.command.ReplicatedEvalResult.AddSSTable.Data))
+	}
 	// If the request requested that Raft consensus be performed asynchronously,
 	// return a proposal result immediately on the proposal's done channel.
 	// The channel's capacity will be large enough to accommodate this.
@@ -172,7 +183,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", writeBytes, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -236,14 +247,14 @@ func (r *Replica) evalAndPropose(
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
 	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
-		return nil, nil, "", roachpb.NewError(errors.Errorf(
+		return nil, nil, "", nil, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
-		return nil, nil, "", roachpb.NewError(err)
+		return nil, nil, "", nil, roachpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
@@ -263,13 +274,13 @@ func (r *Replica) evalAndPropose(
 			Req:        *ba,
 		}
 		if pErr = filter(filterArgs); pErr != nil {
-			return nil, nil, "", pErr
+			return nil, nil, "", nil, pErr
 		}
 	}
 
 	pErr = r.propose(ctx, proposal, tok.Move(ctx))
 	if pErr != nil {
-		return nil, nil, "", pErr
+		return nil, nil, "", nil, pErr
 	}
 	// Abandoning a proposal unbinds its context so that the proposal's client
 	// is free to terminate execution. However, it does nothing to try to
@@ -291,7 +302,7 @@ func (r *Replica) evalAndPropose(
 		// We'd need to make sure the span is finished eventually.
 		proposal.ctx = r.AnnotateCtx(context.TODO())
 	}
-	return proposalCh, abandon, idKey, nil
+	return proposalCh, abandon, idKey, writeBytes, nil
 }
 
 // propose encodes a command, starts tracking it, and proposes it to Raft.
