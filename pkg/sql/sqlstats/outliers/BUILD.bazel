@@ -30,7 +30,7 @@ go_test(
     name = "outliers_test",
     srcs = [
         "detector_test.go",
-        "outliers_test.go",
+        "registry_test.go",
     ],
     embed = [":outliers"],
     deps = [
