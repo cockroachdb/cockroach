@@ -190,7 +190,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = 42
+	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
 	runTest := func(name string, test testcase) {

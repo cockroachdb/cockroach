@@ -224,6 +224,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		alterSystemTableStatisticsAddPartialPredicate,
 	),
+	upgrade.NewTenantUpgrade(
+		"create system.job_info table",
+		toCV(clusterversion.V23_1CreateSystemJobInfoTable),
+		upgrade.NoPrecondition,
+		systemJobInfoTableMigration,
+	),
 }
 
 func init() {
