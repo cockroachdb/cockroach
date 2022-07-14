@@ -4053,7 +4053,7 @@ func (sb *statisticsBuilder) predicateSelectivity(
 	nonNullSelectivity, nullSelectivity props.Selectivity, inputNullCount, inputRowCount float64,
 ) props.Selectivity {
 	outRowCount := nonNullSelectivity.AsFloat()*(inputRowCount-inputNullCount) + nullSelectivity.AsFloat()*inputNullCount
-	sel := props.MakeSelectivity(outRowCount / inputRowCount)
+	sel := props.MakeSelectivityFromFraction(outRowCount, inputRowCount)
 
 	return sel
 }
