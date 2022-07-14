@@ -169,12 +169,6 @@ const (
 	// requires the limit to always be overshot in order to properly enforce
 	// limits when splitting requests.
 	TargetBytesAvoidExcess
-	// AvoidDrainingNames avoids using the draining_names field when renaming or
-	// dropping descriptors.
-	AvoidDrainingNames
-	// DrainingNamesMigration adds the migration which guarantees that no
-	// descriptors have draining names.
-	DrainingNamesMigration
 	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
 	// of span that RPCs get on the server depending on the tracing context.
 	TraceIDDoesntImplyStructuredRecording
@@ -429,14 +423,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TargetBytesAvoidExcess,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
-	},
-	{
-		Key:     AvoidDrainingNames,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 6},
-	},
-	{
-		Key:     DrainingNamesMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
 	},
 	{
 		Key:     TraceIDDoesntImplyStructuredRecording,

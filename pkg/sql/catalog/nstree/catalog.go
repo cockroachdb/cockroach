@@ -170,14 +170,6 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 	if desc == nil {
 		return catalog.ErrDescriptorNotFound
 	}
-	// TODO(postamar): remove draining name checks in 22.2
-	for _, dn := range desc.GetDrainingNames() {
-		if ne.GetParentID() == dn.GetParentID() &&
-			ne.GetParentSchemaID() == dn.GetParentSchemaID() &&
-			ne.GetName() == dn.GetName() {
-			return nil
-		}
-	}
 	if desc.Dropped() {
 		return errors.Newf("no matching name info in draining names of dropped %s",
 			desc.DescriptorType())

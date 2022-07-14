@@ -55,12 +55,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"ensure that draining names are no longer in use",
-		toCV(clusterversion.DrainingNamesMigration),
-		NoPrecondition,
-		ensureNoDrainingNames,
-	),
-	upgrade.NewTenantUpgrade(
 		"add column avgSize to table system.table_statistics",
 		toCV(clusterversion.AlterSystemTableStatisticsAddAvgSizeCol),
 		NoPrecondition,

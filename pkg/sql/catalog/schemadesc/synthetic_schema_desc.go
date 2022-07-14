@@ -49,11 +49,6 @@ func (p synthetic) GetVersion() descpb.DescriptorVersion {
 func (p synthetic) GetModificationTime() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
-
-// Deprecated: Do not use.
-func (p synthetic) GetDrainingNames() []descpb.NameInfo {
-	return nil
-}
 func (p synthetic) GetPrivileges() *catpb.PrivilegeDescriptor {
 	log.Fatalf(context.TODO(), "cannot access privileges on a %s descriptor", p.kindName())
 	return nil

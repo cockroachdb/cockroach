@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -2231,22 +2230,6 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 func runSchemaChangesInTxn(
 	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
 ) error {
-	// TODO(postamar): remove if-block in 22.2
-	//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
-	if len(tableDesc.GetDrainingNames()) > 0 {
-		// Reclaim all the old names. Leave the data and descriptor
-		// cleanup for later.
-		//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
-		for _, drain := range tableDesc.GetDrainingNames() {
-			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
-			if err := planner.Txn().Del(ctx, key); err != nil {
-				return err
-			}
-		}
-		//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
-		tableDesc.SetDrainingNames(nil)
-	}
-
 	if tableDesc.Dropped() {
 		return nil
 	}

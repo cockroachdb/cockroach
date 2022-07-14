@@ -79,7 +79,6 @@ var validationMap = []struct {
 			"ID":               {status: thisFieldReferencesNoObjects},
 			"Version":          {status: thisFieldReferencesNoObjects},
 			"ModificationTime": {status: thisFieldReferencesNoObjects},
-			"DrainingNames":    {status: thisFieldReferencesNoObjects},
 			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
 			"UnexposedParentSchemaID": {
 				status: todoIAmKnowinglyAddingTechDebt,
@@ -265,7 +264,6 @@ var validationMap = []struct {
 			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
 			"Version":                       {status: thisFieldReferencesNoObjects},
 			"ModificationTime":              {status: thisFieldReferencesNoObjects},
-			"DrainingNames":                 {status: thisFieldReferencesNoObjects},
 			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"Schemas":                       {status: iSolemnlySwearThisFieldIsValidated},
 			"State":                         {status: thisFieldReferencesNoObjects},
