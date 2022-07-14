@@ -280,6 +280,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = false
 	notStale()
 
+	// Stale enforce home region.
+	evalCtx.SessionData().EnforceHomeRegion = true
+	stale()
+	evalCtx.SessionData().EnforceHomeRegion = false
+	notStale()
+
 	// Stale testing_optimizer_random_seed.
 	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
 	stale()

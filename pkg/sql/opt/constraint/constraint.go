@@ -830,3 +830,27 @@ func (c *Constraint) CollectFirstColumnValues(
 	}
 	return values, hasNullValue, true
 }
+
+// HasRemoteSpans returns true if any of the constraint spans in `c` belong to
+// partitions remote to the gateway region.
+func (c *Constraint) HasRemoteSpans(ps partition.PrefixSorter) bool {
+	if c.IsUnconstrained() {
+		return true
+	}
+	if c.IsContradiction() {
+		return false
+	}
+	// Iterate through the spans and determine whether each one matches
+	// with a prefix from a remote partition.
+	for i, n := 0, c.Spans.Count(); i < n; i++ {
+		span := c.Spans.Get(i)
+		if match, ok := FindMatch(span, ps); ok {
+			if !match.IsLocal {
+				return true
+			}
+		} else {
+			return true
+		}
+	}
+	return false
+}

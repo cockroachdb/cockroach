@@ -11,9 +11,11 @@
 package distribution
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,14 +39,17 @@ func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Dis
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint, t.Memo().RootIsExplain())
+
+	case *memo.LookupJoinExpr:
+		if t.LocalityOptimized {
+			provided.FromLocality(evalCtx.Locality)
+		}
 
 	default:
 		// Other operators can pass through the distribution to their children.
 	}
-
 	return provided.Any() || provided.Equals(*required)
 }
 
@@ -92,14 +97,24 @@ func BuildProvided(
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		md := expr.Memo().Metadata()
-		index := md.Table(t.Table).Index(t.Index)
-		provided.FromIndexScan(evalCtx, index, t.Constraint)
+		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint, t.Memo().RootIsExplain())
 
 	default:
+		// TODO(msirek): Clarify the distinction between a distribution which can
+		//               provide any required distribution and one which can provide
+		//               none. See issue #86641.
+		if lookupJoinExpr, ok := expr.(*memo.LookupJoinExpr); ok {
+			if lookupJoinExpr.LocalityOptimized {
+				// Locality-optimized join is considered to be local.
+				provided.FromLocality(evalCtx.Locality)
+				break
+			}
+		}
 		for i, n := 0, expr.ChildCount(); i < n; i++ {
 			if relExpr, ok := expr.Child(i).(memo.RelExpr); ok {
-				provided = provided.Union(relExpr.ProvidedPhysical().Distribution)
+				childDistribution := relExpr.ProvidedPhysical().Distribution
+				provided = provided.Union(childDistribution)
 			}
 		}
 	}
@@ -108,6 +123,97 @@ func BuildProvided(
 		checkProvided(&provided, required)
 	}
 
+	return provided
+}
+
+// BuildLookupJoinLookupTableDistribution builds the Distribution that results
+// from performing lookups of a LookupJoin, if that distribution can be
+// statically determined.
+func BuildLookupJoinLookupTableDistribution(
+	evalCtx *eval.Context, lookupJoin *memo.LookupJoinExpr, forExplain bool,
+) (provided physical.Distribution) {
+	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
+	lookupTable := lookupTableMeta.Table
+
+	if lookupJoin.LocalityOptimized {
+		provided.FromLocality(evalCtx.Locality)
+		return provided
+	} else if lookupTable.IsGlobalTable() {
+		provided.FromLocality(evalCtx.Locality)
+		return provided
+	} else if homeRegion, ok := lookupTable.HomeRegion(); ok {
+		provided.Regions = []string{homeRegion}
+		return provided
+	} else if lookupTable.IsRegionalByRow() {
+		if len(lookupJoin.KeyCols) > 0 {
+			projectExpr := lookupJoin.Input
+			firstKeyColID := lookupJoin.LookupJoinPrivate.KeyCols[0]
+			if projectExpr.Op() == opt.InvertedJoinOp {
+				invertedJoinExpr, _ := projectExpr.(*memo.InvertedJoinExpr)
+				if constExpr, ok := invertedJoinExpr.GetConstExprFromFilter(firstKeyColID); ok {
+					if constExpr.Op() == opt.ConstOp {
+						constExpr := constExpr.(*memo.ConstExpr)
+						if enumValue, ok := constExpr.Value.(*tree.DEnum); ok {
+							homeRegion := enumValue.LogicalRep
+							provided.Regions = []string{homeRegion}
+							return provided
+						}
+					}
+				}
+			} else if projection, ok := projectExpr.(*memo.ProjectExpr); ok {
+				regionName := projection.GetProjectedEnumConstant(firstKeyColID)
+				if regionName != "" {
+					provided.Regions = []string{regionName}
+					return provided
+				}
+			}
+		} else if lookupJoin.LookupJoinPrivate.LookupColsAreTableKey &&
+			len(lookupJoin.LookupJoinPrivate.LookupExpr) > 0 {
+			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(lookupJoin.Memo()); ok {
+				firstIndexColEqExpr := lookupJoin.LookupJoinPrivate.LookupExpr[filterIdx].Condition
+				if firstIndexColEqExpr.Op() == opt.EqOp {
+					if firstIndexColEqExpr.Child(1).Op() == opt.ConstOp {
+						constExpr := firstIndexColEqExpr.Child(1).(*memo.ConstExpr)
+						if enumValue, ok := constExpr.Value.(*tree.DEnum); ok {
+							regionName := enumValue.LogicalRep
+							provided.Regions = []string{regionName}
+							return provided
+						}
+					}
+				}
+			}
+		}
+	}
+	provided.FromIndexScan(evalCtx, lookupTableMeta, lookupJoin.Index, nil, forExplain)
+	return provided
+}
+
+// BuildInvertedJoinLookupTableDistribution builds the Distribution that results
+// from performing lookups of an inverted join, if that distribution can be
+// statically determined.
+func BuildInvertedJoinLookupTableDistribution(
+	evalCtx *eval.Context, invertedJoin *memo.InvertedJoinExpr, forExplain bool,
+) (provided physical.Distribution) {
+	lookupTableMeta := invertedJoin.Memo().Metadata().TableMeta(invertedJoin.Table)
+	lookupTable := lookupTableMeta.Table
+
+	if lookupTable.IsGlobalTable() {
+		provided.FromLocality(evalCtx.Locality)
+		return provided
+	} else if homeRegion, ok := lookupTable.HomeRegion(); ok {
+		provided.Regions = []string{homeRegion}
+		return provided
+	} else if lookupTable.IsRegionalByRow() {
+		if len(invertedJoin.PrefixKeyCols) > 0 {
+			if projectExpr, ok := invertedJoin.Input.(*memo.ProjectExpr); ok {
+				colID := invertedJoin.PrefixKeyCols[0]
+				homeRegion = projectExpr.GetProjectedEnumConstant(colID)
+				provided.Regions = []string{homeRegion}
+				return provided
+			}
+		}
+	}
+	provided.FromIndexScan(evalCtx, lookupTableMeta, invertedJoin.Index, nil, forExplain)
 	return provided
 }
 

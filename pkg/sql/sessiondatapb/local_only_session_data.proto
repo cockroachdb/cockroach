@@ -279,6 +279,11 @@ message LocalOnlySessionData {
   // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
   bool copy_fast_path_enabled = 75;
 
+  // EnforceHomeRegion, when true, causes queries which scan rows from multiple
+  // regions, or which scan rows from a single home region, but initiated from
+  // a gateway region which differs from that home region, to error out.
+  bool enforce_home_region = 76;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
