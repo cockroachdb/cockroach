@@ -124,7 +124,7 @@ import (
 // lower-level KV layer. Multi-tenant installations of CRDB run zero or more
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
-type SQLServer struct {
+type SQLServer struct { // XXX: This type encapsulates almost the entirety of a SQL pod (just this type running).
 	ambientCtx       log.AmbientContext
 	stopper          *stop.Stopper
 	sqlIDContainer   *base.SQLIDContainer
@@ -1258,6 +1258,8 @@ func (s *SQLServer) preStart(
 
 	if s.spanconfigMgr != nil {
 		if err := s.spanconfigMgr.Start(ctx); err != nil {
+			// XXX: This is where we kick off the job creation as part of the
+			// tenant server startup.
 			return err
 		}
 	}

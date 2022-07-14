@@ -907,7 +907,7 @@ type Store struct {
 	}
 
 	// established histogram per store.
-	spanStatsHistogram *spanStatsHistogram // XXX: Add commentary
+	spanStatsHistogram *spanStatsHistogram // XXX: Add commentary.
 
 	// The unquiesced subset of replicas.
 	unquiescedReplicas struct {

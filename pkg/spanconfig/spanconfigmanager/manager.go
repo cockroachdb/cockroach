@@ -102,7 +102,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	})
 }
 
-func (m *Manager) run(ctx context.Context) {
+func (m *Manager) run(ctx context.Context) { // XXX: This guy starts the span config reconciliation job we talked about.
 	jobCheckCh := make(chan struct{}, 1)
 	triggerJobCheck := func() {
 		select {
@@ -177,7 +177,7 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	if m.knobs.ManagerDisableJobCreation {
 		return false, nil
 	}
-	record := jobs.Record{
+	record := jobs.Record{ // XXX: This is the job record of interest.
 		JobID:         m.jr.MakeJobID(),
 		Description:   "reconciling span configurations",
 		Username:      username.NodeUserName(),

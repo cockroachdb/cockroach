@@ -47,6 +47,8 @@ func newSpanConfigDecoder() *spanConfigDecoder {
 
 // decode a span config entry given a KV from the
 // system.span_configurations table.
+// XXX: Is an example of a decoder you apply to rangefeed events to be able to
+// decode individual columns in the table.
 func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, error) {
 	// First we need to decode the start_key field from the index key.
 	var rawSp roachpb.Span

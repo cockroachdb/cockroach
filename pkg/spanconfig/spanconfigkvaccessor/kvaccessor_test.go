@@ -66,6 +66,7 @@ import (
 // count towards the targets being deleted, and for "upsert" they correspond to
 // the span config records being upserted. See
 // spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more details.
+// XXX: This is how the thing is tested.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

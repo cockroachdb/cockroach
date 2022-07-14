@@ -26,7 +26,7 @@ import (
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
 // tenant.
-type KVAccessor interface {
+type KVAccessor interface { // XXX: XXX: Is an example of a tiny library that stores all its state in a SQL table. I really like this code, the tests are good.
 	// GetSpanConfigRecords returns the span configurations that apply to or
 	// overlap with the supplied targets.
 	GetSpanConfigRecords(ctx context.Context, targets []Target) ([]Record, error)

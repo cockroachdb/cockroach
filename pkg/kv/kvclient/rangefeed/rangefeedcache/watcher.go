@@ -149,6 +149,10 @@ var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)
 // Callers can control whether the values passed to translateEvent carry a
 // populated PrevValue using the withPrevValue parameter. See
 // rangefeed.WithDiff for more details.
+// XXX: This is the library component that lets you declare a per-node rangefeed
+// against a table and receive updates from it. Useful for the "Per-store stats
+// collector" guy. The KVSubscriber example has a corresponding decoder that we
+// can cargo-cult.
 func NewWatcher(
 	name redact.SafeString,
 	clock *hlc.Clock,

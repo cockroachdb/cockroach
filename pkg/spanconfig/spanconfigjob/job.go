@@ -44,6 +44,19 @@ var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// XXX: XXX: This is an example of a per-tenant singleton job (i.e. only one version
+// running at any point in time). What we're doing is similar -- except our job
+// is going to collect all the data (fan-out or talk to KV for it to fan-out).
+// It has the ability to persist durably a checkpoint (or anything really), and
+// if the job fails for whatever reason, the infrastructure will re-invoke
+// Resume on some available node, and you can read the checkpoint last persisted
+// to continue from.
+// - How is the tenant job installed? Look towards spanconfig.Manager.
+// - Where is the tenant SQL pod code? Look towards server.SQLServer.
+// - How it would execute SQL? Look at spanconfig.KVAccessor as a component that
+//   uses SQL underneath, all you need is an InternalExecutor.
+//   - What's the shortest iteration cycle?
+
 // Resume implements the jobs.Resumer interface.
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr error) {
 	defer func() {
@@ -182,7 +195,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 			}
 
 			lastCheckpoint = rc.Checkpoint()
-			return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
+			return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{ //
 				Checkpoint: rc.Checkpoint(),
 			})
 		}); err != nil {
@@ -223,6 +236,7 @@ func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 }
 
 func init() {
+	// XXX: This is how the job is defined.
 	jobs.RegisterConstructor(jobspb.TypeAutoSpanConfigReconciliation,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 			return &resumer{job: job}
