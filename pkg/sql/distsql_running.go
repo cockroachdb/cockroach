@@ -842,6 +842,18 @@ func NewMetadataCallbackWriter(
 	return &MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn}
 }
 
+// NewMetadataOnlyMetadataCallbackWriter creates a new MetadataCallbackWriter
+// that uses errOnlyResultWriter and only supports receiving
+// execinfrapb.ProducerMetadata.
+func NewMetadataOnlyMetadataCallbackWriter() *MetadataCallbackWriter {
+	return NewMetadataCallbackWriter(
+		&errOnlyResultWriter{},
+		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+			return nil
+		},
+	)
+}
+
 // errOnlyResultWriter is a rowResultWriter and batchResultWriter that only
 // supports receiving an error. All other functions that deal with producing
 // results panic.

@@ -1,0 +1,85 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "roachpb/data.proto";
+import "jobs/jobspb/jobs.proto";
+
+message TTLSpec {
+
+  // JobID of the job that ran the ttlProcessor.
+  optional int64 job_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
+  ];
+
+  // RowLevelTTLDetails are the details of the job that ran the ttlProcessor.
+  optional jobs.jobspb.RowLevelTTLDetails row_level_ttl_details = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "RowLevelTTLDetails"
+  ];
+
+  // AOST is the AS OF SYSTEM TIME value the ttlProcessor uses to select records.
+  optional google.protobuf.Timestamp aost = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "AOST",
+    (gogoproto.stdtime) = true
+  ];
+
+  // TTLExpr is compared against jobspb.RowLevelTTLDetails.Cutoff by the
+  // ttlProcessor to determine what records to delete. Records are deleted
+  // if TTLExpr <= Cutoff.
+  optional string ttl_expr = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TTLExpr",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"
+  ];
+
+  // Spans determine which records are processed by which nodes in the DistSQL
+  // flow.
+  repeated roachpb.Span spans = 5 [(gogoproto.nullable) = false];
+
+  // RangeConcurrency controls how many ranges a single ttlProcessor processes
+  // in parallel.
+  optional int64 range_concurrency = 6 [(gogoproto.nullable) = false];
+
+  // SelectBatchSize controls the batch size for SELECTs.
+  optional int64 select_batch_size = 7 [(gogoproto.nullable) = false];
+
+  // DeleteBatchSize controls the batch size for DELETEs.
+  optional int64 delete_batch_size = 8 [(gogoproto.nullable) = false];
+
+  // DeleteRateLimit controls how many records can be deleted per second.
+  optional int64 delete_rate_limit = 9 [(gogoproto.nullable) = false];
+
+  // LabelMetrics controls if metrics are labeled with the name of the table being TTLed.
+  optional bool label_metrics = 10 [(gogoproto.nullable) = false];
+
+  // PreDeleteChangeTableVersion is a test flag to change the table
+  // descriptor before a delete.
+  optional bool pre_delete_change_table_version = 11 [(gogoproto.nullable) = false];
+
+  // PreSelectStatement is a test setting to run a SQL statement
+  // before selecting records.
+  optional string pre_select_statement = 12 [(gogoproto.nullable) = false];
+}
