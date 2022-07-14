@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-88 keys:
+90 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
@@ -41,6 +41,7 @@ initial-keys tenant=system
  /Table/3/1/47/2/1
  /Table/3/1/50/2/1
  /Table/3/1/51/2/1
+ /Table/3/1/52/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -55,6 +56,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"database_role_settings"/4/1
  /NamespaceTable/30/1/1/29/"descriptor"/4/1
  /NamespaceTable/30/1/1/29/"eventlog"/4/1
+ /NamespaceTable/30/1/1/29/"external_connections"/4/1
  /NamespaceTable/30/1/1/29/"jobs"/4/1
  /NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /NamespaceTable/30/1/1/29/"lease"/4/1
@@ -89,7 +91,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-44 splits:
+45 splits:
  /Table/3
  /Table/4
  /Table/5
@@ -134,10 +136,11 @@ initial-keys tenant=system
  /Table/47
  /Table/50
  /Table/51
+ /Table/52
 
 initial-keys tenant=5
 ----
-77 keys:
+79 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -175,6 +178,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/46/2/1
  /Tenant/5/Table/3/1/50/2/1
  /Tenant/5/Table/3/1/51/2/1
+ /Tenant/5/Table/3/1/52/2/1
  /Tenant/5/Table/5/1/0/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
@@ -184,6 +188,7 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"descriptor"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"descriptor_id_seq"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"eventlog"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"external_connections"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"lease"/4/1
@@ -220,7 +225,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-77 keys:
+79 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1
@@ -258,6 +263,7 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/46/2/1
  /Tenant/999/Table/3/1/50/2/1
  /Tenant/999/Table/3/1/51/2/1
+ /Tenant/999/Table/3/1/52/2/1
  /Tenant/999/Table/5/1/0/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/NamespaceTable/30/1/0/0/"system"/4/1
@@ -267,6 +273,7 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"descriptor"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"descriptor_id_seq"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"eventlog"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"external_connections"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"lease"/4/1
