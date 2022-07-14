@@ -281,6 +281,42 @@ func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
 	return newFilters
 }
 
+// NoOpDistribution returns true if a DistributeExpr has the same distribution
+// as its input.
+func (e *DistributeExpr) NoOpDistribution() bool {
+	distributionProvidedPhysical := e.ProvidedPhysical()
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+
+	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
+		distribution := distributionProvidedPhysical.Distribution
+		inputDistribution := inputDistributionProvidedPhysical.Distribution
+		return distribution.Equals(inputDistribution)
+	}
+	return false
+}
+
+// GetRegionOfDistribution returns the single region name of the provided
+// distribution, if there is exactly one.
+func (e *DistributeExpr) GetRegionOfDistribution() (region string, ok bool) {
+	distributionProvidedPhysical := e.ProvidedPhysical()
+
+	if distributionProvidedPhysical != nil {
+		return distributionProvidedPhysical.Distribution.GetSingleRegion()
+	}
+	return "", false
+}
+
+// GetInputHomeRegion returns the single region name of the home region of the
+// input expression tree to the Distribute operation, if there is exactly one.
+func (e *DistributeExpr) GetInputHomeRegion() (inputHomeRegion string, ok bool) {
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+
+	if inputDistributionProvidedPhysical != nil {
+		return inputDistributionProvidedPhysical.Distribution.GetSingleRegion()
+	}
+	return "", false
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
@@ -894,6 +930,25 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 // columns plus the synthesized columns.
 func (prj *ProjectExpr) InternalFDs() *props.FuncDepSet {
 	return &prj.internalFuncDeps
+}
+
+// GetProjectedEnumConstant looks for the projection with target colID in prj,
+// and if it contains a constant enum, returns its string representation, or the
+// empty string if not found.
+func (prj *ProjectExpr) GetProjectedEnumConstant(colID opt.ColumnID) string {
+	for _, projection := range prj.Projections {
+		if projection.Col == colID {
+			if projection.Element.Op() == opt.ConstOp {
+				constExpr := projection.Element.(*ConstExpr)
+				if enumValue, ok := constExpr.Value.(*tree.DEnum); ok {
+					return enumValue.LogicalRep
+				}
+			} else {
+				return ""
+			}
+		}
+	}
+	return ""
 }
 
 // FindInlinableConstants returns the set of input columns that are synthesized
