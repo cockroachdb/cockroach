@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -761,7 +763,6 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	var childProps *physical.Required
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		before := parent.Child(i)
-
 		if relParent != nil {
 			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
 		} else {
@@ -778,6 +779,23 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	}
 
 	if relParent != nil {
+		if o.evalCtx.SessionData().EnforceHomeRegion {
+			if relParent.Op() == opt.LookupJoinOp {
+				join := relParent.(*memo.LookupJoinExpr)
+				// TODO(msirek): Remove this in phase 2 or 3 when we can dynamically
+				//               determine if the lookup will be local.
+				// This check is done after all costing is done, so that only on the
+				// "best" or lowest-cost relation is checked. This could have been done
+				// in a separate routine which walks the expression tree, but
+				// setLowestCostTree does this walking already, so this check is
+				// included here to avoid an extra walking step.
+				if !join.LocalityOptimized {
+					err := pgerror.New(pgcode.QueryHasNoHomeRegion,
+						"Query has no home region. Try removing the join expression.")
+					panic(err)
+				}
+			}
+		}
 		var provided physical.Provided
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.

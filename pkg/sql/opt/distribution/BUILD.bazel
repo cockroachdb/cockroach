@@ -7,8 +7,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/distribution",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
         "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -16,6 +16,8 @@ go_library(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/props",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
     ],
 )

@@ -156,6 +156,11 @@ const (
 	// stale.
 	largeMaxCardinalityScanCostPenalty = unboundedMaxCardinalityScanCostPenalty / 2
 
+	// remoteCostPenalty is the penalty that should be added to the cost of joins
+	// which are not locality-optimized or Distribute operations when a session
+	// mode is set to error out on remote node accesses.
+	remoteCostPenalty = 1e8
+
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
 	preferLookupJoinFactor = 1e-6
@@ -657,6 +662,20 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 func (c *coster) computeDistributeCost(
 	distribute *memo.DistributeExpr, required *physical.Required,
 ) memo.Cost {
+	if distribute.NoOpDistribution() {
+		// If the distribution will be elided, the cost is zero.
+		return memo.Cost(0)
+	}
+	if c.evalCtx.SessionData().EnforceHomeRegion {
+		// When forcing an index, we always want the access path with the index to
+		// be cheaper than a primary index scan, so that we do not error out with:
+		// `index "%s" cannot be used for this query`. The forced index case sets
+		// the cost of using other indexes to `hugeCost`, so let's make the
+		// current plan's costs expensive, but not on par with the illegal index
+		// plan since we never want the plan with the illegal index to win out.
+		return remoteCostPenalty
+	}
+
 	// TODO(rytaft): Compute a real cost here. Currently we just add a tiny cost
 	// as a placeholder.
 	return cpuCostFactor
@@ -848,6 +867,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		rowsProcessed = join.Relational().Stats.RowCount
 	}
 	cost += memo.Cost(rowsProcessed) * filterPerRow
+	cost += c.nonLocalityOptimizedJoinPenalty()
 
 	return cost
 }
@@ -886,6 +906,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 		panic(errors.AssertionFailedf("could not get rows processed for merge join"))
 	}
 	cost += memo.Cost(rowsProcessed) * filterPerRow
+	cost += c.nonLocalityOptimizedJoinPenalty()
 	return cost
 }
 
@@ -911,7 +932,7 @@ func (c *coster) computeLookupJoinCost(
 	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return hugeCost
 	}
-	return c.computeIndexLookupJoinCost(
+	cost := c.computeIndexLookupJoinCost(
 		join,
 		required,
 		join.LookupColsAreTableKey,
@@ -922,6 +943,10 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
+	if !join.LocalityOptimized {
+		cost += c.nonLocalityOptimizedJoinPenalty()
+	}
+	return cost
 }
 
 func (c *coster) computeIndexLookupJoinCost(
@@ -1078,6 +1103,7 @@ func (c *coster) computeInvertedJoinCost(
 		c.rowScanCost(join, join.Table, join.Index, lookupCols, join.Relational().Stats)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
+	cost += c.nonLocalityOptimizedJoinPenalty()
 	return cost
 }
 
@@ -1458,6 +1484,17 @@ func (c *coster) largeCardinalityCostPenalty(
 			penalty = largeMaxCardinalityScanCostPenalty
 		}
 		return memo.Cost(penalty)
+	}
+	return 0
+}
+
+// remoteCostPenalty returns a penalty that should be added to
+// the cost of joins which are not locality-optimized when a session mode is set
+// to error out on remote table accesses. We want to favor joins which could be
+// evaluated locally to avoid erroring out if possible.
+func (c *coster) nonLocalityOptimizedJoinPenalty() memo.Cost {
+	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
+		return remoteCostPenalty
 	}
 	return 0
 }

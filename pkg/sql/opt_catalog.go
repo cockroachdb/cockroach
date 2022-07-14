@@ -1255,6 +1255,33 @@ func (ot *optTable) IsPartitionAllBy() bool {
 	return ot.desc.IsPartitionAllBy()
 }
 
+// HomeRegion is part of the cat.Table interface.
+func (ot *optTable) HomeRegion() (region string, ok bool) {
+	localityConfig := ot.desc.GetLocalityConfig()
+	if localityConfig == nil {
+		return "", false
+	}
+	regionalByTable := localityConfig.GetRegionalByTable()
+	if regionalByTable == nil {
+		return "", false
+	}
+	return regionalByTable.Region.String(), true
+}
+
+// IsGlobalTable is part of the cat.Table interface.
+func (ot *optTable) IsGlobalTable() bool {
+	localityConfig := ot.desc.GetLocalityConfig()
+	if localityConfig == nil {
+		return false
+	}
+	return localityConfig.GetGlobal() != nil
+}
+
+// GetDatabaseID is part of the cat.Table interface.
+func (ot *optTable) GetDatabaseID() descpb.ID {
+	return ot.desc.GetParentID()
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -2188,6 +2215,21 @@ func (ot *optVirtualTable) Zone() cat.Zone {
 // IsPartitionAllBy is part of the cat.Table interface.
 func (ot *optVirtualTable) IsPartitionAllBy() bool {
 	return false
+}
+
+// HomeRegion is part of the cat.Table interface.
+func (ot *optVirtualTable) HomeRegion() (region string, ok bool) {
+	return "", false
+}
+
+// IsGlobalTable is part of the cat.Table interface.
+func (ot *optVirtualTable) IsGlobalTable() bool {
+	return false
+}
+
+// GetDatabaseID is part of the cat.Table interface.
+func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
+	return 0
 }
 
 // CollectTypes is part of the cat.DataSource interface.

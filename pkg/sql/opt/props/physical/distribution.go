@@ -15,8 +15,11 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
@@ -107,8 +110,10 @@ func (d *Distribution) FromLocality(locality roachpb.Locality) {
 // FromIndexScan sets the Distribution that results from scanning the given
 // index with the given constraint c (c can be nil).
 func (d *Distribution) FromIndexScan(
-	evalCtx *eval.Context, index cat.Index, c *constraint.Constraint,
+	evalCtx *eval.Context, tabMeta *opt.TableMeta, ord cat.IndexOrdinal, c *constraint.Constraint,
 ) {
+	tab := tabMeta.Table
+	index := tab.Index(ord)
 	if index.Table().IsVirtualTable() {
 		// Virtual tables do not have zone configurations.
 		return
@@ -153,8 +158,39 @@ func (d *Distribution) FromIndexScan(
 		}
 	}
 
+	// Populate the distribution for GLOBAL tables and REGIONAL BY TABLE.
 	if len(regions) == 0 {
-		regions = getRegionsFromZone(index.Zone())
+		regionsPopulated := false
+		zone := index.Zone()
+
+		if tab.IsGlobalTable() {
+			// Global tables can always be treated as local to the gateway region.
+			gatewayRegion, found := evalCtx.Locality.Find("region")
+			if found {
+				regions = make(map[string]struct{})
+				regions[gatewayRegion] = struct{}{}
+				regionsPopulated = true
+			}
+		}
+		if !regionsPopulated && zone.ReplicaConstraintsCount() == 0 {
+			// If there are no replica constraints, then the distribution is all
+			// regions in the database.
+			regionsNames, ok := tabMeta.GetRegionsInDatabase(evalCtx.Ctx(), evalCtx.Planner)
+			if !ok && evalCtx.SessionData().EnforceHomeRegion {
+				err := pgerror.New(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try accessing only tables defined in multi-region databases.")
+				panic(err)
+			}
+			regions = make(map[string]struct{})
+			for _, regionName := range regionsNames {
+				regions[string(regionName)] = struct{}{}
+			}
+		}
+		if !regionsPopulated {
+			// Use the leaseholder region(s), which should be the same as the PRIMARY
+			// region for REGIONAL BY TABLE cases.
+			regions = getRegionsFromZone(index.Zone())
+		}
 	}
 
 	// Convert to a slice and sort regions.
@@ -170,19 +206,7 @@ func (d *Distribution) FromIndexScan(
 func getRegionsFromZone(zone cat.Zone) map[string]struct{} {
 	// First find any regional replica constraints. If there is exactly one, we
 	// can return early.
-	var regions map[string]struct{}
-	for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
-		replicaConstraint := zone.ReplicaConstraints(i)
-		for j, m := 0, replicaConstraint.ConstraintCount(); j < m; j++ {
-			constraint := replicaConstraint.Constraint(j)
-			if region, ok := getRegionFromConstraint(constraint); ok {
-				if regions == nil {
-					regions = make(map[string]struct{})
-				}
-				regions[region] = struct{}{}
-			}
-		}
-	}
+	regions := getReplicaRegionsFromZone(zone)
 	if len(regions) == 1 {
 		return regions
 	}
@@ -237,4 +261,23 @@ func getRegionFromConstraint(constraint cat.Constraint) (region string, ok bool)
 	}
 	// The region is prohibited.
 	return "", false /* ok */
+}
+
+// getReplicaRegionsFromZone returns the replica regions of the given zone
+// config, if any.
+func getReplicaRegionsFromZone(zone cat.Zone) map[string]struct{} {
+	var regions map[string]struct{}
+	for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
+		replicaConstraint := zone.ReplicaConstraints(i)
+		for j, m := 0, replicaConstraint.ConstraintCount(); j < m; j++ {
+			constraint := replicaConstraint.Constraint(j)
+			if region, ok := getRegionFromConstraint(constraint); ok {
+				if regions == nil {
+					regions = make(map[string]struct{})
+				}
+				regions[region] = struct{}{}
+			}
+		}
+	}
+	return regions
 }

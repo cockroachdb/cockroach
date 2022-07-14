@@ -274,6 +274,34 @@ func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
 	return newFilters
 }
 
+// NoOpDistribution returns true if a DistributeExpr has the same distribution
+// as its input.
+func (e *DistributeExpr) NoOpDistribution() bool {
+	distributionProvidedPhysical := e.ProvidedPhysical()
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+
+	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
+		distribution := distributionProvidedPhysical.Distribution
+		inputDistribution := inputDistributionProvidedPhysical.Distribution
+		return distribution.Equals(inputDistribution)
+	}
+	return false
+}
+
+// GetRegionOfDistribution returns the single region name of the provided
+// distribution, if there is exactly one.
+func (e *DistributeExpr) GetRegionOfDistribution() string {
+	distributionProvidedPhysical := e.ProvidedPhysical()
+
+	if distributionProvidedPhysical != nil {
+		distribution := distributionProvidedPhysical.Distribution
+		if len(distribution.Regions) == 1 {
+			return distribution.Regions[0]
+		}
+	}
+	return ""
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
