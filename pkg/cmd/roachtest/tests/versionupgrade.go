@@ -346,6 +346,18 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 	}
 }
 
+func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		// Put and start the binary.
+		binary := u.uploadVersion(ctx, t, nodes, v)
+		// NB: can't start sequentially since cluster already bootstrapped.
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.Sequential = false
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
+	}
+}
+
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
