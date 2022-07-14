@@ -20,13 +20,13 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DatabaseComment) scop.Op {
+				emit(func(this *scpb.DatabaseComment) *scop.UpsertDatabaseComment {
 					return &scop.UpsertDatabaseComment{
 						DatabaseID: this.DatabaseID,
 						Comment:    this.Comment,
 					}
 				}),
-				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -34,12 +34,12 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DatabaseComment) scop.Op {
+				emit(func(this *scpb.DatabaseComment) *scop.RemoveDatabaseComment {
 					return &scop.RemoveDatabaseComment{
 						DatabaseID: this.DatabaseID,
 					}
 				}),
-				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

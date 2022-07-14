@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableLocalityGlobal) scop.Op {
+				emit(func(this *scpb.TableLocalityGlobal) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),

@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ForeignKeyConstraint) scop.Op {
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
@@ -35,14 +35,14 @@ func init() {
 				// table do not match. We therefore have to identify the constraint
 				// by name in the origin table descriptor to be able to remove the
 				// back-reference.
-				emit(func(this *scpb.ForeignKeyConstraint) scop.Op {
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.RemoveForeignKeyBackReference {
 					return &scop.RemoveForeignKeyBackReference{
 						ReferencedTableID:  this.ReferencedTableID,
 						OriginTableID:      this.TableID,
 						OriginConstraintID: this.ConstraintID,
 					}
 				}),
-				emit(func(this *scpb.ForeignKeyConstraint) scop.Op {
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.RemoveForeignKeyConstraint {
 					return &scop.RemoveForeignKeyConstraint{
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,

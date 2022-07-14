@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.EnumTypeValue) scop.Op {
+				emit(func(this *scpb.EnumTypeValue) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
@@ -28,7 +28,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.EnumTypeValue) scop.Op {
+				emit(func(this *scpb.EnumTypeValue) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),

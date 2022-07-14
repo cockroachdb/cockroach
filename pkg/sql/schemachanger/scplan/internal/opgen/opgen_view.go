@@ -21,12 +21,12 @@ func init() {
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescID: this.ViewID,
 					}
@@ -36,7 +36,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.View, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
 					return &scop.MarkDescriptorAsOffline{
 						DescID: this.ViewID,
 						Reason: statementForDropJob(this, md).Statement,
@@ -45,12 +45,12 @@ func init() {
 			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
 						DescID: this.ViewID,
 					}
 				}),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.RemoveBackReferenceInTypes {
 					if len(this.UsesTypeIDs) == 0 {
 						return nil
 					}
@@ -59,7 +59,7 @@ func init() {
 						TypeIDs:              this.UsesTypeIDs,
 					}
 				}),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.RemoveViewBackReferencesInRelations {
 					if len(this.UsesRelationIDs) == 0 {
 						return nil
 					}
@@ -68,17 +68,17 @@ func init() {
 						RelationIDs:          this.UsesRelationIDs,
 					}
 				}),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.RemoveAllTableComments {
 					return &scop.RemoveAllTableComments{
 						TableID: this.ViewID,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.View, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View, md *targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.CreateGcJobForTable {
 					if !this.IsMaterialized {
 						return nil
 
@@ -88,7 +88,7 @@ func init() {
 						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View) *scop.DeleteDescriptor {
 					if !this.IsMaterialized {
 						return &scop.DeleteDescriptor{
 							DescriptorID: this.ViewID,

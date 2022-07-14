@@ -56,7 +56,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
       TypeIDs:
       - 105
       - 106
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 1
       Kind: 2
@@ -202,20 +202,20 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 3
       Kind: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 2
       Kind: 2
@@ -352,7 +352,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
       TableID: 104
@@ -520,32 +520,32 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 3
       Kind: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 2
       Kind: 2
       Ordinal: 1
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 3
       Kind: 2
       Ordinal: 1
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 2
       Kind: 2
@@ -705,7 +705,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
       TableID: 104
@@ -821,20 +821,20 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 3
       Kind: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
       TableID: 104
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 2
       Kind: 2
@@ -973,7 +973,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    scop.RemoveColumnFromIndex
+    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
       TableID: 104
@@ -1077,7 +1077,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 1
       Kind: 2
@@ -1117,7 +1117,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-    scop.AddColumnToIndex
+    *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 1
       Kind: 2

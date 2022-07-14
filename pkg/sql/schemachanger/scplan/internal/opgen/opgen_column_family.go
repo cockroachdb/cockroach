@@ -21,7 +21,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ColumnFamily) scop.Op {
+				emit(func(this *scpb.ColumnFamily) *scop.AddColumnFamily {
 					return &scop.AddColumnFamily{
 						TableID:  this.TableID,
 						FamilyID: this.FamilyID,
@@ -34,7 +34,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(this *scpb.ColumnFamily) scop.Op {
+				emit(func(this *scpb.ColumnFamily) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
