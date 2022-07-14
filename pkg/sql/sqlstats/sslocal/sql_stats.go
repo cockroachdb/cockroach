@@ -76,7 +76,7 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
-	outliersMetrics outliers.Metrics,
+	outliersRegistry outliers.Registry,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -96,7 +96,7 @@ func newSQLStats(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
-		outliers:                   outliers.New(st, outliersMetrics),
+		outliers:                   outliersRegistry,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
