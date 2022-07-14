@@ -378,14 +378,14 @@ sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: us
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 614891469123651720
+(chain: id: 0 active: false index: 5) io-avail: 153722867280912930
 
 # Initial tokens are effectively unlimited.
 try-get work=kv v=10000
 ----
 kv: tryGet(10000) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 614891469123641720
+(chain: id: 0 active: false index: 5) io-avail: 153722867280902930
 
 # Set the io tokens to a smaller value.
 set-io-tokens tokens=500

@@ -785,8 +785,12 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
-		metrics = append(
-			metrics, admission.StoreMetrics{StoreID: int32(store.StoreID()), Metrics: m.Metrics})
+		im := store.Engine().GetInternalIntervalMetrics()
+		metrics = append(metrics, admission.StoreMetrics{
+			StoreID:                 int32(store.StoreID()),
+			Metrics:                 m.Metrics,
+			WriteStallCount:         m.WriteStallCount,
+			InternalIntervalMetrics: im})
 		return nil
 	})
 	return metrics
