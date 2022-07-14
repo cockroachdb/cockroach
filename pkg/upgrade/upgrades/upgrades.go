@@ -140,6 +140,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"create system.job_info table",
+		toCV(clusterversion.CreateSystemJobInfoTable),
+		NoPrecondition,
+		systemJobInfoTableMigration,
+	),
 }
 
 func init() {
