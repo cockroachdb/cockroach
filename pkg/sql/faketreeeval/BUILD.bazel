@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/security/username",
+        "//pkg/sql/cacheutil",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",

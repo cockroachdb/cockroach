@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -332,6 +334,13 @@ type Planner interface {
 	// GetVirtualSchemaNameByID returns the name of the virtual schema given
 	// the id and whether or not it was found.
 	GetVirtualSchemaNameByID(id catid.DescID) (string, bool)
+
+	// GetSyntheticPrivilegeCache returns the SyntheticPrivilegeCache.
+	GetSyntheticPrivilegeCache() *cacheutil.Cache
+
+	// GetDescriptorVersionByTableName returns the descriptor version of a
+	// given table.
+	GetDescriptorVersionByTableName(ctx context.Context, name tree.ObjectName, flags tree.ObjectLookupFlags) (descpb.DescriptorVersion, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

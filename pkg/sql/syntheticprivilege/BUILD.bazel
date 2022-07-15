@@ -4,7 +4,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "syntheticprivilege",
     srcs = [
+        "constants.go",
         "global_privilege.go",
+        "synthesize_privileges.go",
         "synthetic_privilege_registry.go",
         "vtable_privilege.go",
     ],

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -293,6 +294,18 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 // ExecutorConfig is part of the Planner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
+}
+
+// GetSyntheticPrivilegeCache is part of the Planner interface.
+func (*DummyEvalPlanner) GetSyntheticPrivilegeCache() *cacheutil.Cache {
+	return nil
+}
+
+// GetDescriptorVersionByTableName is part of the Planner interface.
+func (*DummyEvalPlanner) GetDescriptorVersionByTableName(
+	ctx context.Context, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (descpb.DescriptorVersion, error) {
+	return descpb.DescriptorVersion(0), nil
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}

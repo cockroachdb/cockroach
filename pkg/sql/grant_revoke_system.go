@@ -109,18 +109,52 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 					return err
 				}
 			}
-			return nil
-		}
+		} else {
 
-		// Handle revoke case.
-		for _, user := range n.grantees {
-			syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, false)
-			userPrivs, found := syntheticPrivDesc.FindUser(user)
+			// Handle revoke case.
+			for _, user := range n.grantees {
+				syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, false)
+				userPrivs, found := syntheticPrivDesc.FindUser(user)
 
-			upsert := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
-			// For Public role and virtual tables, leave an empty
-			// row to indicate that SELECT has been revoked.
-			if !found && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
+				upsert := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
+				// For Public role and virtual tables, leave an empty
+				// row to indicate that SELECT has been revoked.
+				if !found && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
+					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+						params.ctx,
+						`insert-system-privilege`,
+						params.p.txn,
+						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+						upsert,
+						user.Normalized(),
+						systemPrivilegeObject.ToString(),
+						[]string{},
+						[]string{},
+					)
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
+				// If there are no entries remaining on the PrivilegeDescriptor for the user
+				// we can remove the entire row for the user.
+				if !found {
+					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+						params.ctx,
+						`delete-system-privilege`,
+						params.p.txn,
+						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+						deleteStmt,
+						user.Normalized(),
+						systemPrivilegeObject.ToString(),
+					)
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
 				_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
@@ -129,51 +163,18 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 					upsert,
 					user.Normalized(),
 					systemPrivilegeObject.ToString(),
-					[]string{},
-					[]string{},
+					privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
+					privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn).SortedNames(),
 				)
 				if err != nil {
 					return err
 				}
-				continue
-			}
-
-			// If there are no entries remaining on the PrivilegeDescriptor for the user
-			// we can remove the entire row for the user.
-			if !found {
-				_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-					params.ctx,
-					`delete-system-privilege`,
-					params.p.txn,
-					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-					deleteStmt,
-					user.Normalized(),
-					systemPrivilegeObject.ToString(),
-				)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-
-			_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-				params.ctx,
-				`insert-system-privilege`,
-				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-				upsert,
-				user.Normalized(),
-				systemPrivilegeObject.ToString(),
-				privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
-				privilege.ListFromBitField(userPrivs.WithGrantOption, n.grantOn).SortedNames(),
-			)
-			if err != nil {
-				return err
 			}
 		}
 	}
 
-	return nil
+	// Bump table version to invalidate cache.
+	return params.p.BumpPrivilegesTableVersion(params.ctx)
 }
 
 func (*changeNonDescriptorBackedPrivilegesNode) Next(runParams) (bool, error) { return false, nil }

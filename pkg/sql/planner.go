@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -887,4 +888,20 @@ func (p *planner) GetVirtualSchemaNameByID(id descpb.ID) (string, bool) {
 		return "", false
 	}
 	return vs.Desc().GetName(), true
+}
+
+// GetSyntheticPrivilegeCache is part of the Planner interface.
+func (p *planner) GetSyntheticPrivilegeCache() *cacheutil.Cache {
+	return p.ExecCfg().SyntheticPrivilegeCache
+}
+
+// GetDescriptorVersionByTableName is part of the Planner interface.
+func (p *planner) GetDescriptorVersionByTableName(
+	ctx context.Context, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (descpb.DescriptorVersion, error) {
+	_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(), name, flags)
+	if err != nil {
+		return descpb.DescriptorVersion(0), err
+	}
+	return desc.GetVersion(), nil
 }
