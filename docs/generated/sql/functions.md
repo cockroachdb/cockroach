@@ -2708,6 +2708,8 @@ The output can be used to recreate a database.’</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="get_byte"></a><code>get_byte(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a byte at the given index in the byte array.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="inet"></a><code>inet(val: <a href="string.html">string</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>If possible, converts input to that of type inet.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="initcap"></a><code>initcap(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Capitalizes the first letter of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="left"></a><code>left(input: <a href="bytes.html">bytes</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the first <code>return_set</code> bytes from <code>input</code>.</p>

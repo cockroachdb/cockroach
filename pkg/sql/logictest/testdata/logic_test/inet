@@ -888,3 +888,23 @@ SELECT '127.001.002.003'::INET, '127.001.002.003/016'::INET, '010.001.002.003'::
 127.1.2.3 127.1.2.3/16 10.1.2.3
 
 subtest end
+
+# Test inet
+
+query error pq: inet\(\): could not parse "some_invalid_value" as inet. invalid IP
+SELECT inet('some_invalid_value')
+
+query T
+SELECT inet('::111')
+----
+::111
+
+query T
+SELECT inet('192.168.0.2')
+----
+192.168.0.2
+
+query T
+SELECT inet('::ffff:192.168.0.1/24')
+----
+::ffff:192.168.0.1/24
