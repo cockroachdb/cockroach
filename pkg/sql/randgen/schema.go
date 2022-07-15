@@ -545,6 +545,13 @@ func randIndexTableDefFromCols(
 		def.Columns = append(def.Columns, elem)
 	}
 
+	// An inverted index column cannot be DESC, so use either the default
+	// direction or ASC.
+	if def.Inverted {
+		dir := tree.Direction(rng.Intn(int(tree.Ascending) + 1))
+		def.Columns[len(def.Columns)-1].Direction = dir
+	}
+
 	// Partition the secondary index in ~10% of cases. Multi-region databases do
 	// not support partitioning.
 	// TODO(harding): Allow partitioning the primary index. This will require

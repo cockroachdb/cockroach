@@ -195,7 +195,7 @@ like_indexes  CREATE TABLE public.like_indexes (
               CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
-              INVERTED INDEX like_table_j_idx (j ASC)
+              INVERTED INDEX like_table_j_idx (j)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -252,7 +252,7 @@ like_all  CREATE TABLE public.like_all (
           CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
           UNIQUE INDEX foo (b DESC, c ASC),
           INDEX like_table_c_idx (c ASC) STORING (j),
-          INVERTED INDEX like_table_j_idx (j ASC),
+          INVERTED INDEX like_table_j_idx (j),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -278,7 +278,7 @@ like_mixed  CREATE TABLE public.like_mixed (
             CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
-            INVERTED INDEX like_table_j_idx (j ASC)
+            INVERTED INDEX like_table_j_idx (j)
 )
 
 statement ok

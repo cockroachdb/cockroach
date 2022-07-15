@@ -1827,7 +1827,7 @@ CREATE TABLE public.regional_by_row_table (
                             CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_table_a_idx (a ASC),
                             UNIQUE INDEX regional_by_row_table_b_key (b ASC),
-                            INVERTED INDEX regional_by_row_table_j_idx (j ASC),
+                            INVERTED INDEX regional_by_row_table_j_idx (j),
                             UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
                             INDEX new_idx (a ASC, b ASC),
                             UNIQUE INDEX unique_b_a (b ASC, a ASC),
