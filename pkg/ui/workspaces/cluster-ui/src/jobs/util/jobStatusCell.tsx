@@ -22,15 +22,22 @@ export interface JobStatusCellProps {
   job: Job;
   lineWidth?: number;
   compact?: boolean;
+  hideDuration?: boolean;
 }
 
 export const JobStatusCell: React.FC<JobStatusCellProps> = ({
   job,
   lineWidth,
   compact = false,
+  hideDuration = false,
 }) => {
   const jobStatus = (
-    <JobStatus job={job} lineWidth={lineWidth} compact={compact} />
+    <JobStatus
+      job={job}
+      lineWidth={lineWidth}
+      compact={compact}
+      hideDuration={hideDuration}
+    />
   );
   if (isRetrying(job.status)) {
     return (
