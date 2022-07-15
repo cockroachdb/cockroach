@@ -42,12 +42,13 @@ type ReplicaMetrics struct {
 	// RangeCounter is true if the current replica is responsible for range-level
 	// metrics (generally the leaseholder, if live, otherwise the first replica in the
 	// range descriptor).
-	RangeCounter    bool
-	Unavailable     bool
-	Underreplicated bool
-	Overreplicated  bool
-	RaftLogTooLarge bool
-	BehindCount     int64
+	RangeCounter        bool
+	Unavailable         bool
+	Underreplicated     bool
+	Overreplicated      bool
+	RaftLogTooLarge     bool
+	BehindCount         int64
+	PausedFollowerCount int64
 
 	QuotaPoolPercentUsed int64 // [0,100]
 
@@ -74,6 +75,7 @@ func (r *Replica) Metrics(
 		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
 		qpUsed = qpCap - qpAvail
 	}
+	paused := r.mu.pausedFollowers
 	r.mu.RUnlock()
 
 	r.store.unquiescedReplicas.Lock()
@@ -101,6 +103,7 @@ func (r *Replica) Metrics(
 		raftLogSize,
 		raftLogSizeTrusted,
 		qpUsed, qpCap,
+		paused,
 	)
 }
 
@@ -122,6 +125,7 @@ func calcReplicaMetrics(
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 	qpUsed, qpCapacity int64, // quota pool used and capacity bytes
+	paused map[roachpb.ReplicaID]struct{},
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -150,6 +154,7 @@ func calcReplicaMetrics(
 	// behind.
 	if m.Leader {
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
+		m.PausedFollowerCount = int64(len(paused))
 	}
 
 	m.LatchMetrics = latchMetrics

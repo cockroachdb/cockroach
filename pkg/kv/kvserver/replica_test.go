@@ -8070,7 +8070,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tick(ctx, nil); err != nil {
+			if _, err := r.tick(ctx, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -8121,7 +8121,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tick(ctx, nil); err != nil {
+		if _, err := r.tick(ctx, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -9187,7 +9187,8 @@ func TestReplicaMetrics(t *testing.T) {
 				ctx, hlc.Timestamp{}, &cfg.RaftConfig, spanConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize, true, 0, 0)
+				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize,
+				true, 0, 0, nil /* overloadMap */)
 			require.Equal(t, c.expected, metrics)
 		})
 	}
@@ -9910,6 +9911,7 @@ type testQuiescer struct {
 
 	// Not used to implement quiescer, but used by tests.
 	livenessMap liveness.IsLiveMap
+	paused      map[roachpb.ReplicaID]struct{}
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -10002,7 +10004,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.ClockTimestamp{}, q.livenessMap)
+			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.ClockTimestamp{}, q.livenessMap, q.paused)
 			require.Equal(t, expected, ok)
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.
@@ -10127,6 +10129,13 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			return q
 		})
 	}
+	// Verify no quiescence when a follower is paused.
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.paused = map[roachpb.ReplicaID]struct{}{
+			q.desc.Replicas().AsProto()[0].ReplicaID: {},
+		}
+		return q
+	})
 }
 
 func TestFollowerQuiesceOnNotify(t *testing.T) {

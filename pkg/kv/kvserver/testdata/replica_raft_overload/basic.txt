@@ -1,0 +1,180 @@
+##############################
+# Basic sanity checks
+##############################
+
+run
+----
+[]
+
+run voters=(1) overloaded=(1)
+----
+[]
+
+# Will pause as many learners as we can...
+run voters=(1) learners=(2,3,4,5,6,7) overloaded=(2,4,6,7)
+----
+[2 4 6 7]
+
+# ... even when we can't do anything about overloaded voters.
+run voters=(1) learners=(2,3,4,5,6,7) overloaded=(1,2,4,6,7)
+----
+[2 4 6 7]
+
+##############################
+# RF=3
+##############################
+
+run voters=(1,2,3)
+----
+[]
+
+run voters=(1,2,3) overloaded=(3)
+----
+[3]
+
+run voters=(1,2,3) overloaded=(2,3)
+----
+[3]
+
+run voters=(1,2,3) overloaded=(1,2,3)
+----
+[3]
+
+run voters=(1,2,3) overloaded=(1,2,3) seed=3
+----
+[1]
+
+run voters=(1,2,3) learners=(4,5)
+----
+[]
+
+run voters=(1,2,3) learners=(4,5) overloaded=(3,4)
+----
+[3 4]
+
+run voters=(1,2,3) learners=(4,5) overloaded=(3,4,5)
+----
+[3 4 5]
+
+run voters=(1,2,3) learners=(4,5) overloaded=(2,3,4,5)
+----
+[3 4 5]
+
+run voters=(1,2,3) learners=(4,5) overloaded=(1,2,3,4,5)
+----
+[3 4 5]
+
+run voters=(1,2,3) down=(3) overloaded=(1)
+----
+[]
+
+run voters=(1,2,3) snapshot=(3) overloaded=(1)
+----
+[]
+
+run voters=(1,2,3) down=(3) overloaded=(1,2)
+----
+[]
+
+run voters=(1,2,3) snapshot=(3) overloaded=(1,2)
+----
+[]
+
+# When a "down" follower is also overloaded, we consider
+# pausing it (even though it's already "down"). If we didn't
+# do this we'd pause a healthy follower, it will become non-healthy
+# due to the pausing, and then we won't consider it paused, it will
+# be caught up, get paused again, etc.
+run voters=(1,2,3) down=(3) overloaded=(1,2,3)
+----
+[3]
+
+run voters=(1,2,3) down=(3) overloaded=(3)
+----
+[3]
+
+run voters=(1,2,3) learners=(4) down=(4) overloaded=(1,2)
+----
+[2]
+
+run voters=(1,2,3) learners=(4) snapshot=(4) overloaded=(1,2)
+----
+[2]
+
+run voters=(1,2,3) learners=(4) snapshot=(4) overloaded=(1,2,4)
+----
+[2 4]
+
+# Won't pause 2 since a quorum is down...
+run voters=(1,2,3) down=(1,2) overloaded=(2,3)
+----
+[]
+
+# ... but if there's an overloaded learner we'll still pause it.
+run voters=(1,2,3) learners=(4) down=(1,2) overloaded=(2,3,4)
+----
+[4]
+
+##############################
+# RF=4
+##############################
+
+run voters=(1,2,3,4) overloaded=(1,2,3,4)
+----
+[2]
+
+run voters=(1,2,3,4) learners=(5) overloaded=(1,2,3,4)
+----
+[2]
+
+run voters=(1,2,3,4) learners=(5) overloaded=(1,2,3,4,5)
+----
+[2 5]
+
+##############################
+# RF=5
+##############################
+
+run voters=(1,2,3,4,5)
+----
+[]
+
+run voters=(1,2,3,4,5) overloaded=(1)
+----
+[1]
+
+run voters=(1,2,3,4,5) overloaded=(1,2)
+----
+[1 2]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3)
+----
+[2 3]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3,4)
+----
+[2 4]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3,4,5)
+----
+[1 4]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3,4,5) snapshot=(1)
+----
+[1 4]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3,4,5) snapshot=(1,2)
+----
+[]
+
+run voters=(1,2,3,4,5) overloaded=(1,2,3,4,5) snapshot=(1,2,3)
+----
+[]
+
+run voters=(1,2,3,4,5) learners=(6) overloaded=(1,6)
+----
+[1 6]
+
+run voters=(1,2,3,4,5) learners=(6,7) overloaded=(1,2,3,4,5,6,7)
+----
+[1 4 6 7]
