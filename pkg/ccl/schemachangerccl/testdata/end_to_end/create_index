@@ -113,18 +113,7 @@ upsert descriptor #104
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - BACKFILL_ONLY
-  +    - ABSENT
-  +    - PUBLIC
-  +    - DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -135,136 +124,8 @@ upsert descriptor #104
   +          BY LIST (id) (PARTITION p1 VALUES IN (1))
   +        statementTag: CREATE INDEX
   +    revertible: true
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    - 4
-  +    - 5
-  +    - 6
-  +    - 7
-  +    - 8
-  +    - 9
-  +    - 10
-  +    targets:
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 2
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 2
-  +          ordinalInKind: 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 3
-  +          indexId: 2
-  +          kind: STORED
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        secondaryIndex:
-  +          indexId: 2
-  +          sourceIndexId: 1
-  +          tableId: 104
-  +          temporaryIndexId: 3
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: id1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexPartitioning:
-  +          indexId: 2
-  +          partitioning:
-  +            list:
-  +            - name: p1
-  +              subpartitioning: {}
-  +              values:
-  +              - AwI=
-  +            numColumns: 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        temporaryIndex:
-  +          indexId: 3
-  +          isUsingSecondaryEncoding: true
-  +          sourceIndexId: 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: TRANSIENT_ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 3
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 3
-  +          ordinalInKind: 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 3
-  +          indexId: 3
-  +          kind: STORED
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexPartitioning:
-  +          indexId: 3
-  +          partitioning:
-  +            list:
-  +            - name: p1
-  +              subpartitioning: {}
-  +              values:
-  +              - AwI=
-  +            numColumns: 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -287,13 +148,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 6 with 3 MutationType ops
 upsert descriptor #104
-  ...
-       - ABSENT
-       - PUBLIC
-  -    - DELETE_ONLY
-  +    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
   ...
      formatVersion: 3
      id: 104
@@ -324,13 +178,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 6 with 3 MutationType ops
 upsert descriptor #104
   ...
-       - PUBLIC
-       - PUBLIC
-  -    - BACKFILL_ONLY
-  +    - DELETE_ONLY
-       - ABSENT
-       - PUBLIC
-  ...
      formatVersion: 3
      id: 104
   -  modificationTime:
@@ -355,13 +202,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #104
-  ...
-       - PUBLIC
-       - PUBLIC
-  -    - DELETE_ONLY
-  +    - MERGE_ONLY
-       - ABSENT
-       - PUBLIC
   ...
      formatVersion: 3
      id: 104
@@ -396,27 +236,11 @@ begin transaction #9
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
-       - PUBLIC
-       - PUBLIC
-  -    - MERGE_ONLY
-  -    - ABSENT
-       - PUBLIC
-  -    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
-  +    - TRANSIENT_DELETE_ONLY
-       - PUBLIC
-       - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-       jobId: "1"
-       relevantStatements:
-  ...
              BY LIST (id) (PARTITION p1 VALUES IN (1))
            statementTag: CREATE INDEX
   -    revertible: true
-       targetRanks:
-       - 0
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 104
@@ -516,18 +340,7 @@ upsert descriptor #104
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -537,136 +350,8 @@ upsert descriptor #104
   -        statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
   -          BY LIST (id) (PARTITION p1 VALUES IN (1))
   -        statementTag: CREATE INDEX
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    - 8
-  -    - 9
-  -    - 10
-  -    targets:
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 2
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 2
-  -          ordinalInKind: 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 3
-  -          indexId: 2
-  -          kind: STORED
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        secondaryIndex:
-  -          indexId: 2
-  -          sourceIndexId: 1
-  -          tableId: 104
-  -          temporaryIndexId: 3
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 2
-  -          name: id1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexPartitioning:
-  -          indexId: 2
-  -          partitioning:
-  -            list:
-  -            - name: p1
-  -              subpartitioning: {}
-  -              values:
-  -              - AwI=
-  -            numColumns: 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        temporaryIndex:
-  -          indexId: 3
-  -          isUsingSecondaryEncoding: true
-  -          sourceIndexId: 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: TRANSIENT_ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 3
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 3
-  -          ordinalInKind: 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 3
-  -          indexId: 3
-  -          kind: STORED
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexPartitioning:
-  -          indexId: 3
-  -          partitioning:
-  -            list:
-  -            - name: p1
-  -              subpartitioning: {}
-  -              values:
-  -              - AwI=
-  -            numColumns: 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...

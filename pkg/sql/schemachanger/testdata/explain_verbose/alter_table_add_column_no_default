@@ -1,0 +1,165 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
+----
+• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8; 
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 4 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   │     ABSENT → DELETE_ONLY
+│       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column name set right after column existence"
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │         rule: "column named before column type becomes public"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       │     rule: "column existence precedes column dependents"
+│       │       │
+│       │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │       │     rule: "column name and type to public after all index column to public"
+│       │       │
+│       │       └── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │             rule: "column name and type to public after all index column to public"
+│       │
+│       └── • 5 Mutation operations
+│           │
+│           ├── • MakeAddedColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 2
+│           │       PgAttributeNum: 2
+│           │       TableID: 106
+│           │
+│           ├── • LogEvent
+│           │     Element:
+│           │       Column:
+│           │         columnId: 2
+│           │         pgAttributeNum: 2
+│           │         tableId: 106
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+│           │       StatementTag: ALTER TABLE
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
+│           │     TargetStatus: 2
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: j
+│           │     TableID: 106
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 2
+│           │       IsNullable: true
+│           │       TableID: 106
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           └── • AddColumnToIndex
+│                 ColumnID: 2
+│                 IndexID: 1
+│                 Kind: 2
+│                 TableID: 106
+│
+├── • PreCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       └── • 2 Mutation operations
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 106
+│                 JobID: 1
+│                 RunningStatus: PostCommitPhase stage 1 of 2 with 1 MutationType op pending
+│                 Statements:
+│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+│                   statementtag: ALTER TABLE
+│
+└── • PostCommitPhase
+    │
+    ├── • Stage 1 of 2 in PostCommitPhase
+    │   │
+    │   ├── • 1 element transitioning toward PUBLIC
+    │   │   │
+    │   │   └── • Column:{DescID: 106, ColumnID: 2}
+    │   │         DELETE_ONLY → WRITE_ONLY
+    │   │
+    │   └── • 3 Mutation operations
+    │       │
+    │       ├── • MakeAddedColumnDeleteAndWriteOnly
+    │       │     ColumnID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             JobID: 1
+    │             RunningStatus: PostCommitPhase stage 2 of 2 with 2 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitPhase
+        │
+        ├── • 1 element transitioning toward PUBLIC
+        │   │
+        │   └── • Column:{DescID: 106, ColumnID: 2}
+        │         WRITE_ONLY → PUBLIC
+        │
+        └── • 4 Mutation operations
+            │
+            ├── • MakeColumnPublic
+            │     ColumnID: 2
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TableID: 106
+            │
+            ├── • RefreshStats
+            │     TableID: 106
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

@@ -80,60 +80,15 @@ upsert descriptor #104
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - VALIDATED
-  +    - ABSENT
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
   +        statement: DROP INDEX idx CASCADE
   +        statementTag: DROP INDEX
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    targets:
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 2
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 2
-  +          kind: KEY_SUFFIX
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        secondaryIndex:
-  +          indexId: 2
-  +          isCreatedExplicitly: true
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: idx
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -156,18 +111,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 upsert descriptor #104
-  ...
-         userName: root
-       currentStatuses:
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - VALIDATED
-       - ABSENT
-  +    - ABSENT
-  +    - DELETE_ONLY
-  +    - ABSENT
-       jobId: "1"
-       relevantStatements:
   ...
      id: 104
      indexes: []
@@ -199,60 +142,15 @@ upsert descriptor #104
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - ABSENT
-  -    - ABSENT
-  -    - DELETE_ONLY
-  -    - ABSENT
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
   -        statement: DROP INDEX idx CASCADE
   -        statementTag: DROP INDEX
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    targets:
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 2
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 2
-  -          kind: KEY_SUFFIX
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        secondaryIndex:
-  -          indexId: 2
-  -          isCreatedExplicitly: true
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 2
-  -          name: idx
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...

@@ -714,19 +714,18 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 47 MutationType ops
     *scop.LogEvent
       Element:
         AliasType:
-          embeddedTypeT:
-            closedTypeIds:
-            - 111
-            - 112
-            type:
-              arrayContents:
-                family: EnumFamily
-                oid: 100111
-                udtMetadata:
-                  arrayTypeOid: 100112
-              arrayElemType: EnumFamily
-              family: ArrayFamily
-              oid: 100112
+          closedTypeIds:
+          - 111
+          - 112
+          type:
+            arrayContents:
+              family: EnumFamily
+              oid: 100111
+              udtMetadata:
+                arrayTypeOid: 100112
+            arrayElemType: EnumFamily
+            family: ArrayFamily
+            oid: 100112
           typeId: 112
       EventBase:
         Authorization:
