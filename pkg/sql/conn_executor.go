@@ -276,6 +276,8 @@ type Server struct {
 	// reportedStatsController.
 	reportedStatsController *sslocal.Controller
 
+	outliers outliers.Registry
+
 	reCache *tree.RegexpCache
 
 	// pool is the parent monitor for all session monitors.
@@ -348,13 +350,14 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
+	outliersRegistry := outliers.New(cfg.Settings, serverMetrics.OutliersMetrics)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-		serverMetrics.OutliersMetrics,
+		outliersRegistry,
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -367,7 +370,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-		serverMetrics.OutliersMetrics,
+		outliersRegistry,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
@@ -380,6 +383,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool:                    pool,
 		reportedStats:           reportedSQLStats,
 		reportedStatsController: reportedSQLStatsController,
+		outliers:                outliersRegistry,
 		reCache:                 tree.NewRegexpCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
@@ -502,6 +506,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// accumulated in the reporter when the telemetry server fails.
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
+
+	s.outliers.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
 }

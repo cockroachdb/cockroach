@@ -21,6 +21,7 @@ go_library(
         "//pkg/util/cache",
         "//pkg/util/metric",
         "//pkg/util/quantile",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_prometheus_client_model//go",
     ],
@@ -30,7 +31,7 @@ go_test(
     name = "outliers_test",
     srcs = [
         "detector_test.go",
-        "outliers_test.go",
+        "registry_test.go",
     ],
     embed = [":outliers"],
     deps = [

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -59,6 +60,10 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
+}
+
+func (r *registry) Start(_ context.Context, _ *stop.Stopper) {
+	// No-op.
 }
 
 func (r *registry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {

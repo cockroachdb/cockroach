@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	prometheus "github.com/prometheus/client_model/go"
 )
 
@@ -126,6 +127,8 @@ type Reader interface {
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained outliers.
 type Registry interface {
+	Start(ctx context.Context, stopper *stop.Stopper)
+
 	// ObserveStatement notifies the registry of a statement execution.
 	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
@@ -133,6 +136,8 @@ type Registry interface {
 	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
 
 	Reader
+
+	enabled() bool
 }
 
 // New builds a new Registry.

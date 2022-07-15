@@ -16,29 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-)
-
-// CanUseStreamer returns whether the kvstreamer.Streamer API should be used.
-func CanUseStreamer(ctx context.Context, settings *cluster.Settings) bool {
-	return useStreamerEnabled.Get(&settings.SV)
-}
-
-// useStreamerEnabled determines whether the Streamer API should be used.
-// TODO(yuzefovich): remove this in 23.1.
-var useStreamerEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	"sql.distsql.use_streamer.enabled",
-	"determines whether the usage of the Streamer API is allowed. "+
-		"Enabling this will increase the speed of lookup/index joins "+
-		"while adhering to memory limits.",
-	true,
 )
 
 // txnKVStreamer handles retrieval of key/values.

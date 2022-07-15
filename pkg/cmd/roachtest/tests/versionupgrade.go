@@ -113,6 +113,16 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		//
 		// See the comment on createCheckpoints for details on fixtures.
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+
+		// lower descriptor lease duration to 1 minute, working around a
+		// lease leak that can occasionally make this test time out (flake
+		// rate ~3%).
+		//
+		// TODO(renato): remove this call and function definition when
+		// https://github.com/cockroachdb/cockroach/issues/84382 is
+		// closed.
+		lowerLeaseDuration(1),
+
 		uploadAndInitSchemaChangeWorkload(),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
@@ -412,6 +422,18 @@ func enableTracingGloballyStep(ctx context.Context, t test.Test, u *versionUpgra
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING trace.debug.enable = $1`, true)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// lowerLeaseDuration sets the `sql.catalog.descriptor_lease_duration`
+// setting to 1 minute.
+func lowerLeaseDuration(node int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '1m'`)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
