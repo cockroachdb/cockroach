@@ -11,11 +11,10 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/scplan/internal/scstage",
+        "//pkg/sql/schemachanger/scplan/scviz",
         "//pkg/sql/schemachanger/screl",
-        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_emicklei_dot//:dot",
-        "@com_github_gogo_protobuf//jsonpb",
     ],
 )
 

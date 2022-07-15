@@ -11,10 +11,7 @@
 package sctestutils
 
 import (
-	"bytes"
 	"context"
-	gojson "encoding/json"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -26,17 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
@@ -99,80 +95,21 @@ func WithBuilderDependenciesFromTestServer(
 // decoding that into a map[string]interface{}. The function will be called
 // for every object in the decoded map recursively.
 func ProtoToYAML(
-	m protoutil.Message, fmtFlags protoreflect.FmtFlags, rewrites func(interface{}),
+	m protoutil.Message, emitDefaults bool, rewrites func(interface{}),
 ) (string, error) {
-	js, err := protoreflect.MessageToJSON(m, fmtFlags)
+	target, err := scviz.ToMap(m, emitDefaults)
 	if err != nil {
 		return "", err
 	}
-	str, err := jsonb.Pretty(js)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	buf.WriteString(str)
-	target := make(map[string]interface{})
-	err = gojson.Unmarshal(buf.Bytes(), &target)
-	if err != nil {
-		return "", err
-	}
-	RewriteEmbeddedIntoParent(target)
+	scviz.WalkMap(target, scviz.RewriteEmbeddedIntoParent)
 	if rewrites != nil {
-		walkMaps(target, rewrites)
+		scviz.WalkMap(target, rewrites)
 	}
 	out, err := yaml.Marshal(target)
 	if err != nil {
 		return "", err
 	}
 	return string(out), nil
-}
-
-func walkMaps(in interface{}, f func(v interface{})) {
-	var walk func(interface{})
-	walk = func(obj interface{}) {
-		f(obj)
-		switch objV := obj.(type) {
-		case map[string]interface{}:
-			for _, v := range objV {
-				walk(v)
-			}
-		case []interface{}:
-			for _, v := range objV {
-				walk(v)
-			}
-		}
-	}
-	walk(in)
-}
-
-// RewriteEmbeddedIntoParent is a rewrite function which lifts embedded
-// struct fields into their parents in ProtoToYAML.
-func RewriteEmbeddedIntoParent(in interface{}) {
-	embeddedRegexp := regexp.MustCompile("^embedded[A-Z]")
-	containsAnyKeys := func(haystack, needles map[string]interface{}) bool {
-		for k := range needles {
-			if _, exists := haystack[k]; exists {
-				return true
-			}
-		}
-		return false
-	}
-	walkMaps(in, func(obj interface{}) {
-		objV, ok := obj.(map[string]interface{})
-		if !ok {
-			return
-		}
-		for k, v := range objV {
-			m, ok := v.(map[string]interface{})
-			if !ok || !embeddedRegexp.MatchString(k) || containsAnyKeys(objV, m) {
-				continue
-			}
-			delete(objV, k)
-			for mk, mv := range m {
-				objV[mk] = mv
-			}
-		}
-	})
 }
 
 // DiffArgs defines arguments for the Diff function.
@@ -214,12 +151,12 @@ func Diff(a, b string, args DiffArgs) string {
 
 // ProtoDiff generates an indented summary of the diff between two protos'
 // YAML representations. See ProtoToYAML for documentation on rewrites.
-func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites func(i interface{})) string {
+func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites func(interface{})) string {
 	toYAML := func(m protoutil.Message) string {
 		if m == nil {
 			return ""
 		}
-		str, err := ProtoToYAML(m, protoreflect.FmtFlags{}, rewrites)
+		str, err := ProtoToYAML(m, false /* emitDefaults */, rewrites)
 		if err != nil {
 			panic(err)
 		}

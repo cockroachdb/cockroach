@@ -784,19 +784,18 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             ├── • LogEvent
             │     Element:
             │       AliasType:
-            │         embeddedTypeT:
-            │           closedTypeIds:
-            │           - 105
-            │           - 107
-            │           type:
-            │             arrayContents:
-            │               family: EnumFamily
-            │               oid: 100105
-            │               udtMetadata:
-            │                 arrayTypeOid: 100107
-            │             arrayElemType: EnumFamily
-            │             family: ArrayFamily
-            │             oid: 100107
+            │         closedTypeIds:
+            │         - 105
+            │         - 107
+            │         type:
+            │           arrayContents:
+            │             family: EnumFamily
+            │             oid: 100105
+            │             udtMetadata:
+            │               arrayTypeOid: 100107
+            │           arrayElemType: EnumFamily
+            │           family: ArrayFamily
+            │           oid: 100107
             │         typeId: 107
             │     EventBase:
             │       Authorization:

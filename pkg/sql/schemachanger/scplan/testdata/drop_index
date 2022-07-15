@@ -75,10 +75,9 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          embeddedIndex:
-            indexId: 2
-            isCreatedExplicitly: true
-            tableId: 104
+          indexId: 2
+          isCreatedExplicitly: true
+          tableId: 104
       EventBase:
         Authorization:
           UserName: root
@@ -237,10 +236,9 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          embeddedIndex:
-            indexId: 4
-            isCreatedExplicitly: true
-            tableId: 104
+          indexId: 4
+          isCreatedExplicitly: true
+          tableId: 104
       EventBase:
         Authorization:
           UserName: root
@@ -443,16 +441,15 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          embeddedIndex:
-            indexId: 6
-            isCreatedExplicitly: true
-            sharding:
-              columnNames:
-              - i
-              isSharded: true
-              name: crdb_internal_i_shard_16
-              shardBuckets: 16
-            tableId: 104
+          indexId: 6
+          isCreatedExplicitly: true
+          sharding:
+            columnNames:
+            - i
+            isSharded: true
+            name: crdb_internal_i_shard_16
+            shardBuckets: 16
+          tableId: 104
       EventBase:
         Authorization:
           UserName: root
@@ -661,12 +658,11 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 11 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          embeddedIndex:
-            constraintId: 9
-            indexId: 8
-            isCreatedExplicitly: true
-            isUnique: true
-            tableId: 104
+          constraintId: 9
+          indexId: 8
+          isCreatedExplicitly: true
+          isUnique: true
+          tableId: 104
       EventBase:
         Authorization:
           UserName: root

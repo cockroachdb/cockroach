@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -771,7 +772,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 			Indent:       "  ",
 			CompactLevel: 3,
 		}, func(i interface{}) {
-			sctestutils.RewriteEmbeddedIntoParent(i)
+			scviz.RewriteEmbeddedIntoParent(i)
 			if m, ok := i.(map[string]interface{}); ok {
 				ds, exists := m["declarativeSchemaChangerState"].(map[string]interface{})
 				if !exists {
