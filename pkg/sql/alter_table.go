@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1322,10 +1321,9 @@ func insertJSONStatistic(
 	histogram interface{},
 ) error {
 	var (
-		ctx      = params.ctx
-		ie       = params.ExecCfg().InternalExecutor
-		txn      = params.p.Txn()
-		settings = params.ExecCfg().Settings
+		ctx = params.ctx
+		ie  = params.ExecCfg().InternalExecutor
+		txn = params.p.Txn()
 	)
 
 	var name interface{}
@@ -1333,31 +1331,6 @@ func insertJSONStatistic(
 		name = s.Name
 	}
 
-	if !settings.Version.IsActive(params.ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
-		_ /* rows */, err := ie.Exec(
-			ctx,
-			"insert-stats",
-			txn,
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			tableID,
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			histogram)
-		return err
-	}
 	_ /* rows */, err := ie.Exec(
 		ctx,
 		"insert-stats",
