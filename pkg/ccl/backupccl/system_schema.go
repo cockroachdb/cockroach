@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -74,11 +75,11 @@ type systemBackupConfiguration struct {
 	// migrationFunc performs the necessary migrations on the system table data in
 	// the crdb_temp staging table before it is loaded into the actual system
 	// table.
-	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string) error
+	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rewrites jobspb.DescRewriteMap) error
 	// customRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
-	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string) error
+	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string, rewrites jobspb.DescRewriteMap) error
 
 	// The following fields are for testing.
 
@@ -94,29 +95,173 @@ func defaultSystemTableRestoreFunc(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
+	_ jobspb.DescRewriteMap,
 ) error {
 	executor := execCfg.InternalExecutor
-
-	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
-	opName := systemTableName + "-data-deletion"
-	log.Eventf(ctx, "clearing data from system table %s with query %q",
-		systemTableName, deleteQuery)
-
-	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
-	if err != nil {
-		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	if err := defaultDeleteAllExistingRows(ctx, txn, executor, systemTableName); err != nil {
+		return err
 	}
 
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
 		systemTableName, tempTableName)
-	opName = systemTableName + "-data-insert"
+	opName := systemTableName + "-data-insert"
 	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
 	return nil
 }
 
+func defaultDeleteAllExistingRows(
+	ctx context.Context, txn *kv.Txn, executor *sql.InternalExecutor, systemTableName string,
+) error {
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+	return nil
+}
+
 // Custom restore functions for different system tables.
+
+func zoneConfigRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+	rewrites jobspb.DescRewriteMap,
+) error {
+	opName := systemTableName + "-data-insert"
+	executor := execCfg.InternalExecutor
+	if err := defaultDeleteAllExistingRows(ctx, txn, executor, systemTableName); err != nil {
+		return err
+	}
+
+	// TODO(ssd): Chunk and memory monitor this. Currently we will issue an insert
+	// per row which is gross.
+	rows, err := executor.QueryIterator(ctx, opName, txn, fmt.Sprintf("SELECT id, config FROM %s", tempTableName))
+	if err != nil {
+		return errors.Wrapf(err, "fetching data from temporary table %s", tempTableName)
+	}
+	return forEachRow(ctx, rows, func(datums tree.Datums) error {
+		descID, err := rewrittenIDFromDatum(datums[0], rewrites)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, opName, txn,
+			fmt.Sprintf("INSERT INTO system.%s(id, config) VALUES($1, $2)", systemTableName),
+			descID, datums[1])
+		if err != nil {
+			return errors.Wrapf(err, "inserting data into %s", systemTableName)
+		}
+		return nil
+	})
+}
+
+func commentsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+	rewrites jobspb.DescRewriteMap,
+) error {
+	opName := systemTableName + "-data-insert"
+	executor := execCfg.InternalExecutor
+	if err := defaultDeleteAllExistingRows(ctx, txn, executor, systemTableName); err != nil {
+		return err
+	}
+	rows, err := executor.QueryIterator(ctx, opName, txn, fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM %s", tempTableName))
+	if err != nil {
+		return errors.Wrapf(err, "fetching data from temporary table %s", tempTableName)
+	}
+	// TODO(ssd): Chunk and memory monitor this. Currently we will issue an insert
+	// per row which is gross.
+	return forEachRow(ctx, rows, func(datums tree.Datums) error {
+		descID, err := rewrittenIDFromDatum(datums[1], rewrites)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, opName, txn,
+			fmt.Sprintf("INSERT INTO system.%s(type, object_id, sub_id, comment) VALUES($1, $2, $3, $4)", systemTableName),
+			datums[0], descID, datums[2], datums[3])
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func databaseRoleSettingsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+	rewrites jobspb.DescRewriteMap,
+) error {
+	opName := systemTableName + "-data-insert"
+	executor := execCfg.InternalExecutor
+	if err := defaultDeleteAllExistingRows(ctx, txn, executor, systemTableName); err != nil {
+		return err
+	}
+	rows, err := executor.QueryIterator(ctx, opName, txn, fmt.Sprintf("SELECT database_id, role_name, settings FROM %s", tempTableName))
+	if err != nil {
+		return errors.Wrapf(err, "fetching data from temporary table %s", tempTableName)
+	}
+	// TODO(ssd): Chunk and memory monitor this. Currently we will issue an insert
+	// per row which is gross.
+	return forEachRow(ctx, rows, func(datums tree.Datums) error {
+		descID, err := rewrittenIDFromDatum(datums[0], rewrites)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, opName, txn,
+			fmt.Sprintf("INSERT INTO system.%s(database_id, role_name, settings) VALUES($1, $2, $3)", systemTableName),
+			descID, datums[1], datums[2])
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func forEachRow(ctx context.Context, rows sqlutil.InternalRows, fn func(tree.Datums) error) error {
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Warningf(ctx, "failed to close rows: %v", err)
+		}
+	}()
+	for {
+		ok, err := rows.Next(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		if err := fn(rows.Cur()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewrittenIDFromDatum(datum tree.Datum, rewrites jobspb.DescRewriteMap) (descpb.ID, error) {
+	var descID descpb.ID
+	if descIDRaw, ok := datum.(*tree.DInt); ok {
+		descID = descpb.ID(*descIDRaw)
+	} else if descIDRaw, ok := datum.(*tree.DOid); ok {
+		descID = descpb.ID(descIDRaw.Oid)
+	} else {
+		return descpb.InvalidID, errors.Errorf("failed to read descriptor id as DInt or DOid (was %T)", datum)
+	}
+	if r, ok := rewrites[descID]; ok {
+		descID = r.ID
+	}
+	return descID, nil
+}
 
 // tenantSettingsTableRestoreFunc restores the system.tenant_settings table. It
 // returns an error when trying to restore a non-empty tenant_settings table
@@ -126,9 +271,10 @@ func tenantSettingsTableRestoreFunc(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
+	rw jobspb.DescRewriteMap,
 ) error {
 	if execCfg.Codec.ForSystemTenant() {
-		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName, rw)
 	}
 
 	if count, err := queryTableRowCount(ctx, execCfg.InternalExecutor, txn, tempTableName); err == nil && count > 0 {
@@ -155,10 +301,13 @@ func queryTableRowCount(
 	return int64(*count), nil
 }
 
-// jobsMigrationFunc resets the progress on schema change jobs, and marks all
-// other jobs as reverting.
+// jobsMigrationFunc marks IMPORT and RESTORE jobs as reverting.
 func jobsMigrationFunc(
-	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, tempTableName string,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	tempTableName string,
+	_ jobspb.DescRewriteMap,
 ) (err error) {
 	executor := execCfg.InternalExecutor
 
@@ -207,7 +356,7 @@ func jobsMigrationFunc(
 		}
 	}
 
-	// Update the status for other jobs.
+	// Update the status of the jobsToRevert.
 	var updateStatusQuery strings.Builder
 	fmt.Fprintf(&updateStatusQuery, "UPDATE %s SET status = $1 WHERE id IN ", tempTableName)
 	fmt.Fprint(&updateStatusQuery, "(")
@@ -233,6 +382,7 @@ func jobsRestoreFunc(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
+	_ jobspb.DescRewriteMap,
 ) error {
 	executor := execCfg.InternalExecutor
 
@@ -254,6 +404,7 @@ func settingsRestoreFunc(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
+	_ jobspb.DescRewriteMap,
 ) error {
 	executor := execCfg.InternalExecutor
 
@@ -289,6 +440,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// The zones table should be restored before the user data so that the range
 		// allocator properly distributes ranges during the restore.
 		restoreBeforeData: true,
+		customRestoreFunc: zoneConfigRestoreFunc,
 	},
 	systemschema.SettingsTable.GetName(): {
 		// The settings table should be restored after all other system tables have
@@ -312,6 +464,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.CommentsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            commentsRestoreFunc,
 	},
 	systemschema.JobsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
@@ -390,6 +543,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.DatabaseRoleSettingsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            databaseRoleSettingsRestoreFunc,
 	},
 	systemschema.TenantUsageTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,

@@ -2481,7 +2481,7 @@ func (r *restoreResumer) restoreSystemTables(
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
-					systemTable.stagingTableName); err != nil {
+					systemTable.stagingTableName, details.DescriptorRewrites); err != nil {
 					return err
 				}
 
@@ -2505,7 +2505,7 @@ func (r *restoreResumer) restoreSystemTables(
 			}
 
 			log.Eventf(ctx, "restoring system table %s", systemTable.systemTableName)
-			err := restoreFunc(ctx, r.execCfg, txn, systemTable.systemTableName, systemTable.stagingTableName)
+			err := restoreFunc(ctx, r.execCfg, txn, systemTable.systemTableName, systemTable.stagingTableName, details.DescriptorRewrites)
 			if err != nil {
 				return errors.Wrapf(err, "restoring system table %s", systemTable.systemTableName)
 			}

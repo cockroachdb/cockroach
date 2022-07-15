@@ -260,91 +260,51 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	// Collect the IDs from all system tables.
-	//
-	// We need the system table IDs to make sure that none of the descriptors in
-	// the backup conflict with system tables.
-	//
-	// TODO(ssd): We could do this in the big transaction below. However, even
-	// there I think there may be a problem if there is a concurrent migration
-	// that is adding a system table between when we look up the the system table
-	// IDs and when we actually create all the rewrites at the end of this
-	// function.
-	systemTableIDs := make(map[descpb.ID]struct{})
-	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		systemTableDescs, err := col.GetAllTableDescriptorsInDatabase(ctx, txn, systemschema.SystemDB.GetID())
-		if err != nil {
-			return err
-		}
-		for _, desc := range systemTableDescs {
-			systemTableIDs[desc.GetID()] = struct{}{}
-		}
-		return nil
-	}); err != nil {
-		return nil, errors.Wrapf(err, "failed to collect system table descriptor IDs")
-	}
-
-	// Table IDs have strict ordering constraints because of how we later
-	// write SSTs.
-	//
-	// Because of this ordering constraint, if we find a conflict between a
-	// descriptor ID in the backup and an existing system table descriptor ID, we
-	// need to then rewrite all descriptors after that conflict. We calculate this
-	// here so that we can avoid using descriptors that are just going to be
-	// rewritten when calculating the maximum ID.
-	var lowestConflictingTableID descpb.ID
-	for tableID, table := range tablesByID {
-		if table.ParentID != systemschema.SystemDB.GetID() {
-			if _, conflicts := systemTableIDs[tableID]; conflicts {
-				if lowestConflictingTableID == 0 || lowestConflictingTableID > tableID {
-					lowestConflictingTableID = tableID
-				}
-			}
-		}
-	}
-
-	var maxDescIDInBackup int64
-	// Include table descriptors that won't be rewritten when calculating the max ID.
-	for _, table := range tablesByID {
-		if int64(table.ID) > maxDescIDInBackup {
-			if lowestConflictingTableID == 0 || lowestConflictingTableID > table.ID {
-				maxDescIDInBackup = int64(table.ID)
-			}
-		}
-	}
-
-	// Include the database descriptors when calculating the max ID.
-	for _, database := range databasesByID {
-		if int64(database.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(database.ID)
-		}
-	}
-
-	// Include the type descriptors when calculating the max ID.
-	for _, typ := range typesByID {
-		if int64(typ.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(typ.ID)
-		}
-	}
-
-	// Include the schema descriptors when calculating the max ID.
-	for _, sc := range schemasByID {
-		if int64(sc.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(sc.ID)
-		}
-	}
-
 	needsNewParentIDs := make(map[string][]descpb.ID)
 
-	// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
-	// in the backup and current max desc ID in the restoring cluster. This generator
-	// keeps produced the next descriptor ID.
-	var tempSysDBID descpb.ID
 	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
-		var err error
 		if descriptorCoverage == tree.AllDescriptors {
+			// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
+			// in the backup and current max desc ID in the restoring cluster. This generator
+			// keeps produced the next descriptor ID.
+			//
+			// TODO(ssd): In theory, if we are rewritting all descriptors in the
+			// backup, there is no need to do this. But, right now we transmit the
+			// temporary system database ID to the Resumer via the descriptor rewrite
+			// map which is keyed off of the IDs in the backup. We assume that it will
+			// be the highest ID in the map.  We can change this by shoving it in a
+			// new field in the relevant proto but I need to think through
+			// mixed-version statement implications of that if we want to backport it.
+			var maxDescIDInBackup int64
+			// Include table descriptors that won't be rewritten when calculating the max ID.
+			for _, table := range tablesByID {
+				if int64(table.ID) > maxDescIDInBackup {
+					maxDescIDInBackup = int64(table.ID)
+				}
+			}
+
+			// Include the database descriptors when calculating the max ID.
+			for _, database := range databasesByID {
+				if int64(database.ID) > maxDescIDInBackup {
+					maxDescIDInBackup = int64(database.ID)
+				}
+			}
+
+			// Include the type descriptors when calculating the max ID.
+			for _, typ := range typesByID {
+				if int64(typ.ID) > maxDescIDInBackup {
+					maxDescIDInBackup = int64(typ.ID)
+				}
+			}
+
+			// Include the schema descriptors when calculating the max ID.
+			for _, sc := range schemasByID {
+				if int64(sc.ID) > maxDescIDInBackup {
+					maxDescIDInBackup = int64(sc.ID)
+				}
+			}
 			// Restore the key which generates descriptor IDs.
-			if err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				v, err := txn.Get(ctx, p.ExecCfg().Codec.DescIDSequenceKey())
 				if err != nil {
 					return err
@@ -367,15 +327,10 @@ func allocateDescriptorRewrites(
 			}); err != nil {
 				return nil, err
 			}
-			tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-			if err != nil {
-				return nil, err
-			}
-		} else if descriptorCoverage == tree.SystemUsers {
-			tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-			if err != nil {
-				return nil, err
-			}
+		}
+		tempSysDBID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return nil, err
 		}
 		// Remap all of the descriptor belonging to system tables to the temp system
 		// DB.
@@ -398,51 +353,6 @@ func allocateDescriptorRewrites(
 				descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 					ParentID:       tempSysDBID,
 					ParentSchemaID: keys.PublicSchemaIDForBackup,
-				}
-			}
-		}
-
-		// When restoring a temporary object, the parent schema which the descriptor
-		// is originally pointing to is never part of the BACKUP. This is because
-		// the "pg_temp" schema in which temporary objects are created is not
-		// represented as a descriptor and thus is not picked up during a full
-		// cluster BACKUP.
-		// To overcome this orphaned schema pointer problem, when restoring a
-		// temporary object we create a "fake" pg_temp schema in temp table's db and
-		// add it to the namespace table.
-		// We then remap the temporary object descriptors to point to this schema.
-		// This allows us to piggy back on the temporary
-		// reconciliation job which looks for "pg_temp" schemas linked to temporary
-		// sessions and properly cleans up the temporary objects in it.
-		haveSynthesizedTempSchema := make(map[descpb.ID]bool)
-		var synthesizedTempSchemaCount int
-		for _, table := range tablesByID {
-			if table.IsTemporary() {
-				if _, ok := haveSynthesizedTempSchema[table.GetParentSchemaID()]; !ok {
-					var synthesizedSchemaID descpb.ID
-					var err error
-					// NB: TemporarySchemaNameForRestorePrefix is a special value that has
-					// been chosen to trick the reconciliation job into performing our
-					// cleanup for us. The reconciliation job strips the "pg_temp" prefix
-					// and parses the remainder of the string into a session ID. It then
-					// checks the session ID against its active sessions, and performs
-					// cleanup on the inactive ones.
-					// We reserve the high bit to be 0 so as to never collide with an
-					// actual session ID as normally the high bit is the hlc.Timestamp at
-					// which the cluster was started.
-					schemaName := sql.TemporarySchemaNameForRestorePrefix +
-						strconv.Itoa(synthesizedTempSchemaCount)
-					synthesizedSchemaID, err = synthesizePGTempSchema(ctx, p, schemaName, table.GetParentID())
-					if err != nil {
-						return nil, err
-					}
-					// Write a schema descriptor rewrite so that we can remap all
-					// temporary table descs which were under the original session
-					// specific pg_temp schema to point to this synthesized schema when we
-					// are performing the table rewrites.
-					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.DescriptorRewrite{ID: synthesizedSchemaID}
-					haveSynthesizedTempSchema[table.GetParentSchemaID()] = true
-					synthesizedTempSchemaCount++
 				}
 			}
 		}
@@ -704,7 +614,6 @@ func allocateDescriptorRewrites(
 				}
 			}
 		}
-
 		return nil
 	}); err != nil {
 		return nil, err
@@ -724,17 +633,11 @@ func allocateDescriptorRewrites(
 	// handle this by chunking the AddSSTable calls more finely in Import, but it
 	// would be a big performance hit.
 	for _, db := range restoreDBs {
-		var newID descpb.ID
-		var err error
 		// NB: Database IDs aren't encoded in keys that we add to SSTs, so we don't
 		// care about the ordering here.
-		if _, conflicts := systemTableIDs[db.GetID()]; descriptorCoverage == tree.AllDescriptors && !conflicts {
-			newID = db.GetID()
-		} else {
-			newID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-			if err != nil {
-				return nil, err
-			}
+		newID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return nil, err
 		}
 
 		descriptorRewrites[db.GetID()] = &jobspb.DescriptorRewrite{ID: newID}
@@ -750,63 +653,81 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	// descriptorsToRemap usually contains all tables that are
-	// being restored.
-	//
-	// In a full cluster restore this should contains
-	//
-	// - the system tables that need to be remapped to the
-	//   temporary table in the temporary system database; and,
-	//
-	// - any user tables with an ID that conflicts IDs with an existing system
-	//   table or has an ID greater than a table that conflicts with an existing
-	//   system table.
-	//
-	// All other tables in a full cluster backup should have the
-	// same ID as they do in the backup.
+	if descriptorCoverage == tree.AllDescriptors {
+		// When restoring a temporary object, the parent schema which the descriptor
+		// is originally pointing to is never part of the BACKUP. This is because
+		// the "pg_temp" schema in which temporary objects are created is not
+		// represented as a descriptor and thus is not picked up during a full
+		// cluster BACKUP.
+		// To overcome this orphaned schema pointer problem, when restoring a
+		// temporary object we create a "fake" pg_temp schema in temp table's db and
+		// add it to the namespace table.
+		// We then remap the temporary object descriptors to point to this schema.
+		// This allows us to piggy back on the temporary
+		// reconciliation job which looks for "pg_temp" schemas linked to temporary
+		// sessions and properly cleans up the temporary objects in it.
+		//
+		// We do this after allocating database ID rewrites because we need to point
+		// the parent ID of the schema to the right database ID.
+		haveSynthesizedTempSchema := make(map[descpb.ID]bool)
+		var synthesizedTempSchemaCount int
+		for _, table := range tablesByID {
+			if table.IsTemporary() {
+				if _, ok := haveSynthesizedTempSchema[table.GetParentSchemaID()]; !ok {
+					var synthesizedSchemaID descpb.ID
+					var err error
+					// NB: TemporarySchemaNameForRestorePrefix is a special value that has
+					// been chosen to trick the reconciliation job into performing our
+					// cleanup for us. The reconciliation job strips the "pg_temp" prefix
+					// and parses the remainder of the string into a session ID. It then
+					// checks the session ID against its active sessions, and performs
+					// cleanup on the inactive ones.
+					// We reserve the high bit to be 0 so as to never collide with an
+					// actual session ID as normally the high bit is the hlc.Timestamp at
+					// which the cluster was started.
+					schemaName := sql.TemporarySchemaNameForRestorePrefix +
+						strconv.Itoa(synthesizedTempSchemaCount)
+					parentID := table.GetParentID()
+					if rw, ok := descriptorRewrites[parentID]; ok {
+						parentID = rw.ID
+					}
+					synthesizedSchemaID, err = synthesizePGTempSchema(ctx, p, schemaName, parentID)
+					if err != nil {
+						return nil, err
+					}
+					// Write a schema descriptor rewrite so that we can remap all
+					// temporary table descs which were under the original session
+					// specific pg_temp schema to point to this synthesized schema when we
+					// are performing the table rewrites.
+					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.DescriptorRewrite{ID: synthesizedSchemaID}
+					haveSynthesizedTempSchema[table.GetParentSchemaID()] = true
+					synthesizedTempSchemaCount++
+				}
+			}
+		}
+	}
+
+	// descriptorsToRemap contains all tables that are being restored.
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
-		if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
-			if table.ParentID == systemschema.SystemDB.GetID() {
-				// This is a system table that should be marked for descriptor creation.
-				descriptorsToRemap = append(descriptorsToRemap, table)
-			} else if lowestConflictingTableID != 0 && table.ID >= lowestConflictingTableID {
-				// This is a user table that has the same ID as an existing system table.
-				descriptorsToRemap = append(descriptorsToRemap, table)
-			} else {
-				// This table does not need to be remapped.
-				descriptorRewrites[table.ID].ID = table.ID
-			}
-		} else {
-			descriptorsToRemap = append(descriptorsToRemap, table)
-		}
+		descriptorsToRemap = append(descriptorsToRemap, table)
 	}
 
 	// Update the remapping information for type descriptors.
 	for _, typ := range typesByID {
-		if descriptorCoverage == tree.AllDescriptors {
-			// The type doesn't need to be remapped.
-			descriptorRewrites[typ.ID].ID = typ.ID
-		} else {
-			// If the type is marked to be remapped to an existing type in the
-			// cluster, then we don't want to generate an ID for it.
-			if !descriptorRewrites[typ.ID].ToExisting {
-				descriptorsToRemap = append(descriptorsToRemap, typ)
-			}
+		// If the type is marked to be remapped to an existing type in the
+		// cluster, then we don't want to generate an ID for it.
+		if !descriptorRewrites[typ.ID].ToExisting {
+			descriptorsToRemap = append(descriptorsToRemap, typ)
 		}
 	}
 
 	// Update remapping information for schema descriptors.
 	for _, sc := range schemasByID {
-		if descriptorCoverage == tree.AllDescriptors {
-			// The schema doesn't need to be remapped.
-			descriptorRewrites[sc.ID].ID = sc.ID
-		} else {
-			// If this schema isn't being remapped to an existing schema, then
-			// request to generate an ID for it.
-			if !descriptorRewrites[sc.ID].ToExisting {
-				descriptorsToRemap = append(descriptorsToRemap, sc)
-			}
+		// If this schema isn't being remapped to an existing schema, then
+		// request to generate an ID for it.
+		if !descriptorRewrites[sc.ID].ToExisting {
+			descriptorsToRemap = append(descriptorsToRemap, sc)
 		}
 	}
 
