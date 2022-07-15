@@ -82,6 +82,9 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// If so, then we disallow renaming, otherwise we allow it.
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
+			if err := p.maybeFailOnDroppingFunction(ctx, dependent.ID); err != nil {
+				return nil, err
+			}
 			return nil, p.dependentViewError(
 				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
 				tableDesc.ParentID, dependent.ID, "rename",

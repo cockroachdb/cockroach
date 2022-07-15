@@ -154,12 +154,12 @@ func TestInterner(t *testing.T) {
 		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
 
-	viewDep1 := opt.ViewDep{}
-	viewDep2 := opt.ViewDep{}
-	viewDeps1 := opt.ViewDeps{viewDep1}
-	viewDeps2 := opt.ViewDeps{viewDep1}
-	viewDeps3 := opt.ViewDeps{viewDep2}
-	viewDeps4 := opt.ViewDeps{viewDep1, viewDep2}
+	viewDep1 := opt.SchemaDep{}
+	viewDep2 := opt.SchemaDep{}
+	viewDeps1 := opt.SchemaDeps{viewDep1}
+	viewDeps2 := opt.SchemaDeps{viewDep1}
+	viewDeps3 := opt.SchemaDeps{viewDep2}
+	viewDeps4 := opt.SchemaDeps{viewDep1, viewDep2}
 
 	invSpan1 := inverted.MakeSingleValSpan([]byte("abc"))
 	invSpan2 := inverted.MakeSingleValSpan([]byte("abc"))
@@ -455,14 +455,14 @@ func TestInterner(t *testing.T) {
 			{val1: cat.UniqueOrdinals{1, 2}, val2: cat.UniqueOrdinals{1, 2, 3}, equal: false},
 		}},
 
-		{hashFn: in.hasher.HashViewDeps, eqFn: in.hasher.IsViewDepsEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashSchemaDeps, eqFn: in.hasher.IsSchemaDepsEqual, variations: []testVariation{
 			{val1: viewDeps1, val2: viewDeps1, equal: true},
 			{val1: viewDeps1, val2: viewDeps2, equal: false},
 			{val1: viewDeps1, val2: viewDeps3, equal: false},
 			{val1: viewDeps1, val2: viewDeps4, equal: false},
 		}},
 
-		{hashFn: in.hasher.HashViewTypeDeps, eqFn: in.hasher.IsViewTypeDepsEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashSchemaTypeDeps, eqFn: in.hasher.IsSchemaTypeDepsEqual, variations: []testVariation{
 			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
 			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
 			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},

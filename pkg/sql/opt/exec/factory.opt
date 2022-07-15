@@ -615,9 +615,21 @@ define CreateView {
     Materialized bool
     ViewQuery string
     Columns colinfo.ResultColumns
-    deps opt.ViewDeps
-    typeDeps opt.ViewTypeDeps
+    deps opt.SchemaDeps
+    typeDeps opt.SchemaTypeDeps
     withData bool
+}
+
+define CreateFunction {
+    Schema cat.Schema
+    FuncName *cat.FunctionName
+    Replace bool
+    FuncArgs tree.FuncArgs
+    ReturnType tree.FuncReturnType
+    Options tree.FunctionOptions
+    FuncBody tree.FunctionBodyStr
+    Deps opt.SchemaDeps
+    TypeDeps opt.SchemaTypeDeps
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
