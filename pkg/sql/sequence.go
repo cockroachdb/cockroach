@@ -833,7 +833,7 @@ func maybeAddSequenceDependencies(
 	}
 
 	var seqDescs []*tabledesc.Mutable
-	seqNameToID := make(map[string]int64)
+	seqNameToID := make(map[string]descpb.ID)
 	for _, seqIdentifier := range seqIdentifiers {
 		seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 		if err != nil {
@@ -850,7 +850,7 @@ func maybeAddSequenceDependencies(
 			)
 
 		}
-		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+		seqNameToID[seqIdentifier.SeqName] = seqDesc.ID
 
 		// If we had already modified this Sequence as part of this transaction,
 		// we only want to modify a single instance of it instead of overwriting it.

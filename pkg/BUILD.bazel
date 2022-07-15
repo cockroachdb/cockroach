@@ -257,6 +257,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/seqexpr:seqexpr_disallowed_imports_test",
     "//pkg/sql/catalog/seqexpr:seqexpr_test",
     "//pkg/sql/catalog/systemschema_test:systemschema_test_test",
+    "//pkg/sql/catalog/tabledesc:tabledesc_disallowed_imports_test",
     "//pkg/sql/catalog/tabledesc:tabledesc_test",
     "//pkg/sql/catalog/typedesc:typedesc_test",
     "//pkg/sql/catalog:catalog_disallowed_imports_test",
