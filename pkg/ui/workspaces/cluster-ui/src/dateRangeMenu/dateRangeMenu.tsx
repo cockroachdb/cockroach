@@ -107,7 +107,7 @@ export function DateRangeMenu({
       <div className={cx("return-to-preset-options-wrapper")}>
         <a onClick={onReturnToPresetOptionsClick}>
           <Icon type={"arrow-left"} className={cx("icon")} />
-          <Text textType={TextTypes.BodyStrong}>Preset Time Ranges</Text>
+          <Text textType={TextTypes.BodyStrong}>Preset time intervals</Text>
         </a>
       </div>
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
