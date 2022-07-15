@@ -205,7 +205,7 @@ describe("<TimeScaleDropdown> component", function () {
     // When a preset option is selected, the dropdown should open to other preset options.
     userEvent.click(getByText("Past 10 Minutes"));
     getByText("Past 30 Minutes");
-    getByText("Past 1 Hour");
+    getByText("Past Hour");
 
     // Change to a custom selection
     userEvent.click(
@@ -227,7 +227,7 @@ describe("<TimeScaleDropdown> component", function () {
     // Clicking "Preset time intervals" should bring the dropdown back to the preset options.
     userEvent.click(getByText("Preset time intervals"));
     getByText("Past 30 Minutes");
-    getByText("Past 1 Hour");
+    getByText("Past Hour");
   });
 });
 
@@ -235,7 +235,7 @@ const initialEntries = [
   "#/metrics/overview/cluster", // Past 10 minutes
   `#/metrics/overview/cluster/cluster?start=${moment()
     .subtract(1, "hour")
-    .format("X")}&end=${moment().format("X")}`, // Past 1 hour
+    .format("X")}&end=${moment().format("X")}`, // Past hour
   `#/metrics/overview/cluster/cluster?start=${moment()
     .subtract(6, "hours")
     .format("X")}&end=${moment().format("X")}`, // Past 6 hours
