@@ -1,0 +1,42 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (ddl) ALTER TABLE db.public.tbl ADD COLUMN j INT;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8; 
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    └── ABSENT → PUBLIC      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+ │         └── 5 Mutation operations
+ │              ├── MakeAddedColumnDeleteOnly {"Column":{"ColumnID":2,"PgAttributeNum":2,"TableID":106}}
+ │              ├── LogEvent {"TargetStatus":2}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":106}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
+ │              └── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         └── 2 Mutation operations
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      ├── Stage 1 of 2 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── DELETE_ONLY → WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+      │    └── 3 Mutation operations
+      │         ├── MakeAddedColumnDeleteAndWriteOnly {"ColumnID":2,"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+      └── Stage 2 of 2 in PostCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── WRITE_ONLY → PUBLIC Column:{DescID: 106, ColumnID: 2}
+           └── 4 Mutation operations
+                ├── MakeColumnPublic {"ColumnID":2,"TableID":106}
+                ├── RefreshStats {"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

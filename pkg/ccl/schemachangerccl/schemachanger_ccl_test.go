@@ -34,9 +34,9 @@ func newCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
 }
 
 func sharedTestdata(t *testing.T) string {
-	testdataDir := "../../sql/schemachanger/testdata/"
+	testdataDir := "../../sql/schemachanger/testdata/end_to_end"
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/schemachanger/testdata/")
+		runfile, err := bazel.Runfile("pkg/sql/schemachanger/testdata/end_to_end")
 		if err != nil {
 			t.Fatal(err)
 		}
