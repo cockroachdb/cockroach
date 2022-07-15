@@ -770,6 +770,21 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		diff := sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
 			Indent:       "  ",
 			CompactLevel: 3,
+		}, func(i interface{}) {
+			sctestutils.RewriteEmbeddedIntoParent(i)
+			if m, ok := i.(map[string]interface{}); ok {
+				ds, exists := m["declarativeSchemaChangerState"].(map[string]interface{})
+				if !exists {
+					return
+				}
+				for _, k := range []string{
+					"currentStatuses", "targetRanks", "targets",
+				} {
+					if _, kExists := ds[k]; kExists {
+						ds[k] = "<redacted>"
+					}
+				}
+			}
 		})
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), diff)
 		b.s.uncommitted.UpsertDescriptorEntry(desc)

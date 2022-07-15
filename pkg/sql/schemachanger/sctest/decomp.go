@@ -113,7 +113,10 @@ func marshalResult(
 			}
 		}
 		elts = append(elts, e)
-		yaml, err := sctestutils.ProtoToYAML(e, protoreflect.FmtFlags{EmitDefaults: true})
+		yaml, err := sctestutils.ProtoToYAML(
+			e, protoreflect.FmtFlags{EmitDefaults: true},
+			sctestutils.RewriteEmbeddedIntoParent,
+		)
 		require.NoError(t, err)
 		str[e] = yaml
 	}
