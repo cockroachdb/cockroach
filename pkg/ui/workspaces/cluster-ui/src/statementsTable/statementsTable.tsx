@@ -17,7 +17,12 @@ import {
   StatementSummary,
   StatementStatistics,
   Count,
+  TimestampToNumber,
+  TimestampToMoment,
 } from "src/util";
+import {
+  DATE_WITH_SECONDS_FORMAT_24_UTC,
+} from "src/util/format";
 import {
   countBarChart,
   bytesReadBarChart,
@@ -180,6 +185,13 @@ function makeCommonColumns(
       },
       sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
       hideIfTenant: true,
+    },
+    {
+      name: "lastExecTimestamp",
+      title: statisticsTableTitles.lastExecTimestamp(statType),
+      cell: (stmt: AggregateStatistics) => TimestampToMoment(stmt.stats.last_exec_timestamp).format(DATE_WITH_SECONDS_FORMAT_24_UTC),
+      sort: (stmt: AggregateStatistics) => TimestampToNumber(stmt.stats.last_exec_timestamp),
+      showByDefault: false,
     },
   ];
 }
