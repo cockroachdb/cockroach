@@ -46,9 +46,16 @@ func GetAllRevisions(
 		return nil, pErr.GoError()
 	}
 
+	// TODO (msbutler): would it be faster to use a PebbleMultiMemSSTIterator to scan these non
+	// interleaved files all at once?
 	var res []VersionedValues
 	for _, file := range resp.(*roachpb.ExportResponse).Files {
-		iter, err := storage.NewMemSSTIterator(file.SST, false)
+		iterOpts := storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsOnly,
+			LowerBound: file.Span.Key,
+			UpperBound: file.Span.EndKey,
+		}
+		iter, err := storage.NewPebbleMemSSTIterator(file.SST, true, iterOpts)
 		if err != nil {
 			return nil, err
 		}
