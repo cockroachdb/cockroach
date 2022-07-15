@@ -164,9 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
-	// of span that RPCs get on the server depending on the tracing context.
-	TraceIDDoesntImplyStructuredRecording
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
@@ -414,10 +411,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     TraceIDDoesntImplyStructuredRecording,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
 	},
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
