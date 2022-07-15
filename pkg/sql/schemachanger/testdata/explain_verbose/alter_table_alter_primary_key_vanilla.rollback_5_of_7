@@ -1,0 +1,249 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
+EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›); 
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 12 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │     MERGE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   │     MERGE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 14 Mutation operations
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 5
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 4
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 9 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 4 elements transitioning toward ABSENT
+        │   │
+        │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+        │   │   │     rule: "secondary index columns removed before removing the index"
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
+        │   │   │     rule: "secondary index columns removed before removing the index"
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}
+        │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+        │             rule: "dependents removed before index"
+        │
+        └── • 11 Mutation operations
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 3
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 104
+            │
+            ├── • LogEvent
+            │     Element:
+            │       SecondaryIndex:
+            │         indexId: 4
+            │         isUnique: true
+            │         sourceIndexId: 1
+            │         tableId: 104
+            │         temporaryIndexId: 5
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TargetStatus: 1
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 4
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 4
+            │     TableID: 104
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 5
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 5
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

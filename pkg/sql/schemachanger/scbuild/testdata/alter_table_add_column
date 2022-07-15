@@ -145,3 +145,47 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   {columnId: 3, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}}
 - [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 105}
+
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL)
+----
+
+build
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
+----
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 106}
+- [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 106}
+- [[IndexName:{DescID: 106, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: t_pkey, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 2, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 2, kind: STORED, tableId: 106}
+- [[PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 3}
+- [[IndexName:{DescID: 106, Name: t_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: t_pkey, tableId: 106}
+- [[TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 1, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 3, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 3, kind: STORED, tableId: 106}
+- [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 5}
+- [[TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 5, isUnique: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 4, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 5, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 4, kind: KEY_SUFFIX, tableId: 106}
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 5, kind: KEY_SUFFIX, tableId: 106}
+- [[IndexName:{DescID: 106, Name: t_i_key, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, name: t_i_key, tableId: 106}
