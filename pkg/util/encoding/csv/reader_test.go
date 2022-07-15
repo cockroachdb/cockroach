@@ -26,7 +26,7 @@ func TestRead(t *testing.T) {
 	tests := []struct {
 		Name   string
 		Input  string
-		Output [][]string
+		Output [][]Record
 		Error  error
 
 		// These fields are copied into the Reader
@@ -41,15 +41,15 @@ func TestRead(t *testing.T) {
 	}{{
 		Name:   "Simple",
 		Input:  "a,b,c\n",
-		Output: [][]string{{"a", "b", "c"}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}}},
 	}, {
 		Name:   "CRLF",
 		Input:  "a,b\r\nc,d\r\n",
-		Output: [][]string{{"a", "b"}, {"c", "d"}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}}, {Record{"c", false}, Record{"d", false}}},
 	}, {
 		Name:   "BareCR",
 		Input:  "a,b\rc,d\r\n",
-		Output: [][]string{{"a", "b\rc", "d"}},
+		Output: [][]Record{{Record{"a", false}, Record{"b\rc", false}, Record{"d", false}}},
 	}, {
 		Name: "RFC4180test",
 		Input: `#field1,field2,field3
@@ -58,22 +58,22 @@ b","ccc"
 "a,a","b""bb","ccc"
 zzz,yyy,xxx
 `,
-		Output: [][]string{
-			{"#field1", "field2", "field3"},
-			{"aaa", "bb\nb", "ccc"},
-			{"a,a", `b"bb`, "ccc"},
-			{"zzz", "yyy", "xxx"},
+		Output: [][]Record{
+			{Record{"#field1", false}, Record{"field2", false}, Record{"field3", false}},
+			{Record{"aaa", true}, Record{"bb\nb", true}, Record{"ccc", true}},
+			{Record{"a,a", true}, Record{`b"bb`, true}, Record{"ccc", true}},
+			{Record{"zzz", false}, Record{"yyy", false}, Record{"xxx", false}},
 		},
 		UseFieldsPerRecord: true,
 		FieldsPerRecord:    0,
 	}, {
 		Name:   "NoEOLTest",
 		Input:  "a,b,c",
-		Output: [][]string{{"a", "b", "c"}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}}},
 	}, {
 		Name:   "Semicolon",
 		Input:  "a;b;c\n",
-		Output: [][]string{{"a", "b", "c"}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}}},
 		Comma:  ';',
 	}, {
 		Name: "MultiLine",
@@ -81,55 +81,58 @@ zzz,yyy,xxx
 line","one line","three
 line
 field"`,
-		Output: [][]string{{"two\nline", "one line", "three\nline\nfield"}},
+		Output: [][]Record{{Record{"two\nline", true}, Record{"one line", true}, Record{"three\nline\nfield", true}}},
 	}, {
 		Name:  "BlankLine",
 		Input: "a,b,c\n\nd,e,f\n\n",
-		Output: [][]string{
-			{"a", "b", "c"},
-			{"d", "e", "f"},
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}, Record{"c", false}},
+			{Record{"d", false}, Record{"e", false}, Record{"f", false}},
 		},
 	}, {
 		Name:  "BlankLineFieldCount",
 		Input: "a,b,c\n\nd,e,f\n\n",
-		Output: [][]string{
-			{"a", "b", "c"},
-			{"d", "e", "f"},
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}, Record{"c", false}},
+			{Record{"d", false}, Record{"e", false}, Record{"f", false}},
 		},
 		UseFieldsPerRecord: true,
 		FieldsPerRecord:    0,
 	}, {
 		Name:             "TrimSpace",
 		Input:            " a,  b,   c\n",
-		Output:           [][]string{{"a", "b", "c"}},
+		Output:           [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}}},
 		TrimLeadingSpace: true,
 	}, {
 		Name:   "LeadingSpace",
 		Input:  " a,  b,   c\n",
-		Output: [][]string{{" a", "  b", "   c"}},
+		Output: [][]Record{{Record{" a", false}, Record{"  b", false}, Record{"   c", false}}},
 	}, {
 		Name:    "Comment",
 		Input:   "#1,2,3\na,b,c\n#comment",
-		Output:  [][]string{{"a", "b", "c"}},
+		Output:  [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}}},
 		Comment: '#',
 	}, {
-		Name:   "NoComment",
-		Input:  "#1,2,3\na,b,c",
-		Output: [][]string{{"#1", "2", "3"}, {"a", "b", "c"}},
+		Name:  "NoComment",
+		Input: "#1,2,3\na,b,c",
+		Output: [][]Record{
+			{Record{"#1", false}, Record{"2", false}, Record{"3", false}},
+			{Record{"a", false}, Record{"b", false}, Record{"c", false}},
+		},
 	}, {
 		Name:       "LazyQuotes",
 		Input:      `a "word","1"2",a","b`,
-		Output:     [][]string{{`a "word"`, `1"2`, `a"`, `b`}},
+		Output:     [][]Record{{Record{`a "word"`, false}, Record{`1"2`, true}, Record{`a"`, false}, Record{`b`, true}}},
 		LazyQuotes: true,
 	}, {
 		Name:       "BareQuotes",
 		Input:      `a "word","1"2",a"`,
-		Output:     [][]string{{`a "word"`, `1"2`, `a"`}},
+		Output:     [][]Record{{Record{`a "word"`, false}, Record{`1"2`, true}, Record{`a"`, false}}},
 		LazyQuotes: true,
 	}, {
 		Name:       "BareDoubleQuotes",
 		Input:      `a""b,c`,
-		Output:     [][]string{{`a""b`, `c`}},
+		Output:     [][]Record{{Record{`a""b`, false}, Record{`c`, false}}},
 		LazyQuotes: true,
 	}, {
 		Name:  "BadDoubleQuotes",
@@ -138,7 +141,7 @@ field"`,
 	}, {
 		Name:             "TrimQuote",
 		Input:            ` "a"," b",c`,
-		Output:           [][]string{{"a", " b", "c"}},
+		Output:           [][]Record{{Record{"a", true}, Record{" b", true}, Record{"c", false}}},
 		TrimLeadingSpace: true,
 	}, {
 		Name:  "BadBareQuote",
@@ -165,36 +168,42 @@ field"`,
 		UseFieldsPerRecord: true,
 		FieldsPerRecord:    2,
 	}, {
-		Name:   "FieldCount",
-		Input:  "a,b,c\nd,e",
-		Output: [][]string{{"a", "b", "c"}, {"d", "e"}},
+		Name:  "FieldCount",
+		Input: "a,b,c\nd,e",
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}, Record{"c", false}},
+			{Record{"d", false}, Record{"e", false}},
+		},
 	}, {
 		Name:   "TrailingCommaEOF",
 		Input:  "a,b,c,",
-		Output: [][]string{{"a", "b", "c", ""}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}, Record{"", false}}},
 	}, {
 		Name:   "TrailingCommaEOL",
 		Input:  "a,b,c,\n",
-		Output: [][]string{{"a", "b", "c", ""}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}, Record{"", false}}},
 	}, {
 		Name:             "TrailingCommaSpaceEOF",
 		Input:            "a,b,c, ",
-		Output:           [][]string{{"a", "b", "c", ""}},
+		Output:           [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}, Record{"", false}}},
 		TrimLeadingSpace: true,
 	}, {
 		Name:             "TrailingCommaSpaceEOL",
 		Input:            "a,b,c, \n",
-		Output:           [][]string{{"a", "b", "c", ""}},
+		Output:           [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}, Record{"", false}}},
 		TrimLeadingSpace: true,
 	}, {
-		Name:             "TrailingCommaLine3",
-		Input:            "a,b,c\nd,e,f\ng,hi,",
-		Output:           [][]string{{"a", "b", "c"}, {"d", "e", "f"}, {"g", "hi", ""}},
+		Name:  "TrailingCommaLine3",
+		Input: "a,b,c\nd,e,f\ng,hi,",
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}, Record{"c", false}},
+			{Record{"d", false}, Record{"e", false}, Record{"f", false}},
+			{Record{"g", false}, Record{"hi", false}, Record{"", false}}},
 		TrimLeadingSpace: true,
 	}, {
 		Name:   "NotTrailingComma3",
 		Input:  "a,b,c, \n",
-		Output: [][]string{{"a", "b", "c", " "}},
+		Output: [][]Record{{Record{"a", false}, Record{"b", false}, Record{"c", false}, Record{" ", false}}},
 	}, {
 		Name: "CommaFieldTest",
 		Input: `x,y,z,w
@@ -208,32 +217,32 @@ x,,,
 "x","","",""
 "","","",""
 `,
-		Output: [][]string{
-			{"x", "y", "z", "w"},
-			{"x", "y", "z", ""},
-			{"x", "y", "", ""},
-			{"x", "", "", ""},
-			{"", "", "", ""},
-			{"x", "y", "z", "w"},
-			{"x", "y", "z", ""},
-			{"x", "y", "", ""},
-			{"x", "", "", ""},
-			{"", "", "", ""},
+		Output: [][]Record{
+			{Record{"x", false}, Record{"y", false}, Record{"z", false}, Record{"w", false}},
+			{Record{"x", false}, Record{"y", false}, Record{"z", false}, Record{"", false}},
+			{Record{"x", false}, Record{"y", false}, Record{"", false}, Record{"", false}},
+			{Record{"x", false}, Record{"", false}, Record{"", false}, Record{"", false}},
+			{Record{"", false}, Record{"", false}, Record{"", false}, Record{"", false}},
+			{Record{"x", true}, Record{"y", true}, Record{"z", true}, Record{"w", true}},
+			{Record{"x", true}, Record{"y", true}, Record{"z", true}, Record{"", true}},
+			{Record{"x", true}, Record{"y", true}, Record{"", true}, Record{"", true}},
+			{Record{"x", true}, Record{"", true}, Record{"", true}, Record{"", true}},
+			{Record{"", true}, Record{"", true}, Record{"", true}, Record{"", true}},
 		},
 	}, {
 		Name:  "TrailingCommaIneffective1",
 		Input: "a,b,\nc,d,e",
-		Output: [][]string{
-			{"a", "b", ""},
-			{"c", "d", "e"},
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}, Record{"", false}},
+			{Record{"c", false}, Record{"d", false}, Record{"e", false}},
 		},
 		TrimLeadingSpace: true,
 	}, {
 		Name:  "ReadAllReuseRecord",
 		Input: "a,b\nc,d",
-		Output: [][]string{
-			{"a", "b"},
-			{"c", "d"},
+		Output: [][]Record{
+			{Record{"a", false}, Record{"b", false}},
+			{Record{"c", false}, Record{"d", false}},
 		},
 		ReuseRecord: true,
 	}, {
@@ -247,21 +256,21 @@ x,,,
 	}, {
 		Name:  "CRLFInQuotedField", // Issue 21201
 		Input: "\"Hello\r\nHi\"",
-		Output: [][]string{
-			{"Hello\r\nHi"},
+		Output: [][]Record{
+			{Record{"Hello\r\nHi", true}},
 		},
 	}, {
 		Name:   "BinaryBlobField", // Issue 19410
 		Input:  "x09\x41\xb4\x1c,aktau",
-		Output: [][]string{{"x09A\xb4\x1c", "aktau"}},
+		Output: [][]Record{{Record{"x09A\xb4\x1c", false}, Record{"aktau", false}}},
 	}, {
 		Name:   "TrailingCR",
 		Input:  "field1,field2\r",
-		Output: [][]string{{"field1", "field2"}},
+		Output: [][]Record{{Record{"field1", false}, Record{"field2", false}}},
 	}, {
 		Name:   "QuotedTrailingCR",
 		Input:  "\"field\"\r",
-		Output: [][]string{{"field"}},
+		Output: [][]Record{{Record{"field", true}}},
 	}, {
 		Name:  "QuotedTrailingCRCR",
 		Input: "\"field\"\r\r",
@@ -269,42 +278,46 @@ x,,,
 	}, {
 		Name:   "FieldCR",
 		Input:  "field\rfield\r",
-		Output: [][]string{{"field\rfield"}},
+		Output: [][]Record{{Record{"field\rfield", false}}},
 	}, {
 		Name:   "FieldCRCR",
 		Input:  "field\r\rfield\r\r",
-		Output: [][]string{{"field\r\rfield\r"}},
+		Output: [][]Record{{Record{"field\r\rfield\r", false}}},
 	}, {
 		Name:   "FieldCRCRLF",
 		Input:  "field\r\r\nfield\r\r\n",
-		Output: [][]string{{"field\r"}, {"field\r"}},
+		Output: [][]Record{{Record{"field\r", false}}, {Record{"field\r", false}}},
 	}, {
 		Name:   "FieldCRCRLFCR",
 		Input:  "field\r\r\n\rfield\r\r\n\r",
-		Output: [][]string{{"field\r"}, {"\rfield\r"}},
+		Output: [][]Record{{Record{"field\r", false}}, {Record{"\rfield\r", false}}},
 	}, {
-		Name:   "FieldCRCRLFCRCR",
-		Input:  "field\r\r\n\r\rfield\r\r\n\r\r",
-		Output: [][]string{{"field\r"}, {"\r\rfield\r"}, {"\r"}},
+		Name:  "FieldCRCRLFCRCR",
+		Input: "field\r\r\n\r\rfield\r\r\n\r\r",
+		Output: [][]Record{
+			{Record{"field\r", false}},
+			{Record{"\r\rfield\r", false}},
+			{Record{"\r", false}},
+		},
 	}, {
 		Name:  "MultiFieldCRCRLFCRCR",
 		Input: "field1,field2\r\r\n\r\rfield1,field2\r\r\n\r\r,",
-		Output: [][]string{
-			{"field1", "field2\r"},
-			{"\r\rfield1", "field2\r"},
-			{"\r\r", ""},
+		Output: [][]Record{
+			{Record{"field1", false}, Record{"field2\r", false}},
+			{Record{"\r\rfield1", false}, Record{"field2\r", false}},
+			{Record{"\r\r", false}, Record{"", false}},
 		},
 	}, {
 		Name:             "NonASCIICommaAndComment",
 		Input:            "a£b,c£ \td,e\n€ comment\n",
-		Output:           [][]string{{"a", "b,c", "d,e"}},
+		Output:           [][]Record{{Record{"a", false}, Record{"b,c", false}, Record{"d,e", false}}},
 		TrimLeadingSpace: true,
 		Comma:            '£',
 		Comment:          '€',
 	}, {
 		Name:    "NonASCIICommaAndCommentWithQuotes",
 		Input:   "a€\"  b,\"€ c\nλ comment\n",
-		Output:  [][]string{{"a", "  b,", " c"}},
+		Output:  [][]Record{{Record{"a", false}, Record{"  b,", true}, Record{" c", false}}},
 		Comma:   '€',
 		Comment: 'λ',
 	}, {
@@ -312,18 +325,18 @@ x,,,
 		// This tests that the parser doesn't confuse such characters.
 		Name:    "NonASCIICommaConfusion",
 		Input:   "\"abθcd\"λefθgh",
-		Output:  [][]string{{"abθcd", "efθgh"}},
+		Output:  [][]Record{{Record{"abθcd", true}, Record{"efθgh", false}}},
 		Comma:   'λ',
 		Comment: '€',
 	}, {
 		Name:    "NonASCIICommentConfusion",
 		Input:   "λ\nλ\nθ\nλ\n",
-		Output:  [][]string{{"λ"}, {"λ"}, {"λ"}},
+		Output:  [][]Record{{Record{"λ", false}}, {Record{"λ", false}}, {Record{"λ", false}}},
 		Comment: 'θ',
 	}, {
 		Name:   "QuotedFieldMultipleLF",
 		Input:  "\"\n\n\n\n\"",
-		Output: [][]string{{"\n\n\n\n"}},
+		Output: [][]Record{{Record{"\n\n\n\n", true}}},
 	}, {
 		Name:  "MultipleCRLF",
 		Input: "\r\n\r\n\r\n\r\n",
@@ -332,7 +345,7 @@ x,,,
 		// in the read buffer, so we should test the code to handle that condition.
 		Name:    "HugeLines",
 		Input:   strings.Repeat("#ignore\n", 10000) + strings.Repeat("@", 5000) + "," + strings.Repeat("*", 5000),
-		Output:  [][]string{{strings.Repeat("@", 5000), strings.Repeat("*", 5000)}},
+		Output:  [][]Record{{Record{strings.Repeat("@", 5000), false}, Record{strings.Repeat("*", 5000), false}}},
 		Comment: '#',
 	}, {
 		Name:  "QuoteWithTrailingCRLF",
@@ -341,16 +354,16 @@ x,,,
 	}, {
 		Name:       "LazyQuoteWithTrailingCRLF",
 		Input:      "\"foo\"bar\"\r\n",
-		Output:     [][]string{{`foo"bar`}},
+		Output:     [][]Record{{Record{`foo"bar`, true}}},
 		LazyQuotes: true,
 	}, {
 		Name:   "DoubleQuoteWithTrailingCRLF",
 		Input:  "\"foo\"\"bar\"\r\n",
-		Output: [][]string{{`foo"bar`}},
+		Output: [][]Record{{Record{`foo"bar`, true}}},
 	}, {
 		Name:   "EvenQuotes",
 		Input:  `""""""""`,
-		Output: [][]string{{`"""`}},
+		Output: [][]Record{{Record{`"""`, true}}},
 	}, {
 		Name:  "OddQuotes",
 		Input: `"""""""`,
@@ -358,7 +371,7 @@ x,,,
 	}, {
 		Name:       "LazyOddQuotes",
 		Input:      `"""""""`,
-		Output:     [][]string{{`"""`}},
+		Output:     [][]Record{{Record{`"""`, true}}},
 		LazyQuotes: true,
 	}, {
 		Name:  "BadComma1",
@@ -393,18 +406,18 @@ x,,,
 		Name:   "EscapeText",
 		Escape: 'x',
 		Input:  `"x"",",","xxx"",x,"xxxx,"` + "\n",
-		Output: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}},
+		Output: [][]Record{{Record{`"`, true}, Record{`,`, true}, Record{`x"`, true}, Record{`x`, false}, Record{`xx,`, true}}},
 	}, {
 		Name:   "EscapeTextWithComma",
 		Escape: 'x',
 		Comma:  'x',
 		Input:  `"x""x,x"xxx""x"xx"x"xxxx,"` + "\n",
-		Output: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}},
+		Output: [][]Record{{Record{`"`, true}, Record{`,`, false}, Record{`x"`, true}, Record{`x`, true}, Record{`xx,`, true}}},
 	}, {
 		Name:   "EscapeTextWithNonEscapingCharacter",
 		Escape: 'x',
 		Input:  `"xxx,xa",",x,"` + "\n",
-		Output: [][]string{{`xx,xa`, `,x,`}},
+		Output: [][]Record{{Record{`xx,xa`, true}, Record{`,x,`, true}}},
 	}, {
 		Name:   "EscapeTextWithComma",
 		Escape: 'x',
