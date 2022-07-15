@@ -192,11 +192,24 @@ func TestParseTSQuery(t *testing.T) {
 		{`!(a | (b & c) <-> (d <0> !x | y))`, `!( 'a' | ( 'b' & 'c' ) <-> ( 'd' <0> !'x' | 'y' ) )`},
 	}
 	for _, tc := range tcs {
-		t.Log(tc.input)
-		query, err := ParseTSQuery(tc.input)
-		assert.NoError(t, err)
-		actual := query.String()
-		assert.Equal(t, tc.expectedStr, actual)
+		t.Run(tc.input, func(t *testing.T) {
+			query, err := ParseTSQuery(tc.input)
+			assert.NoError(t, err)
+			actual := query.String()
+			assert.Equal(t, tc.expectedStr, actual)
+
+			// Test serialization.
+			serialized, err := EncodeTSQuery(nil, query)
+			require.NoError(t, err)
+			roundtripped, err := DecodeTSQuery(serialized)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedStr, roundtripped.String())
+
+			serialized = EncodeTSQueryPGBinary(nil, query)
+			roundtripped, err = DecodeTSQueryPGBinary(serialized)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedStr, roundtripped.String())
+		})
 	}
 
 	t.Run("ComparePG", func(t *testing.T) {
