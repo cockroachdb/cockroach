@@ -1754,3 +1754,27 @@ SHOW client_encoding -- normalized!
 SHOW client_encoding -- fully parenthesized
 SHOW client_encoding -- literals removed
 SHOW client_encoding -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION foo
+----
+SHOW CREATE FUNCTION foo
+SHOW CREATE FUNCTION foo -- fully parenthesized
+SHOW CREATE FUNCTION foo -- literals removed
+SHOW CREATE FUNCTION _ -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION db.foo
+----
+SHOW CREATE FUNCTION db.foo
+SHOW CREATE FUNCTION db.foo -- fully parenthesized
+SHOW CREATE FUNCTION db.foo -- literals removed
+SHOW CREATE FUNCTION _._ -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION db.sch.foo
+----
+SHOW CREATE FUNCTION db.sch.foo
+SHOW CREATE FUNCTION db.sch.foo -- fully parenthesized
+SHOW CREATE FUNCTION db.sch.foo -- literals removed
+SHOW CREATE FUNCTION _._._ -- identifiers removed
