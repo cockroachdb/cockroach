@@ -14,63 +14,88 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// AllBuiltinNames is an array containing all the built-in function
+// orderedStrings sorts a slice of strings lazily
+// for better performance.
+type orderedStrings struct {
+	strings []string
+	sorted  bool
+}
+
+func (o *orderedStrings) add(s string) {
+	if o.sorted {
+		o.insert(s)
+	} else {
+		o.strings = append(o.strings, s)
+	}
+}
+
+func (o *orderedStrings) sort() {
+	if !o.sorted {
+		sort.Strings(o.strings)
+	}
+	o.sorted = true
+}
+
+func (o *orderedStrings) insert(s string) {
+	i := sort.SearchStrings(o.strings, s)
+	o.strings = append(o.strings, "")
+	copy(o.strings[i+1:], o.strings[i:])
+	o.strings[i] = s
+}
+
+var allBuiltinNames orderedStrings
+
+// AllBuiltinNames returns a slice containing all the built-in function
 // names, sorted in alphabetical order. This can be used for a
 // deterministic walk through the Builtins map.
-var AllBuiltinNames []string
+func AllBuiltinNames() []string {
+	allBuiltinNames.sort()
+	return allBuiltinNames.strings
+}
 
-// AllAggregateBuiltinNames is an array containing the subset of
+var allAggregateBuiltinNames orderedStrings
+
+// AllAggregateBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to aggregate functions.
-var AllAggregateBuiltinNames []string
+func AllAggregateBuiltinNames() []string {
+	allAggregateBuiltinNames.sort()
+	return allAggregateBuiltinNames.strings
+}
 
-// AllWindowBuiltinNames is an array containing the subset of
+var allWindowBuiltinNames orderedStrings
+
+// AllWindowBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to window functions.
-var AllWindowBuiltinNames []string
+func AllWindowBuiltinNames() []string {
+	allWindowBuiltinNames.sort()
+	return allWindowBuiltinNames.strings
+}
 
 func init() {
-	initRegularBuiltins()
-	initAggregateBuiltins()
-	initWindowBuiltins()
-	initGeneratorBuiltins()
-	initGeoBuiltins()
-	initTrigramBuiltins()
-	initPGBuiltins()
-	initMathBuiltins()
-	initOverlapsBuiltins()
-	initReplicationBuiltins()
-	initPgcryptoBuiltins()
-	initProbeRangesBuiltins()
-
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
-	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
 		tree.FunDefs[name] = fDef
 		if !fDef.ShouldDocument() {
 			// Avoid listing help for undocumented functions.
 			return
 		}
-		AllBuiltinNames = append(AllBuiltinNames, name)
+		allBuiltinNames.add(name)
 		if props.Class == tree.AggregateClass {
-			AllAggregateBuiltinNames = append(AllAggregateBuiltinNames, name)
+			allAggregateBuiltinNames.add(name)
 		} else if props.Class == tree.WindowClass {
-			AllWindowBuiltinNames = append(AllWindowBuiltinNames, name)
+			allWindowBuiltinNames.add(name)
 		}
 	})
-
-	sort.Strings(AllBuiltinNames)
-	sort.Strings(AllAggregateBuiltinNames)
-	sort.Strings(AllWindowBuiltinNames)
 }
 
 func registerBuiltin(name string, def builtinDefinition) {
-	for i, overload := range def.overloads {
+	for _, overload := range def.overloads {
 		fnCount := 0
 		if overload.Fn != nil {
 			fnCount++
@@ -94,10 +119,6 @@ func registerBuiltin(name string, def builtinDefinition) {
 					"must be set on overloads; (found %d)",
 				name, fnCount,
 			))
-		}
-		c := sqltelemetry.BuiltinCounter(name, overload.Signature(false))
-		def.overloads[i].OnTypeCheck = func() {
-			telemetry.Inc(c)
 		}
 	}
 	if def.props.ShouldDocument() && def.props.Category == "" {

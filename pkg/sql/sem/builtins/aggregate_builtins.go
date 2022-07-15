@@ -37,7 +37,7 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-func initAggregateBuiltins() {
+func init() {
 	// Add all aggregates to the builtins map after a few sanity checks.
 	for k, v := range aggregates {
 

@@ -45,17 +45,17 @@ func init() {
 			}
 
 			if err := ioutil.WriteFile(
-				filepath.Join(outDir, "functions.md"), generateFunctions(builtins.AllBuiltinNames, true), 0644,
+				filepath.Join(outDir, "functions.md"), generateFunctions(builtins.AllBuiltinNames(), true), 0644,
 			); err != nil {
 				return err
 			}
 			if err := ioutil.WriteFile(
-				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.AllAggregateBuiltinNames, false), 0644,
+				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.AllAggregateBuiltinNames(), false), 0644,
 			); err != nil {
 				return err
 			}
 			if err := ioutil.WriteFile(
-				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames(), false), 0644,
 			); err != nil {
 				return err
 			}

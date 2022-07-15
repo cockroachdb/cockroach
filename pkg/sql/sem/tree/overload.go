@@ -134,7 +134,7 @@ type Overload struct {
 	SQLFn SQLFnOverload
 
 	// OnTypeCheck is incremented every time this overload is type checked.
-	OnTypeCheck func()
+	OnTypeCheck *func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.

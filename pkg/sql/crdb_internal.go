@@ -2412,7 +2412,7 @@ CREATE TABLE crdb_internal.builtin_functions (
   details   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for _, name := range builtins.AllBuiltinNames {
+		for _, name := range builtins.AllBuiltinNames() {
 			props, overloads := builtinsregistry.GetBuiltinProperties(name)
 			for _, f := range overloads {
 				if err := addRow(

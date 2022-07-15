@@ -12,13 +12,16 @@ import (
 	"bytes"
 	"context"
 	gojson "encoding/json"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -194,4 +197,41 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		}
 	}
 	return gojson.Marshal(jsonEntries)
+}
+
+var placeholderCtx = eventContext{topic: "topic"}
+
+// EncodeAsJSONChangefeedWithFlags implements the crdb_internal.to_json_as_changefeed_with_flags
+// builtin.
+func EncodeAsJSONChangefeedWithFlags(r cdcevent.Row, flags ...string) ([]byte, error) {
+	optsMap := make(map[string]string, len(flags))
+	for _, f := range flags {
+		split := strings.SplitN(f, "=", 2)
+		k := split[0]
+		var v string
+		if len(split) == 2 {
+			v = split[1]
+		}
+		optsMap[k] = v
+	}
+	opts, err := changefeedbase.MakeStatementOptions(optsMap).GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
+	if err != nil {
+		return nil, err
+	}
+	return e.EncodeValue(context.TODO(), placeholderCtx, r, cdcevent.Row{})
+
+}
+
+func init() {
+	utilccl.RegisterArgType(cdcevent.Row{}, types.AnyTuple, func(d tree.Datum) interface{} {
+		return cdcevent.MakeRowFromTuple(tree.MustBeDTuple(d))
+	})
+
+	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
+		"Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes. Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.",
+		EncodeAsJSONChangefeedWithFlags)
 }
