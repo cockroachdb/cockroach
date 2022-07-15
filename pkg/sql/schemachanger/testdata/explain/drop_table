@@ -1,0 +1,84 @@
+/* setup */
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+CREATE TABLE db.sc.t (k INT, v STRING);
+CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
+
+/* test */
+EXPLAIN (ddl) DROP TABLE db.sc.t;
+----
+Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›; 
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 7 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → OFFLINE    Table:{DescID: 107}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 1}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 2}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967294}
+ │         │    └── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+ │         └── 1 Mutation operation
+ │              └── MarkDescriptorAsOffline {"DescID":107,"Reason":"DROP TABLE db.sc..."}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         └── 2 Mutation operations
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 28 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 107}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 107, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 107, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     Table:{DescID: 107}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 107, ReferencedDescID: 106}
+      │    │    ├── PUBLIC     → ABSENT      ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 107, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 107, Name: k, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 107, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 107, Name: v, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 107, ColumnID: 3}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+      │    │    ├── PUBLIC     → ABSENT      ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 107, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 107, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
+      │    │    ├── VALIDATED  → DELETE_ONLY PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+      │    │    └── PUBLIC     → ABSENT      IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
+      │    └── 6 Mutation operations
+      │         ├── MarkDescriptorAsDropped {"DescID":107}
+      │         ├── RemoveAllTableComments {"TableID":107}
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 7 elements transitioning toward ABSENT
+           │    ├── DROPPED     → ABSENT Table:{DescID: 107}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 2}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 3}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 4294967295}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 4294967294}
+           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+           └── 9 Mutation operations
+                ├── LogEvent {"TargetStatus":1}
+                ├── CreateGcJobForTable {"TableID":107}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":107}
+                ├── MakeColumnAbsent {"ColumnID":2,"TableID":107}
+                ├── MakeColumnAbsent {"ColumnID":3,"TableID":107}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":107}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

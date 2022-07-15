@@ -13,9 +13,12 @@
 package sctest
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -70,11 +74,13 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+
 		// Create a test cluster.
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
 		defer cleanup()
 		numTestStatementsObserved := 0
+		var setupStmts parser.Statements
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
@@ -91,6 +97,7 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 				a := prettyNamespaceDump(t, tdb)
 				execStmts()
 				b := prettyNamespaceDump(t, tdb)
+				setupStmts = stmts
 				return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
 
 			case "test":
@@ -131,7 +138,8 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 					sctestdeps.WithStatements(stmtSqls...),
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 				)
-				execStatementWithTestDeps(ctx, t, deps, stmts...)
+				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
+				writeExplainDiagrams(t, path, setupStmts, stmts, stmtStates)
 				return replaceNonDeterministicOutput(deps.SideEffectLog())
 
 			default:
@@ -139,6 +147,79 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 			}
 		})
 	})
+}
+
+// Subdirectories of the testdata directory containing test files in which to
+// write explain diagrams.
+const (
+	explainDirName        = "explain"
+	explainVerboseDirName = "explain_verbose"
+)
+
+// writeExplainDiagrams writes out the compact and verbose explain diagrams
+// for the statements and plans from the test.
+func writeExplainDiagrams(
+	t *testing.T, path string, setupStmts, stmts parser.Statements, states []scpb.CurrentState,
+) {
+	makeSharedPrefix := func() []byte {
+		var prefixBuf bytes.Buffer
+		prefixBuf.WriteString("/* setup */\n")
+		for _, stmt := range setupStmts {
+			prefixBuf.WriteString(stmt.SQL)
+			prefixBuf.WriteString(";\n")
+		}
+		prefixBuf.WriteString("\n/* test */\n")
+		return prefixBuf.Bytes()
+	}
+	prefix := makeSharedPrefix()
+	makeStatementPrefix := func(i int) []byte {
+		var stmtBuf bytes.Buffer
+		stmtBuf.Write(prefix)
+		for j := 0; j < i; j++ {
+			_, _ = fmt.Fprintf(&stmtBuf, "%s;\n", stmts[j].SQL)
+		}
+		return stmtBuf.Bytes()
+	}
+	testDataDir := filepath.Dir(filepath.Dir(path))
+	mkdir := func(name string) string {
+		dir := filepath.Join(testDataDir, name)
+		require.NoError(t, os.MkdirAll(dir, 0777))
+		return dir
+	}
+	explainDir := mkdir(explainDirName)
+	explainVerboseDir := mkdir(explainVerboseDirName)
+	baseName := filepath.Base(path)
+	makeFile := func(dir string, i int) *os.File {
+		name := baseName
+		if len(stmts) > 1 {
+			name = fmt.Sprintf("%s.%d", name, i)
+		}
+		explainFile, err := os.Create(filepath.Join(dir, name))
+		require.NoError(t, err)
+		_, err = explainFile.Write(makeStatementPrefix(i))
+		require.NoError(t, err)
+		return explainFile
+	}
+	writePlan := func(dir, tag string, i int, fn func() (string, error)) {
+		file := makeFile(dir, i)
+		_, err := fmt.Fprintf(file, "EXPLAIN (%s) %s;\n----\n", tag, stmts[i].SQL)
+		require.NoError(t, err)
+		out, err := fn()
+		require.NoError(t, err)
+		_, err = file.WriteString(out)
+		require.NoError(t, err)
+		require.NoError(t, file.Close())
+	}
+	for i, stmt := range stmts {
+		pl, err := scplan.MakePlan(states[i], scplan.Params{
+			InRollback:                 false,
+			ExecutionPhase:             scop.StatementPhase,
+			SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		})
+		require.NoErrorf(t, err, "%d: %s", i, stmt.SQL)
+		writePlan(explainDir, "ddl", i, pl.ExplainCompact)
+		writePlan(explainVerboseDir, "ddl, verbose", i, pl.ExplainVerbose)
+	}
 }
 
 // scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
@@ -157,7 +238,7 @@ func replaceNonDeterministicOutput(text string) string {
 // schema changer with testing dependencies injected.
 func execStatementWithTestDeps(
 	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmts ...parser.Statement,
-) {
+) (stateAfterBuildingEachStatement []scpb.CurrentState) {
 	var jobID jobspb.JobID
 	var state scpb.CurrentState
 	var err error
@@ -169,6 +250,7 @@ func execStatementWithTestDeps(
 		for _, stmt := range stmts {
 			state, err = scbuild.Build(ctx, deps, state, stmt.AST)
 			require.NoError(t, err, "error in builder")
+			stateAfterBuildingEachStatement = append(stateAfterBuildingEachStatement, state)
 			state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
 			require.NoError(t, err, "error in %s", s.Phase())
 		}
@@ -191,6 +273,7 @@ func execStatementWithTestDeps(
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
 	}
+	return stateAfterBuildingEachStatement
 }
 
 // prettyNamespaceDump prints the state of the namespace table, minus

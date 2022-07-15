@@ -19,22 +19,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func endToEndPath(t *testing.T) string {
+	return testutils.TestDataPath(t, "end_to_end")
+}
+
 func TestSchemaChangerSideEffects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
+	sctest.EndToEndSideEffects(t, endToEndPath(t), sctest.SingleNodeCluster)
 }
 
 func TestRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.Rollback(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
+	sctest.Rollback(t, endToEndPath(t), sctest.SingleNodeCluster)
 }
 
 func TestPause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.Pause(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
+	sctest.Pause(t, endToEndPath(t), sctest.SingleNodeCluster)
 }
