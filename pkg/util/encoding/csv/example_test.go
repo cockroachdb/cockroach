@@ -46,10 +46,10 @@ Ken,Thompson,ken
 		fmt.Println(record)
 	}
 	// Output:
-	// [first_name last_name username]
-	// [Rob Pike rob]
-	// [Ken Thompson ken]
-	// [Robert Griesemer gri]
+	// [{first_name false} {last_name false} {username false}]
+	// [{Rob true} {Pike true} {rob false}]
+	// [{Ken false} {Thompson false} {ken false}]
+	// [{Robert true} {Griesemer true} {gri true}]
 }
 
 // This example shows how csv.Reader can be configured to handle other
@@ -71,9 +71,14 @@ Ken;Thompson;ken
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	fmt.Print(records)
+	for _, record := range records {
+		fmt.Println(record)
+	}
 	// Output:
-	// [[first_name last_name username] [Rob Pike rob] [Ken Thompson ken] [Robert Griesemer gri]]
+	// [{first_name false} {last_name false} {username false}]
+	// [{Rob true} {Pike true} {rob false}]
+	// [{Ken false} {Thompson false} {ken false}]
+	// [{Robert true} {Griesemer true} {gri true}]
 }
 
 func ExampleReader_ReadAll() {
@@ -90,9 +95,14 @@ Ken,Thompson,ken
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	fmt.Print(records)
+	for _, record := range records {
+		fmt.Println(record)
+	}
 	// Output:
-	// [[first_name last_name username] [Rob Pike rob] [Ken Thompson ken] [Robert Griesemer gri]]
+	// [{first_name false} {last_name false} {username false}]
+	// [{Rob true} {Pike true} {rob false}]
+	// [{Ken false} {Thompson false} {ken false}]
+	// [{Robert true} {Griesemer true} {gri true}]
 }
 
 func ExampleWriter() {

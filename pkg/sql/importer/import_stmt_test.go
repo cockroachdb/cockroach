@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3695,7 +3696,7 @@ func BenchmarkUserfileImport(b *testing.B) {
 type csvBenchmarkStream struct {
 	n    int
 	pos  int
-	data [][]string
+	data [][]csv.Record
 }
 
 func (s *csvBenchmarkStream) Progress() float32 {
@@ -3727,9 +3728,31 @@ func (s *csvBenchmarkStream) Read(buf []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		return copy(buf, strings.Join(r.([]string), "\t")+"\n"), nil
+		row := r.([]csv.Record)
+		if len(row) == 0 {
+			return copy(buf, "\n"), nil
+		}
+		var b strings.Builder
+		b.WriteString(row[0].String())
+		for _, v := range row[1:] {
+			b.WriteString("\t")
+			b.WriteString(v.String())
+		}
+		return copy(buf, b.String()+"\n"), nil
 	}
 	return 0, io.EOF
+}
+
+func toRecords(input [][]string) [][]csv.Record {
+	records := make([][]csv.Record, len(input))
+	for i := range input {
+		row := make([]csv.Record, len(input[i]))
+		for j := range input[i] {
+			row[j] = csv.Record{Quoted: false, Val: input[i][j]}
+		}
+		records[i] = row
+	}
+	return records
 }
 
 var _ importRowProducer = &csvBenchmarkStream{}
@@ -3819,7 +3842,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	producer := &csvBenchmarkStream{
 		n:    b.N,
 		pos:  0,
-		data: tpchLineItemDataRows,
+		data: toRecords(tpchLineItemDataRows),
 	}
 	consumer := &csvRowConsumer{importCtx: importCtx, opts: &roachpb.CSVOptions{}}
 	b.ResetTimer()
@@ -4765,7 +4788,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	producer := &csvBenchmarkStream{
 		n:    b.N,
 		pos:  0,
-		data: tpchLineItemDataRows,
+		data: toRecords(tpchLineItemDataRows),
 	}
 
 	delimited := &fileReader{Reader: producer}
@@ -4868,7 +4891,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	producer := &csvBenchmarkStream{
 		n:    b.N,
 		pos:  0,
-		data: tpchLineItemDataRows,
+		data: toRecords(tpchLineItemDataRows),
 	}
 
 	pgCopyInput := &fileReader{Reader: producer}
