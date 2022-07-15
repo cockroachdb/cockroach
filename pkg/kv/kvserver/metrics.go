@@ -907,6 +907,20 @@ difficult to meaningfully interpret this metric.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaRaftFollowerPaused = metric.Metadata{
+		Name: "admission.raft.paused_replicas",
+		Help: `Number of followers (i.e. Replicas) to which replication is currently paused to help them recover from I/O overload.
+
+Such Replicas will be ignored for the purposes of proposal quota, and will not
+receive replication traffic. They are essentially treated as offline for the
+purpose of replication. This serves as a crude form of admission control.
+
+The count is emitted by the leaseholder of each range.
+.`,
+		Measurement: "Followers",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica queue metrics.
 	metaMVCCGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.gc.process.success",
@@ -1619,6 +1633,8 @@ type StoreMetrics struct {
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
 
+	RaftPausedFollowerCount *metric.Gauge
+
 	RaftEnqueuedPending            *metric.Gauge
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
@@ -2094,6 +2110,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
+
+		RaftPausedFollowerCount: metric.NewGauge(metaRaftFollowerPaused),
 
 		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
 

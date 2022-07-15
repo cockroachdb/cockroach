@@ -1,0 +1,24 @@
+# Start out in a situation in which s3 is overloaded. The quorum (1,2) is ahead
+# of the min live index, so we can afford pausing replication to s3.
+run voters=(1@100,2@80,3@60) overloaded=(3) min-live-match-index=60
+----
+[3]
+
+# We'll also pause s3 if it's out of the quota pool window.
+run voters=(1@100,2@80,3@60) overloaded=(3) min-live-match-index=59
+----
+[3]
+
+# s3 quickly recovers while s2 becomes overloaded. However, s3 hasn't caught up
+# yet, so we don't count it towards quorum yet, meaning that we will need to
+# continue replicating to s2 despite it being overloaded, until s3 considered
+# caught up.
+run voters=(1@100,2@90,3@69) overloaded=(2) min-live-match-index=70
+----
+[]
+
+# s3 has caught up to the min-live-match-index of 70, so we can now pause
+# replication to s2.
+run voters=(1@100,2@90,3@70) overloaded=(2) min-live-match-index=70
+----
+[2]

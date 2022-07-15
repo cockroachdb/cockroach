@@ -565,6 +565,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Paused Followers",
+				Metrics: []string{
+					"admission.raft.paused_replicas",
+				},
+			},
+			{
 				Title: "Operations",
 				Metrics: []string{
 					"range.adds",
