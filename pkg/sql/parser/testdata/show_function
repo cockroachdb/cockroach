@@ -1,0 +1,23 @@
+parse
+SHOW FUNCTION foo
+----
+SHOW FUNCTION foo
+SHOW FUNCTION (foo) -- fully parenthesized
+SHOW FUNCTION foo -- literals removed
+SHOW FUNCTION _ -- identifiers removed
+
+parse
+SHOW FUNCTION db.foo
+----
+SHOW FUNCTION db.foo
+SHOW FUNCTION (db.foo) -- fully parenthesized
+SHOW FUNCTION db.foo -- literals removed
+SHOW FUNCTION _._ -- identifiers removed
+
+parse
+SHOW FUNCTION db.sch.foo
+----
+SHOW FUNCTION db.sch.foo
+SHOW FUNCTION (db.sch.foo) -- fully parenthesized
+SHOW FUNCTION db.sch.foo -- literals removed
+SHOW FUNCTION _._._ -- identifiers removed

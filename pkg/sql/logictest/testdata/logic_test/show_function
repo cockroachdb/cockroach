@@ -1,0 +1,2 @@
+statement error this statement is not yet supported
+SHOW FUNCTION lower
