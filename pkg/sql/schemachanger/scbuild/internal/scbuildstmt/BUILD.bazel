@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_table.go",
         "alter_table_add_column.go",
+        "alter_table_alter_primary_key.go",
         "comment_on.go",
         "create_index.go",
         "dependencies.go",
@@ -23,6 +24,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
