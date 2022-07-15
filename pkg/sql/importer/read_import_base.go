@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -724,7 +725,11 @@ func (p *parallelImporter) importWorker(
 
 			rowIndex := int64(timestamp) + rowNum
 			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex); err != nil {
-				return newImportRowError(err, fmt.Sprintf("%v", record), rowNum)
+				s := fmt.Sprintf("%v", record)
+				if r, ok := record.([]csv.Record); ok {
+					s = strRecord(r, ',')
+				}
+				return newImportRowError(err, s, rowNum)
 			}
 		}
 	}
