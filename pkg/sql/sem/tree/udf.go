@@ -34,6 +34,8 @@ func (f *FunctionName) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&f.ObjectName)
 }
 
+func (f *FunctionName) String() string { return AsString(f) }
+
 // CreateFunction represents a CREATE FUNCTION statement.
 type CreateFunction struct {
 	IsProcedure bool
@@ -112,7 +114,7 @@ type FunctionOption interface {
 
 func (FunctionNullInputBehavior) functionOption() {}
 func (FunctionVolatility) functionOption()        {}
-func (FunctionLeakProof) functionOption()         {}
+func (FunctionLeakproof) functionOption()         {}
 func (FunctionBodyStr) functionOption()           {}
 func (FunctionLanguage) functionOption()          {}
 
@@ -121,7 +123,8 @@ type FunctionNullInputBehavior int
 
 const (
 	// FunctionCalledOnNullInput indicates that the function will be given the
-	// chance to execute when presented with NULL input.
+	// chance to execute when presented with NULL input. This is the default if
+	// no null input behavior is specified.
 	FunctionCalledOnNullInput FunctionNullInputBehavior = iota
 	// FunctionReturnsNullOnNullInput indicates that the function will result in
 	// NULL given any NULL parameter.
@@ -148,11 +151,12 @@ func (node FunctionNullInputBehavior) Format(ctx *FmtCtx) {
 type FunctionVolatility int
 
 const (
-	// FunctionVolatile see volatility.Volatile
+	// FunctionVolatile represents volatility.Volatile. This is the default
+	// volatility if none is provided.
 	FunctionVolatile FunctionVolatility = iota
-	// FunctionImmutable see volatility.Immutable
+	// FunctionImmutable represents volatility.Immutable.
 	FunctionImmutable
-	// FunctionStable see volatility.Stable
+	// FunctionStable represents volatility.Stable.
 	FunctionStable
 )
 
@@ -170,11 +174,15 @@ func (node FunctionVolatility) Format(ctx *FmtCtx) {
 	}
 }
 
-// FunctionLeakProof indicates whether if a UDF is leakproof or not.
-type FunctionLeakProof bool
+// FunctionLeakproof indicates whether if a UDF is leakproof or not. The default
+// is NOT LEAKPROOF if no leakproof option is provided. LEAKPROOF can only be
+// used with the IMMUTABLE volatility because we currently conflated LEAKPROOF
+// as a volatility equal to IMMUTABLE+LEAKPROOF. Postgres allows
+// STABLE+LEAKPROOF functions.
+type FunctionLeakproof bool
 
 // Format implements the NodeFormatter interface.
-func (node FunctionLeakProof) Format(ctx *FmtCtx) {
+func (node FunctionLeakproof) Format(ctx *FmtCtx) {
 	if !node {
 		ctx.WriteString("NOT ")
 	}

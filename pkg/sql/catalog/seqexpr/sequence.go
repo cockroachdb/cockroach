@@ -54,6 +54,8 @@ func GetSequenceFromFunc(
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
+	// TODO(mgartner): Plumb a function resolver here, or determine that the
+	// function should have already been resolved.
 	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return nil, err
