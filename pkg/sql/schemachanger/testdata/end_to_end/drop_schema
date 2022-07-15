@@ -57,77 +57,15 @@ upsert descriptor #106
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - OFFLINE
-  +    - PUBLIC
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
   +        statement: DROP SCHEMA db.sc
   +        statementTag: DROP SCHEMA
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    - 4
-  +    - 5
-  +    targets:
-  +    - elementProto:
-  +        namespace:
-  +          databaseId: 104
-  +          descriptorId: 106
-  +          name: sc
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        owner:
-  +          descriptorId: 106
-  +          owner: root
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 106
-  +          privileges: 2
-  +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 106
-  +          privileges: 2
-  +          userName: root
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        schema:
-  +          schemaId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        schemaParent:
-  +          parentDatabaseId: 104
-  +          schemaId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      id: 106
   -  modificationTime: {}
   +  modificationTime:
@@ -164,24 +102,7 @@ upsert descriptor #104
   +  version: "4"
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - OFFLINE
-  -    - PUBLIC
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - DROPPED
-  +    - ABSENT
-       jobId: "1"
-       relevantStatements:
-  ...
-         targetStatus: ABSENT
+       targets: <redacted>
      id: 106
   -  modificationTime:
   -    wallTime: "1640995200000000001"

@@ -1,0 +1,73 @@
+/* setup */
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multi_region_test_db.public.table_regional_by_table (
+  a INT PRIMARY KEY
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
+
+/* test */
+EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE;
+----
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE; 
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 5 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → OFFLINE    Table:{DescID: 108}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
+ │         │    └── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+ │         └── 1 Mutation operation
+ │              └── MarkDescriptorAsOffline {"DescID":108,"Reason":"DROP TABLE multi..."}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         └── 3 Mutation operations
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 20 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC     → ABSENT      Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
+      │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 108}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 108, Name: admin}
+      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 108, Name: root}
+      │    │    ├── OFFLINE    → DROPPED     Table:{DescID: 108}
+      │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 108, ReferencedDescID: 106}
+      │    │    ├── PUBLIC     → ABSENT      TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 105}
+      │    │    ├── PUBLIC     → ABSENT      ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 108, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 108, Name: a, ColumnID: 1}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+      │    │    ├── VALIDATED  → DELETE_ONLY PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+      │    │    └── PUBLIC     → ABSENT      IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+      │    └── 7 Mutation operations
+      │         ├── MarkDescriptorAsDropped {"DescID":108}
+      │         ├── RemoveAllTableComments {"TableID":108}
+      │         ├── RemoveBackReferenceInTypes {"BackReferencedDescID":108}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":106}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 5 elements transitioning toward ABSENT
+           │    ├── DROPPED     → ABSENT Table:{DescID: 108}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 1}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967295}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967294}
+           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+           └── 8 Mutation operations
+                ├── LogEvent {"TargetStatus":1}
+                ├── CreateGcJobForTable {"TableID":108}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":108}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":108}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

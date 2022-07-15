@@ -1,0 +1,272 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON t(j) USING HASH;
+
+/* test */
+EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
+----
+• Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE; 
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 4 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 3}
+│       │   │     PUBLIC → WRITE_ONLY
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+│       │   │         rule: "column dependents removed after column no longer public"
+│       │   │
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │     PUBLIC → VALIDATED
+│       │   │
+│       │   └── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │             rule: "index no longer public before dependents removed"
+│       │
+│       └── • 5 Mutation operations
+│           │
+│           ├── • MakeDroppedColumnDeleteAndWriteOnly
+│           │     ColumnID: 3
+│           │     TableID: 104
+│           │
+│           ├── • LogEvent
+│           │     Element:
+│           │       Column:
+│           │         columnId: 3
+│           │         isHidden: true
+│           │         pgAttributeNum: 3
+│           │         tableId: 104
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+│           │       StatementTag: DROP INDEX
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
+│           │     TargetStatus: 1
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 3
+│           │     Name: crdb_internal_column_3_name_placeholder
+│           │     TableID: 104
+│           │
+│           ├── • MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+│           │     IndexID: 2
+│           │     TableID: 104
+│           │
+│           └── • SetIndexName
+│                 IndexID: 2
+│                 Name: crdb_internal_index_2_name_placeholder
+│                 TableID: 104
+│
+├── • PreCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       └── • 2 Mutation operations
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 104
+│                 JobID: 1
+│                 NonCancelable: true
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops pending
+│                 Statements:
+│                 - statement: DROP INDEX idx CASCADE
+│                   redactedstatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+│                   statementtag: DROP INDEX
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 7 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • Column:{DescID: 104, ColumnID: 3}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │     VALIDATED → DELETE_ONLY
+    │   │   │
+    │   │   ├── • CheckConstraint:{DescID: 104, ConstraintID: 4}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 4}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 9 Mutation operations
+    │       │
+    │       ├── • MakeDroppedColumnDeleteOnly
+    │       │     ColumnID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveCheckConstraint
+    │       │     ConstraintID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • NotImplemented
+    │       │     ElementType: scpb.ConstraintName
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 3 elements transitioning toward ABSENT
+        │   │
+        │   ├── • Column:{DescID: 104, ColumnID: 3}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+        │   │         rule: "dependents removed before column"
+        │   │         rule: "column type removed right before column when not dropping relation"
+        │   │
+        │   ├── • ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+        │   │         rule: "column dependents removed after column no longer public"
+        │   │
+        │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+        │       │     rule: "secondary index columns removed before removing the index"
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+        │       │     rule: "secondary index columns removed before removing the index"
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │       │     rule: "secondary index columns removed before removing the index"
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
+        │             rule: "dependents removed before index"
+        │
+        └── • 6 Mutation operations
+            │
+            ├── • LogEvent
+            │     Element:
+            │       SecondaryIndex:
+            │         indexId: 2
+            │         isCreatedExplicitly: true
+            │         sharding:
+            │           columnNames:
+            │           - j
+            │           isSharded: true
+            │           name: crdb_internal_j_shard_16
+            │           shardBuckets: 16
+            │         tableId: 104
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+            │       StatementTag: DROP INDEX
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TargetStatus: 1
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Statement: DROP INDEX defaultdb.public.t@idx CASCADE
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • MakeColumnAbsent
+            │     ColumnID: 3
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+            │       StatementTag: DROP INDEX
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

@@ -110,115 +110,15 @@ upsert descriptor #104
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - WRITE_ONLY
-  +    - ABSENT
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - VALIDATED
-  +    - ABSENT
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
   +        statement: DROP INDEX idx CASCADE
   +        statementTag: DROP INDEX
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    - 4
-  +    - 5
-  +    - 6
-  +    - 7
-  +    targets:
-  +    - elementProto:
-  +        column:
-  +          columnId: 3
-  +          isInaccessible: true
-  +          pgAttributeNum: 3
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        columnName:
-  +          columnId: 3
-  +          name: crdb_internal_idx_expr
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        columnType:
-  +          columnId: 3
-  +          computeExpr:
-  +            expr: lower(j)
-  +            referencedColumnIds:
-  +            - 2
-  +          isNullable: true
-  +          isVirtual: true
-  +          tableId: 104
-  +          type:
-  +            family: StringFamily
-  +            oid: 25
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 3
-  +          indexId: 2
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 2
-  +          kind: KEY_SUFFIX
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        secondaryIndexPartial:
-  +          expr: i > 0:::INT8
-  +          indexId: 2
-  +          referencedColumnIds:
-  +          - 1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        secondaryIndex:
-  +          indexId: 2
-  +          isCreatedExplicitly: true
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: idx
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -241,22 +141,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #104
-  ...
-         userName: root
-       currentStatuses:
-  -    - WRITE_ONLY
-  +    - DELETE_ONLY
-       - ABSENT
-       - PUBLIC
-  +    - ABSENT
-  +    - ABSENT
-       - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - VALIDATED
-  +    - DELETE_ONLY
-       - ABSENT
-       jobId: "1"
   ...
      id: 104
      indexes: []
@@ -295,115 +179,15 @@ upsert descriptor #104
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - DELETE_ONLY
-  -    - ABSENT
-  -    - PUBLIC
-  -    - ABSENT
-  -    - ABSENT
-  -    - PUBLIC
-  -    - DELETE_ONLY
-  -    - ABSENT
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
   -        statement: DROP INDEX idx CASCADE
   -        statementTag: DROP INDEX
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    targets:
-  -    - elementProto:
-  -        column:
-  -          columnId: 3
-  -          isInaccessible: true
-  -          pgAttributeNum: 3
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        columnName:
-  -          columnId: 3
-  -          name: crdb_internal_idx_expr
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        columnType:
-  -          columnId: 3
-  -          computeExpr:
-  -            expr: lower(j)
-  -            referencedColumnIds:
-  -            - 2
-  -          isNullable: true
-  -          isVirtual: true
-  -          tableId: 104
-  -          type:
-  -            family: StringFamily
-  -            oid: 25
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 3
-  -          indexId: 2
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 2
-  -          kind: KEY_SUFFIX
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        secondaryIndexPartial:
-  -          expr: i > 0:::INT8
-  -          indexId: 2
-  -          referencedColumnIds:
-  -          - 1
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        secondaryIndex:
-  -          indexId: 2
-  -          isCreatedExplicitly: true
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 2
-  -          name: idx
-  -          tableId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...
