@@ -18,12 +18,19 @@ import {
 } from "./plansTable";
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
+import { SortSetting } from "../../sortedtable";
 
 interface PlanDetailsProps {
   plans: PlanHashStats[];
+  sortSetting: SortSetting;
+  onChangeSortSetting: (ss: SortSetting) => void;
 }
 
-export function PlanDetails({ plans }: PlanDetailsProps): React.ReactElement {
+export function PlanDetails({
+  plans,
+  sortSetting,
+  onChangeSortSetting,
+}: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const handleDetails = (plan: PlanHashStats): void => {
     setPlan(plan);
@@ -35,13 +42,20 @@ export function PlanDetails({ plans }: PlanDetailsProps): React.ReactElement {
   if (plan) {
     return renderExplainPlan(plan, backToPlanTable);
   } else {
-    return renderPlanTable(plans, handleDetails);
+    return renderPlanTable(
+      plans,
+      handleDetails,
+      sortSetting,
+      onChangeSortSetting,
+    );
   }
 }
 
 function renderPlanTable(
   plans: PlanHashStats[],
   handleDetails: (plan: PlanHashStats) => void,
+  sortSetting: SortSetting,
+  onChangeSortSetting: (ss: SortSetting) => void,
 ): React.ReactElement {
   const columns = makeExplainPlanColumns(handleDetails);
   return (
@@ -49,6 +63,8 @@ function renderPlanTable(
       columns={columns}
       data={plans}
       className="statements-table"
+      sortSetting={sortSetting}
+      onChangeSortSetting={onChangeSortSetting}
     />
   );
 }
