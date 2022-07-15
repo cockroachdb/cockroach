@@ -124,6 +124,7 @@ func InitDefaultPrivilegesForRole(
 				RoleHasAllPrivilegesOnSequences: true,
 				RoleHasAllPrivilegesOnSchemas:   true,
 				RoleHasAllPrivilegesOnTypes:     true,
+				RoleHasAllPrivilegesOnFunctions: true,
 			},
 		}
 	} else {
