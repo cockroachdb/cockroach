@@ -644,7 +644,12 @@ func (b *SSTBatcher) addSSTable(
 	updatesLastRange bool,
 ) error {
 	sendStart := timeutil.Now()
-	iter, err := storage.NewMemSSTIterator(sstBytes, true)
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+	iter, err := storage.NewPebbleMemSSTIterator(sstBytes, true, iterOpts)
 	if err != nil {
 		return err
 	}
