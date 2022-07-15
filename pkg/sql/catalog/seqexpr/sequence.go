@@ -18,11 +18,14 @@ package seqexpr
 import (
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // SeqIdentifier wraps together different ways of identifying a sequence.
@@ -43,7 +46,7 @@ func (si *SeqIdentifier) IsByID() bool {
 // a sequence name or an ID), wrapped in the SeqIdentifier type.
 // Returns the identifier of the sequence or nil if no sequence was found.
 //
-// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
+// `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
 func GetSequenceFromFunc(
 	funcExpr *tree.FuncExpr,
 	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
@@ -131,7 +134,7 @@ func getSequenceIdentifier(expr tree.Expr) *SeqIdentifier {
 // identifiers are found. The identifier is wrapped in a SeqIdentifier.
 // e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
 //
-// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
+// `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
 func GetUsedSequences(
 	defaultExpr tree.Expr,
 	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
@@ -163,10 +166,10 @@ func GetUsedSequences(
 // any sequence names in the expression by their IDs instead.
 // e.g. nextval('foo') => nextval(123::regclass)
 //
-// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
+// `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
 func ReplaceSequenceNamesWithIDs(
 	defaultExpr tree.Expr,
-	nameToID map[string]int64,
+	nameToID map[string]descpb.ID,
 	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -190,7 +193,7 @@ func ReplaceSequenceNamesWithIDs(
 					&tree.AnnotateTypeExpr{
 						Type:       types.RegClass,
 						SyntaxMode: tree.AnnotateShort,
-						Expr:       tree.NewNumVal(constant.MakeInt64(id), "", false),
+						Expr:       tree.NewNumVal(constant.MakeInt64(int64(id)), "", false),
 					},
 				},
 			}, nil
@@ -200,4 +203,163 @@ func ReplaceSequenceNamesWithIDs(
 
 	newExpr, err := tree.SimpleVisit(defaultExpr, replaceFn)
 	return newExpr, err
+}
+
+// UpgradeSequenceReferenceInExpr upgrades all by-name sequence
+// reference in `expr` to by-ID with a provided id-to-name
+// mapping `usedSequenceIDsToNames`, from which we should be able
+// to uniquely determine the ID of each by-name seq reference.
+//
+// Such a mapping can often be constructed if we know the sequence IDs
+// used in a particular expression, e.g. a column descriptor's
+// `usesSequenceIDs` field or a view descriptor's `dependsOn` field if
+// the column DEFAULT/ON-UPDATE or the view's query references sequences.
+//
+// `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
+func UpgradeSequenceReferenceInExpr(
+	expr *string,
+	usedSequenceIDsToNames map[descpb.ID]*tree.TableName,
+	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+) (hasUpgraded bool, err error) {
+	// Find the "reverse" mapping from sequence name to their IDs for those
+	// sequences referenced by-name in `expr`.
+	usedSequenceNamesToIDs, err := seqNameToIDMappingInExpr(*expr, usedSequenceIDsToNames, getBuiltinProperties)
+	if err != nil {
+		return false, err
+	}
+
+	// With this "reverse" mapping, we can simply replace each by-name
+	// seq reference in `expr` with the sequence's ID.
+	parsedExpr, err := parser.ParseExpr(*expr)
+	if err != nil {
+		return false, err
+	}
+
+	newExpr, err := ReplaceSequenceNamesWithIDs(parsedExpr, usedSequenceNamesToIDs, getBuiltinProperties)
+	if err != nil {
+		return false, err
+	}
+
+	// Modify `expr` in place, if any upgrade.
+	if *expr != tree.Serialize(newExpr) {
+		hasUpgraded = true
+		*expr = tree.Serialize(newExpr)
+	}
+
+	return hasUpgraded, nil
+}
+
+// seqNameToIDMappingInExpr attempts to find the seq ID for
+// every by-name seq reference in `expr` from `seqIDToNameMapping`.
+// This process can be thought of as a "reverse mapping" process
+// where, given an id-to-seq-name mapping, for each by-name seq reference
+// in `expr`, we attempt to find the entry in that mapping such that
+// the entry's name "best matches" the by-name seq reference.
+// See comments of findUniqueBestMatchingForTableName for "best matching" definition.
+//
+// It returns a non-nill error if zero or multiple entries
+// in `seqIDToNameMapping` have a name that "best matches"
+// the by-name seq reference.
+//
+// See its unit test for some examples.
+func seqNameToIDMappingInExpr(
+	expr string,
+	seqIDToNameMapping map[descpb.ID]*tree.TableName,
+	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+) (map[string]descpb.ID, error) {
+	parsedExpr, err := parser.ParseExpr(expr)
+	if err != nil {
+		return nil, err
+	}
+	seqRefs, err := GetUsedSequences(parsedExpr, getBuiltinProperties)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the key mapping from seq-by-name-reference to their IDs.
+	result := make(map[string]descpb.ID)
+	for _, seqIdentifier := range seqRefs {
+		if seqIdentifier.IsByID() {
+			continue
+		}
+
+		parsedSeqName, err := parser.ParseQualifiedTableName(seqIdentifier.SeqName)
+		if err != nil {
+			return nil, err
+		}
+
+		// Pairing: find out which sequence name in the id-to-name mapping
+		// (i.e. `seqIDToNameMapping`) matches `parsedSeqName` so we
+		// know the ID of it.
+		idOfSeqIdentifier, err := findUniqueBestMatchingForTableName(seqIDToNameMapping, *parsedSeqName)
+		if err != nil {
+			return nil, err
+		}
+
+		// Put it to the reverse mapping.
+		result[seqIdentifier.SeqName] = idOfSeqIdentifier
+	}
+	return result, nil
+}
+
+// findUniqueBestMatchingForTableName picks the "best-matching" name from
+// `allTableNamesByID` for `targetTableName`. The best-matching name is the
+// one that matches all parts of `targetTableName`, if that part exists
+// in both names.
+// Example 1:
+// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'db.sc2.t'}
+//		tableName = 'sc2.t'
+//		return = 25 (because `db.sc2.t` best-matches `sc2.t`)
+// Example 2:
+// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
+//		tableName = 'sc2.t'
+//		return = 25 (because `sc2.t` best-matches `sc2.t`)
+// Example 3:
+// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
+//		tableName = 'db.sc2.t'
+//		return = 25 (because `sc2.t` best-matches `db.sc2.t`)
+//
+// Example 4:
+// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//		tableName = 't'
+//		return = non-nil error (because both 'sc1.t' and 'sc2.t' are equally good matches
+//	 			for 't' and we cannot decide,	i.e., >1 valid candidates left.)
+// Example 5:
+// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//		tableName = 't2'
+//		return = non-nil error (because neither 'sc1.t' nor 'sc2.t' matches 't2', that is, 0 valid candidate left)
+func findUniqueBestMatchingForTableName(
+	allTableNamesByID map[descpb.ID]*tree.TableName, targetTableName tree.TableName,
+) (match descpb.ID, err error) {
+	t := targetTableName.Table()
+	if t == "" {
+		return descpb.InvalidID, errors.AssertionFailedf("input tableName does not have a Table field.")
+	}
+
+	for id, candidateTableName := range allTableNamesByID {
+		ct, tt := candidateTableName.Table(), targetTableName.Table()
+		cs, ts := candidateTableName.Schema(), targetTableName.Schema()
+		cdb, tdb := candidateTableName.Catalog(), targetTableName.Catalog()
+		if (ct != "" && tt != "" && ct != tt) ||
+			(cs != "" && ts != "" && cs != ts) ||
+			(cdb != "" && tdb != "" && cdb != tdb) {
+			// not a match -- there is a part, either db or schema or table name,
+			// that exists in both names but they don't match.
+			continue
+		}
+
+		// id passes the check; consider it as the result
+		// If already found a valid result, report error!
+		if match != descpb.InvalidID {
+			return descpb.InvalidID, errors.AssertionFailedf("more than 1 matches found for %q",
+				targetTableName.String())
+		}
+		match = id
+	}
+
+	if match == descpb.InvalidID {
+		return descpb.InvalidID, errors.AssertionFailedf("no table name found to match input %q", t)
+	}
+
+	return match, nil
 }

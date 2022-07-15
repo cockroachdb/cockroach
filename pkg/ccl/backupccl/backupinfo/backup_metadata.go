@@ -618,7 +618,7 @@ func debugDumpFileSST(
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.DeprecatingExternalSSTReader(ctx, store, fileInfoPath, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, store, fileInfoPath, encOpts)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func DebugDumpMetadataSST(
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
 
-	iter, err := storageccl.DeprecatingExternalSSTReader(ctx, store, path, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, store, path, encOpts)
 	if err != nil {
 		return err
 	}
@@ -805,7 +805,7 @@ func NewBackupMetadata(
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
 
-	iter, err := storageccl.DeprecatingExternalSSTReader(ctx, exportStore, sstFileName, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, exportStore, sstFileName, encOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -922,7 +922,7 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 			break
 		}
 
-		iter, err := storageccl.DeprecatingExternalSSTReader(ctx, b.store, path, encOpts)
+		iter, err := storageccl.ExternalSSTReader(ctx, b.store, path, encOpts)
 		if err != nil {
 			return FileIterator{err: err}
 		}
@@ -1232,7 +1232,7 @@ func makeBytesIter(
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
 
-	iter, err := storageccl.DeprecatingExternalSSTReader(ctx, store, path, encOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, store, path, encOpts)
 	if err != nil {
 		return bytesIter{iterError: err}
 	}
