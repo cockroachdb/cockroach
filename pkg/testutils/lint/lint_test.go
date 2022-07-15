@@ -1070,7 +1070,7 @@ func TestLint(t *testing.T) {
 			":!settings/settings_test.go",
 			":!storage/mvcc_value.go",
 			":!sql/types/types_jsonpb.go",
-			":!sql/schemachanger/scplan/internal/scgraphviz/graphviz.go",
+			":!sql/schemachanger/scplan/scviz/maps.go",
 		)
 		if err != nil {
 			t.Fatal(err)

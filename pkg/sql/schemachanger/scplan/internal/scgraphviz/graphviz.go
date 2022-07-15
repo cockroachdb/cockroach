@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -27,11 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/emicklei/dot"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 // StagesURL returns a URL to a rendering of the stages of the Plan.
@@ -254,15 +252,9 @@ func itoa(i, ub int) string {
 	return fmt.Sprintf(fmt.Sprintf("%%0%dd", len(strconv.Itoa(ub))), i)
 }
 
-// ToMap converts a struct to a map, field by field. If at any point a protobuf
-// message is encountered, it is converted to a map using jsonpb to marshal it
-// to json and then marshaling it back to a map. This approach allows zero
-// values to be effectively omitted.
+// ToMap is a thin wrapper around scviz.ToMap which comes with some default
+// behavior for planned data structures.
 func ToMap(v interface{}) (interface{}, error) {
-	if v == nil {
-		return nil, nil
-	}
-
 	// The SetJobStateOnDescriptor is very large and graphviz fails to render it.
 	// Clear the DescriptorState field so that the relevant information (the
 	// existence of the Op and the descriptor ID) make it into the graph.
@@ -271,43 +263,11 @@ func ToMap(v interface{}) (interface{}, error) {
 		clone.State = scpb.DescriptorState{}
 		v = &clone
 	}
-	if msg, ok := v.(protoutil.Message); ok {
-		var buf bytes.Buffer
-		jsonEncoder := jsonpb.Marshaler{EmitDefaults: false}
-		if err := jsonEncoder.Marshal(&buf, msg); err != nil {
-			return nil, errors.Wrapf(err, "%T %v", v, v)
-		}
-		var m map[string]interface{}
-		if err := json.NewDecoder(&buf).Decode(&m); err != nil {
-			return nil, err
-		}
-		return m, nil
+	m, err := scviz.ToMap(v, false /* emitDefaults */)
+	if err != nil {
+		return nil, err
 	}
-	vv := reflect.ValueOf(v)
-	vt := vv.Type()
-	switch vt.Kind() {
-	case reflect.Struct:
-	case reflect.Ptr:
-		if vt.Elem().Kind() != reflect.Struct {
-			return v, nil
-		}
-		vv = vv.Elem()
-		vt = vt.Elem()
-	default:
-		return v, nil
-	}
-
-	m := make(map[string]interface{}, vt.NumField())
-	for i := 0; i < vt.NumField(); i++ {
-		vvf := vv.Field(i)
-		if !vvf.CanInterface() || vvf.IsZero() {
-			continue
-		}
-		var err error
-		if m[vt.Field(i).Name], err = ToMap(vvf.Interface()); err != nil {
-			return nil, err
-		}
-	}
+	scviz.WalkMap(m, scviz.RewriteEmbeddedIntoParent)
 	return m, nil
 }
 

@@ -21,11 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
@@ -113,9 +113,9 @@ func marshalResult(
 			}
 		}
 		elts = append(elts, e)
+		const emitDefaults = true
 		yaml, err := sctestutils.ProtoToYAML(
-			e, protoreflect.FmtFlags{EmitDefaults: true},
-			sctestutils.RewriteEmbeddedIntoParent,
+			e, emitDefaults, scviz.RewriteEmbeddedIntoParent,
 		)
 		require.NoError(t, err)
 		str[e] = yaml
