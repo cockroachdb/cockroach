@@ -140,3 +140,8 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 COMMENT ON COLUMN public.t.c IS 'first comment'
+
+subtest show_create_function
+
+statement error this statement is not yet supported
+SHOW CREATE FUNCTION lower
