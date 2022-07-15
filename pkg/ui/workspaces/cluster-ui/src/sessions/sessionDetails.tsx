@@ -327,26 +327,6 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   value={TimestampToMoment(stmt.start).format(DATE_FORMAT)}
                   className={cx("details-item")}
                 />
-                <SummaryCardItem
-                  label={
-                    <div className={cx("session-details-link")}>
-                      <Link
-                        to={StatementLinkTarget({
-                          statementFingerprintID: stmt.id,
-                          implicitTxn: session.active_txn?.implicit,
-                        })}
-                        onClick={() =>
-                          this.props.onStatementClick &&
-                          this.props.onStatementClick()
-                        }
-                      >
-                        View Statement Details
-                      </Link>
-                    </div>
-                  }
-                  value={""}
-                  className={cx("details-item")}
-                />
               </Col>
               <Col className="gutter-row" span={4} />
               <Col className="gutter-row" span={10}>

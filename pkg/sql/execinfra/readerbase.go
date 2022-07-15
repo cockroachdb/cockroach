@@ -16,8 +16,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -199,3 +202,37 @@ func (h *LimitHintHelper) ReadSomeRows(rowsRead int64) error {
 	}
 	return nil
 }
+
+// CanUseStreamer returns whether the kvstreamer.Streamer API should be used if
+// possible.
+func CanUseStreamer(settings *cluster.Settings) bool {
+	return useStreamerEnabled.Get(&settings.SV)
+}
+
+// UseStreamer returns whether the kvstreamer.Streamer API should be used as
+// well as the txn that should be used (regardless of the boolean return value).
+func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
+	useStreamer := CanUseStreamer(flowCtx.EvalCtx.Settings) && flowCtx.Txn != nil &&
+		flowCtx.Txn.Type() == kv.LeafTxn && flowCtx.MakeLeafTxn != nil
+	if !useStreamer {
+		return false, flowCtx.Txn, nil
+	}
+	leafTxn, err := flowCtx.MakeLeafTxn()
+	if leafTxn == nil || err != nil {
+		// leafTxn might be nil in some flows which run outside of the txn, the
+		// streamer should not be used in such cases.
+		return false, flowCtx.Txn, err
+	}
+	return true, leafTxn, nil
+}
+
+// useStreamerEnabled determines whether the Streamer API should be used.
+// TODO(yuzefovich): remove this in 23.1.
+var useStreamerEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.distsql.use_streamer.enabled",
+	"determines whether the usage of the Streamer API is allowed. "+
+		"Enabling this will increase the speed of lookup/index joins "+
+		"while adhering to memory limits.",
+	true,
+)

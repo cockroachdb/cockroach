@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -477,7 +476,7 @@ func (dsp *DistSQLPlanner) Run(
 			// given a LeafTxn. In order for that LeafTxn to be created later,
 			// during the flow setup, we need to populate leafInputState below,
 			// so we tell the localState that there is concurrency.
-			if row.CanUseStreamer(ctx, dsp.st) {
+			if execinfra.CanUseStreamer(dsp.st) {
 				for _, proc := range plan.Processors {
 					if jr := proc.Spec.Core.JoinReader; jr != nil {
 						// Both index and lookup joins, with and without
