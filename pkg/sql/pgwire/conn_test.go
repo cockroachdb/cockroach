@@ -1937,3 +1937,33 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 		requireConnectionCount(t, 0)
 	})
 }
+
+func TestConnCloseReleasesReservedMem(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	before := s.PGServer().(*Server).connMonitor.AllocBytes()
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	)
+	values := pgURL.Query()
+	values.Add("options", "c sadsad=") // invalid client-provided session param
+	pgURL.RawQuery = values.Encode()
+
+	defer cleanupFunc()
+	db, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = db.Ping()
+	require.Error(t, err)
+	require.Regexp(t, "pq: option .* is invalid", err.Error())
+
+	// Check that no accounted-for memory is leaked, after the connection attempt fails.
+	after := s.PGServer().(*Server).connMonitor.AllocBytes()
+	require.Equal(t, before, after)
+}

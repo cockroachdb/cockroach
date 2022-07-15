@@ -850,6 +850,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	var sArgs sql.SessionArgs
 	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
 		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
+		reserved.Close(ctx)
 		return s.sendErr(ctx, conn, err)
 	}
 
