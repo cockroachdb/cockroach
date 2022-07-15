@@ -13,7 +13,6 @@ package stats
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -88,28 +87,6 @@ func InsertNewStat(
 		if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
 			return err
 		}
-	}
-	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
-		_, err := executor.Exec(
-			ctx, "insert-statistic", txn,
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			tableID,
-			nameVal,
-			columnIDsVal,
-			rowCount,
-			distinctCount,
-			nullCount,
-			histogramVal,
-		)
-		return err
 	}
 	_, err := executor.Exec(
 		ctx, "insert-statistic", txn,
