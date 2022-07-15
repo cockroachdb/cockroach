@@ -105,12 +105,14 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	if len(prepared.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
+		prepared.memAcc.Close(ctx)
 		return nil, pgwirebase.NewProtocolViolationErrorf(
 			"more than %d arguments to prepared statement: %d",
 			pgwirebase.MaxPreparedStatementArgs, len(prepared.TypeHints))
 	}
 
 	if err := prepared.memAcc.Grow(ctx, int64(len(name))); err != nil {
+		prepared.memAcc.Close(ctx)
 		return nil, err
 	}
 	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
@@ -135,16 +137,13 @@ func (ex *connExecutor) addPreparedStmt(
 //
 // placeholderHints may contain partial type information for placeholders.
 // prepare will populate the missing types. It can be nil.
-//
-// The PreparedStatement is returned (or nil if there are no results). The
-// returned PreparedStatement needs to be close()d once its no longer in use.
 func (ex *connExecutor) prepare(
 	ctx context.Context,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
-) (*PreparedStatement, error) {
+) (_ *PreparedStatement, retErr error) {
 
 	prepared := &PreparedStatement{
 		memAcc:   ex.sessionMon.MakeBoundAccount(),
@@ -153,9 +152,12 @@ func (ex *connExecutor) prepare(
 		createdAt: timeutil.Now(),
 		origin:    origin,
 	}
-	// NB: if we start caching the plan, we'll want to keep around the memory
-	// account used for the plan, rather than clearing it.
-	defer prepared.memAcc.Clear(ctx)
+	defer func() {
+		// Make sure to close the memory account if an error is returned.
+		if retErr != nil {
+			prepared.memAcc.Close(ctx)
+		}
+	}()
 
 	if stmt.AST == nil {
 		return prepared, nil
