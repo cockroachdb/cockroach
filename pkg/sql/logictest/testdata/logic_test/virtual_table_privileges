@@ -55,6 +55,10 @@ user testuser
 statement ok
 SELECT * FROM crdb_internal.tables
 
+# Second select tests the cache. Rudimentary test to ensure the cache works.
+statement ok
+SELECT * FROM crdb_internal.tables
+
 statement error pq: invalid privilege type USAGE for virtual_table
 GRANT USAGE ON TABLE crdb_internal.tables TO testuser
 

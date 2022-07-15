@@ -5,6 +5,7 @@ go_library(
     name = "syntheticprivilege",
     srcs = [
         "global_privilege.go",
+        "synthesize_privileges.go",
         "synthetic_privilege_registry.go",
         "vtable_privilege.go",
     ],

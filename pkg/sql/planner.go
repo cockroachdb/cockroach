@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -879,4 +880,26 @@ func (p *planner) QueryIteratorEx(
 // IsActive implements the Planner interface.
 func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 	return p.execCfg.Settings.Version.IsActive(ctx, key)
+}
+
+func (p *planner) GetSyntheticPrivilegeCache() *cacheutil.Cache {
+	return p.ExecCfg().SyntheticPrivilegeCache
+}
+
+func (p *planner) GetDescriptorVersionByTableName(
+	ctx context.Context, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (descpb.DescriptorVersion, error) {
+	_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(), name, flags)
+	if err != nil {
+		return descpb.DescriptorVersion(0), err
+	}
+	return desc.GetVersion(), nil
+}
+
+func (p *planner) GetVirtualSchemaNameByID(id descpb.ID) (string, bool) {
+	vs, found := p.ExecCfg().VirtualSchemas.GetVirtualSchemaByID(id)
+	if !found {
+		return "", false
+	}
+	return vs.Desc().GetName(), true
 }
