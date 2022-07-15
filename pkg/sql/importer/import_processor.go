@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -354,9 +353,6 @@ func ingestKvs(
 	writeAtBatchTimestamp := true
 	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
 		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
-		writeAtBatchTimestamp = false
-	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
-		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
 		writeAtBatchTimestamp = false
 	}
 
