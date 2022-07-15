@@ -110,7 +110,7 @@ type Overload struct {
 	AggregateFunc AggregateOverload
 	WindowFunc    WindowOverload
 
-	// Only one of the following three attributes can be set.
+	// Only one of the following six attributes can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
 	// take in Datums and return a Datum.
@@ -132,6 +132,9 @@ type Overload struct {
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
 	SQLFn SQLFnOverload
+
+	// Body is the SQL string body of a user-defined function.
+	Body string
 
 	// OnTypeCheck is incremented every time this overload is type checked.
 	OnTypeCheck func()
@@ -233,7 +236,7 @@ func (b Overload) Signature(simplify bool) string {
 }
 
 // overloadImpl is an implementation of an overloaded function. It provides
-// access to the parameter type list  and the return type of the implementation.
+// access to the parameter type list and the return type of the implementation.
 //
 // This is a more general type than Overload defined above, because it also
 // works with the built-in binary and unary operators.
@@ -322,6 +325,12 @@ func (a ArgTypes) MatchLen(l int) bool {
 // GetAt is part of the TypeList interface.
 func (a ArgTypes) GetAt(i int) *types.T {
 	return a[i].Typ
+}
+
+// SetAt is part of the TypeList interface.
+func (a ArgTypes) SetAt(i int, name string, t *types.T) {
+	a[i].Name = name
+	a[i].Typ = t
 }
 
 // Length is part of the TypeList interface.

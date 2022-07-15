@@ -4025,11 +4025,11 @@ common_func_opt_item:
   }
 | LEAKPROOF
   {
-    $$.val = tree.FunctionLeakProof(true)
+    $$.val = tree.FunctionLeakproof(true)
   }
 | NOT LEAKPROOF
   {
-    $$.val = tree.FunctionLeakProof(false)
+    $$.val = tree.FunctionLeakproof(false)
   }
 | COST numeric_only
   {

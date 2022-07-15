@@ -1,0 +1,57 @@
+exec-ddl
+CREATE FUNCTION a(i INT, s STRING) RETURNS INT LANGUAGE SQL AS 'SELECT i'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION a
+----
+FUNCTION a(i: int, s: string) -> int [volatile]
+ └── SELECT i
+
+exec-ddl
+CREATE FUNCTION b(i INT, s STRING) RETURNS INT LANGUAGE SQL AS $$
+  SELECT *
+  FROM t WHERE col1 > i AND
+    col2 = s;
+  SELECT s;
+$$
+----
+
+exec-ddl
+SHOW CREATE FUNCTION b
+----
+FUNCTION b(i: int, s: string) -> int [volatile]
+ └──   SELECT *
+       FROM t WHERE col1 > i AND
+         col2 = s;
+       SELECT s;
+
+exec-ddl
+CREATE FUNCTION c() RETURNS VOID IMMUTABLE LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION c
+----
+FUNCTION c() -> void [immutable]
+ └── SELECT 1
+
+exec-ddl
+CREATE FUNCTION d() RETURNS VOID LEAKPROOF IMMUTABLE LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION d
+----
+FUNCTION d() -> void [leakproof]
+ └── SELECT 1
+
+exec-ddl
+CREATE FUNCTION e(i INT) RETURNS INT IMMUTABLE STRICT LANGUAGE SQL AS 'SELECT i'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION e
+----
+FUNCTION e(i: int) -> int [immutable, nullable-args=false]
+ └── SELECT i

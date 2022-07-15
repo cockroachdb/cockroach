@@ -50,6 +50,7 @@ type Catalog struct {
 	testSchema Schema
 	counter    int
 	enumTypes  map[string]*types.T
+	udfs       map[string]*tree.FunctionDefinition
 }
 
 type dataSource interface {
@@ -468,6 +469,10 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.CreateType(stmt)
 		return "", nil
 
+	case *tree.CreateFunction:
+		tc.CreateFunction(stmt)
+		return "", nil
+
 	case *tree.SetZoneConfig:
 		tc.SetZoneConfig(stmt)
 		return "", nil
@@ -479,6 +484,14 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 			return "", err
 		}
 		return ds.(fmt.Stringer).String(), nil
+
+	case *tree.ShowCreateFunction:
+		fn := stmt.Name.FunctionReference.(*tree.UnresolvedName)
+		def, err := tc.ResolveFunction(fn, tree.EmptySearchPath)
+		if err != nil {
+			return "", err
+		}
+		return formatFunction(def), nil
 
 	default:
 		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)

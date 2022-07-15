@@ -327,6 +327,13 @@ func (oc *optCatalog) ResolveType(
 	return oc.planner.ResolveType(ctx, name)
 }
 
+// ResolveFunction is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveFunction(
+	name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.FunctionDefinition, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
+}
+
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
 	switch t := o.(type) {
 	case *optSchema:
