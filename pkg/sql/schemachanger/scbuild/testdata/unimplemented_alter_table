@@ -33,10 +33,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (i)
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo DROP COLUMN k
 ----
 
