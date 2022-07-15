@@ -1,0 +1,148 @@
+# Tests that Backups with Revisions History and As Of System Time
+# Restore properly handle range keys in tables foo and baz
+# - t0: inital dataset
+# - t1: delrange on foo
+# - t2: one insert in foo
+# - full backup
+# - t3: 2 inserts in foo; delrange on baz
+# - t4: one insert in baz
+# - incremental backup
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'x'),(2,'y');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (11, 'xx'),(22,'yy');
+----
+
+save-cluster-ts tag=t0
+----
+
+kv request=DeleteRange target=foo
+----
+
+save-cluster-ts tag=t1
+----
+
+exec-sql
+INSERT INTO foo VALUES (3,'z');
+----
+
+save-cluster-ts tag=t2
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://0/test-root/' with revision_history;
+----
+
+exec-sql
+INSERT INTO foo VALUES (4,'a'),(5,'b');
+----
+
+kv request=DeleteRange target=baz
+----
+
+save-cluster-ts tag=t3
+----
+
+exec-sql
+INSERT INTO baz VALUES (33,'zz');
+----
+
+save-cluster-ts tag=t4
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/test-root/' with revision_history;
+----
+
+restore aost=t0
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t0 WITH new_db_name='orig1';
+----
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+2
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+2
+
+exec-sql
+DROP DATABASE orig1 CASCADE
+----
+
+restore aost=t1
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t1 WITH new_db_name='orig1';
+----
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+0
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+2
+
+exec-sql
+DROP DATABASE orig1 CASCADE
+----
+
+restore aost=t2
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t2 WITH new_db_name='orig1';
+----
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+1
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+2
+
+exec-sql
+DROP DATABASE orig1 CASCADE
+----
+
+restore aost=t3
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t3 WITH new_db_name='orig1';
+----
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+3
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+0
+
+exec-sql
+DROP DATABASE orig1 CASCADE
+----
+
+restore aost=t4
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://0/test-root/' AS OF SYSTEM TIME t4 WITH new_db_name='orig1';
+----
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+3
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+1
