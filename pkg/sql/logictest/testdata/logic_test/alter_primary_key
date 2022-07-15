@@ -273,7 +273,7 @@ t  CREATE TABLE public.t (
    INDEX i2 (y ASC),
    UNIQUE INDEX i4 (z ASC),
    UNIQUE INDEX i5 (w ASC) STORING (y),
-   INVERTED INDEX i6 (v ASC),
+   INVERTED INDEX i6 (v),
    INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
    FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
 )

@@ -285,7 +285,7 @@ func TestShowCreateTable(t *testing.T) {
 	id INT8 NOT NULL,
 	a STRING NULL,
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (id ASC),
-	INVERTED INDEX %[1]s_a_idx (a gin_trgm_ops ASC)
+	INVERTED INDEX %[1]s_a_idx (a gin_trgm_ops)
 )`,
 		},
 	}
