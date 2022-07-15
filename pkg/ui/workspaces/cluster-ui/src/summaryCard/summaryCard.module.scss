@@ -8,6 +8,13 @@
   margin-bottom: 15px;
   font-family: $font-family--base;
   font-size: $font-size--medium;
+  h4 {
+    @include text--body-strong;
+    color: $colors--neutral-7;
+  }
+  p {
+    @include text--body;
+  }
   &__divider {
     width: 100%;
     height: 1px;
