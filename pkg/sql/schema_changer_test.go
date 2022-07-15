@@ -2646,7 +2646,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		wg.Add(1)
 		// Alter the primary key of the table.
 		go func() {
-			if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
+			if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2);
+SET use_declarative_schema_changer = on;`); err != nil {
 				t.Error(err)
 			}
 			wg.Done()
@@ -2655,7 +2658,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		<-backfillNotif
 
 		// This must be rejected, because there is a primary key change already in progress.
-		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
+SET use_declarative_schema_changer = on;`)
 		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
