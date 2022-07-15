@@ -362,6 +362,12 @@
 <tr><td>jsonb <code>@></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code>@@</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>tsquery <code>@@</code> tsvector</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsvector <code>@@</code> tsquery</td><td><a href="bool.html">bool</a></td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>ILIKE</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="string.html">string</a> <code>ILIKE</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>

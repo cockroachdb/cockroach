@@ -484,6 +484,25 @@ var (
 		},
 	}
 
+	// TSQuery is the tsquery type, which represents a full text search query.
+	TSQuery = &T{
+		InternalType: InternalType{
+			Family: TSQueryFamily,
+			Oid:    oid.T_tsquery,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// TSVector is the tsvector type which represents a document compressed in
+	// a form that a tsquery query can operate on.
+	TSVector = &T{
+		InternalType: InternalType{
+			Family: TSVectorFamily,
+			Oid:    oid.T_tsvector,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -1409,6 +1428,8 @@ var familyNames = map[Family]string{
 	TimestampFamily:      "timestamp",
 	TimestampTZFamily:    "timestamptz",
 	TimeTZFamily:         "timetz",
+	TSQueryFamily:        "tsquery",
+	TSVectorFamily:       "tsvector",
 	TupleFamily:          "tuple",
 	UnknownFamily:        "unknown",
 	UuidFamily:           "uuid",
@@ -2800,8 +2821,6 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"money":         41578,
 	"path":          21286,
 	"pg_lsn":        -1,
-	"tsquery":       7821,
-	"tsvector":      7821,
 	"txid_snapshot": -1,
 	"xml":           43355,
 }

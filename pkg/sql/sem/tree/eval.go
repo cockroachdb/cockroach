@@ -1442,6 +1442,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 		makeEqFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeEqFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
+		makeEqFn(types.TSQuery, types.TSQuery, volatility.Leakproof),
+		makeEqFn(types.TSVector, types.TSVector, volatility.Leakproof),
 		makeEqFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeEqFn(types.VarBit, types.VarBit, volatility.Leakproof),
 
@@ -1631,6 +1633,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 		makeIsFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeIsFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
+		makeIsFn(types.TSQuery, types.TSQuery, volatility.Leakproof),
+		makeIsFn(types.TSVector, types.TSVector, volatility.Leakproof),
 		makeIsFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeIsFn(types.VarBit, types.VarBit, volatility.Leakproof),
 
@@ -1819,6 +1823,20 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			},
 		)...,
 	),
+	treecmp.TSMatches: {
+		&CmpOp{
+			LeftType:   types.TSQuery,
+			RightType:  types.TSVector,
+			EvalOp:     &TSMatchesQueryVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+		&CmpOp{
+			LeftType:   types.TSVector,
+			RightType:  types.TSQuery,
+			EvalOp:     &TSMatchesVectorQueryOp{},
+			Volatility: volatility.Immutable,
+		},
+	},
 })
 
 func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) cmpOpOverload {

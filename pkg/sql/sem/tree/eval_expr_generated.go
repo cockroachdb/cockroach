@@ -216,6 +216,16 @@ func (node *DString) Eval(v ExprEvaluator) (Datum, error) {
 }
 
 // Eval is part of the TypedExpr interface.
+func (node *DTSQuery) Eval(v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *DTSVector) Eval(v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node *DTime) Eval(v ExprEvaluator) (Datum, error) {
 	return node, nil
 }

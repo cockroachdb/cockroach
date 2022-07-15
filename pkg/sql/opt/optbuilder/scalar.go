@@ -755,6 +755,8 @@ func (b *Builder) constructComparison(
 			return b.factory.ConstructBBoxIntersects(left, right)
 		}
 		return b.factory.ConstructOverlaps(left, right)
+	case treecmp.TSMatches:
+		return b.factory.ConstructTSMatches(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(cmp.Operator)))
 }

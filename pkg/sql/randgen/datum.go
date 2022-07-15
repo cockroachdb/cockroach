@@ -16,6 +16,8 @@ import (
 	"math"
 	"math/bits"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 	"unicode"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -279,6 +282,49 @@ func RandDatumWithNullChance(
 		return d
 	case types.VoidFamily:
 		return tree.DVoidDatum
+	case types.TSVectorFamily:
+		for {
+			nTerms := 1 + rng.Intn(10)
+			var b strings.Builder
+			for i := 0; i < nTerms; i++ {
+				l := make([]byte, 1+rng.Intn(10))
+				for i := range l {
+					l[i] = byte('a' + rng.Intn('Z'-'a'))
+				}
+				b.Write(l)
+				if rng.Intn(1) == 0 {
+					b.WriteString(":")
+					for j := 0; j < 1+rng.Intn(5); j++ {
+						if j > 0 {
+							b.WriteString(",")
+						}
+						b.WriteString(strconv.Itoa(rng.Intn(1000)))
+						// Write a random "weight" from a-d.
+						b.WriteByte(byte('a' + rng.Intn('d'-'a')))
+					}
+				}
+				b.WriteByte(' ')
+			}
+			vec, err := tsearch.ParseTSVector(b.String())
+			if err != nil {
+				continue
+			}
+			return &tree.DTSVector{TSVector: vec}
+		}
+	case types.TSQueryFamily:
+		// TODO(jordan): make this a more robust random query generator
+		for {
+			l := make([]byte, 1+rng.Intn(10))
+			for i := range l {
+				l[i] = byte('a' + rng.Intn('Z'-'a'))
+			}
+			query, err := tsearch.ParseTSQuery(string(l))
+			if err != nil {
+				continue
+			}
+			return &tree.DTSQuery{TSQuery: query}
+		}
+
 	default:
 		panic(errors.AssertionFailedf("invalid type %v", typ.DebugString()))
 	}

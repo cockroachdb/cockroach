@@ -239,6 +239,12 @@ func writeTextDatumNotNull(
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
 
+	case *tree.DTSQuery:
+		b.writeLengthPrefixedString(v.String())
+
+	case *tree.DTSVector:
+		b.writeLengthPrefixedString(v.String())
+
 	case *tree.DTuple:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)

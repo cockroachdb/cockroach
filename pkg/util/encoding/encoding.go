@@ -1659,6 +1659,8 @@ const (
 	ArrayKeyDesc Type = 23 // Array key encoded descendingly
 	Box2D        Type = 24
 	Void         Type = 25
+	TSQuery      Type = 26
+	TSVector     Type = 27
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2547,6 +2549,16 @@ func EncodeUntaggedIPAddrValue(appendTo []byte, u ipaddr.IPAddr) []byte {
 // final buffer.
 func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
 	appendTo = EncodeValueTag(appendTo, colID, JSON)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
+func EncodeTSQueryValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, TSQuery)
+	return appendTo
+}
+
+func EncodeTSVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, TSVector)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
