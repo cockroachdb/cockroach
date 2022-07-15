@@ -136,7 +136,7 @@ describe("<TimeScaleDropdown> component", function () {
     // Click left, and it shows a custom time.
     userEvent.click(
       getByRole("button", {
-        name: "previous timeframe",
+        name: "previous time interval",
       }),
     );
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
@@ -151,14 +151,14 @@ describe("<TimeScaleDropdown> component", function () {
     // Click right, and it reverts to "Past 10 minutes".
     userEvent.click(
       getByRole("button", {
-        name: "next timeframe",
+        name: "next time interval",
       }),
     );
     expect(mockSetTimeScale).toHaveBeenCalledTimes(2);
     getByText("Past 10 Minutes");
   });
 
-  it("initializes the custom selection to the current time frame", () => {
+  it("initializes the custom selection to the current time interval", () => {
     const mockSetTimeScale = jest.fn();
     // Default state
     const { getByText, getByDisplayValue } = render(
@@ -169,14 +169,14 @@ describe("<TimeScaleDropdown> component", function () {
         />
       </MemoryRouter>,
     );
-    // Switch to a bigger time frame
+    // Switch to a bigger time interval
     userEvent.click(getByText("Past 10 Minutes"));
     userEvent.click(getByText("Past 6 Hours"));
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
 
     // Open the custom menu
     userEvent.click(getByText("Past 6 Hours"));
-    userEvent.click(getByText("Custom date range"));
+    userEvent.click(getByText("Custom time interval"));
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
 
     // Custom menu should be initialized to currently selected time, i.e. now-6h to now.
@@ -191,7 +191,7 @@ describe("<TimeScaleDropdown> component", function () {
     // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196.
   });
 
-  it("opens directly to the custom menu when a custom time frame is currently selected", () => {
+  it("opens directly to the custom menu when a custom time interval is currently selected", () => {
     const mockSetTimeScale = jest.fn();
     const { getByText, getByRole } = render(
       <MemoryRouter>
@@ -210,7 +210,7 @@ describe("<TimeScaleDropdown> component", function () {
     // Change to a custom selection
     userEvent.click(
       getByRole("button", {
-        name: "previous timeframe",
+        name: "previous time interval",
       }),
     );
 
@@ -224,8 +224,8 @@ describe("<TimeScaleDropdown> component", function () {
     getByText("Start (UTC)");
     getByText("End (UTC)");
 
-    // Clicking "Preset Time Ranges" should bring the dropdown back to the preset options.
-    userEvent.click(getByText("Preset Time Ranges"));
+    // Clicking "Preset time intervals" should bring the dropdown back to the preset options.
+    userEvent.click(getByText("Preset time intervals"));
     getByText("Past 30 Minutes");
     getByText("Past 1 Hour");
   });
