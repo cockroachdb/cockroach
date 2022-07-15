@@ -57,6 +57,7 @@ export const statisticsColumnLabels = {
   time: "Time",
   transactions: "Transactions",
   workloadPct: "% of All Runtime",
+  lastExecTimestamp: "Last Execution Time (UTC)",
 };
 
 export const contentModifiers = {
@@ -376,6 +377,29 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={<p>Database on which the {contentModifier} was executed.</p>}
       >
         {getLabel("database")}
+      </Tooltip>
+    );
+  },
+  lastExecTimestamp: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>Last time stamp on which the {contentModifier} was executed.</p>
+        }
+      >
+        {getLabel("lastExecTimestamp")}
       </Tooltip>
     );
   },
