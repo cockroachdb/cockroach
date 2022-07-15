@@ -129,14 +129,16 @@
     }
   }
 
-  .summary--card__status {
-    &--title {
-      font-family: $font-family--base;
-      font-size: $font-size--tall;
-      line-height: 1.5;
-      color: $colors--neutral-7;
-      margin-bottom: 15px;
-    }
+  .summary--card--title {
+    font-family: $font-family--base;
+    font-size: $font-size--tall;
+    font-weight: $font-weight--bold;
+    line-height: 1.5;
+    color: $colors--neutral-8;
+    margin-bottom: 15px;
+  }
+  .secondary {
+    margin-top: 15px;
   }
   .page--header__title {
     margin-bottom: 30px;
