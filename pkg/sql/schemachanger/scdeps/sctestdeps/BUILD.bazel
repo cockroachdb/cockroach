@@ -38,6 +38,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scplan/scviz",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",

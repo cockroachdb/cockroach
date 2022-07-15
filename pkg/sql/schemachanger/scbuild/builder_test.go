@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
@@ -233,7 +232,9 @@ func (n nodeEntries) Swap(i, j int) { n[i], n[j] = n[j], n[i] }
 var _ sort.Interface = nodeEntries{}
 
 func formatElementForDisplay(t *testing.T, e scpb.Element) []byte {
-	marshaled, err := sctestutils.ProtoToYAML(e, protoreflect.FmtFlags{})
+	marshaled, err := sctestutils.ProtoToYAML(
+		e, false /* emitDefaults */, nil,
+	)
 	require.NoError(t, err)
 	dec := yaml.NewDecoder(strings.NewReader(marshaled))
 	dec.KnownFields(true)
