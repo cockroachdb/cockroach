@@ -837,8 +837,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM select_test
 ----
-hash: 4348909884410007975
-plan-gist: AigGBg==
+hash: 4347957707340166466
+plan-gist: AikGBg==
 explain(shape):
 • sequence select
   estimated row count: 1
@@ -854,8 +854,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo SPLIT AT VALUES(1)
 ----
-hash: 12193483658718214527
-plan-gist: AgICAgYCLGoCBgY=
+hash: 8861506885543083784
+plan-gist: AgICAgYCLWoCBgY=
 explain(shape):
 • split
 │ index: foo@foo_pkey
@@ -874,8 +874,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo UNSPLIT AT VALUES(1)
 ----
-hash: 8861506885543083786
-plan-gist: AgICAgYCLWoCBgQ=
+hash: 1730448010859497979
+plan-gist: AgICAgYCLmoCBgQ=
 explain(shape):
 • unsplit
 │ index: foo@foo_pkey
@@ -894,8 +894,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE foo UNSPLIT ALL
 ----
-hash: 16533768908468588919
-plan-gist: Ai5qAgYE
+hash: 9107402998801707764
+plan-gist: Ai9qAgYE
 explain(shape):
 • unsplit all
   index: foo@foo_pkey
@@ -907,8 +907,8 @@ explain(gist):
 gist-explain-roundtrip
 ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1],1)
 ----
-hash: 8656743312841134920
-plan-gist: AgICBAYEL24CBgQ=
+hash: 13903101387868873709
+plan-gist: AgICBAYEMG4CBgQ=
 explain(shape):
 • relocate table
 │ index: abc@abc_pkey
@@ -926,8 +926,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM [INSERT INTO abc SELECT a, b, c FROM abc RETURNING a] ORDER BY a
 ----
-hash: 15302623232936960462
-plan-gist: AgFuAgAHAAAAH24AMDERBgI=
+hash: 1900855250021694750
+plan-gist: AgFuAgAHAAAAH24AMTIRBgI=
 explain(shape):
 • root
 │
@@ -979,8 +979,8 @@ explain(gist):
 gist-explain-roundtrip
 WITH RECURSIVE cte(x) AS (VALUES (1) UNION ALL SELECT x+1 FROM cte WHERE x < 10) SELECT * FROM cte
 ----
-hash: 14841964197367358450
-plan-gist: AgICAjIHAgYC
+hash: 7059253623772935111
+plan-gist: AgICAjMHAgYC
 explain(shape):
 • render
 │
@@ -1000,8 +1000,8 @@ explain(gist):
 gist-explain-roundtrip
 PAUSE SCHEDULE 123
 ----
-hash: 10623204031984216363
-plan-gist: AgICAjQ=
+hash: 10623204031984216362
+plan-gist: AgICAjU=
 explain(shape):
 • control schedules
 │
@@ -1017,8 +1017,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL JOBS SELECT 1
 ----
-hash: 6026897435584380072
-plan-gist: AgICAgYCMw==
+hash: 6026897435584380079
+plan-gist: AgICAgYCNA==
 explain(shape):
 • control jobs
 │
@@ -1034,8 +1034,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL QUERIES SELECT '1'
 ----
-hash: 6026897435584380078
-plan-gist: AgICAgYCNQ==
+hash: 6026897435584380077
+plan-gist: AgICAgYCNg==
 explain(shape):
 • cancel queries
 │
@@ -1051,8 +1051,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL SESSIONS SELECT '1'
 ----
-hash: 6026897435584380077
-plan-gist: AgICAgYCNg==
+hash: 6026897435584380076
+plan-gist: AgICAgYCNw==
 explain(shape):
 • cancel sessions
 │
@@ -1068,8 +1068,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE STATISTICS s1 FROM foo
 ----
-hash: 590681868797177008
-plan-gist: Ajc=
+hash: 590681868797177023
+plan-gist: Ajg=
 explain(shape):
 • create statistics
 explain(gist):
@@ -1079,8 +1079,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPORT INTO CSV "tmp" FROM SELECT * FROM foo
 ----
-hash: 4828533627625221211
-plan-gist: AgFqAgAHAAAABgY4BgY=
+hash: 4827563858369328342
+plan-gist: AgFqAgAHAAAABgY5BgY=
 explain(shape):
 • export
 │

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -171,7 +172,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 	}
 
 	// Update the mutable descriptor with the new proto.
-	tbl, db, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&desc, newModTime)
+	tbl, db, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(&desc, newModTime)
 	switch md := mut.(type) {
 	case *tabledesc.Mutable:
 		if objectType != privilege.Table {
@@ -193,6 +194,11 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace type descriptor with %s", objectType)
 		}
 		md.TypeDescriptor = *typ
+	case *funcdesc.Mutable:
+		if objectType != privilege.Function {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace function descriptor with %s", objectType)
+		}
+		md.FunctionDescriptor = *function
 	case nil:
 		b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, newModTime)
 		if b == nil {

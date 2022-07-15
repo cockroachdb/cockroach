@@ -161,6 +161,11 @@ func (n *dropTypeNode) startExec(params runParams) error {
 func (p *planner) addTypeBackReference(
 	ctx context.Context, typeID, ref descpb.ID, jobDesc string,
 ) error {
+	// If it is a table implicit type, then there is no need to track such type reference.
+	_, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, typeID, tree.ObjectLookupFlagsWithRequired())
+	if err == nil {
+		return nil
+	}
 	mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
 	if err != nil {
 		return err
