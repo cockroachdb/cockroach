@@ -395,7 +395,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={<p>Last execution time stamp on which the {contentModifier} was executed.</p>}
+        content={
+          <p>Last time stamp on which the {contentModifier} was executed.</p>
+        }
       >
         {getLabel("lastExecTimestamp")}
       </Tooltip>
