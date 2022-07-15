@@ -277,12 +277,6 @@ type Tracer struct {
 	noopSpan        *Span
 	sterileNoopSpan *Span
 
-	// backardsCompatibilityWith211, if set, makes the Tracer
-	// work with 21.1 remote nodes.
-	//
-	// Accessed atomically.
-	backwardsCompatibilityWith211 int64
-
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
@@ -1292,23 +1286,9 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 		carrier.Set(fieldNameOtelSpanID, sm.otelCtx.SpanID().String())
 	}
 
-	compatMode := atomic.LoadInt64(&t.backwardsCompatibilityWith211) == 1
-
-	// For compatibility with 21.1, we don't want to propagate the traceID when
-	// we're not recording. A 21.1 node interprets a traceID as wanting structured
-	// recording (or verbose recording if fieldNameDeprecatedVerboseTracing is also
-	// set).
-	if compatMode && sm.recordingType == tracingpb.RecordingOff {
-		return
-	}
-
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 	carrier.Set(fieldNameRecordingType, sm.recordingType.ToCarrierValue())
-
-	if compatMode && sm.recordingType == tracingpb.RecordingVerbose {
-		carrier.Set(fieldNameDeprecatedVerboseTracing, "1")
-	}
 }
 
 var noopSpanMeta = SpanMeta{}
@@ -1472,15 +1452,6 @@ func (t *Tracer) ShouldRecordAsyncSpans() bool {
 	defer t.testingMu.Unlock()
 
 	return t.testingRecordAsyncSpans
-}
-
-// SetBackwardsCompatibilityWith211 toggles the compatibility mode.
-func (t *Tracer) SetBackwardsCompatibilityWith211(to bool) {
-	if to {
-		atomic.StoreInt64(&t.backwardsCompatibilityWith211, 1)
-	} else {
-		atomic.StoreInt64(&t.backwardsCompatibilityWith211, 0)
-	}
 }
 
 // PanicOnUseAfterFinish returns true if the Tracer is configured to crash when
