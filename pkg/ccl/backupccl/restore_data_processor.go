@@ -278,13 +278,18 @@ func (rd *restoreDataProcessor) openSSTs(
 ) error {
 	ctxDone := ctx.Done()
 
-	// TODO(msbutler): use a a map of external storage factories to avoid reopening the same dir
-	// in a given restore span entry
+	// The sstables only contain MVCC data and no intents, so using an MVCC
+	// iterator is sufficient.
+	var iters []storage.SimpleMVCCIterator
 	var dirs []cloud.ExternalStorage
 
 	// If we bail early and haven't handed off responsibility of the dirs/iters to
 	// the channel, close anything that we had open.
 	defer func() {
+		for _, iter := range iters {
+			iter.Close()
+		}
+
 		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
 				log.Warningf(ctx, "close export storage failed %v", err)
@@ -292,13 +297,18 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 	}()
 
-	// sendIter sends a multiplexed iterator covering the currently accumulated files over the
+	// sendIters sends all of the currently accumulated iterators over the
 	// channel.
-	sendIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
-		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
+	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
+		multiIter := storage.MakeMultiIterator(itersToSend)
+		readAsOfIter := storage.NewReadAsOfIterator(multiIter, rd.spec.RestoreTime)
 
 		cleanup := func() {
 			readAsOfIter.Close()
+			multiIter.Close()
+			for _, iter := range itersToSend {
+				iter.Close()
+			}
 
 			for _, dir := range dirsToSend {
 				if err := dir.Close(); err != nil {
@@ -319,13 +329,13 @@ func (rd *restoreDataProcessor) openSSTs(
 			return ctx.Err()
 		}
 
+		iters = make([]storage.SimpleMVCCIterator, 0)
 		dirs = make([]cloud.ExternalStorage, 0)
 		return nil
 	}
 
 	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
-	filePaths := make([]string, 0, len(EntryFiles{}))
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
 
@@ -334,23 +344,17 @@ func (rd *restoreDataProcessor) openSSTs(
 			return err
 		}
 		dirs = append(dirs, dir)
-		filePaths = append(filePaths, file.Path)
 
 		// TODO(pbardea): When memory monitoring is added, send the currently
 		// accumulated iterators on the channel if we run into memory pressure.
+		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		if err != nil {
+			return err
+		}
+		iters = append(iters, iter)
 	}
-	iterOpts := storage.IterOptions{
-		RangeKeyMaskingBelow: rd.spec.RestoreTime,
-		KeyTypes:             storage.IterKeyTypePointsAndRanges,
-		LowerBound:           keys.LocalMax,
-		UpperBound:           keys.MaxKey,
-	}
-	iter, err := storageccl.ExternalSSTReader(ctx, dirs, filePaths, rd.spec.Encryption,
-		iterOpts)
-	if err != nil {
-		return err
-	}
-	return sendIter(iter, dirs)
+
+	return sendIters(iters, dirs)
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
