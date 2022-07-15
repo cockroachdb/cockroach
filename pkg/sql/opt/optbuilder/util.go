@@ -455,12 +455,24 @@ func resolveTemporaryStatus(name *tree.TableName, persistence tree.Persistence) 
 	return name.SchemaName == catconstants.PgTempSchemaName || persistence.IsTemporary()
 }
 
-// resolveSchemaForCreate returns the schema that will contain a newly created
+// resolveSchemaForCreateTable returns the schema that will contain a newly created
 // catalog object with the given name. If the current user does not have the
-// CREATE privilege, then resolveSchemaForCreate raises an error.
-func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.SchemaName) {
+// CREATE privilege, then resolveSchemaForCreateTable raises an error.
+func (b *Builder) resolveSchemaForCreateTable(name *tree.TableName) (cat.Schema, cat.SchemaName) {
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+}
+
+func (b *Builder) resolveSchemaForCreateFunction(
+	name *tree.FunctionName,
+) (cat.Schema, cat.SchemaName) {
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+}
+
+func (b *Builder) resolveSchemaForCreate(
+	prefix *tree.ObjectNamePrefix, name tree.NodeFormatter,
+) (cat.Schema, cat.SchemaName) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
-	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, &name.ObjectNamePrefix)
+	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, prefix)
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
@@ -602,7 +614,7 @@ func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
-	if b.insideViewDef {
+	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking table leases when we're creating a view.
 		flags.AvoidDescriptorCaches = true
 	}
@@ -629,7 +641,7 @@ func (b *Builder) resolveDataSourceRef(
 	ref *tree.TableRef, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
-	if b.insideViewDef {
+	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking table leases when we're creating a view.
 		flags.AvoidDescriptorCaches = true
 	}
