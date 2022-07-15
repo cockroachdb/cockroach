@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -327,6 +328,15 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + expect-pausepoint: expects the schema change job to end up in a paused state because
 //   of a pausepoint error.
 //
+// - "kv" [args]
+//   Issues a kv request
+//
+//   Supported arguments:
+//
+//   + type: kv request type. Currently, only DeleteRange is supported
+//
+//   + target: SQL target. Currently, only table names are supported.
+//
 // - "nudge-and-wait-for-temp-cleanup"
 //    Nudges the temporary object reconciliation loop to run, and waits for completion.
 func TestDataDriven(t *testing.T) {
@@ -626,6 +636,15 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 
+			case "kv":
+				var request string
+				d.ScanArgs(t, "request", &request)
+
+				var target string
+				d.ScanArgs(t, "target", &target)
+				handleKVRequest(ctx, t, lastCreatedServer, ds, request, target)
+				return ""
+
 			case "save-cluster-ts":
 				server := lastCreatedServer
 				user := "root"
@@ -675,6 +694,32 @@ func TestDataDriven(t *testing.T) {
 			}
 		})
 	})
+}
+
+func handleKVRequest(
+	ctx context.Context, t *testing.T, server string, ds datadrivenTestState, request, target string,
+) {
+	user := "root"
+	if request == "DeleteRange" {
+		var tableID uint32
+		err := ds.getSQLDB(t, server, user).QueryRow(`SELECT id FROM system.namespace WHERE name = $1`,
+			target).Scan(&tableID)
+		require.NoError(t, err)
+		bankSpan := makeTableSpan(tableID)
+		dr := roachpb.DeleteRangeRequest{
+			// Bogus span to make it a valid request.
+			RequestHeader: roachpb.RequestHeader{
+				Key:    bankSpan.Key,
+				EndKey: bankSpan.EndKey,
+			},
+			UseRangeTombstone: true,
+		}
+		if _, err := kv.SendWrapped(ctx, ds.servers[server].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatalf("Unknown kv request")
+	}
 }
 
 // findMostRecentJobWithType returns the most recently created job of `job_type`

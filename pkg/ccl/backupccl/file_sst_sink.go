@@ -268,32 +268,16 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 
 	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
-	// Copy SST content.
-	sst, err := storage.NewMemSSTIterator(resp.dataSST, false)
-	if err != nil {
+	// To speed up SST reading, surface all the point keys first, flush,
+	// then surface all the range keys and flush.
+	//
+	// TODO(msbutler): investigate using single a single iterator that surfaces
+	// all point keys first and then all range keys
+	if err := s.copyPointKeys(resp.dataSST); err != nil {
 		return err
 	}
-	defer sst.Close()
-
-	sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-	for {
-		if valid, err := sst.Valid(); !valid || err != nil {
-			if err != nil {
-				return err
-			}
-			break
-		}
-		k := sst.UnsafeKey()
-		if k.Timestamp.IsEmpty() {
-			if err := s.sst.PutUnversioned(k.Key, sst.UnsafeValue()); err != nil {
-				return err
-			}
-		} else {
-			if err := s.sst.PutRawMVCC(sst.UnsafeKey(), sst.UnsafeValue()); err != nil {
-				return err
-			}
-		}
-		sst.Next()
+	if err := s.copyRangeKeys(resp.dataSST); err != nil {
+		return err
 	}
 
 	// If this span extended the last span added -- that is, picked up where it
@@ -324,6 +308,66 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 		}
 	} else {
 		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
+	}
+	return nil
+}
+
+func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+	iter, err := storage.NewPebbleMemSSTIterator(dataSST, false, iterOpts)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if valid, err := iter.Valid(); !valid || err != nil {
+			if err != nil {
+				return err
+			}
+			break
+		}
+		k := iter.UnsafeKey()
+		if k.Timestamp.IsEmpty() {
+			if err := s.sst.PutUnversioned(k.Key, iter.UnsafeValue()); err != nil {
+				return err
+			}
+		} else {
+			if err := s.sst.PutRawMVCC(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+	iter, err := storage.NewPebbleMemSSTIterator(dataSST, false, iterOpts)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		for _, rkv := range iter.RangeKeys() {
+			if err := s.sst.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
