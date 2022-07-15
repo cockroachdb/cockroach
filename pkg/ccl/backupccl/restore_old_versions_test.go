@@ -553,6 +553,14 @@ ORDER BY
 			{"non-system", "3"},
 		})
 		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank", [][]string{{"1"}})
+
+		// Check that we can select from every known system
+		// table and haven't clobbered any.
+		for systemTableName, config := range systemTableBackupConfiguration {
+			if !config.expectMissingInSystemTenant {
+				sqlDB.Exec(t, fmt.Sprintf("SELECT * FROM system.%s", systemTableName))
+			}
+		}
 	}
 }
 
