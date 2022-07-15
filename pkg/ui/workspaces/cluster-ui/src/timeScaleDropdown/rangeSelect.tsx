@@ -75,7 +75,7 @@ const OptionButton = ({ option, onClick, isSelected }: OptionButtonProps) => {
         {!isSelected && option.value === "Custom" ? "--" : option.timeLabel}
       </TimeLabel>
       <span className={cx("__option-label")}>
-        {option.value === "Custom" ? "Custom date range" : option.value}
+        {option.value === "Custom" ? "Custom time interval" : option.value}
       </span>
     </Button>
   );
@@ -89,7 +89,7 @@ const RangeSelect = ({
 }: RangeSelectProps): React.ReactElement => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
   /**
-   * customDropdownOptionWasJustSelected holds whether the user had just clicked the "Custom date range" option in
+   * customDropdownOptionWasJustSelected holds whether the user had just clicked the "Custom time interval" option in
    * the dropdown menu.
    * It is NOT whether the user had just selected a custom time by clicking "Apply".
    */
