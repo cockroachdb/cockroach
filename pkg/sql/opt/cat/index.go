@@ -56,7 +56,7 @@ type Index interface {
 	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
 
-	// IsHidden returns true if this index is invisible.
+	// IsHidden returns true if this index is hidden.
 	IsHidden() bool
 
 	// ColumnCount returns the number of columns in the index. This includes

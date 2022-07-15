@@ -48,7 +48,7 @@ type hypotheticalIndex struct {
 	// inverted indicates if an index is inverted.
 	inverted bool
 
-	// hidden indicates if an index is invisible.
+	// hidden indicates if an index is hidden.
 	hidden bool
 }
 

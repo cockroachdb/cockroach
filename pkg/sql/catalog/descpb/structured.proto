@@ -494,9 +494,9 @@ message IndexDescriptor {
   optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
-  // Hidden specifies whether the index is invisible. An invisible index is
-  // ignored by the optimizer unless it is explicitly selected with index
-  // hinting (force index).
+  // Hidden specifies whether the index is hidden to the optimizer. An invisible
+  // index is ignored by the optimizer unless it is explicitly selected with
+  // index hinting (force index). The default value for hidden is false.
   optional bool hidden = 28 [(gogoproto.nullable) = false];
 
   // Next ID: 29

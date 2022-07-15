@@ -917,7 +917,7 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
-	// Hidden is true iff this index is invisible.
+	// Hidden is true iff this index is hidden.
 	Hidden bool
 
 	Columns []cat.IndexColumn

@@ -102,7 +102,7 @@ func (w index) IsSharded() bool {
 	return w.desc.IsSharded()
 }
 
-// IsHidden returns true iff the index is invisible.
+// IsHidden returns true iff the index is hidden.
 func (w index) IsHidden() bool {
 	return w.desc.Hidden
 }

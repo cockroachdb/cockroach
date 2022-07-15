@@ -667,7 +667,7 @@ func TestValidateTableDesc(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnNames:      []string{"bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					ConstraintID:        1,

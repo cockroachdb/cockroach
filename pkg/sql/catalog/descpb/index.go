@@ -29,7 +29,7 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
-// IsHidden returns whether the index is hidden from the optimizer or not.
+// IsHidden returns whether the index is hidden or not.
 func (desc *IndexDescriptor) IsHidden() bool {
 	return desc.Hidden
 }
