@@ -101,6 +101,8 @@ func (w *walkCtx) walkRoot() {
 		w.walkType(d)
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
+	case catalog.FunctionDescriptor:
+		// TODO (Chengxiong) #83235 implement DROP FUNCTION
 	default:
 		panic(errors.AssertionFailedf("unexpected descriptor type %T: %+v",
 			w.desc, w.desc))
