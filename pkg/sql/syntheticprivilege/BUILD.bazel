@@ -5,6 +5,7 @@ go_library(
     name = "syntheticprivilege",
     srcs = [
         "global_privilege.go",
+        "synthesize_privileges.go",
         "synthetic_privilege_registry.go",
         "vtable_privilege.go",
     ],
@@ -21,6 +22,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
