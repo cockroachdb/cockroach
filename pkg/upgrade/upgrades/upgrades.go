@@ -55,12 +55,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"add column avgSize to table system.table_statistics",
-		toCV(clusterversion.AlterSystemTableStatisticsAddAvgSizeCol),
-		NoPrecondition,
-		alterSystemTableStatisticsAddAvgSize,
-	),
-	upgrade.NewTenantUpgrade(
 		"seed system.span_configurations with configs for existing tenants",
 		toCV(clusterversion.SeedTenantSpanConfigs),
 		NoPrecondition,

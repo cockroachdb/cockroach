@@ -164,9 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
-	// table system.table_statistics that contains a new statistic.
-	AlterSystemTableStatisticsAddAvgSizeCol
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
@@ -411,10 +408,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
 	},
 	{
 		Key:     MVCCAddSSTable,
