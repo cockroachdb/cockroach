@@ -93,8 +93,14 @@ func WithBuilderDependenciesFromTestServer(
 	))
 }
 
-// ProtoToYAML marshals a protobuf to YAML in a roundabout way.
-func ProtoToYAML(m protoutil.Message, fmtFlags protoreflect.FmtFlags) (string, error) {
+// ProtoToYAML marshals a protobuf to YAML in a roundabout way. The optional
+// rewrites function can be used to modify the data being displayed. The input
+// are values decoded after converting the protobuf first to json and then
+// decoding that into a map[string]interface{}. The function will be called
+// for every object in the decoded map recursively.
+func ProtoToYAML(
+	m protoutil.Message, fmtFlags protoreflect.FmtFlags, rewrites func(interface{}),
+) (string, error) {
 	js, err := protoreflect.MessageToJSON(m, fmtFlags)
 	if err != nil {
 		return "", err
@@ -110,7 +116,10 @@ func ProtoToYAML(m protoutil.Message, fmtFlags protoreflect.FmtFlags) (string, e
 	if err != nil {
 		return "", err
 	}
-	removeEmbedded(target)
+	RewriteEmbeddedIntoParent(target)
+	if rewrites != nil {
+		walkMaps(target, rewrites)
+	}
 	out, err := yaml.Marshal(target)
 	if err != nil {
 		return "", err
@@ -118,7 +127,27 @@ func ProtoToYAML(m protoutil.Message, fmtFlags protoreflect.FmtFlags) (string, e
 	return string(out), nil
 }
 
-func removeEmbedded(in map[string]interface{}) {
+func walkMaps(in interface{}, f func(v interface{})) {
+	var walk func(interface{})
+	walk = func(obj interface{}) {
+		f(obj)
+		switch objV := obj.(type) {
+		case map[string]interface{}:
+			for _, v := range objV {
+				walk(v)
+			}
+		case []interface{}:
+			for _, v := range objV {
+				walk(v)
+			}
+		}
+	}
+	walk(in)
+}
+
+// RewriteEmbeddedIntoParent is a rewrite function which lifts embedded
+// struct fields into their parents in ProtoToYAML.
+func RewriteEmbeddedIntoParent(in interface{}) {
 	embeddedRegexp := regexp.MustCompile("^embedded[A-Z]")
 	containsAnyKeys := func(haystack, needles map[string]interface{}) bool {
 		for k := range needles {
@@ -128,28 +157,22 @@ func removeEmbedded(in map[string]interface{}) {
 		}
 		return false
 	}
-	var walk func(interface{})
-	walk = func(obj interface{}) {
-		switch objV := obj.(type) {
-		case map[string]interface{}:
-			for k, v := range objV {
-				walk(v)
-				m, ok := v.(map[string]interface{})
-				if !ok || !embeddedRegexp.MatchString(k) || containsAnyKeys(objV, m) {
-					continue
-				}
-				delete(objV, k)
-				for mk, mv := range m {
-					objV[mk] = mv
-				}
+	walkMaps(in, func(obj interface{}) {
+		objV, ok := obj.(map[string]interface{})
+		if !ok {
+			return
+		}
+		for k, v := range objV {
+			m, ok := v.(map[string]interface{})
+			if !ok || !embeddedRegexp.MatchString(k) || containsAnyKeys(objV, m) {
+				continue
 			}
-		case []interface{}:
-			for _, v := range objV {
-				walk(v)
+			delete(objV, k)
+			for mk, mv := range m {
+				objV[mk] = mv
 			}
 		}
-	}
-	walk(in)
+	})
 }
 
 // DiffArgs defines arguments for the Diff function.
@@ -190,13 +213,13 @@ func Diff(a, b string, args DiffArgs) string {
 }
 
 // ProtoDiff generates an indented summary of the diff between two protos'
-// YAML representations.
-func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
+// YAML representations. See ProtoToYAML for documentation on rewrites.
+func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites func(i interface{})) string {
 	toYAML := func(m protoutil.Message) string {
 		if m == nil {
 			return ""
 		}
-		str, err := ProtoToYAML(m, protoreflect.FmtFlags{})
+		str, err := ProtoToYAML(m, protoreflect.FmtFlags{}, rewrites)
 		if err != nil {
 			panic(err)
 		}

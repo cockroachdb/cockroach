@@ -76,11 +76,7 @@ upsert descriptor #106
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -88,53 +84,8 @@ upsert descriptor #106
   +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
   +        statementTag: ALTER TABLE
   +    revertible: true
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    targets:
-  +    - elementProto:
-  +        column:
-  +          columnId: 2
-  +          pgAttributeNum: 2
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        columnName:
-  +          columnId: 2
-  +          name: j
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        columnType:
-  +          columnId: 2
-  +          isNullable: true
-  +          tableId: 106
-  +          type:
-  +            family: IntFamily
-  +            oid: 20
-  +            width: 64
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 1
-  +          kind: STORED
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -157,13 +108,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 3 MutationType ops
 upsert descriptor #106
-  ...
-         userName: root
-       currentStatuses:
-  -    - DELETE_ONLY
-  +    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -205,11 +149,7 @@ upsert descriptor #106
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - WRITE_ONLY
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -217,53 +157,8 @@ upsert descriptor #106
   -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
   -        statementTag: ALTER TABLE
   -    revertible: true
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    targets:
-  -    - elementProto:
-  -        column:
-  -          columnId: 2
-  -          pgAttributeNum: 2
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        columnName:
-  -          columnId: 2
-  -          name: j
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        columnType:
-  -          columnId: 2
-  -          isNullable: true
-  -          tableId: 106
-  -          type:
-  -            family: IntFamily
-  -            oid: 20
-  -            width: 64
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 1
-  -          kind: STORED
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...
