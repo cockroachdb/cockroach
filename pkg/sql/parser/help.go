@@ -92,7 +92,7 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 // "in error", with the error set to a contextual help message about
 // the current built-in function.
 func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
-	d, err := f.Resolve(tree.EmptySearchPath)
+	d, err := f.Resolve(tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return 1
 	}
