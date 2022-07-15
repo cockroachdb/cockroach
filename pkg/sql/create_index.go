@@ -193,7 +193,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted); err != nil {
 		return nil, err
 	}
 
@@ -318,7 +318,7 @@ func makeIndexDescriptor(
 }
 
 func checkIndexColumns(
-	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList,
+	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList, inverted bool,
 ) error {
 	for i, colDef := range columns {
 		col, err := desc.FindColumnWithName(colDef.Column)
@@ -330,6 +330,13 @@ func checkIndexColumns(
 				pgcode.FeatureNotSupported,
 				"cannot index system column %v", colDef.Column,
 			)
+		}
+	}
+	if inverted {
+		lastCol := columns[len(columns)-1]
+		if lastCol.Direction != tree.DefaultDirection {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"the last column in an inverted index cannot have ASC/DESC options")
 		}
 	}
 	for i, colName := range storing {

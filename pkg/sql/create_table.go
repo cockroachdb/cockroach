@@ -1790,7 +1790,7 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -2666,6 +2666,11 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
+				}
+				// The last column of an inverted index cannot have an explicit
+				// direction.
+				if indexDef.Inverted {
+					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 					indexDef.Storing = append(indexDef.Storing, tree.Name(idx.GetStoredColumnName(j)))

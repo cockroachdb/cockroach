@@ -107,6 +107,9 @@ CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (a + b)))
 statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (row(a, b))))
 
+statement error the last column in an inverted index cannot have ASC/DESC options
+CREATE TABLE err (a INT, j JSON, INVERTED INDEX (a, (j->'a') DESC))
+
 statement error volatile functions are not allowed in index element
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
 
@@ -308,6 +311,9 @@ CREATE INVERTED INDEX err ON t (a, (a + b));
 statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (row(a, b)));
 
+statement error the last column in an inverted index cannot have ASC/DESC options
+CREATE INVERTED INDEX err ON t (j, (j->'a') DESC);
+
 statement ok
 CREATE TABLE other (
   a INT
@@ -424,7 +430,7 @@ CREATE TABLE public.copy_indexes (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING) ASC)
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -451,7 +457,7 @@ CREATE TABLE public.copy_all (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING) ASC)
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are

@@ -216,14 +216,18 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		f.WriteByte(' ')
+		// The last column of an inverted index cannot have an explicit
+		// direction.
+		if i < n-1 || index.Type != descpb.IndexDescriptor_INVERTED {
+			f.WriteByte(' ')
+			f.WriteString(index.KeyColumnDirections[i].String())
+		}
 		if index.Type == descpb.IndexDescriptor_INVERTED && len(index.InvertedColumnKinds) > 0 {
 			switch index.InvertedColumnKinds[0] {
 			case catpb.InvertedIndexColumnKind_TRIGRAM:
-				f.WriteString("gin_trgm_ops ")
+				f.WriteString(" gin_trgm_ops")
 			}
 		}
-		f.WriteString(index.KeyColumnDirections[i].String())
 	}
 	return nil
 }
