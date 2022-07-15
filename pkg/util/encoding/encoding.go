@@ -154,6 +154,25 @@ const (
 
 const escapeLength = 2
 
+// EncodeUint16Ascending encodes the uint16 value using a big-endian 2 byte
+// representation. The bytes are appended to the supplied buffer and
+// the final buffer is returned.
+func EncodeUint16Ascending(b []byte, v uint16) []byte {
+	return append(b, byte(v>>8), byte(v))
+}
+
+// PutUint16Ascending encodes the uint16 value using a big-endian 2 byte
+// representation at the specified index, lengthening the input slice if
+// necessary.
+func PutUint16Ascending(b []byte, v uint16, idx int) []byte {
+	for len(b) < idx+2 {
+		b = append(b, 0)
+	}
+	b[idx] = byte(v >> 8)
+	b[idx+1] = byte(v)
+	return b
+}
+
 // EncodeUint32Ascending encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
@@ -179,6 +198,17 @@ func PutUint32Ascending(b []byte, v uint32, idx int) []byte {
 // reverse order, from largest to smallest.
 func EncodeUint32Descending(b []byte, v uint32) []byte {
 	return EncodeUint32Ascending(b, ^v)
+}
+
+// DecodeUint16Ascending decodes a uint16 from the input buffer, treating
+// the input as a big-endian 2 byte uint16 representation. The remainder
+// of the input buffer and the decoded uint16 are returned.
+func DecodeUint16Ascending(b []byte) ([]byte, uint16, error) {
+	if len(b) < 2 {
+		return nil, 0, errors.Errorf("insufficient bytes to decode uint16 int value")
+	}
+	v := binary.BigEndian.Uint16(b)
+	return b[2:], v, nil
 }
 
 // DecodeUint32Ascending decodes a uint32 from the input buffer, treating
@@ -2904,7 +2934,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo:
+	case Bytes, Array, JSON, Geo, TSVector, TSQuery:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:

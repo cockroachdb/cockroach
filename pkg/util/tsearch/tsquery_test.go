@@ -188,6 +188,9 @@ func TestParseTSQuery(t *testing.T) {
 		assert.NoError(t, err)
 		actual := query.String()
 		assert.Equal(t, tc.expectedStr, actual)
+
+		// Ensure it doesn't error for now.
+		EncodeTSQuery(query, nil)
 	}
 }
 

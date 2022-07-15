@@ -15,10 +15,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // tsweight is a string A, B, C, or D.
-type tsweight int
+type tsweight byte
 
 const (
 	weightD tsweight = 1 << iota
@@ -26,6 +28,7 @@ const (
 	weightB
 	weightA
 	weightStar
+	invalidWeight
 )
 
 func (w tsweight) String() string {
@@ -46,6 +49,40 @@ func (w tsweight) String() string {
 		ret.WriteByte('D')
 	}
 	return ret.String()
+}
+
+// TSVectorPGEncoding returns the PG-compatible wire protocol encoding for a
+// given weight. Note that this is only allowable for TSVector tsweights, which
+// can't have more than one weight set at the same time. In a TSQuery, you might
+// have more than one weight per lexeme, which is not encodable using this
+// scheme.
+func (w tsweight) TSVectorPGEncoding() (byte, error) {
+	switch w {
+	case weightA:
+		return 3, nil
+	case weightB:
+		return 2, nil
+	case weightC:
+		return 1, nil
+	case weightD, 0:
+		return 0, nil
+	}
+	return 0, errors.Errorf("invalid tsvector weight %d", w)
+}
+
+func tsWeightFromVectorPGEncoding(b byte) (tsweight, error) {
+	switch b {
+	case 3:
+		return weightA, nil
+	case 2:
+		return weightB, nil
+	case 1:
+		return weightC, nil
+	case 0:
+		// We don't explicitly return weightD, since it's the default.
+		return 0, nil
+	}
+	return 0, errors.Errorf("invalid encoded tsvector weight %d", b)
 }
 
 type tsposition struct {
@@ -79,6 +116,20 @@ func (o tsoperator) precedence() int {
 		return 1
 	}
 	panic(fmt.Sprintf("no precdence for operator %d", o))
+}
+
+func (o tsoperator) pgwireEncoding() byte {
+	switch o {
+	case not:
+		return 1
+	case and:
+		return 2
+	case or:
+		return 3
+	case followedby:
+		return 4
+	}
+	panic(fmt.Sprintf("no pgwire encoding for operator %d", o))
 }
 
 type tsTerm struct {

@@ -147,6 +147,7 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	case types.ArrayFamily:
 	case types.GeographyFamily:
 	case types.GeometryFamily:
+	case types.TSVectorFamily:
 	default:
 		return false
 	}
@@ -165,6 +166,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 			return MustBeValueEncoded(semanticType.ArrayContents())
 		}
 	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+		return true
+	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	}
 	return false
