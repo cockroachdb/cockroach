@@ -944,3 +944,16 @@ func (s ShowCompletions) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ShowCompletions{}
+
+// ShowCreateFunction represents a SHOW CREATE FUNCTION statement.
+type ShowCreateFunction struct {
+	Name ResolvableFunctionReference
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE FUNCTION ")
+	ctx.FormatNode(&node.Name)
+}
+
+var _ Statement = &ShowCreateFunction{}

@@ -58,6 +58,9 @@ func TryDelegate(
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
 
+	case *tree.ShowCreateFunction:
+		return d.delegateShowCreateFunction(t)
+
 	case *tree.ShowCreateAllSchemas:
 		return d.delegateShowCreateAllSchemas()
 
