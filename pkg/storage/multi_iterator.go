@@ -20,8 +20,6 @@ import (
 const invalidIdxSentinel = -1
 
 // multiIterator multiplexes iteration over a number of SimpleMVCCIterators.
-//
-// TODO (msbutler): remove the multiIterator and replace all uses with PebbleSSTIterator
 type multiIterator struct {
 	iters []SimpleMVCCIterator
 	// The index into `iters` of the iterator currently being pointed at.

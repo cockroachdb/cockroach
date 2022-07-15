@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 )
 
-// RemoteSSTs lets external SSTables get iterated directly in some cases,
-// rather than being downloaded entirely first.
 var remoteSSTs = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulk_ingest.stream_external_ssts.enabled",
@@ -41,126 +39,12 @@ var remoteSSTSuffixCacheSize = settings.RegisterByteSizeSetting(
 	64<<10,
 )
 
-func getFileWithRetry(
-	ctx context.Context, basename string, e cloud.ExternalStorage,
-) (ioctx.ReadCloserCtx, int64, error) {
-	// Do an initial read of the file, from the beginning, to get the file size as
-	// this is used e.g. to read the trailer.
-	var f ioctx.ReadCloserCtx
-	var sz int64
-	const maxAttempts = 3
-	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		var err error
-		f, sz, err = e.ReadFileAt(ctx, basename, 0)
-		return err
-	}); err != nil {
-		return nil, 0, err
-	}
-	return f, sz, nil
-}
-
-// newMemPebbleSSTReader returns a PebbleSSTIterator for in-memory SSTs from
-// external storage, optionally decrypting with the supplied parameters.
-//
-// ctx is captured and used throughout the life of the returned iterator, until
-// the iterator's Close() method is called.
-func newMemPebbleSSTReader(
-	ctx context.Context,
-	e []cloud.ExternalStorage,
-	basenames []string,
-	encryption *roachpb.FileEncryptionOptions,
-	iterOps storage.IterOptions,
-) (storage.SimpleMVCCIterator, error) {
-
-	inMemorySSTs := make([][]byte, 0, len(basenames))
-
-	for i, basename := range basenames {
-		f, _, err := getFileWithRetry(ctx, basename, e[i])
-		if err != nil {
-			return nil, err
-		}
-		content, err := ioctx.ReadAll(ctx, f)
-		f.Close(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if encryption != nil {
-			content, err = DecryptFile(ctx, content, encryption.Key, nil /* mm */)
-			if err != nil {
-				return nil, err
-			}
-		}
-		inMemorySSTs = append(inMemorySSTs, content)
-	}
-	return storage.NewPebbleMultiMemSSTIterator(inMemorySSTs, false, iterOps)
-}
-
-// ExternalSSTReader returns a PebbleSSTIterator for the SSTs in external storage,
-// optionally decrypting with the supplied parameters.
-//
-// ctx is captured and used throughout the life of the returned iterator, until
-// the iterator's Close() method is called.
-func ExternalSSTReader(
-	ctx context.Context,
-	e []cloud.ExternalStorage,
-	basenames []string,
-	encryption *roachpb.FileEncryptionOptions,
-	iterOps storage.IterOptions,
-) (storage.SimpleMVCCIterator, error) {
-	if !remoteSSTs.Get(&e[0].Settings().SV) {
-		return newMemPebbleSSTReader(ctx, e, basenames, encryption, iterOps)
-	}
-	remoteCacheSize := remoteSSTSuffixCacheSize.Get(&e[0].Settings().SV)
-	readers := make([]sstable.ReadableFile, 0, len(basenames))
-
-	for i, basename := range basenames {
-		f, sz, err := getFileWithRetry(ctx, basename, e[i])
-		if err != nil {
-			return nil, err
-		}
-
-		raw := &sstReader{
-			ctx:  ctx,
-			sz:   sizeStat(sz),
-			body: f,
-			openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
-				reader, _, err := e[i].ReadFileAt(ctx, basename, offset)
-				return reader, err
-			},
-		}
-
-		var reader sstable.ReadableFile
-
-		if encryption != nil {
-			r, err := decryptingReader(raw, encryption.Key)
-			if err != nil {
-				f.Close(ctx)
-				return nil, err
-			}
-			reader = r
-		} else {
-			// We only explicitly buffer the suffix of the file when not decrypting as
-			// the decrypting reader has its own internal block buffer.
-			if err := raw.readAndCacheSuffix(remoteCacheSize); err != nil {
-				f.Close(ctx)
-				return nil, err
-			}
-			reader = raw
-		}
-		readers = append(readers, reader)
-	}
-	return storage.NewPebbleSSTIterator(readers, iterOps)
-}
-
-// DeprecatingExternalSSTReader returns opens an SST in external storage, optionally
+// ExternalSSTReader returns opens an SST in external storage, optionally
 // decrypting with the supplied parameters, and returns iterator over it.
 //
 // ctx is captured and used throughout the life of the returned iterator, until
 // the iterator's Close() method is called.
-//
-// TODO (msbutler): replace all current calls with new ExternalSSTReader,
-// as it does not handle range keys
-func DeprecatingExternalSSTReader(
+func ExternalSSTReader(
 	ctx context.Context,
 	e cloud.ExternalStorage,
 	basename string,
