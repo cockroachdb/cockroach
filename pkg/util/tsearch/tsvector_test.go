@@ -88,6 +88,19 @@ bar   `, `'bar' 'foo'`},
 		require.NoError(t, err)
 		actual := vec.String()
 		assert.Equal(t, tc.expectedStr, actual)
+
+		// Test serialization.
+		serialized := EncodeTSVector(nil, vec)
+		roundtripped, err := DecodeTSVector(serialized)
+		require.NoError(t, err)
+		assert.Equal(t, tc.expectedStr, roundtripped.String())
+
+		serialized, err = EncodeTSVectorPGBinary(nil, vec)
+		require.NoError(t, err)
+		roundtripped, err = DecodeTSVectorPGBinary(serialized)
+		require.NoError(t, err)
+		assert.Equal(t, tc.expectedStr, roundtripped.String())
+
 	}
 
 	t.Run("ComparePG", func(t *testing.T) {
