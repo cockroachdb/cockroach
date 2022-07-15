@@ -27,15 +27,13 @@ export const EmptyTransactionsPlaceholder: React.FC<{
   const emptyPlaceholderProps: EmptyTableProps = isEmptySearchResults
     ? {
         title:
-          "No transactions match your search since this page was last cleared",
+          "No transactions match your search in the selected time interval",
         icon: magnifyingGlassImg,
         footer,
       }
     : {
-        title: "No transactions since this page was last cleared",
+        title: "No transactions in the selected time interval",
         icon: emptyTableResultsImg,
-        message:
-          "Transactions are cleared every hour by default, or according to your configuration.",
         footer,
       };
   return <EmptyTable {...emptyPlaceholderProps} />;
