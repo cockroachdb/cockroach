@@ -7012,7 +7012,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// First test to make sure we would send the replica to purgatory.
 	_, _, err := a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil)
-	if !errors.HasInterface(err, (*PurgatoryError)(nil)) {
+	if !errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
@@ -7036,7 +7036,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	storeDetail.throttledUntil = timeutil.Now().Add(24 * time.Hour)
 	a.storePool.detailsMu.Unlock()
 	_, _, err = a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil)
-	if errors.HasInterface(err, (*PurgatoryError)(nil)) {
+	if errors.HasInterface(err, (*purgatoryError)(nil)) {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
 }

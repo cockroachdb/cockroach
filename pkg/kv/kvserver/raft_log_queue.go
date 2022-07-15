@@ -754,10 +754,6 @@ func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
 
-func (*raftLogQueue) updateChan() <-chan time.Time {
-	return nil
-}
-
 func isLooselyCoupledRaftLogTruncationEnabled(
 	ctx context.Context, settings *cluster.Settings,
 ) bool {
