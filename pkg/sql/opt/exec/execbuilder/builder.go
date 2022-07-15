@@ -201,6 +201,8 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 
 // SetSearchPath configures this builder to use specified search path.
 func (b *Builder) SetSearchPath(sp tree.SearchPath) {
+	// TODO(mgartner): The customFnResolver and wrapFunctionOverride could
+	// probably be replaced by a custom implementation of tree.FunctionResolver.
 	if customFnResolver, ok := sp.(tree.CustomFunctionDefinitionResolver); ok {
 		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
 			fd := customFnResolver.Resolve(fnName)
