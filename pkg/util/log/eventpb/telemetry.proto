@@ -61,6 +61,9 @@ message SampledQuery {
 
   // Database ID of the query.
   uint32 database_id = 12 [(gogoproto.customname) = "DatabaseID", (gogoproto.jsontag) = ",omitempty"];
+
+  // Statement fingerprint ID of the query.
+  uint64 statement_fingerprint_id = 13 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty'];
 }
 
 // CapturedIndexUsageStats
