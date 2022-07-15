@@ -8,6 +8,7 @@ go_library(
         "column.go",
         "data_source.go",
         "family.go",
+        "function.go",
         "index.go",
         "object.go",
         "schema.go",

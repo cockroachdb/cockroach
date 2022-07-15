@@ -660,7 +660,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"referenced table ID 500: referenced descriptor not found",
+			"referenced descriptor ID 500: referenced descriptor not found",
 			descpb.TypeDescriptor{
 				Name:                     "t",
 				ID:                       typeDescID,
@@ -673,7 +673,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"referenced table ID 500: referenced descriptor not found",
+			"referenced descriptor ID 500: referenced descriptor not found",
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,

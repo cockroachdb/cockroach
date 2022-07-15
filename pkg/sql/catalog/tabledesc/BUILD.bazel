@@ -97,6 +97,7 @@ go_test(
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/privilege",
