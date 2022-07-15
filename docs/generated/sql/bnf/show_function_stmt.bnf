@@ -1,0 +1,2 @@
+show_function_stmt ::=
+	'SHOW' 'FUNCTION' func_name_no_crdb_extra

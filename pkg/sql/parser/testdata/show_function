@@ -1,0 +1,7 @@
+parse
+SHOW FUNCTION foo
+----
+SHOW FUNCTION foo
+SHOW FUNCTION (foo) -- fully parenthesized
+SHOW FUNCTION foo -- literals removed
+SHOW FUNCTION _ -- identifiers removed

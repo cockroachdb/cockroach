@@ -1148,6 +1148,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_fingerprints_stmt
+%type <tree.Statement> show_function_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
@@ -5673,8 +5674,9 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW CREATE SCHEDULES, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
+// SHOW CREATE, SHOW CREATE SCHEDULES, SHOW DATABASES, SHOW ENUMS, SHOW
+// FUNCTION, SHOW HISTOGRAM, SHOW INDEXES, SHOW PARTITIONS, SHOW JOBS, SHOW
+// STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
@@ -5690,6 +5692,7 @@ show_stmt:
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
+| show_function_stmt         // EXTEND WITH HELP: SHOW FUNCTION
 | show_grants_stmt           // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt        // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt          // EXTEND WITH HELP: SHOW INDEXES
@@ -6279,6 +6282,17 @@ show_enums_stmt:
     }
 }
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
+
+// %Help: SHOW FUNCTION - Display function information.
+// %Category: Misc
+// %Text: SHOW FUNCTION <function_name>
+// %SeeAlso: WEBDOCS/show-function.html
+show_function_stmt:
+  SHOW FUNCTION func_name_no_crdb_extra
+  {
+    $$.val = &tree.ShowFunction{Func: $3.resolvableFuncRefFromName()}
+  }
+| SHOW FUNCTION error // SHOW HELP: SHOW FUNCTION
 
 // %Help: SHOW TYPES - list user defined types
 // %Category: Misc
