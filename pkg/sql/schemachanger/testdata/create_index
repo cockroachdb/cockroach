@@ -93,14 +93,7 @@ upsert descriptor #106
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - BACKFILL_ONLY
-  +    - ABSENT
-  +    - DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -109,82 +102,8 @@ upsert descriptor #106
   +        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   +        statementTag: CREATE INDEX
   +    revertible: true
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    - 4
-  +    - 5
-  +    - 6
-  +    targets:
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 2
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 2
-  +          kind: KEY_SUFFIX
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        secondaryIndex:
-  +          indexId: 2
-  +          sourceIndexId: 1
-  +          tableId: 106
-  +          temporaryIndexId: 3
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: idx1
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        temporaryIndex:
-  +          indexId: 3
-  +          isUsingSecondaryEncoding: true
-  +          sourceIndexId: 1
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: TRANSIENT_ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 3
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 3
-  +          kind: KEY_SUFFIX
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -207,13 +126,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 6 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       - BACKFILL_ONLY
-       - ABSENT
-  -    - DELETE_ONLY
-  +    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -244,13 +156,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
-       - PUBLIC
-       - PUBLIC
-  -    - BACKFILL_ONLY
-  +    - DELETE_ONLY
-       - ABSENT
-       - WRITE_ONLY
-  ...
      formatVersion: 3
      id: 106
   -  modificationTime:
@@ -275,13 +180,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       - PUBLIC
-       - PUBLIC
-  -    - DELETE_ONLY
-  +    - MERGE_ONLY
-       - ABSENT
-       - WRITE_ONLY
   ...
      formatVersion: 3
      id: 106
@@ -316,24 +214,11 @@ begin transaction #9
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 upsert descriptor #106
   ...
-       - PUBLIC
-       - PUBLIC
-  -    - MERGE_ONLY
-  -    - ABSENT
-  -    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
-  +    - TRANSIENT_DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
-       jobId: "1"
-       relevantStatements:
-  ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
            statementTag: CREATE INDEX
   -    revertible: true
-       targetRanks:
-       - 0
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 106
@@ -413,14 +298,7 @@ upsert descriptor #106
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
-  -    - PUBLIC
-  -    - PUBLIC
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -428,82 +306,8 @@ upsert descriptor #106
   -          (‹v› = ‹'a'›)
   -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   -        statementTag: CREATE INDEX
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    targets:
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 2
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 2
-  -          kind: KEY_SUFFIX
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        secondaryIndex:
-  -          indexId: 2
-  -          sourceIndexId: 1
-  -          tableId: 106
-  -          temporaryIndexId: 3
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 2
-  -          name: idx1
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        temporaryIndex:
-  -          indexId: 3
-  -          isUsingSecondaryEncoding: true
-  -          sourceIndexId: 1
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: TRANSIENT_ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 3
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 3
-  -          kind: KEY_SUFFIX
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...

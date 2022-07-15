@@ -128,21 +128,7 @@ upsert descriptor #106
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
-  +    currentStatuses:
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
-  +    - BACKFILL_ONLY
-  +    - ABSENT
-  +    - DELETE_ONLY
-  +    - PUBLIC
-  +    - PUBLIC
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -151,159 +137,8 @@ upsert descriptor #106
   +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
   +        statementTag: ALTER TABLE
   +    revertible: true
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    - 3
-  +    - 4
-  +    - 5
-  +    - 6
-  +    - 7
-  +    - 8
-  +    - 9
-  +    - 10
-  +    - 11
-  +    - 12
-  +    - 13
-  +    targets:
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 1
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        primaryIndex:
-  +          constraintId: 1
-  +          indexId: 1
-  +          isUnique: true
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 1
-  +          name: tbl_pkey
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        column:
-  +          columnId: 2
-  +          pgAttributeNum: 2
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        columnName:
-  +          columnId: 2
-  +          name: j
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        columnType:
-  +          columnId: 2
-  +          tableId: 106
-  +          type:
-  +            family: IntFamily
-  +            oid: 20
-  +            width: 64
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        columnDefaultExpression:
-  +          columnId: 2
-  +          expr: 42:::INT8
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 2
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 2
-  +          kind: STORED
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        primaryIndex:
-  +          constraintId: 1
-  +          indexId: 2
-  +          isUnique: true
-  +          sourceIndexId: 1
-  +          tableId: 106
-  +          temporaryIndexId: 3
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: tbl_pkey
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        temporaryIndex:
-  +          constraintId: 1
-  +          indexId: 3
-  +          isUnique: true
-  +          sourceIndexId: 1
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: TRANSIENT_ABSENT
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 1
-  +          indexId: 3
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexColumn:
-  +          columnId: 2
-  +          indexId: 3
-  +          kind: STORED
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -326,20 +161,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 6 with 4 MutationType ops
 upsert descriptor #106
-  ...
-       - PUBLIC
-       - PUBLIC
-  -    - DELETE_ONLY
-  +    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
-  ...
-       - BACKFILL_ONLY
-       - ABSENT
-  -    - DELETE_ONLY
-  +    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -377,13 +198,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
-       - PUBLIC
-       - PUBLIC
-  -    - BACKFILL_ONLY
-  +    - DELETE_ONLY
-       - ABSENT
-       - WRITE_ONLY
-  ...
      formatVersion: 3
      id: 106
   -  modificationTime:
@@ -408,13 +222,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       - PUBLIC
-       - PUBLIC
-  -    - DELETE_ONLY
-  +    - MERGE_ONLY
-       - ABSENT
-       - WRITE_ONLY
   ...
      formatVersion: 3
      id: 106
@@ -462,32 +269,11 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-         userName: root
-       currentStatuses:
-  +    - ABSENT
-  +    - WRITE_ONLY
-  +    - ABSENT
-       - PUBLIC
-       - PUBLIC
-       - PUBLIC
-  -    - WRITE_ONLY
-       - PUBLIC
-       - PUBLIC
-  ...
-       - PUBLIC
-       - PUBLIC
-  -    - MERGE_ONLY
-  -    - ABSENT
-  -    - WRITE_ONLY
-  +    - TRANSIENT_DELETE_ONLY
-       - PUBLIC
-       - PUBLIC
-  ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
            statementTag: ALTER TABLE
   -    revertible: true
-       targetRanks:
-       - 0
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 106
@@ -600,13 +386,6 @@ begin transaction #10
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
 upsert descriptor #106
   ...
-       currentStatuses:
-       - ABSENT
-  -    - WRITE_ONLY
-  +    - DELETE_ONLY
-       - ABSENT
-       - PUBLIC
-  ...
      formatVersion: 3
      id: 106
   -  modificationTime:
@@ -637,21 +416,7 @@ upsert descriptor #106
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses:
-  -    - ABSENT
-  -    - DELETE_ONLY
-  -    - ABSENT
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
-  -    - PUBLIC
-  -    - PUBLIC
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -659,159 +424,8 @@ upsert descriptor #106
   -          NULL DEFAULT ‹42›
   -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
   -        statementTag: ALTER TABLE
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    - 8
-  -    - 9
-  -    - 10
-  -    - 11
-  -    - 12
-  -    - 13
-  -    targets:
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 1
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        primaryIndex:
-  -          constraintId: 1
-  -          indexId: 1
-  -          isUnique: true
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 1
-  -          name: tbl_pkey
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        column:
-  -          columnId: 2
-  -          pgAttributeNum: 2
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        columnName:
-  -          columnId: 2
-  -          name: j
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        columnType:
-  -          columnId: 2
-  -          tableId: 106
-  -          type:
-  -            family: IntFamily
-  -            oid: 20
-  -            width: 64
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        columnDefaultExpression:
-  -          columnId: 2
-  -          expr: 42:::INT8
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 2
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 2
-  -          kind: STORED
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        primaryIndex:
-  -          constraintId: 1
-  -          indexId: 2
-  -          isUnique: true
-  -          sourceIndexId: 1
-  -          tableId: 106
-  -          temporaryIndexId: 3
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 2
-  -          name: tbl_pkey
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        temporaryIndex:
-  -          constraintId: 1
-  -          indexId: 3
-  -          isUnique: true
-  -          sourceIndexId: 1
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: TRANSIENT_ABSENT
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 1
-  -          indexId: 3
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        indexColumn:
-  -          columnId: 2
-  -          indexId: 3
-  -          kind: STORED
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: PUBLIC
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...
