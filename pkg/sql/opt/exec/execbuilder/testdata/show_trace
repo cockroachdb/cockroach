@@ -52,7 +52,7 @@ $trace_query
 batch flow coordinator  CPut /NamespaceTable/30/1/106/0/"public"/4/1 -> 107
 batch flow coordinator  CPut /Table/3/1/107/2/1 -> schema:<name:"public" id:107 state:PUBLIC offline_reason:"" modification_time:<> version:1 parent_id:106 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:516 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"admin" version:2 > >
 batch flow coordinator  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 106
-batch flow coordinator  CPut /Table/3/1/106/2/1 -> database:<name:"t" id:106 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:2048 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > schemas:<key:"public" value:<id:107 dropped:false > > state:PUBLIC offline_reason:"" default_privileges:<type:DATABASE > >
+batch flow coordinator  CPut /Table/3/1/106/2/1 -> database:<name:"t" id:106 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:2048 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > schemas:<key:"public" value:<id:107 > > state:PUBLIC offline_reason:"" default_privileges:<type:DATABASE > >
 sql query               rows affected: 0
 
 

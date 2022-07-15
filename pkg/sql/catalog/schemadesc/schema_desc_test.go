@@ -107,35 +107,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				ID: 51,
 			},
 		},
-		{ // 2
-			err: `not present in parent database [51] schemas mapping`,
-			desc: descpb.SchemaDescriptor{
-				ID:       52,
-				ParentID: 51,
-				Name:     "schema1",
-			},
-			dbDesc: descpb.DatabaseDescriptor{
-				ID: 51,
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"foo": {ID: 52, Dropped: true},
-				},
-			},
-		},
 		{ // 3
-			err: `present in parent database [51] schemas mapping but marked as dropped`,
-			desc: descpb.SchemaDescriptor{
-				ID:       52,
-				ParentID: 51,
-				Name:     "schema1",
-			},
-			dbDesc: descpb.DatabaseDescriptor{
-				ID: 51,
-				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: true},
-				},
-			},
-		},
-		{ // 4
 			err: `present in parent database [51] schemas mapping but under name "bad"`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
@@ -149,7 +121,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 5
+		{ // 4
 			err: `present in parent database [51] schemas mapping but name maps to other schema [500]`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,

@@ -582,7 +582,7 @@ func DatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRe
 
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-		err := db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
+		err := db.ForEachSchema(func(id descpb.ID, name string) error {
 			rewrite, ok := descriptorRewrites[id]
 			if !ok {
 				return errors.Errorf("missing rewrite for schema %d", id)

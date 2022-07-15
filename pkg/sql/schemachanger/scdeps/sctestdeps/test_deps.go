@@ -539,7 +539,7 @@ func (s *TestState) MustGetSchemasForDatabase(
 	ctx context.Context, database catalog.DatabaseDescriptor,
 ) map[descpb.ID]string {
 	schemas := make(map[descpb.ID]string)
-	err := database.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
+	err := database.ForEachSchema(func(id descpb.ID, name string) error {
 		schemas[id] = name
 		return nil
 	})

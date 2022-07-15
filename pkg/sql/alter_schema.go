@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -249,15 +248,8 @@ func (p *planner) renameSchema(
 		)
 	}
 
-	// Remove the old schema name or mark it as dropped, depending on version.
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.AvoidDrainingNames) {
-		delete(db.Schemas, oldName)
-	} else {
-		db.Schemas[oldName] = descpb.DatabaseDescriptor_SchemaInfo{
-			ID:      desc.ID,
-			Dropped: true,
-		}
-	}
+	// Remove the old schema name.
+	delete(db.Schemas, oldName)
 
 	// Create an entry for the new schema name.
 	db.Schemas[newName] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
