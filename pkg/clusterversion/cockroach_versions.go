@@ -164,9 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
-	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
-	MVCCAddSSTable
 	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
 	// have an entry in system.namespace upon being restored.
 	InsertPublicSchemaNamespaceEntryOnRestore
@@ -408,10 +405,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     MVCCAddSSTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 	{
 		Key:     InsertPublicSchemaNamespaceEntryOnRestore,
