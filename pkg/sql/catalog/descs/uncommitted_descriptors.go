@@ -161,9 +161,6 @@ func (ud *uncommittedDescriptors) add(
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range uNew.immutable.GetDrainingNames() {
-		ud.descNames.Add(n)
-	}
 	if prev, ok := ud.descs.GetByID(mut.GetID()).(*uncommittedDescriptor); ok {
 		if prev.mutable.OriginalVersion() != mut.OriginalVersion() {
 			return nil, errors.AssertionFailedf(

@@ -128,12 +128,6 @@ func (v TableImplicitRecordType) GetModificationTime() hlc.Timestamp {
 	return v.desc.GetModificationTime()
 }
 
-// GetDrainingNames implements the Descriptor interface.
-func (v TableImplicitRecordType) GetDrainingNames() []descpb.NameInfo {
-	// Implicit record types don't have draining names.
-	return nil
-}
-
 // GetPrivileges implements the Descriptor interface.
 func (v TableImplicitRecordType) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return v.privs

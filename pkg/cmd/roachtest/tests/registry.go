@@ -94,7 +94,6 @@ func RegisterTests(r registry.Registry) {
 	registerRubyPG(r)
 	registerRustPostgres(r)
 	registerSchemaChangeBulkIngest(r)
-	registerSchemaChangeDatabaseVersionUpgrade(r)
 	registerSchemaChangeDuringKV(r)
 	registerSchemaChangeIndexTPCC100(r)
 	registerSchemaChangeIndexTPCC1000(r)

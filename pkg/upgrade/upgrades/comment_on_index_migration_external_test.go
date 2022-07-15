@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnsureNoDrainingNames tests if comments on indexes all have indexes,
-// that exist.
+// TestEnsureIndexesExistForComments tests if comments on indexes all have
+// indexes that exist.
 func TestEnsureIndexesExistForComments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
