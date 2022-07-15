@@ -1,0 +1,6 @@
+**/*
+!cockroach
+!pkg/ui/.yarnrc
+!pkg/ui/yarn-vendor
+!pkg/ui/workspaces/e2e-tests
+pkg/ui/workspaces/e2e-tests/node_modules
