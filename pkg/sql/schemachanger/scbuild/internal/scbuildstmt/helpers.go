@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -355,4 +357,16 @@ func getPrimaryIndexes(
 		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
 	}
 	return existing, freshlyAdded
+}
+
+// indexColumnDirection converts tree.Direction to catpb.IndexColumn_Direction.
+func indexColumnDirection(d tree.Direction) catpb.IndexColumn_Direction {
+	switch d {
+	case tree.DefaultDirection, tree.Ascending:
+		return catpb.IndexColumn_ASC
+	case tree.Descending:
+		return catpb.IndexColumn_DESC
+	default:
+		panic(errors.AssertionFailedf("unknown direction %s", d))
+	}
 }
