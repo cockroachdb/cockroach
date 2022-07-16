@@ -226,6 +226,64 @@ func TestPingInterceptors(t *testing.T) {
 	}
 }
 
+// TestClockOffsetInPingRequest ensures that all ping requests
+// after the first one have a non-zero offset.
+// (Regression test for issue #84027.)
+func TestClockOffsetInPingRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	cfg := testutils.NewNodeTestBaseContext()
+	// Experimentally, values below 50ms seem to incur flakiness.
+	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
+
+	pings := make(chan PingRequest, 5)
+	done := make(chan struct{})
+	defer func() { close(done) }()
+
+	// Build a minimal server.
+	opts := ContextOptions{
+		TenantID:  roachpb.SystemTenantID,
+		Config:    cfg,
+		Clock:     &timeutil.DefaultTimeSource{},
+		MaxOffset: 500 * time.Millisecond,
+		Stopper:   stopper,
+		Settings:  cluster.MakeTestingClusterSettings(),
+		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
+			select {
+			case <-done:
+			case pings <- *req:
+			}
+			return nil
+		},
+	}
+	rpcCtx := NewContext(ctx, opts)
+	s := newTestServer(t, rpcCtx)
+	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
+	rpcCtx.NodeID.Set(ctx, 1)
+	ln, err := netutil.ListenAndServeGRPC(rpcCtx.Stopper, s, util.TestAddr)
+	require.NoError(t, err)
+
+	// Dial: this causes the heartbeats to start.
+	remoteAddr := ln.Addr().String()
+	_, err = rpcCtx.GRPCDialNode(remoteAddr, 1, SystemClass).Connect(ctx)
+	require.NoError(t, err)
+
+	firstPing := <-pings
+	require.Zero(t, firstPing.Offset.Offset)
+	require.Zero(t, firstPing.Offset.Uncertainty)
+	require.Zero(t, firstPing.Offset.MeasuredAt)
+	for i := 1; i < 3; i++ {
+		t.Skip(85027)
+		nextPing := <-pings
+		require.NotZero(t, nextPing.Offset.Offset, i)
+		require.NotZero(t, nextPing.Offset.Uncertainty, i)
+		require.NotZero(t, nextPing.Offset.MeasuredAt, i)
+	}
+}
+
 var _ roachpb.InternalServer = &internalServer{}
 
 type internalServer struct {
