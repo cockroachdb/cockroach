@@ -234,9 +234,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
 				//lint:ignore SA1019 grpc.WithInsecure is deprecated
 				grpc.WithInsecure(),
-				grpc.WithUnaryInterceptor(grpcinterceptor.ClientInterceptor(tr, nil, /* init */
-					func(_ context.Context) bool { return false }, /* compatibilityMode */
-				)),
+				grpc.WithUnaryInterceptor(grpcinterceptor.ClientInterceptor(tr, nil /* init */)),
 				grpc.WithStreamInterceptor(grpcinterceptor.StreamClientInterceptor(tr, nil /* init */)),
 			)
 			require.NoError(t, err)
