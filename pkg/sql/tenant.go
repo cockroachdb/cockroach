@@ -126,10 +126,6 @@ func CreateTenantRecord(
 		}
 	}
 
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
-		return nil
-	}
-
 	// Install a single key[1] span config at the start of tenant's keyspace;
 	// elsewhere this ensures that we split on the tenant boundary. The subset
 	// of entries with spans in the tenant keyspace are, henceforth, governed
@@ -471,10 +467,6 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			`DELETE FROM system.tenant_settings WHERE tenant_id = $1`, info.ID,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d settings", info.ID)
-		}
-
-		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
-			return nil
 		}
 
 		// Clear out all span config records left over by the tenant.

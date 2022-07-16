@@ -55,12 +55,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"seed system.span_configurations with configs for existing tenants",
-		toCV(clusterversion.SeedTenantSpanConfigs),
-		NoPrecondition,
-		seedTenantSpanConfigsMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"add column target to system.protected_ts_records",
 		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
 		NoPrecondition,
