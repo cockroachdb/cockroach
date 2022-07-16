@@ -110,16 +110,14 @@ $input
 
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
-# comparisons can be negated except for the JSON comparisons.
+# comparisons can be negated except for the JSON and Geospatial comparisons.
 [NegateComparison, Normalize]
 (Not
     $input:(Comparison $left:* $right:*) &
-        ^(Contains | ContainedBy | JsonExists | JsonSomeExists
-                | JsonAllExists | Overlaps
-        )
+        (CanNegateComparison $op:(OpName $input))
 )
 =>
-(NegateComparison (OpName $input) $left $right)
+(NegateComparison $op $left $right)
 
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]
