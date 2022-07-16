@@ -26,7 +26,6 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -629,19 +628,15 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		tagger := func(span *tracing.Span) {
 			span.SetTag("node", attribute.IntValue(int(rpcCtx.NodeID.Get())))
 		}
-		compatMode := func(reqCtx context.Context) bool {
-			return !rpcCtx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
-		}
 
 		if rpcCtx.ClientOnly {
 			// client-only RPC contexts don't have a node ID to report nor a
 			// cluster version to check against.
 			tagger = func(span *tracing.Span) {}
-			compatMode = func(_ context.Context) bool { return false }
 		}
 
 		rpcCtx.clientUnaryInterceptors = append(rpcCtx.clientUnaryInterceptors,
-			grpcinterceptor.ClientInterceptor(tracer, tagger, compatMode))
+			grpcinterceptor.ClientInterceptor(tracer, tagger))
 		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
 			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
 	}

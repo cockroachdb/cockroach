@@ -173,14 +173,6 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
-	// SelectRPCsTakeTracingInfoInband switches the way tracing works for a couple
-	// of common RPCs. Tracing information for these select RPCs is no longer
-	// marshaled from the client to the server as gRPC metadata, and the gRPC
-	// server interceptor is no longer in charge of transparently creating server
-	// spans. Instead, trace information is carried by the respective request
-	// protos (the client is responsible for filling it in explicitly), and the
-	// server-side handler is responsible for opening a span manually.
-	SelectRPCsTakeTracingInfoInband
 	// PreSeedTenantSpanConfigs precedes SeedTenantSpanConfigs, and enables the
 	// creation of initial span config records for newly created tenants.
 	PreSeedTenantSpanConfigs
@@ -389,10 +381,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     SelectRPCsTakeTracingInfoInband,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 28},
 	},
 	{
 		Key:     PreSeedTenantSpanConfigs,
