@@ -8,7 +8,6 @@ go_library(
         "alter_table_protected_timestamp_records.go",
         "comment_on_index_migration.go",
         "descriptor_utils.go",
-        "insert_missing_public_schema_namespace_entry.go",
         "migrate_span_configs.go",
         "precondition_before_starting_an_upgrade.go",
         "public_schema_migration.go",
