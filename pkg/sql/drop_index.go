@@ -13,12 +13,8 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -505,40 +501,6 @@ func (p *planner) dropIndexByName(
 
 	idxEntry := *foundIndex.IndexDesc()
 	idxOrdinal := foundIndex.Ordinal()
-
-	// Unsplit all manually split ranges in the index so they can be
-	// automatically merged by the merge queue. Gate this on being the
-	// system tenant because secondary tenants aren't allowed to scan
-	// the meta ranges directly.
-	// TODO(Chengxiong): Remove this range unsplitting in 22.2
-	st := p.EvalContext().Settings
-	if p.ExecCfg().Codec.ForSystemTenant() &&
-		!st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
-
-		span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-		txn := p.ExecCfg().DB.NewTxn(ctx, "scan-ranges-for-index-drop")
-		ranges, err := kvclient.ScanMetaKVs(ctx, txn, span)
-		if err != nil {
-			return err
-		}
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
-				return err
-			}
-			// We have to explicitly check that the range descriptor's start key
-			// lies within the span of the index since ScanMetaKVs returns all
-			// intersecting spans.
-			if !desc.GetStickyBit().IsEmpty() && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
-				// Swallow "key is not the start of a range" errors because it would
-				// mean that the sticky bit was removed and merged concurrently. DROP
-				// INDEX should not fail because of this.
-				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
-					return err
-				}
-			}
-		}
-	}
 
 	// the idx we picked up with FindIndexByID at the top may not
 	// contain the same field any more due to other schema changes
