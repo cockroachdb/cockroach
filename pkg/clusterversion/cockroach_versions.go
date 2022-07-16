@@ -169,10 +169,6 @@ const (
 	// for fine-grained time bound iteration. See
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
 	PebbleFormatBlockPropertyCollector
-	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
-	// This version must be active before any ProbeRequest is issued on the
-	// cluster.
-	ProbeRequest
 	// SelectRPCsTakeTracingInfoInband switches the way tracing works for a couple
 	// of common RPCs. Tracing information for these select RPCs is no longer
 	// marshaled from the client to the server as gRPC metadata, and the gRPC
@@ -385,10 +381,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatBlockPropertyCollector,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
-	},
-	{
-		Key:     ProbeRequest,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
 	},
 	{
 		Key:     SelectRPCsTakeTracingInfoInband,
