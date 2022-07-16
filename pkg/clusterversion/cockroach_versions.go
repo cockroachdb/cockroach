@@ -164,9 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
-	// "drop table"/"truncate table" to async gc jobs
-	UnsplitRangesInAsyncGCJobs
 	// ValidateGrantOption checks whether the current user granting privileges to
 	// another user holds the grant option for those privileges
 	ValidateGrantOption
@@ -402,10 +399,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     UnsplitRangesInAsyncGCJobs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 20},
 	},
 	{
 		Key:     ValidateGrantOption,
