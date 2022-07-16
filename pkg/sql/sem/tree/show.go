@@ -472,9 +472,9 @@ func (node *ShowConstraints) Format(ctx *FmtCtx) {
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
-// TargetList is defined in grant.go.
+// GrantTargetList is defined in grant.go.
 type ShowGrants struct {
-	Targets  *TargetList
+	Targets  *GrantTargetList
 	Grantees RoleSpecList
 }
 

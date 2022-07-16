@@ -497,11 +497,17 @@ func (u *sqlSymUnion) updateExprs() tree.UpdateExprs {
 func (u *sqlSymUnion) limit() *tree.Limit {
     return u.val.(*tree.Limit)
 }
-func (u *sqlSymUnion) targetList() tree.TargetList {
-    return u.val.(tree.TargetList)
+func (u *sqlSymUnion) backupTargetList() tree.BackupTargetList {
+    return u.val.(tree.BackupTargetList)
 }
-func (u *sqlSymUnion) targetListPtr() *tree.TargetList {
-    return u.val.(*tree.TargetList)
+func (u *sqlSymUnion) backupTargetListPtr() *tree.BackupTargetList {
+    return u.val.(*tree.BackupTargetList)
+}
+func (u *sqlSymUnion) grantTargetList() tree.GrantTargetList {
+    return u.val.(tree.GrantTargetList)
+}
+func (u *sqlSymUnion) grantTargetListPtr() *tree.GrantTargetList {
+    return u.val.(*tree.GrantTargetList)
 }
 func (u *sqlSymUnion) changefeedTargets() tree.ChangefeedTargets {
     return u.val.(tree.ChangefeedTargets)
@@ -1480,11 +1486,14 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList> targets targets_roles target_types
 %type <tree.ChangefeedTargets> changefeed_targets
 %type <tree.ChangefeedTarget> changefeed_target
+%type <tree.BackupTargetList> backup_targets
+%type <*tree.BackupTargetList> opt_backup_targets
+
+%type <tree.GrantTargetList> grant_targets targets_roles target_types
 %type <tree.TableExpr> changefeed_target_expr
-%type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
+%type <*tree.GrantTargetList> opt_on_targets_roles
 %type <tree.RoleSpecList> for_grantee_clause
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
@@ -2867,7 +2876,7 @@ backup_stmt:
   BACKUP opt_backup_targets INTO sconst_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
-      Targets: $2.targetListPtr(),
+      Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
       Nested: true,
       AppendToLatest: false,
@@ -2879,7 +2888,7 @@ backup_stmt:
 | BACKUP opt_backup_targets INTO string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
-      Targets: $2.targetListPtr(),
+      Targets: $2.backupTargetListPtr(),
       To: $4.stringOrPlaceholderOptList(),
       Nested: true,
       AsOf: $5.asOfClause(),
@@ -2889,7 +2898,7 @@ backup_stmt:
 | BACKUP opt_backup_targets INTO LATEST IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
-      Targets: $2.targetListPtr(),
+      Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
       Nested: true,
       AppendToLatest: true,
@@ -2900,7 +2909,7 @@ backup_stmt:
 | BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
   {
     $$.val = &tree.Backup{
-      Targets: $2.targetListPtr(),
+      Targets: $2.backupTargetListPtr(),
       To: $4.stringOrPlaceholderOptList(),
       IncrementalFrom: $6.exprs(),
       AsOf: $5.asOfClause(),
@@ -2912,11 +2921,11 @@ backup_stmt:
 opt_backup_targets:
   /* EMPTY -- full cluster */
   {
-    $$.val = (*tree.TargetList)(nil)
+    $$.val = (*tree.BackupTargetList)(nil)
   }
-| targets
+| backup_targets
   {
-    t := $1.targetList()
+    t := $1.backupTargetList()
     $$.val = &t
   }
 
@@ -3055,7 +3064,7 @@ create_schedule_for_backup_stmt:
         Recurrence:           $10.expr(),
         FullBackup:           $11.fullBackupClause(),
         To:                   $8.stringOrPlaceholderOptList(),
-        Targets:              $6.targetListPtr(),
+        Targets:              $6.backupTargetListPtr(),
         BackupOptions:        *($9.backupOptions()),
         ScheduleOptions:      $12.kvOptions(),
       }
@@ -3180,19 +3189,19 @@ restore_stmt:
 		Options: *($7.restoreOptions()),
     }
   }
-| RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
-    Targets: $2.targetList(),
+    Targets: $2.backupTargetList(),
     From: $4.listOfStringOrPlaceholderOptList(),
     AsOf: $5.asOfClause(),
     Options: *($6.restoreOptions()),
     }
   }
-| RESTORE targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
-      Targets: $2.targetList(),
+      Targets: $2.backupTargetList(),
       Subdir: $4.expr(),
       From: $6.listOfStringOrPlaceholderOptList(),
       AsOf: $7.asOfClause(),
@@ -3218,10 +3227,10 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_tenant_clause
+| RESTORE backup_targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_tenant_clause
   {
    $$.val = &tree.StreamIngestion{
-     Targets: $2.targetList(),
+     Targets: $2.backupTargetList(),
      From: $7.stringOrPlaceholderOptList(),
      AsTenant: $8.asTenantClause(),
    }
@@ -4528,7 +4537,7 @@ drop_type_stmt:
 target_types:
   type_name_list
   {
-    $$.val = tree.TargetList{Types: $1.unresolvedObjectNames()}
+    $$.val = tree.GrantTargetList{Types: $1.unresolvedObjectNames()}
   }
 
 type_name_list:
@@ -4964,9 +4973,9 @@ deallocate_stmt:
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
-  GRANT privileges ON targets TO role_spec_list opt_with_grant_option
+  GRANT privileges ON grant_targets TO role_spec_list opt_with_grant_option
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList(), WithGrantOption: $7.bool(),}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.grantTargetList(), WithGrantOption: $7.bool(),}
   }
 | GRANT privilege_list TO role_spec_list
   {
@@ -4978,13 +4987,13 @@ grant_stmt:
   }
 | GRANT privileges ON TYPE target_types TO role_spec_list opt_with_grant_option
   {
-    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList(), WithGrantOption: $8.bool(),}
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.grantTargetList(), Grantees: $7.roleSpecList(), WithGrantOption: $8.bool(),}
   }
 | GRANT privileges ON SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.roleSpecList(),
@@ -4999,7 +5008,7 @@ grant_stmt:
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $8.objectNamePrefixList(),
         AllSequencesInSchema: true,
       },
@@ -5011,7 +5020,7 @@ grant_stmt:
   {
     $$.val = &tree.Grant{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $8.objectNamePrefixList(),
         AllTablesInSchema: true,
       },
@@ -5023,7 +5032,7 @@ grant_stmt:
   {
     $$.val = &tree.Grant{
       Privileges: $3.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         System: true,
       },
       Grantees: $5.roleSpecList(),
@@ -5052,13 +5061,13 @@ grant_stmt:
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
-  REVOKE privileges ON targets FROM role_spec_list
+  REVOKE privileges ON grant_targets FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.targetList(), GrantOptionFor: false}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.roleSpecList(), Targets: $4.grantTargetList(), GrantOptionFor: false}
   }
-| REVOKE GRANT OPTION FOR privileges ON targets FROM role_spec_list
+| REVOKE GRANT OPTION FOR privileges ON grant_targets FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Grantees: $9.roleSpecList(), Targets: $7.targetList(), GrantOptionFor: true}
+    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Grantees: $9.roleSpecList(), Targets: $7.grantTargetList(), GrantOptionFor: true}
   }
 | REVOKE privilege_list FROM role_spec_list
   {
@@ -5070,17 +5079,17 @@ revoke_stmt:
   }
 | REVOKE privileges ON TYPE target_types FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.roleSpecList(), GrantOptionFor: false}
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.grantTargetList(), Grantees: $7.roleSpecList(), GrantOptionFor: false}
   }
 | REVOKE GRANT OPTION FOR privileges ON TYPE target_types FROM role_spec_list
   {
-    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Targets: $8.targetList(), Grantees: $10.roleSpecList(), GrantOptionFor: true}
+    $$.val = &tree.Revoke{Privileges: $5.privilegeList(), Targets: $8.grantTargetList(), Grantees: $10.roleSpecList(), GrantOptionFor: true}
   }
 | REVOKE privileges ON SCHEMA schema_name_list FROM role_spec_list
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $5.objectNamePrefixList(),
       },
       Grantees: $7.roleSpecList(),
@@ -5091,7 +5100,7 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{
       Privileges: $5.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $8.objectNamePrefixList(),
       },
       Grantees: $10.roleSpecList(),
@@ -5102,7 +5111,7 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $8.objectNamePrefixList(),
         AllTablesInSchema: true,
       },
@@ -5114,7 +5123,7 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{
       Privileges: $2.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $8.objectNamePrefixList(),
         AllSequencesInSchema: true,
       },
@@ -5126,7 +5135,7 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{
       Privileges: $5.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
         AllTablesInSchema: true,
       },
@@ -5138,7 +5147,7 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{
       Privileges: $3.privilegeList(),
-      Targets: tree.TargetList{
+      Targets: tree.GrantTargetList{
         System: true,
       },
       Grantees: $5.roleSpecList(),
@@ -6299,7 +6308,7 @@ show_types_stmt:
 show_grants_stmt:
   SHOW GRANTS opt_on_targets_roles for_grantee_clause
   {
-    lst := $3.targetListPtr()
+    lst := $3.grantTargetListPtr()
     if lst != nil && lst.ForRoles {
       $$.val = &tree.ShowRoleGrants{Roles: lst.Roles, Grantees: $4.roleSpecList()}
     } else {
@@ -6998,15 +7007,15 @@ show_full_scans_stmt:
 opt_on_targets_roles:
   ON targets_roles
   {
-    tmp := $2.targetList()
+    tmp := $2.grantTargetList()
     $$.val = &tmp
   }
 | /* EMPTY */
   {
-    $$.val = (*tree.TargetList)(nil)
+    $$.val = (*tree.GrantTargetList)(nil)
   }
 
-// targets is a non-terminal for a list of privilege targets, either a
+// grant_targets is a non-terminal for a list of privilege targets, either a
 // list of databases or a list of tables.
 //
 // This rule is complex and cannot be decomposed as a tree of
@@ -7120,14 +7129,16 @@ opt_on_targets_roles:
 //   more nuance.)
 //
 // Tada!
-targets:
+// TODO(knz): This should learn how to parse more complex expressions
+// and placeholders.
+grant_targets:
   IDENT
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | col_name_keyword
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | unreserved_keyword
   {
@@ -7163,27 +7174,64 @@ targets:
     // to remove the special casing of SHOW GRANTS altogether instead
     // of increasing (or attempting to modify) the grey magic occurring
     // here.
-    $$.val = tree.TargetList{
+    $$.val = tree.GrantTargetList{
       Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns:tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}},
       ForRoles: $1 == "role", // backdoor for "SHOW GRANTS ON ROLE" (no name list)
     }
   }
 | complex_table_pattern
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
   }
 | SEQUENCE table_pattern_list
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: true, TablePatterns: $2.tablePatterns()}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: true, TablePatterns: $2.tablePatterns()}}
   }
 | table_pattern ',' table_pattern_list
   {
     remainderPats := $3.tablePatterns()
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
   }
 | TABLE table_pattern_list
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: $2.tablePatterns()}}
+    $$.val = tree.GrantTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: $2.tablePatterns()}}
+  }
+| DATABASE name_list
+  {
+    $$.val = tree.GrantTargetList{Databases: $2.nameList()}
+  }
+
+// backup_targets is similar to grant_targets but used by backup and restore, and thus
+// supports tenants, but does not support sequences, types, or other SQL nouns
+// that grants support, but rather just things which hold rows that can be backed
+// up.
+backup_targets:
+  IDENT
+  {
+    $$.val = tree.BackupTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+  }
+| col_name_keyword
+  {
+    $$.val = tree.BackupTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+  }
+| unreserved_keyword
+  {
+      $$.val = tree.BackupTargetList{
+      Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns:tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}},
+    }
+  }
+| complex_table_pattern
+  {
+    $$.val = tree.BackupTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
+  }
+| table_pattern ',' table_pattern_list
+  {
+    remainderPats := $3.tablePatterns()
+    $$.val = tree.BackupTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
+  }
+| TABLE table_pattern_list
+  {
+    $$.val = tree.BackupTargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: $2.tablePatterns()}}
   }
 // TODO(knz): This should learn how to parse more complex expressions
 // and placeholders.
@@ -7193,7 +7241,7 @@ targets:
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
-    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true, ID: tenID}}
+    $$.val = tree.BackupTargetList{TenantID: tree.TenantID{Specified: true, ID: tenID}}
   }
 | TENANT IDENT
   {
@@ -7202,11 +7250,11 @@ targets:
     if $2 != "_" {
        return setErr(sqllex, errors.New("invalid syntax"))
     }
-    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true}}
+    $$.val = tree.BackupTargetList{TenantID: tree.TenantID{Specified: true}}
   }
 | DATABASE name_list
   {
-    $$.val = tree.TargetList{Databases: $2.nameList()}
+    $$.val = tree.BackupTargetList{Databases: $2.nameList()}
   }
 
 // target_roles is the variant of targets which recognizes ON ROLES
@@ -7215,21 +7263,21 @@ targets:
 targets_roles:
   ROLE role_spec_list
   {
-     $$.val = tree.TargetList{ForRoles: true, Roles: $2.roleSpecList()}
+     $$.val = tree.GrantTargetList{ForRoles: true, Roles: $2.roleSpecList()}
   }
 | SCHEMA schema_name_list
   {
-     $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
+     $$.val = tree.GrantTargetList{Schemas: $2.objectNamePrefixList()}
   }
 | SCHEMA schema_wildcard
    {
-     $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
+     $$.val = tree.GrantTargetList{Schemas: $2.objectNamePrefixList()}
    }
 | TYPE type_name_list
   {
-    $$.val = tree.TargetList{Types: $2.unresolvedObjectNames()}
+    $$.val = tree.GrantTargetList{Types: $2.unresolvedObjectNames()}
   }
-| targets
+| grant_targets
 
 
 for_grantee_clause:

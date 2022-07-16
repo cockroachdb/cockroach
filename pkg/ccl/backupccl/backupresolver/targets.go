@@ -318,7 +318,7 @@ func DescriptorsMatchingTargets(
 	currentDatabase string,
 	searchPath sessiondata.SearchPath,
 	descriptors []catalog.Descriptor,
-	targets tree.TargetList,
+	targets tree.BackupTargetList,
 	asOf hlc.Timestamp,
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{
@@ -648,7 +648,7 @@ func LoadAllDescs(
 //
 // TODO(ajwerner): adopt the collection here.
 func ResolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
 ) ([]catalog.Descriptor, []descpb.ID, map[tree.TablePattern]catalog.Descriptor, error) {
 	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
 	if err != nil {
