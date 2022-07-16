@@ -164,9 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
-	// have an entry in system.namespace upon being restored.
-	InsertPublicSchemaNamespaceEntryOnRestore
 	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
 	// "drop table"/"truncate table" to async gc jobs
 	UnsplitRangesInAsyncGCJobs
@@ -405,10 +402,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     InsertPublicSchemaNamespaceEntryOnRestore,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
 	},
 	{
 		Key:     UnsplitRangesInAsyncGCJobs,

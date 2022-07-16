@@ -60,11 +60,6 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedTenantSpanConfigsMigration,
 	),
-	upgrade.NewTenantUpgrade("insert missing system.namespace entries for public schemas",
-		toCV(clusterversion.InsertPublicSchemaNamespaceEntryOnRestore),
-		NoPrecondition,
-		insertMissingPublicSchemaNamespaceEntry,
-	),
 	upgrade.NewTenantUpgrade(
 		"add column target to system.protected_ts_records",
 		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
