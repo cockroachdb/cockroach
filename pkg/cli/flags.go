@@ -1009,7 +1009,17 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		if serverSocketDir == "" {
 			serverCfg.SocketFile = ""
 		} else {
-			serverCfg.SocketFile = filepath.Join(serverSocketDir, ".s.PGSQL."+serverListenPort)
+			socketName := ".s.PGSQL." + serverListenPort
+			// On BSD, binding to a socket is limited to a path length of 104 characters
+			// (including the NUL terminator). In glibc, this limit is 108 characters.
+			// Otherwise, the bind operation fails with "invalid parameter".
+			if len(serverSocketDir) >= 104-1-len(socketName) {
+				return errors.WithHintf(
+					errors.Newf("value of --%s is too long: %s", cliflags.SocketDir.Name, serverSocketDir),
+					"The socket directory name must be shorter than %d characters.",
+					104-1-len(socketName))
+			}
+			serverCfg.SocketFile = filepath.Join(serverSocketDir, socketName)
 		}
 	}
 

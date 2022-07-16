@@ -29,6 +29,6 @@ func Ready() error {
 // either exited or signaled that it is ready. If the command exits
 // with a non-zero status before signaling readiness, returns an
 // exec.ExitError.
-func Exec(cmd *exec.Cmd) error {
-	return bgExec(cmd)
+func Exec(cmd *exec.Cmd, socketDir string) error {
+	return bgExec(cmd, socketDir)
 }
