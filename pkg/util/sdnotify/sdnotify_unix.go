@@ -55,8 +55,8 @@ func notify(path, msg string) error {
 	return err
 }
 
-func bgExec(cmd *exec.Cmd) error {
-	l, err := listen()
+func bgExec(cmd *exec.Cmd, socketDir string) error {
+	l, err := listen(socketDir)
 	if err != nil {
 		return err
 	}
@@ -97,8 +97,8 @@ type listener struct {
 	conn    *net.UnixConn
 }
 
-func listen() (listener, error) {
-	dir, err := ioutil.TempDir("", "sdnotify")
+func listen(socketDir string) (listener, error) {
+	dir, err := ioutil.TempDir(socketDir, "sdnotify")
 	if err != nil {
 		return listener{}, err
 	}
