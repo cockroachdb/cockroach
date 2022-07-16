@@ -22,15 +22,22 @@ export interface JobStatusCellProps {
   job: Job;
   lineWidth?: number;
   compact?: boolean;
+  hideDuration?: boolean;
 }
 
 export const JobStatusCell: React.FC<JobStatusCellProps> = ({
   job,
   lineWidth,
   compact = false,
+  hideDuration = false,
 }) => {
   const jobStatus = (
-    <JobStatus job={job} lineWidth={lineWidth} compact={compact} />
+    <JobStatus
+      job={job}
+      lineWidth={lineWidth}
+      compact={compact}
+      hideDuration={hideDuration}
+    />
   );
   if (isRetrying(job.status)) {
     return (
@@ -39,7 +46,7 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
         style="tableTitle"
         content={
           <>
-            Next Execution Time:
+            Next Planned Execution Time:
             <br />
             {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
           </>

@@ -20,7 +20,7 @@ import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox } from "src/sql";
-import { SummaryCard } from "src/summaryCard";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { TimestampToMoment } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
@@ -72,65 +72,66 @@ export class JobDetails extends React.Component<JobDetailsProps> {
     this.refresh();
   }
 
-  prevPage = () => this.props.history.goBack();
+  prevPage = (): void => this.props.history.goBack();
 
-  renderContent = () => {
+  renderContent = (): React.ReactElement => {
     const job = this.props.job;
     return (
-      <Row gutter={16}>
-        <Col className={commonStyles("gutter-row")} span={16}>
-          <SqlBox value={job.description} />
-          <SummaryCard>
-            <h3 className={cardCx("summary--card__status--title")}>Status</h3>
-            <JobStatusCell job={job} lineWidth={1.5} />
-          </SummaryCard>
-        </Col>
-        <Col className={commonStyles("gutter-row")} span={8}>
-          <SummaryCard>
-            <Row>
-              <Col span={24}>
-                <div className={cardCx("summary--card__counting")}>
-                  <h3 className={cardCx("summary--card__counting--value")}>
-                    {TimestampToMoment(job.created).format(DATE_FORMAT_24_UTC)}
-                  </h3>
-                  <p className={cardCx("summary--card__counting--label")}>
-                    Creation time
-                  </p>
-                </div>
-              </Col>
-              <Col span={24}>
-                <div className={cardCx("summary--card__counting")}>
-                  <h3 className={cardCx("summary--card__counting--value")}>
-                    {job.username}
-                  </h3>
-                  <p className={cardCx("summary--card__counting--label")}>
-                    Users
-                  </p>
-                </div>
-              </Col>
-              {job.highwater_timestamp ? (
-                <Col span={24}>
-                  <div className={cardCx("summary--card__counting")}>
-                    <h3 className={cardCx("summary--card__counting--value")}>
-                      <HighwaterTimestamp
-                        timestamp={job.highwater_timestamp}
-                        decimalString={job.highwater_decimal}
-                      />
-                    </h3>
-                    <p className={cardCx("summary--card__counting--label")}>
-                      High-water Timestamp
-                    </p>
-                  </div>
-                </Col>
-              ) : null}
-            </Row>
-          </SummaryCard>
-        </Col>
-      </Row>
+      <>
+        <Row gutter={24}>
+          <Col className="gutter-row" span={24}>
+            <SqlBox value={job.description} />
+          </Col>
+        </Row>
+        <Row gutter={24}>
+          <Col className="gutter-row" span={12}>
+            <SummaryCard>
+              <h3 className={jobCx("summary--card--title")}>Status</h3>
+              <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
+              <h3 className={jobCx("summary--card--title", "secondary")}>
+                Next Planned Execution Time:
+              </h3>
+              {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+            </SummaryCard>
+          </Col>
+          <Col className="gutter-row" span={12}>
+            <SummaryCard className={cardCx("summary-card")}>
+              <SummaryCardItem
+                label="Creation Time"
+                value={TimestampToMoment(job.created).format(
+                  DATE_FORMAT_24_UTC,
+                )}
+              />
+              <SummaryCardItem
+                label="Last Execution Time"
+                value={TimestampToMoment(job.last_run).format(
+                  DATE_FORMAT_24_UTC,
+                )}
+              />
+              <SummaryCardItem
+                label="Execution Count"
+                value={String(job.num_runs)}
+              />
+              <SummaryCardItem label="User Name" value={job.username} />
+              {job.highwater_timestamp && (
+                <SummaryCardItem
+                  label="High-water Timestamp"
+                  value={
+                    <HighwaterTimestamp
+                      timestamp={job.highwater_timestamp}
+                      decimalString={job.highwater_decimal}
+                    />
+                  }
+                />
+              )}
+            </SummaryCard>
+          </Col>
+        </Row>
+      </>
     );
   };
 
-  render() {
+  render(): React.ReactElement {
     const isLoading = !this.props.job || this.props.jobLoading;
     const error = this.props.job && this.props.jobError;
     return (
