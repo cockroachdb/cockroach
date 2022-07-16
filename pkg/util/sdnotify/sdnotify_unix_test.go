@@ -14,13 +14,14 @@
 package sdnotify
 
 import (
+	"os"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func TestSDNotify(t *testing.T) {
-	l, err := listen()
+	l, err := listen(os.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
