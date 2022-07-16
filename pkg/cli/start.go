@@ -758,8 +758,10 @@ func waitForShutdown(
 				// INFO because a single interrupt is rather innocuous.
 				severity.INFO,
 			)
-			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
-			fmt.Fprintln(os.Stdout, msgDouble)
+			if !startCtx.inBackground {
+				msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
+				fmt.Fprintln(os.Stdout, msgDouble)
+			}
 		}
 
 		// Start the draining process in a separate goroutine so that it
@@ -843,7 +845,9 @@ func waitForShutdown(
 
 	const msgDrain = "initiating graceful shutdown of server"
 	log.Ops.Info(shutdownCtx, msgDrain)
-	fmt.Fprintln(os.Stdout, msgDrain)
+	if !startCtx.inBackground {
+		fmt.Fprintln(os.Stdout, msgDrain)
+	}
 
 	// Notify the user every 5 second of the shutdown progress.
 	go func() {
@@ -895,12 +899,16 @@ func waitForShutdown(
 		case <-stopper.IsStopped():
 			const msgDone = "server drained and shutdown completed"
 			log.Ops.Infof(shutdownCtx, msgDone)
-			fmt.Fprintln(os.Stdout, msgDone)
+			if !startCtx.inBackground {
+				fmt.Fprintln(os.Stdout, msgDone)
+			}
 
 		case <-stopWithoutDrain:
 			const msgDone = "too early to drain; used hard shutdown instead"
 			log.Ops.Infof(shutdownCtx, msgDone)
-			fmt.Fprintln(os.Stdout, msgDone)
+			if !startCtx.inBackground {
+				fmt.Fprintln(os.Stdout, msgDone)
+			}
 		}
 		break
 	}
