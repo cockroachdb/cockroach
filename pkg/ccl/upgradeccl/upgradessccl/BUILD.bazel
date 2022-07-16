@@ -6,13 +6,11 @@ go_test(
     srcs = [
         "main_test.go",
         "seed_span_counts_external_test.go",
-        "seed_tenant_span_configs_external_test.go",
     ],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
-        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

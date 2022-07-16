@@ -173,15 +173,6 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
-	// PreSeedTenantSpanConfigs precedes SeedTenantSpanConfigs, and enables the
-	// creation of initial span config records for newly created tenants.
-	PreSeedTenantSpanConfigs
-	// SeedTenantSpanConfigs populates system.span_configurations with seed
-	// data for secondary tenants. This state is what ensures that we always
-	// split on tenant boundaries when using the span configs infrastructure.
-	// This version comes with a migration to populate the same seed data
-	// for existing tenants.
-	SeedTenantSpanConfigs
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
@@ -381,14 +372,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     PreSeedTenantSpanConfigs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 30},
-	},
-	{
-		Key:     SeedTenantSpanConfigs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 32},
 	},
 	{
 		Key:     PublicSchemasWithDescriptors,
