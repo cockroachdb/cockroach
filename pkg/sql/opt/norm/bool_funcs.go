@@ -37,6 +37,12 @@ func (c *CustomFuncs) NegateComparison(
 	return c.f.DynamicConstruct(negate, left, right).(opt.ScalarExpr)
 }
 
+// CanNegateComparison returns whether the given comparison op can be negated.
+func (c *CustomFuncs) CanNegateComparison(cmp opt.Operator) bool {
+	_, ok := opt.NegateOpMap[cmp]
+	return ok
+}
+
 // FindRedundantConjunct takes the left and right operands of an Or operator as
 // input. It examines each conjunct from the left expression and determines
 // whether it appears as a conjunct in the right expression. If so, it returns
