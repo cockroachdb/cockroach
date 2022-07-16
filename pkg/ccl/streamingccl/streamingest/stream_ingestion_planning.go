@@ -147,7 +147,7 @@ func ingestionPlanHook(
 		}
 		streamAddress = streamingccl.StreamAddress(url.String())
 
-		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||
+		if ingestionStmt.Targets.Databases != nil ||
 			ingestionStmt.Targets.Tables.TablePatterns != nil || ingestionStmt.Targets.Schemas != nil {
 			return errors.Newf("unsupported target in ingestion query, "+
 				"only tenant ingestion is supported: %s", ingestionStmt.String())

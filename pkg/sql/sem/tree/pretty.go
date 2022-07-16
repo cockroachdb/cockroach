@@ -2140,16 +2140,30 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(items...)
 }
 
-func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
+func (node *BackupTargetList) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
+func (node *BackupTargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Databases != nil {
 		return p.row("DATABASE", p.Doc(&node.Databases))
 	}
 	if node.TenantID.Specified {
 		return p.row("TENANT", p.Doc(&node.TenantID))
+	}
+	if node.Tables.SequenceOnly {
+		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))
+	}
+	return p.row("TABLE", p.Doc(&node.Tables.TablePatterns))
+}
+
+func (node *GrantTargetList) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *GrantTargetList) docRow(p *PrettyCfg) pretty.TableRow {
+	if node.Databases != nil {
+		return p.row("DATABASE", p.Doc(&node.Databases))
 	}
 	if node.Tables.SequenceOnly {
 		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))

@@ -249,15 +249,15 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
-			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)
+			sql := fmt.Sprintf(`BACKUP %s TO 'ignored'`, test.pattern)
 			stmt, err := parser.ParseOne(sql)
 			if err != nil {
 				t.Fatal(err)
 			}
-			targets := stmt.AST.(*tree.Grant).Targets
+			targets := stmt.AST.(*tree.Backup).Targets
 
 			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, targets, hlc.Timestamp{})
+				test.sessionDatabase, searchPath, descriptors, *targets, hlc.Timestamp{})
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)

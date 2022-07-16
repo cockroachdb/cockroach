@@ -51,7 +51,7 @@ var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets *TargetList
+	Targets *BackupTargetList
 
 	// To is set to the root directory of the backup (called the <destination> in
 	// the docs).
@@ -143,7 +143,7 @@ var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets            TargetList
+	Targets            BackupTargetList
 	DescriptorCoverage DescriptorCoverage
 
 	// From contains the URIs for the backup(s) we seek to restore.
@@ -520,4 +520,34 @@ func (o RestoreOptions) IsDefault() bool {
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant
+}
+
+// BackupTargetList represents a list of targets.
+// Only one field may be non-nil.
+type BackupTargetList struct {
+	Databases NameList
+	Schemas   ObjectNamePrefixList
+	Tables    TableAttrs
+	TenantID  TenantID
+}
+
+// Format implements the NodeFormatter interface.
+func (tl *BackupTargetList) Format(ctx *FmtCtx) {
+	if tl.Databases != nil {
+		ctx.WriteString("DATABASE ")
+		ctx.FormatNode(&tl.Databases)
+	} else if tl.Schemas != nil {
+		ctx.WriteString("SCHEMA ")
+		ctx.FormatNode(&tl.Schemas)
+	} else if tl.TenantID.Specified {
+		ctx.WriteString("TENANT ")
+		ctx.FormatNode(&tl.TenantID)
+	} else {
+		if tl.Tables.SequenceOnly {
+			ctx.WriteString("SEQUENCE ")
+		} else {
+			ctx.WriteString("TABLE ")
+		}
+		ctx.FormatNode(&tl.Tables.TablePatterns)
+	}
 }
