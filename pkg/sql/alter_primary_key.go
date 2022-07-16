@@ -754,25 +754,47 @@ func addIndexMutationWithSpecificPrimaryKey(
 		return err
 	}
 
-	setKeySuffixColumnIDsFromPrimary(toAdd, primary)
-	if tempIdx := catalog.FindCorrespondingTemporaryIndexByID(table, toAdd.ID); tempIdx != nil {
-		setKeySuffixColumnIDsFromPrimary(tempIdx.IndexDesc(), primary)
+	if err := setKeySuffixColumnIDsFromPrimary(table, toAdd, primary); err != nil {
+		return err
 	}
-
+	if tempIdx := catalog.FindCorrespondingTemporaryIndexByID(table, toAdd.ID); tempIdx != nil {
+		if err := setKeySuffixColumnIDsFromPrimary(table, tempIdx.IndexDesc(), primary); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // setKeySuffixColumnIDsFromPrimary uses the columns in the given
 // primary index to construct this toAdd's KeySuffixColumnIDs list.
 func setKeySuffixColumnIDsFromPrimary(
-	toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
-) {
+	table *tabledesc.Mutable, toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
+) error {
 	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
 	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
 	toAdd.KeySuffixColumnIDs = nil
+	invIdx := toAdd.Type == descpb.IndexDescriptor_INVERTED
 	for _, colID := range primary.KeyColumnIDs {
 		if !presentColIDs.Contains(colID) {
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
+		} else if invIdx && colID == toAdd.InvertedColumnID() {
+			// In an inverted index, the inverted column's value is not equal to the
+			// actual data in the row for that column. As a result, if the inverted
+			// column happens to also be in the primary key, it's crucial that
+			// the index key still be suffixed with that full primary key value to
+			// preserve the index semantics.
+			// toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
+			// However, this functionality is not supported by the execution engine,
+			// so prevent it by returning an error.
+			col, err := table.FindColumnWithID(colID)
+			if err != nil {
+				return err
+			}
+			return unimplemented.NewWithIssuef(84405,
+				"primary key column %s cannot be present in an inverted index",
+				col.GetName(),
+			)
 		}
 	}
+	return nil
 }
