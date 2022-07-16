@@ -144,8 +144,12 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	}
 
 	// Make a random primary key with high likelihood.
+	var pk *tree.IndexTableDef
 	if rng.Intn(8) != 0 {
 		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+		if ok {
+			pk = &indexDef
+		}
 		if ok && !indexDef.Inverted {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				PrimaryKey:    true,
@@ -171,6 +175,20 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
 		if !ok {
 			continue
+		}
+		if indexDef.Inverted && pk != nil {
+			// Inverted indexes aren't permitted to be created on primary key columns.
+			col := indexDef.Columns[len(indexDef.Columns)-1]
+			foundOverlap := false
+			for _, pkCol := range pk.Columns {
+				if col.Column == pkCol.Column {
+					foundOverlap = true
+					break
+				}
+			}
+			if foundOverlap {
+				continue
+			}
 		}
 		// Make forward indexes unique 50% of the time. Inverted indexes cannot
 		// be unique.
