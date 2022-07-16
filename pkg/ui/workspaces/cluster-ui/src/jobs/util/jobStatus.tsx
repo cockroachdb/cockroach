@@ -30,12 +30,14 @@ export interface JobStatusProps {
   job: Job;
   lineWidth?: number;
   compact?: boolean;
+  hideDuration?: boolean;
 }
 
 export const JobStatus: React.FC<JobStatusProps> = ({
   job,
   compact,
   lineWidth,
+  hideDuration = false,
 }) => {
   const visualType = jobToVisual(job);
 
@@ -46,7 +48,9 @@ export const JobStatus: React.FC<JobStatusProps> = ({
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <Duration job={job} className={cx("jobs-table__duration")} />
+          {!hideDuration && (
+            <Duration job={job} className={cx("jobs-table__duration")} />
+          )}
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration: {
