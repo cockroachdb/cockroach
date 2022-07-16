@@ -79,6 +79,7 @@ type datadrivenTestState struct {
 	sqlDBs                   map[sqlDBKey]*gosql.DB
 	jobTags                  map[string]jobspb.JobID
 	clusterTimestamps        map[string]string
+	queryTags                map[string]string
 	noticeBuffer             []string
 	cleanupFns               []func()
 }
@@ -91,6 +92,7 @@ func newDatadrivenTestState() datadrivenTestState {
 		sqlDBs:                   make(map[sqlDBKey]*gosql.DB),
 		jobTags:                  make(map[string]jobspb.JobID),
 		clusterTimestamps:        make(map[string]string),
+		queryTags:                make(map[string]string),
 	}
 }
 
@@ -270,7 +272,15 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   query execution.
 //
 // - "query-sql [server=<name>] [user=<name>]"
-//   Executes the input SQL query and print the results.
+//   Executes the input SQL query and print or caches the results.
+//
+//   Supported arguments:
+//
+//   + tag=<tag>: cache the results at the given tag to compare to a future
+//   query.
+//
+//   + equals=<tag>: compare the query results to a previously cached query.
+//   fail if results do not match.
 //
 // - "reset"
 //    Clear all state associated with the test.
@@ -472,6 +482,19 @@ func TestDataDriven(t *testing.T) {
 				}
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
+
+				if d.HasArg("tag") {
+					tagQuery(t, output, ds, d)
+					return ""
+				}
+
+				if d.HasArg("equals") {
+					var equalsTag string
+					d.ScanArgs(t, "equals", &equalsTag)
+					require.Equal(t, ds.queryTags[equalsTag], output)
+					return ""
+				}
+
 				return output
 
 			case "backup":
@@ -688,4 +711,14 @@ func tagJob(
 		t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
 	}
 	ds.jobTags[jobTag] = findMostRecentJobWithType(t, ds, server, user, jobType)
+}
+
+// tagQuery stores the query results. Users can compare the cached results in a future query
+func tagQuery(t *testing.T, output string, ds datadrivenTestState, d *datadriven.TestData) {
+	var queryTag string
+	d.ScanArgs(t, "tag", &queryTag)
+	if _, exists := ds.queryTags[queryTag]; exists {
+		t.Fatalf("failed to `tag`, query with tag %s already exists", queryTag)
+	}
+	ds.queryTags[queryTag] = output
 }
