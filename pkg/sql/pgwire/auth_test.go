@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAuthenticationAndHBARules exercises the authentication code
@@ -138,6 +139,7 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 		// Unix sockets not supported on windows.
 		return "", "", func() {}
 	}
+	socketName := ".s.PGSQL." + socketConnVirtualPort
 	// We need a temp directory in which we'll create the unix socket.
 	//
 	// On BSD, binding to a socket is limited to a path length of 104 characters
@@ -145,17 +147,19 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 	//
 	// macOS has a tendency to produce very long temporary directory names, so
 	// we are careful to keep all the constants involved short.
-	baseTmpDir := ""
-	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
+	baseTmpDir := os.TempDir()
+	if len(baseTmpDir) >= 104-1-len(socketName)-1-len("TestAuth")-10 {
+		t.Logf("temp dir name too long: %s", baseTmpDir)
+		t.Logf("using /tmp instead.")
+		// Note: /tmp might fail in some systems, that's why we still prefer
+		// os.TempDir() if available.
 		baseTmpDir = "/tmp"
 	}
 	tempDir, err := ioutil.TempDir(baseTmpDir, "TestAuth")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// ".s.PGSQL.NNNN" is the standard unix socket name supported by pg clients.
 	return tempDir,
-		filepath.Join(tempDir, ".s.PGSQL."+socketConnVirtualPort),
+		filepath.Join(tempDir, socketName),
 		func() { _ = os.RemoveAll(tempDir) }
 }
 
