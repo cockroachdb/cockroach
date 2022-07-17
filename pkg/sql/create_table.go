@@ -708,6 +708,13 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
+	if d.NotVisible {
+		// Theoretically, this should never happen because this is not supported by
+		// the parser. This is just a safe check.
+		return pgerror.Newf(pgcode.IntegrityConstraintViolation,
+			"adding a unique constraint with invisible index is not supported yet.",
+		)
+	}
 
 	// If there is a predicate, validate it.
 	var predicate string
@@ -1776,6 +1783,11 @@ func NewTableDesc(
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
+			if d.NotVisible {
+				return nil, unimplemented.Newf(
+					"Invisible Index",
+					"creating an invisible index is not supported yet")
+			}
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
@@ -1878,6 +1890,11 @@ func NewTableDesc(
 			if d.WithoutIndex {
 				// We will add the unique constraint below.
 				break
+			}
+			if d.NotVisible {
+				return nil, unimplemented.Newf(
+					"Invisible Index",
+					"creating an invisible index is not supported yet")
 			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when

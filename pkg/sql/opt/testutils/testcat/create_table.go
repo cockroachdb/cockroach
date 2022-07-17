@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"reflect"
 	"sort"
 	"strconv"
@@ -702,6 +703,10 @@ func (tt *Table) addIndexWithVersion(
 	// Add a unique constraint if this is a primary or unique index.
 	if typ != nonUniqueIndex {
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
+	}
+
+	if def.NotVisible {
+		panic(unimplemented.Newf("Invisible Index", "creating an invisible index is not supported yet"))
 	}
 
 	idx := &Index{
