@@ -24,5 +24,6 @@ bazel build //pkg/cmd/bazci --config=ci
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci --compilation_mode opt \
 		       --config "$CONFIG" --config ci --config with_ui \
 		       build //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
-               //pkg/cmd/cockroach-sql \
+		       //pkg/cmd/cockroach-sql \
+		       //pkg/cmd/roachprod \
 		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
