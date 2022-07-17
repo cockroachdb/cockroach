@@ -1623,10 +1623,10 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_secondary_region_clause
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 
 create_schema_stmt ::=
 	'CREATE' 'SCHEMA' qualifiable_schema_name
@@ -2283,6 +2283,11 @@ opt_partition_by_index ::=
 
 opt_with_storage_parameter_list ::=
 	'WITH' '(' storage_parameter_list ')'
+
+opt_index_visible ::=
+	'NOT' 'VISIBLE'
+	| 'VISIBLE'
+	| 
 
 opt_schema_name ::=
 	qualifiable_schema_name
@@ -3562,9 +3567,9 @@ storage_parameter_key ::=
 	| 'SCONST'
 
 index_def ::=
-	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
-	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 
 like_table_option_list ::=
 	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
