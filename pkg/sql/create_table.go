@@ -1784,11 +1784,7 @@ func NewTableDesc(
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
-			}
+
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
@@ -1893,11 +1889,7 @@ func NewTableDesc(
 				// We will add the unique constraint below.
 				break
 			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
-			}
+
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
@@ -2223,6 +2215,16 @@ func NewTableDesc(
 	})
 	if onUpdateErr != nil {
 		return nil, onUpdateErr
+	}
+
+	// Warn against dropping an index if there exists a NotVisible index that may
+	// be used for constraint check behind the scene.
+	notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndexWithinTable(&desc)
+	if notVisibleIndexNotice != nil {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx,
+			notVisibleIndexNotice,
+		)
 	}
 
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`

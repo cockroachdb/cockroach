@@ -131,6 +131,26 @@ func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
 	return true
 }
 
+// UtilFastIntSetOperation takes in a list of ColumnIDs and performs the given
+// operation op after transforming ColumnIDs to FastIntSet.
+func (c ColumnIDs) UtilFastIntSetOperation(input ColumnIDs, op func(util.FastIntSet, util.FastIntSet) bool) bool {
+	ourColsSet := util.MakeFastIntSet()
+	for _, col := range c {
+		ourColsSet.Add(int(col))
+	}
+
+	inputColsSet := util.MakeFastIntSet()
+	for _, inputCol := range input {
+		inputColsSet.Add(int(inputCol))
+	}
+	return op(ourColsSet, inputColsSet)
+}
+
+// HasIntersection returns true if the input list has intersection with columnIDs.
+func (c ColumnIDs) HasIntersection(input ColumnIDs) bool {
+	return c.UtilFastIntSetOperation(input, util.FastIntSet.Intersects)
+}
+
 // Equals returns true if the input list is equal to this list.
 func (c ColumnIDs) Equals(input ColumnIDs) bool {
 	if len(input) != len(c) {
@@ -147,17 +167,7 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 // PermutationOf returns true if this list and the input list contain the same
 // set of column IDs in any order. Duplicate ColumnIDs have no effect.
 func (c ColumnIDs) PermutationOf(input ColumnIDs) bool {
-	ourColsSet := util.MakeFastIntSet()
-	for _, col := range c {
-		ourColsSet.Add(int(col))
-	}
-
-	inputColsSet := util.MakeFastIntSet()
-	for _, inputCol := range input {
-		inputColsSet.Add(int(inputCol))
-	}
-
-	return inputColsSet.Equals(ourColsSet)
+	return c.UtilFastIntSetOperation(input, util.FastIntSet.Equals)
 }
 
 // Contains returns whether this list contains the input ID.

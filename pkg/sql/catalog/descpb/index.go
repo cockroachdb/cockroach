@@ -64,6 +64,15 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	return nil
 }
 
+// IsHelpfulOriginIndex returns whether the index may become a helpful index for
+// foreign key constraint check on the child table. Given the originColIDs for
+// foreign key constraint, the index could be useful for FK check if it has
+// overlaps (intersection) with the originColIDs.
+// TODO(wenyihu6): check if checking HasIntersection is correct here.
+func (desc *IndexDescriptor) IsHelpfulOriginIndex(originColIDs ColumnIDs) bool {
+	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasIntersection(originColIDs)
+}
+
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {

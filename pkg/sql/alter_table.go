@@ -859,6 +859,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 			return err
 		}
 	}
+
+	// Warn against dropping an index if there exists a NotVisible index that may
+	// be used for constraint check behind the scene.
+	notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndexWithinTable(n.tableDesc)
+	if notVisibleIndexNotice != nil {
+		params.p.BufferClientNotice(
+			params.ctx,
+			notVisibleIndexNotice,
+		)
+	}
+
 	// Were some changes made?
 	//
 	// This is only really needed for the unittests that add dummy mutations
