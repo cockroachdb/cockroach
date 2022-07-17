@@ -6269,6 +6269,7 @@ update trade
                 │    └── fd: ()-->(43)
                 ├── scan status_type
                 │    ├── columns: st_id:44!null
+                │    ├── flags: disabled not visible index feature
                 │    ├── key: (44)
                 │    └── ordering: +44
                 └── filters (true)

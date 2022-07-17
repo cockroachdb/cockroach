@@ -460,6 +460,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					}
 				}
 			}
+			if private.Flags.DisableNotVisibleIndex {
+				b.WriteString(" disabled not visible index feature")
+			}
 			tp.Child(b.String())
 		}
 		f.formatLocking(tp, private.Locking)
