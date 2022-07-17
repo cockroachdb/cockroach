@@ -68,7 +68,8 @@ func TestBuilder(t *testing.T) {
 				memo.ExprFmtHideCost |
 				memo.ExprFmtHideQualifications |
 				memo.ExprFmtHideScalars |
-				memo.ExprFmtHideTypes
+				memo.ExprFmtHideTypes |
+				memo.ExprFmtAlwaysShowNotVisibleIndexInfo
 
 			switch d.Cmd {
 			case "build-scalar":
