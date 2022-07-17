@@ -1,0 +1,569 @@
+# This file tests for normal invisible index where foreign key checks and unique
+# constraint checks are not involved.
+# This file will exercise these dimensions and some other cases called from buildDataSource.
+#   - Select
+#   - Insert, Update, Delete, Upsert
+#   - Force Index
+#   - Partial Index
+#   - Inverted Index & Partial Inverted Index
+#   - Non Null constraint check
+
+# Existing test cases under `xform`, `norm`, `optbuilder` will be used to check
+# if the flag has been passed correctly for constraint check `buildScan`.
+exec-ddl
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE)
+----
+
+exec-ddl
+SHOW CREATE t1
+----
+TABLE t1
+ ├── k int not null
+ ├── v int
+ ├── i int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t1_pkey
+ │    └── k int not null
+ ├── INDEX idx_v_visible
+ │    ├── v int
+ │    └── k int not null
+ └── INDEX idx_i_invisible NOT VISIBLE
+      ├── i int
+      └── k int not null
+
+# The following tests check for SELECT. idx_v_visible is chosen to scan.
+opt
+SELECT * FROM t1 WHERE v = 2
+----
+index-join t1
+ ├── columns: k:1!null v:2!null i:3
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan t1@idx_v_visible
+      ├── columns: k:1!null v:2!null
+      ├── constraint: /2/1: [/2 - /2]
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+exec-ddl
+DROP INDEX t1@idx_v_visible
+----
+
+# Index idx_v_invisible should be invisible.
+exec-ddl
+CREATE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
+----
+
+# Check SELECT: ignored idx_v_invisible during scan t1.
+opt
+SELECT v FROM t1 WHERE v = 2
+----
+select
+ ├── columns: v:2!null
+ ├── fd: ()-->(2)
+ ├── scan t1
+ │    └── columns: v:2
+ └── filters
+      └── v:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Check SELECT: ignored idx_i_invisible during scan t1.
+opt
+SELECT * FROM t1 WHERE i = 2
+----
+select
+ ├── columns: k:1!null v:2 i:3!null
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── scan t1
+ │    ├── columns: k:1!null v:2 i:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+# The following tests check for Force Index.
+# Check Force Index: chose idx_v_invisible during scan t1.
+opt
+SELECT * FROM t1@idx_v_invisible WHERE v = 2
+----
+index-join t1
+ ├── columns: k:1!null v:2!null i:3
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan t1@idx_v_invisible
+      ├── columns: k:1!null v:2!null
+      ├── constraint: /2/1: [/2 - /2]
+      ├── flags: force-index=idx_v_invisible
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+# Check Force Index: chose idx_i_invisible during scan t1.
+opt
+SELECT * FROM t1@{FORCE_INDEX=idx_i_invisible, ASC};
+----
+index-join t1
+ ├── columns: k:1!null v:2 i:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan t1@idx_i_invisible
+      ├── columns: k:1!null i:3
+      ├── flags: force-index=idx_i_invisible,fwd
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+# Check Force Index: chose idx_i_invisible during scan t1.
+opt
+SELECT * FROM t1@{FORCE_INDEX=idx_i_invisible, DESC} WHERE i > 0;
+----
+index-join t1
+ ├── columns: k:1!null v:2 i:3!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan t1@idx_i_invisible,rev
+      ├── columns: k:1!null i:3!null
+      ├── constraint: /3/1: [/1 - ]
+      ├── flags: force-index=idx_i_invisible,rev
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+# Check INSERT with SELECT: ignored idx_i_invisible during scan t1.
+opt
+INSERT INTO t1 (k, v, i) SELECT * FROM t1 WHERE i IN (1, 2);
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── k:6 => k:1
+ │    ├── v:7 => v:2
+ │    └── i:8 => i:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: k:6!null v:7 i:8!null
+      ├── key: (6)
+      ├── fd: (6)-->(7,8)
+      ├── scan t1
+      │    ├── columns: k:6!null v:7 i:8
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           └── i:8 IN (1, 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+
+# Check UPSERT with SELECT: ignored idx_i_invisible during scan t1.
+opt
+UPSERT INTO t1 (k, v, i) SELECT * FROM t1 WHERE i IN (1, 2);
+----
+upsert t1
+ ├── arbiter indexes: t1_pkey
+ ├── columns: <none>
+ ├── canary column: k:11
+ ├── fetch columns: k:11 v:12 i:13
+ ├── insert-mapping:
+ │    ├── k:6 => k:1
+ │    ├── v:7 => v:2
+ │    └── i:8 => i:3
+ ├── update-mapping:
+ │    ├── v:7 => v:2
+ │    └── i:8 => i:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── inner-join (lookup t1)
+      ├── columns: k:6!null v:7 i:8!null k:11!null v:12 i:13
+      ├── key columns: [6] = [11]
+      ├── lookup columns are key
+      ├── key: (11)
+      ├── fd: (6)-->(7,8), (11)-->(12,13), (6)==(11), (11)==(6)
+      ├── ensure-upsert-distinct-on
+      │    ├── columns: k:6!null v:7 i:8!null
+      │    ├── grouping columns: k:6!null
+      │    ├── internal-ordering: +6
+      │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── select
+      │    │    ├── columns: k:6!null v:7 i:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── ordering: +6
+      │    │    ├── scan t1
+      │    │    │    ├── columns: k:6!null v:7 i:8
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: (6)-->(7,8)
+      │    │    │    └── ordering: +6
+      │    │    └── filters
+      │    │         └── i:8 IN (1, 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+      │    └── aggregations
+      │         ├── first-agg [as=v:7, outer=(7)]
+      │         │    └── v:7
+      │         └── first-agg [as=i:8, outer=(8)]
+      │              └── i:8
+      └── filters (true)
+
+# Check buildInputForDelete
+opt
+DELETE FROM t1 WHERE i > 0
+----
+delete t1
+ ├── columns: <none>
+ ├── fetch columns: k:6 v:7 i:8
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: k:6!null v:7 i:8!null
+      ├── key: (6)
+      ├── fd: (6)-->(7,8)
+      ├── scan t1
+      │    ├── columns: k:6!null v:7 i:8
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           └── i:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Check buildInputForUpdate
+opt
+UPDATE t1 SET i=0 WHERE i > 0
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: k:6 v:7 i:8
+ ├── update-mapping:
+ │    └── i_new:11 => i:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: i_new:11!null k:6!null v:7 i:8!null
+      ├── key: (6)
+      ├── fd: ()-->(11), (6)-->(7,8)
+      ├── select
+      │    ├── columns: k:6!null v:7 i:8!null
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── scan t1
+      │    │    ├── columns: k:6!null v:7 i:8
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         └── i:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      └── projections
+           └── 0 [as=i_new:11]
+
+# Check buildScanFromTableRef: ignored idx_i_invisible
+opt
+SELECT * FROM [53(3) AS t] WHERE i > 0
+----
+select
+ ├── columns: i:3!null
+ ├── scan t1 [as=t]
+ │    └── columns: i:3
+ └── filters
+      └── i:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+
+# Check buildScanFromTableRef with force index: chose idx_i_invisible
+opt
+SELECT * FROM [53(2) AS t]@[3]
+----
+scan t1@idx_v_invisible [as=t]
+ ├── columns: v:2
+ └── flags: force-index=idx_v_invisible
+
+exec-ddl
+DROP TABLE t1
+----
+
+##########################################################
+# The following tests check for invisible partial index. #
+##########################################################
+exec-ddl
+CREATE TABLE t2 (a INT, b INT, c INT, INDEX idx_a_partial_invisible (a) WHERE a > 0 NOT VISIBLE);
+----
+
+# Check SELECT: ignored idx_a_partial_invisible during.
+opt
+SELECT a FROM t2 WHERE a > 0;
+----
+select
+ ├── columns: a:1!null
+ ├── scan t2
+ │    ├── columns: a:1
+ │    └── partial index predicates
+ │         └── idx_a_partial_invisible: filters
+ │              └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters
+      └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+
+# Check Force Index: chose idx_a_partial_invisible if query's filter implied partial index predicate.
+opt
+SELECT * FROM t2@{FORCE_INDEX=idx_a_partial_invisible, DESC} WHERE a > 2;
+----
+index-join t2
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null rowid:4!null
+      ├── key: (4)
+      ├── fd: (4)-->(1)
+      ├── scan t2@idx_a_partial_invisible,rev,partial
+      │    ├── columns: a:1!null rowid:4!null
+      │    ├── flags: force-index=idx_a_partial_invisible,rev
+      │    ├── key: (4)
+      │    └── fd: (4)-->(1)
+      └── filters
+           └── a:1 > 2 [outer=(1), constraints=(/1: [/3 - ]; tight)]
+
+# Check Force Index: did not choose idx_a_partial_invisible because query's filter did not imply partial index predicate.
+opt
+SELECT a FROM t2@{FORCE_INDEX=idx_a_partial_invisible} WHERE a < 0;
+----
+select
+ ├── columns: a:1!null
+ ├── scan t2
+ │    ├── columns: a:1
+ │    ├── partial index predicates
+ │    │    └── idx_a_partial_invisible: filters
+ │    │         └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── flags: force-index=idx_a_partial_invisible
+ └── filters
+      └── a:1 < 0 [outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+
+exec-ddl
+DROP TABLE t2
+----
+
+##################################################################################
+# The following tests check invisible inverted index and partial inverted index. #
+##################################################################################
+exec-ddl
+CREATE TABLE t3 (id INT, data JSONB, geom GEOMETRY, INVERTED INDEX idx_geom_invisible(geom) NOT VISIBLE);
+----
+
+# Check geospatial
+# Check invisible inverted index: ignored idx_geom_invisible.
+opt
+SELECT * FROM t3 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+select
+ ├── columns: id:1 data:2 geom:3!null
+ ├── immutable
+ ├── scan t3
+ │    └── columns: id:1 data:2 geom:3
+ └── filters
+      └── st_covers(geom:3, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Check invisible inverted index with force index: chose idx_geom_invisible.
+opt
+SELECT * FROM t3@idx_geom_invisible WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+select
+ ├── columns: id:1 data:2 geom:3!null
+ ├── immutable
+ ├── index-join t3
+ │    ├── columns: id:1 data:2 geom:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)
+ │         ├── key: (4)
+ │         └── scan t3@idx_geom_invisible
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── flags: force-index=idx_geom_invisible
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_covers(geom:3, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Check JSONB
+exec-ddl
+CREATE INVERTED INDEX idx_data_invisible ON t3(data) WHERE id > 10 NOT VISIBLE
+----
+
+# Check invisible inverted partial index: ignored idx_data_invisible.
+opt
+SELECT * FROM t3 WHERE data @> '{"foo": "1"}' AND id > 10
+----
+select
+ ├── columns: id:1!null data:2!null geom:3
+ ├── immutable
+ ├── scan t3
+ │    ├── columns: id:1 data:2 geom:3
+ │    └── partial index predicates
+ │         └── idx_data_invisible: filters
+ │              └── id:1 > 10 [outer=(1), constraints=(/1: [/11 - ]; tight)]
+ └── filters
+      ├── data:2 @> '{"foo": "1"}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── id:1 > 10 [outer=(1), constraints=(/1: [/11 - ]; tight)]
+
+exec-ddl
+DROP TABLE t3
+----
+
+#################################################################################
+# These tests check for some other cases called from buildDataSource (buildJoin,
+# buildInputForUpdate, buildFromWithLateral).
+#################################################################################
+exec-ddl
+CREATE TABLE t4 (p INT PRIMARY KEY, other INT NOT NULL, INDEX idx_t4_invisible(other) NOT VISIBLE)
+----
+
+exec-ddl
+CREATE TABLE t5 (a INT PRIMARY KEY, other INT)
+----
+
+exec-ddl
+CREATE INDEX idx_t5_invisible ON t5(other) NOT VISIBLE
+----
+
+# called buildSelectClause, buildFromTablesRightDeep, buildDataSource
+# ignored idx_t4_invisible
+opt
+SELECT * FROM t4, t5 WHERE t4.other > 0
+----
+inner-join (cross)
+ ├── columns: p:1!null other:2!null a:5!null other:6
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t5
+ │    ├── columns: a:5!null t5.other:6
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ ├── select
+ │    ├── columns: p:1!null t4.other:2!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan t4
+ │    │    ├── columns: p:1!null t4.other:2!null
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters
+ │         └── t4.other:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+ └── filters (true)
+
+# called buildSelectClause, buildFromTablesRightDeep, buildDataSource
+# ignored idx_t4_invisible, idx_t5_invisible
+opt
+SELECT * FROM t4, t5 WHERE t4.other = t5.other
+----
+inner-join (hash)
+ ├── columns: p:1!null other:2!null a:5!null other:6!null
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6), (2)==(6), (6)==(2)
+ ├── scan t4
+ │    ├── columns: p:1!null t4.other:2!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan t5
+ │    ├── columns: a:5!null t5.other:6
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters
+      └── t4.other:2 = t5.other:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# called buildJoin, buildDataSource
+# ignored idx_t4_invisible, idx_t5_invisible
+opt
+SELECT * FROM t4 JOIN t5 USING (other)
+----
+project
+ ├── columns: other:2!null p:1!null a:5!null
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(2)
+ └── inner-join (hash)
+      ├── columns: p:1!null t4.other:2!null a:5!null t5.other:6!null
+      ├── key: (1,5)
+      ├── fd: (1)-->(2), (5)-->(6), (2)==(6), (6)==(2)
+      ├── scan t4
+      │    ├── columns: p:1!null t4.other:2!null
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan t5
+      │    ├── columns: a:5!null t5.other:6
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── t4.other:2 = t5.other:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# called buildFromTablesRightDeep, buildJoin
+# ignored idx_t4_invisible, idx_t5_invisible
+opt
+SELECT * FROM t4 AS a JOIN t5 as b USING(other) ORDER BY other
+----
+project
+ ├── columns: other:2!null p:1!null a:5!null
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(2)
+ ├── ordering: +2
+ └── inner-join (merge)
+      ├── columns: p:1!null a.other:2!null a:5!null b.other:6!null
+      ├── left ordering: +2
+      ├── right ordering: +6
+      ├── key: (1,5)
+      ├── fd: (1)-->(2), (5)-->(6), (2)==(6), (6)==(2)
+      ├── ordering: +(2|6) [actual: +2]
+      ├── sort
+      │    ├── columns: p:1!null a.other:2!null
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +2
+      │    └── scan t4 [as=a]
+      │         ├── columns: p:1!null a.other:2!null
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      ├── sort
+      │    ├── columns: a:5!null b.other:6
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    ├── ordering: +6
+      │    └── scan t5 [as=b]
+      │         ├── columns: a:5!null b.other:6
+      │         ├── key: (5)
+      │         └── fd: (5)-->(6)
+      └── filters (true)
+
+# called buildFromWithLateral
+# ignored idx_t4_invisible, idx_t5_invisible
+opt
+SELECT * FROM t4, LATERAL (SELECT * FROM t5 WHERE other > 0) WHERE t4.other > 0;
+----
+inner-join (cross)
+ ├── columns: p:1!null other:2!null a:5!null other:6!null
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── select
+ │    ├── columns: p:1!null t4.other:2!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan t4
+ │    │    ├── columns: p:1!null t4.other:2!null
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters
+ │         └── t4.other:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: a:5!null t5.other:6!null
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    ├── scan t5
+ │    │    ├── columns: a:5!null t5.other:6
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    └── filters
+ │         └── t5.other:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
+ └── filters (true)
+
+exec-ddl
+DROP TABLE t4
+----
+
+exec-ddl
+DROP TABLE t5
+----
