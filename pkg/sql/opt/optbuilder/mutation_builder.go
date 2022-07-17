@@ -295,6 +295,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		indexFlags,
 		noRowLocking,
 		inScope,
+		false, /* disableNotVisibleIndex */
 	)
 
 	// Set list of columns that will be fetched by the input expression.
@@ -410,6 +411,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		indexFlags,
 		noRowLocking,
 		inScope,
+		false, /* disableNotVisibleIndex */
 	)
 	mb.outScope = mb.fetchScope
 

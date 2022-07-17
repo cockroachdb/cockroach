@@ -601,6 +601,7 @@ with &2 (cte)
  │                   │         └── &1: count=1 used-columns=(6)
  │                   ├── scan t.public.parent
  │                   │    ├── columns: t.public.parent.p:8(int!null)
+ │                   │    ├── flags: disabled not visible index feature
  │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
  │                   │    ├── cost: 1044.22
  │                   │    ├── key: (8)

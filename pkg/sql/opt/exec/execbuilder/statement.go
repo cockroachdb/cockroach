@@ -91,10 +91,10 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	switch {
 	case explain.Options.Flags[tree.ExplainFlagVerbose]:
 		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
-			memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
+			memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull | memo.ExprFmtHideNotVisibleIndexInfo
 
 	case explain.Options.Flags[tree.ExplainFlagTypes]:
-		fmtFlags = memo.ExprFmtHideQualifications
+		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
 	}
 
 	// Format the plan here and pass it through to the exec factory.

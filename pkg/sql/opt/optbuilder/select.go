@@ -121,6 +121,7 @@ func (b *Builder) buildDataSource(
 					includeInverted:  false,
 				}),
 				indexFlags, locking, inScope,
+				false, /* disableNotVisibleIndex */
 			)
 
 		case cat.Sequence:
@@ -407,7 +408,8 @@ func (b *Builder) buildScanFromTableRef(
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope)
+
+	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope, false /* disableNotVisibleIndex */)
 }
 
 // addTable adds a table to the metadata and returns the TableMeta. The table
@@ -447,6 +449,7 @@ func (b *Builder) buildScan(
 	indexFlags *tree.IndexFlags,
 	locking lockingSpec,
 	inScope *scope,
+	disableNotVisibleIndex bool,
 ) (outScope *scope) {
 	if ordinals == nil {
 		panic(errors.AssertionFailedf("no ordinals"))
@@ -594,6 +597,7 @@ func (b *Builder) buildScan(
 		private.Flags.NoIndexJoin = true
 		private.Flags.NoZigzagJoin = true
 	}
+	private.Flags.DisableNotVisibleIndex = disableNotVisibleIndex
 
 	b.addCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta)

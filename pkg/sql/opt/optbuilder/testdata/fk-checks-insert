@@ -28,7 +28,8 @@ insert child
                 │    └── mapping:
                 │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    ├── columns: parent.p:8!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8
 
@@ -52,7 +53,8 @@ insert child
  │    │    │    ├── (100, 1)
  │    │    │    └── (200, 1)
  │    │    ├── scan child
- │    │    │    └── columns: c:7!null child.p:8!null
+ │    │    │    ├── columns: c:7!null child.p:8!null
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:5 = c:7
  │    └── aggregations
@@ -67,7 +69,8 @@ insert child
                 │    └── mapping:
                 │         └──  column2:6 => p:11
                 ├── scan parent
-                │    └── columns: parent.p:12!null
+                │    ├── columns: parent.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:11 = parent.p:12
 
@@ -98,7 +101,8 @@ insert child
                 │    └── mapping:
                 │         └──  y:6 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:11!null
+                │    ├── columns: parent.p:11!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:11
 
@@ -134,7 +138,8 @@ insert child_nullable
                 │    └── filters
                 │         └── p:7 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    ├── columns: parent.p:8!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8
 
@@ -162,7 +167,8 @@ insert child_nullable
                 │    └── mapping:
                 │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    ├── columns: parent.p:8!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8
 
@@ -233,7 +239,8 @@ insert child_nullable_full
                 │    └── filters
                 │         └── p:7 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    ├── columns: parent.p:8!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8
 
@@ -301,7 +308,8 @@ insert multi_col_child
                 │         ├── q:12 IS NOT NULL
                 │         └── r:13 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -339,7 +347,8 @@ insert multi_col_child
                 │         ├── p:11 IS NOT NULL
                 │         └── q:12 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -371,7 +380,8 @@ insert multi_col_child
                 │         ├──  column3:9 => q:12
                 │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -433,7 +443,8 @@ insert multi_col_child_full
                 │    └── filters
                 │         └── ((p:11 IS NOT NULL) OR (q:12 IS NOT NULL)) OR (r:13 IS NOT NULL)
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -466,7 +477,8 @@ insert multi_col_child_full
                 │         ├──  column3:9 => q:12
                 │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -498,7 +510,8 @@ insert multi_col_child_full
                 │         ├──  column3:9 => q:12
                 │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -548,7 +561,8 @@ insert multi_col_child_full
                 │         ├──  column3:9 => q:12
                 │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    ├── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p:11 = multi_col_parent.p:14
                      ├── q:12 = multi_col_parent.q:15
@@ -602,7 +616,8 @@ insert multi_ref_child
       │         │    └── filters
       │         │         └── a:11 IS NOT NULL
       │         ├── scan multi_ref_parent_a
-      │         │    └── columns: multi_ref_parent_a.a:12!null
+      │         │    ├── columns: multi_ref_parent_a.a:12!null
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── a:11 = multi_ref_parent_a.a:12
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
@@ -619,7 +634,8 @@ insert multi_ref_child
                 │         ├── b:16 IS NOT NULL
                 │         └── c:17 IS NOT NULL
                 ├── scan multi_ref_parent_bc
-                │    └── columns: multi_ref_parent_bc.b:18!null multi_ref_parent_bc.c:19!null
+                │    ├── columns: multi_ref_parent_bc.b:18!null multi_ref_parent_bc.c:19!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── b:16 = multi_ref_parent_bc.b:18
                      └── c:17 = multi_ref_parent_bc.c:19
@@ -664,6 +680,7 @@ insert child
                 │    └── mapping:
                 │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    ├── columns: parent.p:8!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8

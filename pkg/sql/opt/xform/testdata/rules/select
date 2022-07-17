@@ -849,7 +849,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -1301,7 +1301,7 @@ memo (optimized, ~8KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~7KB, required=[presentation: i:2,k:1])
+memo (optimized, ~8KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
@@ -6236,7 +6236,7 @@ memo (optimized, ~10KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~7KB, required=[presentation: c:3])
+memo (optimized, ~8KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)

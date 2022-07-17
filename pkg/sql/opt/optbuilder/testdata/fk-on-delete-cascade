@@ -29,7 +29,8 @@ root
            └── select
                 ├── columns: c:11!null child.p:12!null
                 ├── scan child
-                │    └── columns: c:11!null child.p:12!null
+                │    ├── columns: c:11!null child.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── child.p:12 > 1
 
@@ -57,7 +58,8 @@ root
            └── semi-join (hash)
                 ├── columns: c:11!null child.p:12!null
                 ├── scan child
-                │    └── columns: c:11!null child.p:12!null
+                │    ├── columns: c:11!null child.p:12!null
+                │    └── flags: disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:15!null
                 │    └── mapping:
@@ -93,7 +95,8 @@ root
            └── semi-join (hash)
                 ├── columns: c:14!null child.p:15!null
                 ├── scan child
-                │    └── columns: c:14!null child.p:15!null
+                │    ├── columns: c:14!null child.p:15!null
+                │    └── flags: disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:18!null
                 │    └── mapping:
@@ -118,7 +121,8 @@ root
            ├── columns: <none>
            ├── fetch columns: c:11 child.p:12
            └── scan child
-                └── columns: c:11!null child.p:12!null
+                ├── columns: c:11!null child.p:12!null
+                └── flags: disabled not visible index feature
 
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
@@ -150,7 +154,8 @@ root
       │    └── select
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
-      │         │    └── columns: c:11!null child.p:12!null
+      │         │    ├── columns: c:11!null child.p:12!null
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── child.p:12 > 1
       └── cascade
@@ -160,7 +165,8 @@ root
                 └── semi-join (hash)
                      ├── columns: g:19!null grandchild.c:20
                      ├── scan grandchild
-                     │    └── columns: g:19!null grandchild.c:20
+                     │    ├── columns: g:19!null grandchild.c:20
+                     │    └── flags: disabled not visible index feature
                      ├── with-scan &1
                      │    ├── columns: c:23!null
                      │    └── mapping:
@@ -195,7 +201,8 @@ root
       │    └── semi-join (hash)
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
-      │         │    └── columns: c:11!null child.p:12!null
+      │         │    ├── columns: c:11!null child.p:12!null
+      │         │    └── flags: disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: p:15!null
       │         │    └── mapping:
@@ -209,7 +216,8 @@ root
                 └── semi-join (hash)
                      ├── columns: g:20!null grandchild.c:21
                      ├── scan grandchild
-                     │    └── columns: g:20!null grandchild.c:21
+                     │    ├── columns: g:20!null grandchild.c:21
+                     │    └── flags: disabled not visible index feature
                      ├── with-scan &2
                      │    ├── columns: c:24!null
                      │    └── mapping:
@@ -236,7 +244,8 @@ root
       │    ├── cascades
       │    │    └── grandchild_c_fkey
       │    └── scan child
-      │         └── columns: c:11!null child.p:12!null
+      │         ├── columns: c:11!null child.p:12!null
+      │         └── flags: disabled not visible index feature
       └── cascade
            └── delete grandchild
                 ├── columns: <none>
@@ -244,7 +253,8 @@ root
                 └── select
                      ├── columns: g:19!null grandchild.c:20!null
                      ├── scan grandchild
-                     │    └── columns: g:19!null grandchild.c:20
+                     │    ├── columns: g:19!null grandchild.c:20
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           └── grandchild.c:20 IS DISTINCT FROM CAST(NULL AS INT8)
 
@@ -280,7 +290,8 @@ root
            ├── select
            │    ├── columns: child.c:11!null child.p:12!null
            │    ├── scan child
-           │    │    └── columns: child.c:11!null child.p:12!null
+           │    │    ├── columns: child.c:11!null child.p:12!null
+           │    │    └── flags: disabled not visible index feature
            │    └── filters
            │         └── child.p:12 > 1
            └── f-k-checks
@@ -292,7 +303,8 @@ root
                           │    └── mapping:
                           │         └──  child.c:11 => c:15
                           ├── scan grandchild
-                          │    └── columns: grandchild.c:17
+                          │    ├── columns: grandchild.c:17
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── c:15 = grandchild.c:17
 
@@ -320,7 +332,8 @@ root
            ├── semi-join (hash)
            │    ├── columns: child.c:11!null child.p:12!null
            │    ├── scan child
-           │    │    └── columns: child.c:11!null child.p:12!null
+           │    │    ├── columns: child.c:11!null child.p:12!null
+           │    │    └── flags: disabled not visible index feature
            │    ├── with-scan &1
            │    │    ├── columns: p:15!null
            │    │    └── mapping:
@@ -336,7 +349,8 @@ root
                           │    └── mapping:
                           │         └──  child.c:11 => c:16
                           ├── scan grandchild
-                          │    └── columns: grandchild.c:18
+                          │    ├── columns: grandchild.c:18
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── c:16 = grandchild.c:18
 
@@ -371,7 +385,8 @@ root
       │    └── semi-join (hash)
       │         ├── columns: self.a:13!null b:14
       │         ├── scan self
-      │         │    └── columns: self.a:13!null b:14
+      │         │    ├── columns: self.a:13!null b:14
+      │         │    └── flags: disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:17!null
       │         │    └── mapping:
@@ -388,7 +403,8 @@ root
            │    └── semi-join (hash)
            │         ├── columns: self.a:22!null b:23
            │         ├── scan self
-           │         │    └── columns: self.a:22!null b:23
+           │         │    ├── columns: self.a:22!null b:23
+           │         │    └── flags: disabled not visible index feature
            │         ├── with-scan &2
            │         │    ├── columns: a:26!null
            │         │    └── mapping:
@@ -405,7 +421,8 @@ root
                      └── semi-join (hash)
                           ├── columns: self.a:31!null b:32
                           ├── scan self
-                          │    └── columns: self.a:31!null b:32
+                          │    ├── columns: self.a:31!null b:32
+                          │    └── flags: disabled not visible index feature
                           ├── with-scan &3
                           │    ├── columns: a:35!null
                           │    └── mapping:
@@ -465,7 +482,8 @@ root
       │    └── semi-join (hash)
       │         ├── columns: e:13!null f:14
       │         ├── scan ef
-      │         │    └── columns: e:13!null f:14
+      │         │    ├── columns: e:13!null f:14
+      │         │    └── flags: disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:17!null
       │         │    └── mapping:
@@ -482,7 +500,8 @@ root
            │    └── semi-join (hash)
            │         ├── columns: c:22!null d:23
            │         ├── scan cd
-           │         │    └── columns: c:22!null d:23
+           │         │    ├── columns: c:22!null d:23
+           │         │    └── flags: disabled not visible index feature
            │         ├── with-scan &2
            │         │    ├── columns: e:26!null
            │         │    └── mapping:
@@ -499,7 +518,8 @@ root
                      └── semi-join (hash)
                           ├── columns: ab.a:31!null b:32
                           ├── scan ab
-                          │    └── columns: ab.a:31!null b:32
+                          │    ├── columns: ab.a:31!null b:32
+                          │    └── flags: disabled not visible index feature
                           ├── with-scan &3
                           │    ├── columns: c:35!null
                           │    └── mapping:
@@ -555,7 +575,8 @@ root
       │    └── select
       │         ├── columns: f2.a:14!null b:15!null f2.data:16
       │         ├── scan f2
-      │         │    └── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── (f2.a:14 >= 1) AND (f2.a:14 <= 4)
       └── cascade
@@ -565,7 +586,8 @@ root
                 └── select
                      ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
                      ├── scan f3
-                     │    └── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
+                     │    ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           └── (f3.a:25 >= 1) AND (f3.a:25 <= 4)
 
@@ -596,7 +618,8 @@ root
       │    └── semi-join (hash)
       │         ├── columns: f2.a:14!null b:15!null f2.data:16
       │         ├── scan f2
-      │         │    └── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
+      │         │    └── flags: disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:19!null
       │         │    └── mapping:
@@ -610,7 +633,8 @@ root
                 └── semi-join (hash)
                      ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
                      ├── scan f3
-                     │    └── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
+                     │    ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
+                     │    └── flags: disabled not visible index feature
                      ├── with-scan &2
                      │    ├── columns: a:32!null b:33!null
                      │    └── mapping:
@@ -657,7 +681,8 @@ root
  │         └── select
  │              ├── columns: g2a.a:16!null data:17 g2a.rowid:18!null
  │              ├── scan g2a
- │              │    └── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    └── flags: disabled not visible index feature
  │              └── filters
  │                   ├── g2a.a:16 = 1
  │                   └── g2a.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -668,7 +693,8 @@ root
            └── semi-join (hash)
                 ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
                 ├── scan g2b
-                │    └── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
+                │    ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
+                │    └── flags: disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: b:31
                 │    └── mapping:
@@ -700,7 +726,8 @@ root
  │         └── semi-join (hash)
  │              ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
  │              ├── scan g2a
- │              │    └── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
+ │              │    └── flags: disabled not visible index feature
  │              ├── with-scan &1
  │              │    ├── columns: a:21
  │              │    └── mapping:
@@ -714,7 +741,8 @@ root
            └── select
                 ├── columns: g2b.b:27!null g2b.data:28 g2b.rowid:29!null
                 ├── scan g2b
-                │    └── columns: g2b.b:27 g2b.data:28 g2b.rowid:29!null
+                │    ├── columns: g2b.b:27 g2b.data:28 g2b.rowid:29!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── g2b.b:27 = 1
                      └── g2b.b:27 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -753,7 +781,8 @@ root
            └── semi-join (hash)
                 ├── columns: c:11!null h2.p:12
                 ├── scan h2
-                │    └── columns: c:11!null h2.p:12
+                │    ├── columns: c:11!null h2.p:12
+                │    └── flags: disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:15!null
                 │    └── mapping:
@@ -784,7 +813,8 @@ root
            └── select
                 ├── columns: c:11!null h2.p:12!null
                 ├── scan h2
-                │    └── columns: c:11!null h2.p:12
+                │    ├── columns: c:11!null h2.p:12
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── h2.p:12 = 1
                      └── h2.p:12 IS DISTINCT FROM CAST(NULL AS DECIMAL)
@@ -830,7 +860,8 @@ root
            └── select
                 ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
                 ├── scan m2
-                │    └── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── ((m2.a:19 + m2.b:20) + m2.c:21) = 1
                      ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -859,7 +890,8 @@ root
            └── select
                 ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
                 ├── scan m2
-                │    └── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── m2.a:19 IS NULL
                      ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -907,11 +939,12 @@ root
                 │    ├── columns: c:12!null child_partial.p:13!null i:14
                 │    ├── scan child_partial
                 │    │    ├── columns: c:12!null child_partial.p:13 i:14
-                │    │    └── partial index predicates
-                │    │         ├── child_partial_p_idx: filters
-                │    │         │    └── i:14 > 0
-                │    │         └── child_partial_i_idx: filters
-                │    │              └── child_partial.p:13 > 0
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: disabled not visible index feature
                 │    └── filters
                 │         ├── child_partial.p:13 > 1
                 │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -947,11 +980,12 @@ root
                 │    ├── columns: c:12!null child_partial.p:13 i:14
                 │    ├── scan child_partial
                 │    │    ├── columns: c:12!null child_partial.p:13 i:14
-                │    │    └── partial index predicates
-                │    │         ├── child_partial_p_idx: filters
-                │    │         │    └── i:14 > 0
-                │    │         └── child_partial_i_idx: filters
-                │    │              └── child_partial.p:13 > 0
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: disabled not visible index feature
                 │    ├── with-scan &1
                 │    │    ├── columns: p:17!null
                 │    │    └── mapping:
@@ -985,11 +1019,12 @@ root
                 │    ├── columns: c:12!null child_partial.p:13!null i:14
                 │    ├── scan child_partial
                 │    │    ├── columns: c:12!null child_partial.p:13 i:14
-                │    │    └── partial index predicates
-                │    │         ├── child_partial_p_idx: filters
-                │    │         │    └── i:14 > 0
-                │    │         └── child_partial_i_idx: filters
-                │    │              └── child_partial.p:13 > 0
+                │    │    ├── partial index predicates
+                │    │    │    ├── child_partial_p_idx: filters
+                │    │    │    │    └── i:14 > 0
+                │    │    │    └── child_partial_i_idx: filters
+                │    │    │         └── child_partial.p:13 > 0
+                │    │    └── flags: disabled not visible index feature
                 │    └── filters
                 │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
                 └── projections
@@ -1036,11 +1071,12 @@ root
                 │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
                 │    ├── scan child_virt
                 │    │    ├── columns: c:13!null child_virt.p:14
-                │    │    └── computed column expressions
-                │    │         ├── v:15
-                │    │         │    └── child_virt.p:14
-                │    │         └── v2:16
-                │    │              └── c:13::STRING
+                │    │    ├── computed column expressions
+                │    │    │    ├── v:15
+                │    │    │    │    └── child_virt.p:14
+                │    │    │    └── v2:16
+                │    │    │         └── c:13::STRING
+                │    │    └── flags: disabled not visible index feature
                 │    └── projections
                 │         ├── child_virt.p:14 [as=v:15]
                 │         └── c:13::STRING [as=v2:16]
@@ -1075,11 +1111,12 @@ root
                 │    ├── columns: v:15 v2:16!null c:13!null child_virt.p:14
                 │    ├── scan child_virt
                 │    │    ├── columns: c:13!null child_virt.p:14
-                │    │    └── computed column expressions
-                │    │         ├── v:15
-                │    │         │    └── child_virt.p:14
-                │    │         └── v2:16
-                │    │              └── c:13::STRING
+                │    │    ├── computed column expressions
+                │    │    │    ├── v:15
+                │    │    │    │    └── child_virt.p:14
+                │    │    │    └── v2:16
+                │    │    │         └── c:13::STRING
+                │    │    └── flags: disabled not visible index feature
                 │    └── projections
                 │         ├── child_virt.p:14 [as=v:15]
                 │         └── c:13::STRING [as=v2:16]

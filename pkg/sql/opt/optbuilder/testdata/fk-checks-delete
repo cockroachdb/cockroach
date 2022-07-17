@@ -41,7 +41,8 @@ delete parent
                 │    └── mapping:
                 │         └──  parent.p:7 => p:11
                 ├── scan child
-                │    └── columns: child.p:13!null
+                │    ├── columns: child.p:13!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:11 = child.p:13
 
@@ -71,7 +72,8 @@ delete parent
       │         │    └── mapping:
       │         │         └──  parent.p:7 => p:11
       │         ├── scan child
-      │         │    └── columns: child.p:13!null
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = child.p:13
       └── f-k-checks-item: child2(p) -> parent(other)
@@ -82,7 +84,8 @@ delete parent
                 │    └── mapping:
                 │         └──  parent.other:8 => other:16
                 ├── scan child2
-                │    └── columns: child2.p:18!null
+                │    ├── columns: child2.p:18!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18
 
@@ -117,7 +120,8 @@ delete doubleparent
                 │         ├──  doubleparent.p1:6 => p1:11
                 │         └──  doubleparent.p2:7 => p2:12
                 ├── scan doublechild
-                │    └── columns: doublechild.p1:14 doublechild.p2:15
+                │    ├── columns: doublechild.p1:14 doublechild.p2:15
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p1:11 = doublechild.p1:14
                      └── p2:12 = doublechild.p2:15
@@ -159,7 +163,8 @@ delete parent
       │         │    └── mapping:
       │         │         └──  parent.p:7 => p:11
       │         ├── scan child
-      │         │    └── columns: child.p:13!null
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = child.p:13
       └── f-k-checks-item: child2(p) -> parent(other)
@@ -171,6 +176,7 @@ delete parent
                 │    └── mapping:
                 │         └──  parent.other:8 => other:16
                 ├── scan child2
-                │    └── columns: child2.p:18!null
+                │    ├── columns: child2.p:18!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18

@@ -42,7 +42,8 @@ func TestNormRules(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
-		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
+		memo.ExprFmtHideNotVisibleIndexInfo
 	datadriven.Walk(t, testutils.TestDataPath(t, "rules"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -61,7 +62,8 @@ func TestNormRuleProps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
-		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
+		memo.ExprFmtHideNotVisibleIndexInfo
 	datadriven.Walk(t, testutils.TestDataPath(t, "ruleprops"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

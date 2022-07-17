@@ -1006,7 +1006,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			if errors.IsAssertionFailure(err) {
 				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
 				// expression.
-				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
+					memo.ExprFmtHideNotVisibleIndexInfo
 				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}

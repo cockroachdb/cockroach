@@ -23,7 +23,7 @@ import (
 
 func TestOptTester(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
-		memo.ExprFmtHideQualifications
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
 
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		if strings.HasSuffix(path, ".json") {
