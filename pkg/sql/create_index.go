@@ -737,9 +737,19 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.NotVisible {
-		return unimplemented.Newf(
-			"Not Visible Index",
-			"creating a not visible index is not supported yet")
+		// Warn against dropping an index if user is creating a unique invisible
+		// index or creating an invisible index in a child table. Invisible indexes
+		// may still be used to police unique or foreign key constraint check behind
+		// the scene. In this case, dropping the index may behave differently than
+		// marking the index invisible.
+		if n.n.Unique || len(n.tableDesc.OutboundFKs) != 0 {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("invisible indexes may still be used for unique or "+
+					"foreign key constraint check, so the query plan may be different from "+
+					"dropping the index completely."),
+			)
+		}
 	}
 
 	// Warn against creating a non-partitioned index on a partitioned table,
