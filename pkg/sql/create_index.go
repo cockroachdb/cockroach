@@ -807,6 +807,15 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Warn against dropping an index if there exists a NotVisible index that may
+	// be used for constraint check behind the scene.
+	if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndexWithinTable(n.tableDesc); notVisibleIndexNotice != nil {
+		params.p.BufferClientNotice(
+			params.ctx,
+			notVisibleIndexNotice,
+		)
+	}
+
 	// The index name may have changed as a result of
 	// AllocateIDs(). Retrieve it for the event log below.
 	index := n.tableDesc.Mutations[mutationIdx].GetIndex()

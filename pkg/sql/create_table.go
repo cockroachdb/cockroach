@@ -2208,6 +2208,15 @@ func NewTableDesc(
 		return nil, onUpdateErr
 	}
 
+	// Warn against dropping an index if there exists a NotVisible index that may
+	// be used for constraint check behind the scene.
+	if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndexWithinTable(&desc); notVisibleIndexNotice != nil {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx,
+			notVisibleIndexNotice,
+		)
+	}
+
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.
 	//

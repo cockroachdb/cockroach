@@ -527,6 +527,10 @@ func (b *Builder) buildScan(
 				if tab.Index(i).Name() == tree.Name(indexFlags.Index) ||
 					tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
 					idx = i
+
+					//if tab.Index(i).IsNotVisible() {
+					//	// TODO(wenyihu6): Find a way to give notice here is force index is not visible.
+					//}
 					break
 				}
 			}

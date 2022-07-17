@@ -6,6 +6,14 @@
 # - Check show indexes
 # - Check invisible index feature using EXPLAIN
 
+# In addition, this file should also check if we printing log notice correctly.
+# - When dropping an index is not equivalent to marking an index as invisible,
+#   we should log a notice message.
+#   - Whenever a unique invisible index is created in CREATE INDEX or CREATE TABLE
+#   - Whenever an invisible index is created on a child table in CREATE INDEX or CREATE TABLE
+#   - Whenever a new foreign key constraint is added to a table with invisible index
+#   - Whenever they are using force index with invisible index
+
 statement ok
 CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE, FAMILY (k, v, i))
 
@@ -882,6 +890,135 @@ DROP TABLE child_delete
 
 statement ok
 DROP TABLE child_update
+
+statement ok
+DROP TABLE parent
+
+############################################################################
+# We should log notices
+# when dropping an index might be different from marking an index invisible
+# - Invisible unique indexes are created
+# - Invisible indexes are created in a child table
+# - Invisible indexes are used with Force Index
+############################################################################
+# Creating an invisble secondary index in CREATE TABLE does not log warning if it is not in a child table.
+query T noticetrace
+CREATE TABLE t1 (p INT PRIMARY KEY, INDEX idx_invisible (p) NOT VISIBLE)
+----
+
+# Creating an invisble secondary index in CREATE INDEX does not log warning.
+query T noticetrace
+CREATE INDEX t1_idx_invisible_unique ON t1(p) NOT VISIBLE
+----
+
+# Creating an invisble unique index in CREATE INDEX does log warning.
+query T noticetrace
+CREATE UNIQUE INDEX t1_idx_invisible ON t1(p) NOT VISIBLE
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Creating an invisble unique index in CREATE TABLE does log warning.
+# TODO (wenyihu6): try to find workaround to test for creating invisible unique indexes in CREATE TABLE
+# (confirmed that the following statement works on a cluster)
+# query T noticetrace
+# CREATE TABLE t2 (p INT PRIMARY KEY, UNIQUE INDEX c_idx_invisible (p) NOT VISIBLE)
+# ----
+
+# Creating an invisble unique index in CREATE TABLE does log warning.
+# (Confirmed that the following statement works on a cluster and only prints once.)
+# query T noticetrace
+# CREATE TABLE t3 (p INT PRIMARY KEY, UNIQUE INDEX c_idx_invisible1 (p) NOT VISIBLE, UNIQUE INDEX c_idx_invisible2 (p) NOT VISIBLE)
+# ----
+
+statement ok
+DROP TABLE t1
+
+############################################################################
+# Creating an invisble secondary index in CREATE TABLE does not log warning if it is not in a child table.
+query T noticetrace
+CREATE TABLE parent (p INT PRIMARY KEY, INDEX p_idx_invisible_1 (p) NOT VISIBLE)
+----
+
+# Creating an invisible index in a child table does log warning and only once.
+query T noticetrace
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), INDEX c_idx1_invisible (p) NOT VISIBLE, INDEX c_idx2_invisible (p) NOT VISIBLE)
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Creating an invisible index in a child table does log warning.
+query T noticetrace
+CREATE INDEX c_idx3_invisible ON child(p) NOT VISIBLE
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Creating a unique invisible index in a child table does log warning and only once.
+query T noticetrace
+CREATE UNIQUE INDEX c_idx_invisible_unique ON child(p) NOT VISIBLE
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Creating an invisble secondary index in a parent table still does not log warning.
+query T noticetrace
+CREATE INDEX p_idx_invisible_2 ON parent(p) NOT VISIBLE
+----
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+############################################################################
+query T noticetrace
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+query T noticetrace
+CREATE TABLE child (c INT PRIMARY KEY)
+----
+
+# Adding a FK constraint to a table without invisible indexes does not log warning.
+query T noticetrace
+ALTER TABLE child ADD CONSTRAINT p_fk_1 FOREIGN KEY (c) REFERENCES parent(p);
+----
+
+# Adding invisible indexes to a child table logs warning.
+query T noticetrace
+CREATE INDEX c_idx_invisible_2 ON child(c) NOT VISIBLE
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Adding a FK constraint to a table with invisible indexes should log warning.
+query T noticetrace
+ALTER TABLE child ADD CONSTRAINT p_fk_2 FOREIGN KEY (c) REFERENCES parent(p);
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Adding multiple FK constraints in a table with invisible indexes should log only once.
+query T noticetrace
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (c) REFERENCES parent(p), ADD CONSTRAINT fk2 FOREIGN KEY (c) REFERENCES child(c);
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Having multiple FK constraints in CREATE TABLE with invisible indexes should log only once.
+query T noticetrace
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE, h INT NOT NULL REFERENCES child(c) ON DELETE CASCADE, INDEX c1_idx_invisible (p) NOT VISIBLE)
+----
+NOTICE: not visible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Having FK constraints and multiple unique invisible indexes in CREATE TABLE should log only once.
+# (Confirmed that the following statement works on a cluster and only prints once.)
+# query T noticetrace
+# CREATE TABLE child3 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE, h INT NOT NULL REFERENCES child(c) ON DELETE CASCADE, UNIQUE INDEX c1_idx_invisible (p) NOT VISIBLE)
+# ----
+
+# 6. Force index with invisible index should also throw a notice
+
+statement ok
+DROP TABLE child2
+
+statement ok
+DROP TABLE child
 
 statement ok
 DROP TABLE parent
