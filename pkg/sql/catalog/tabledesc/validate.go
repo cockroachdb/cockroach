@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -758,6 +759,42 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
 	ValidateOnUpdate(desc, vea.Report)
+}
+
+// ValidateNotVisibleIndex returns a notice when dropping the given index may
+// behave differently than marking the index invisible. NotVisible indexes may
+// still be used to police unique or foreign key constraint check behind the
+// scene. Hence, dropping the index might behave different from marking the
+// index invisible. There are three cases where this might happen:
+// Case 1: If the index is unique,
+// - Sub case 1: if the given tableDes is a parent table and this index could be
+// useful for FK check on the parent table.
+// - Sub case 2: otherwise, a unique index may only be useful for unique
+// constraint check. These first two cases can be covered by just checking
+// whether the index is unique.
+// Case 2: if the given tableDesc is a child table and this index could be
+// helpful for FK check in the child table. Note that we can only decide if an
+// index is currently useful for FK check on a child table. It is possible that
+// the user adds FK constraint later and this invisible index becomes useful. No
+// notices would be given at that point.
+func ValidateNotVisibleIndex(
+	index catalog.Index, tableDesc catalog.TableDescriptor,
+) pgnotice.Notice {
+	notices := pgnotice.Newf("queries may still use not visible indexes to enforce unique and foreign key constraints")
+	if index.IsUnique() {
+		// Case 1: The given index is a unique index.
+		return notices
+	}
+
+	notice := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+		// Case 2: The given index is an index on a child table that may be useful
+		// for FK check.
+		if index.IsHelpfulOriginIndex(fk.OriginColumnIDs) {
+			return notices
+		}
+		return nil
+	})
+	return notice
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign

@@ -79,6 +79,17 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "primary index cannot be invisible")
 	}
 
+	// Warn if this invisible index may still be used to enforce constraint check
+	// behind the scene.
+	if n.n.NotVisible {
+		if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndex(n.index, n.tableDesc); notVisibleIndexNotice != nil {
+			params.p.BufferClientNotice(
+				params.ctx,
+				notVisibleIndexNotice,
+			)
+		}
+	}
+
 	if n.index.IsNotVisible() == n.n.NotVisible {
 		// Nothing needed if the index is already what they want.
 		return nil
