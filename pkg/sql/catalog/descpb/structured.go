@@ -131,6 +131,15 @@ func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
 	return true
 }
 
+// HasFirstElementIn returns true if the first element of this list is present
+// in the input list.
+func (c ColumnIDs) HasFirstElementIn(input ColumnIDs) bool {
+	if len(c) < 0 {
+		return false
+	}
+	return input.Contains(c[0])
+}
+
 // Equals returns true if the input list is equal to this list.
 func (c ColumnIDs) Equals(input ColumnIDs) bool {
 	if len(input) != len(c) {

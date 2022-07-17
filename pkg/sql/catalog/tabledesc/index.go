@@ -142,6 +142,12 @@ func (w index) IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool {
 	return w.desc.IsValidOriginIndex(originColIDs)
 }
 
+// IsHelpfulOriginIndex returns whether the index may become a helpful index for
+// foreign key constraint check on the child table.
+func (w index) IsHelpfulOriginIndex(originColIDs descpb.ColumnIDs) bool {
+	return w.desc.IsHelpfulOriginIndex(originColIDs)
+}
+
 // IsValidReferencedUniqueConstraint returns whether the index can serve as a
 // referenced index for a foreign  key constraint with the provided set of
 // referencedColumnIDs.

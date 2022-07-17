@@ -1374,3 +1374,87 @@ vectorized: true
 
 statement ok
 DROP TABLE t
+
+############################################################################
+# We should log notices when dropping an invisible index might be different from marking an index invisible.
+# - Unique invisible indexes are dropped.
+# - Invisible indexes that may help with FK check are dropped in a child table.
+############################################################################
+subtest not_visible_notices
+
+query T noticetrace
+CREATE TABLE t1 (p INT PRIMARY KEY, INDEX idx_invisible (p) NOT VISIBLE)
+----
+
+query T noticetrace
+CREATE UNIQUE INDEX idx_invisible_unique ON t1(p) VISIBLE
+----
+
+# Notices if changing a unique index to NotVisible.
+query T noticetrace
+ALTER INDEX idx_invisible_unique NOT VISIBLE
+----
+NOTICE: not visible indexes may still used to police constraint check
+
+# Notices if dropping a unique invisible index.
+query T noticetrace
+DROP INDEX idx_invisible_unique
+----
+NOTICE: not visible indexes may still used to police constraint check
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+# No notices if changing a normal index to NotVisible.
+query T noticetrace
+ALTER INDEX idx_invisible NOT VISIBLE
+----
+
+# No notices if dropping a normal invisible index.
+query T noticetrace
+DROP INDEX idx_invisible
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+statement ok
+DROP TABLE t1
+
+query T noticetrace
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+query T noticetrace
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), INDEX c_idx_invisible_helpful (p, c) NOT VISIBLE, INDEX c_idx_invisible_not_helpful (c, p) NOT VISIBLE)
+----
+
+# Notices if the index on the child table is helpful.
+query T noticetrace
+ALTER INDEX c_idx_invisible_helpful NOT VISIBLE
+----
+NOTICE: not visible indexes may still used to police constraint check
+
+# Notices if the index on the child table is helpful.
+query T noticetrace
+DROP INDEX c_idx_invisible_helpful
+----
+NOTICE: not visible indexes may still used to police constraint check
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+# No notices if the index on the child table is not helpful.
+query T noticetrace
+ALTER INDEX c_idx_invisible_not_helpful NOT VISIBLE
+----
+
+# No notices if the index on the child table is not helpful.
+query T noticetrace
+DROP INDEX c_idx_invisible_not_helpful
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent

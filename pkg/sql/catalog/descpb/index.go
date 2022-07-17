@@ -64,6 +64,14 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	return nil
 }
 
+// IsHelpfulOriginIndex returns whether the index may become a helpful index for
+// foreign key constraint check on the child table. Given the originColIDs for
+// foreign key constraint, the index could be useful for FK check if the first
+// column covered by the index is present in FK constraint columns.
+func (desc *IndexDescriptor) IsHelpfulOriginIndex(originColIDs ColumnIDs) bool {
+	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasFirstElementIn(originColIDs)
+}
+
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {

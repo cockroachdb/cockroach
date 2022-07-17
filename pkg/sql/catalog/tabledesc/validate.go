@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -758,6 +759,37 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
 	ValidateOnUpdate(desc, vea.Report)
+}
+
+// ValidateNotVisibleIndex returns a notice when dropping the given index may
+// behave differently than marking the index invisible.
+// NotVisible indexes may still be used to police unique or foreign key
+// constraint check behind the scene. Hence, dropping the index might behave
+// different from marking the index invisible. The following two cases are where
+// NotVisible indexes might be used for constraint check:
+// Case 1. if this index is unique.
+// Case 2. if the given tableDesc is a child table and this index could be
+// helpful for FK check in the table. Note that not visible indexes in a parent
+// table may also be used for FK check, but they are not discussed in a
+// different case here because they will always be unique indexes (having unique
+// indexes or constraint on a parent table was necessary to create the child
+// table).
+func ValidateNotVisibleIndex(
+	index catalog.Index, tableDesc catalog.TableDescriptor,
+) pgnotice.Notice {
+	noticeStr := "not visible indexes may still used to police constraint check"
+	if index.IsUnique() {
+		return pgnotice.Newf(noticeStr)
+	}
+
+	notice := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+		// IsHelpfulOriginIndex checks if the index may become helpful for FK check.
+		if index.IsHelpfulOriginIndex(fk.OriginColumnIDs) {
+			return pgnotice.Newf(noticeStr)
+		}
+		return nil
+	})
+	return notice
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
