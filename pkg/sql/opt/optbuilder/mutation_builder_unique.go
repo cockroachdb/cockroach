@@ -410,6 +410,9 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
+		// Disable not visible index feature because this scan is for building
+		// unique constraint check.
+		true,
 	), ordinals
 }
 

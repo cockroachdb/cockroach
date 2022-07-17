@@ -620,6 +620,9 @@ func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.Tab
 		&tree.IndexFlags{IgnoreForeignKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
+		// Disable not visible index feature because this scan is for building FK or
+		// cascade checks for Update, Upsert, Delete, Insert.
+		true,
 	), otherTabMeta
 }
 
