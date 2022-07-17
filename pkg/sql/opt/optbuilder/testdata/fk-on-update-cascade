@@ -38,7 +38,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:12!null child.p:13!null p_old:16!null p_new:17!null
            │    ├── scan child
-           │    │    └── columns: c:12!null child.p:13!null
+           │    │    ├── columns: c:12!null child.p:13!null
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:16!null p_new:17!null
            │    │    ├── with-scan &1
@@ -59,7 +60,8 @@ root
                           │    └── mapping:
                           │         └──  p_new:17 => p:18
                           ├── scan parent
-                          │    └── columns: parent.p:19!null
+                          │    ├── columns: parent.p:19!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p:18 = parent.p:19
 
@@ -118,7 +120,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
            │    ├── scan child_multi
-           │    │    └── columns: c:18!null child_multi.p:19 child_multi.q:20
+           │    │    ├── columns: c:18!null child_multi.p:19 child_multi.q:20
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:23 p_new:24 q_old:25 q_new:26
            │    │    ├── with-scan &1
@@ -148,7 +151,8 @@ root
                           │         ├── p:27 IS NOT NULL
                           │         └── q:28 IS NOT NULL
                           ├── scan parent_multi
-                          │    └── columns: parent_multi.p:30 parent_multi.q:31
+                          │    ├── columns: parent_multi.p:30 parent_multi.q:31
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:27 = parent_multi.p:30
                                └── q:28 = parent_multi.q:31
@@ -188,7 +192,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
            │    ├── scan child_multi
-           │    │    └── columns: c:17!null child_multi.p:18 child_multi.q:19
+           │    │    ├── columns: c:17!null child_multi.p:18 child_multi.q:19
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
            │    │    ├── with-scan &1
@@ -217,7 +222,8 @@ root
                           │    └── filters
                           │         └── q:27 IS NOT NULL
                           ├── scan parent_multi
-                          │    └── columns: parent_multi.p:29 parent_multi.q:30
+                          │    ├── columns: parent_multi.p:29 parent_multi.q:30
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:26 = parent_multi.p:29
                                └── q:27 = parent_multi.q:30
@@ -258,7 +264,8 @@ root
  │         │    │         └── first-agg [as=column3:8]
  │         │    │              └── column3:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:9
  │         └── projections
@@ -274,7 +281,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
            │    ├── scan child_multi
-           │    │    └── columns: c:20!null child_multi.p:21 child_multi.q:22
+           │    │    ├── columns: c:20!null child_multi.p:21 child_multi.q:22
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:25 p_new:26!null q_old:27 q_new:28!null
            │    │    ├── with-scan &1
@@ -299,7 +307,8 @@ root
                           │         ├──  p_new:26 => p:29
                           │         └──  q_new:28 => q:30
                           ├── scan parent_multi
-                          │    └── columns: parent_multi.p:32 parent_multi.q:33
+                          │    ├── columns: parent_multi.p:32 parent_multi.q:33
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:29 = parent_multi.p:32
                                └── q:30 = parent_multi.q:33
@@ -344,7 +353,8 @@ root
  │         │    │         └── first-agg [as=q_default:8]
  │         │    │              └── q_default:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:9
  │         └── projections
@@ -361,7 +371,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
            │    ├── scan child_multi
-           │    │    └── columns: c:21!null child_multi.p:22 child_multi.q:23
+           │    │    ├── columns: c:21!null child_multi.p:22 child_multi.q:23
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:26 p_new:27!null q_old:28 q_new:29
            │    │    ├── with-scan &1
@@ -390,7 +401,8 @@ root
                           │    └── filters
                           │         └── q:31 IS NOT NULL
                           ├── scan parent_multi
-                          │    └── columns: parent_multi.p:33 parent_multi.q:34
+                          │    ├── columns: parent_multi.p:33 parent_multi.q:34
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:30 = parent_multi.p:33
                                └── q:31 = parent_multi.q:34
@@ -430,7 +442,8 @@ root
  │         │    │    │         └── first-agg [as=column1:6]
  │         │    │    │              └── column1:6
  │         │    │    ├── scan parent_multi
- │         │    │    │    └── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    │    └── flags: disabled not visible index feature
  │         │    │    └── filters
  │         │    │         ├── column2:7 = p:10
  │         │    │         └── column3:8 = q:11
@@ -451,7 +464,8 @@ root
            ├── inner-join (hash)
            │    ├── columns: c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
            │    ├── scan child_multi
-           │    │    └── columns: c:23!null child_multi.p:24 child_multi.q:25
+           │    │    ├── columns: c:23!null child_multi.p:24 child_multi.q:25
+           │    │    └── flags: disabled not visible index feature
            │    ├── select
            │    │    ├── columns: p_old:28 p_new:29!null q_old:30 q_new:31
            │    │    ├── with-scan &1
@@ -480,7 +494,8 @@ root
                           │    └── filters
                           │         └── q:33 IS NOT NULL
                           ├── scan parent_multi
-                          │    └── columns: parent_multi.p:35 parent_multi.q:36
+                          │    ├── columns: parent_multi.p:35 parent_multi.q:36
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:32 = parent_multi.p:35
                                └── q:33 = parent_multi.q:36
@@ -529,7 +544,8 @@ root
       │    ├── inner-join (hash)
       │    │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
       │    │    ├── scan child_multi
-      │    │    │    └── columns: c:17!null child_multi.p:18 child_multi.q:19
+      │    │    │    ├── columns: c:17!null child_multi.p:18 child_multi.q:19
+      │    │    │    └── flags: disabled not visible index feature
       │    │    ├── select
       │    │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
       │    │    │    ├── with-scan &1
@@ -558,7 +574,8 @@ root
       │                   │    └── filters
       │                   │         └── q:27 IS NOT NULL
       │                   ├── scan parent_multi
-      │                   │    └── columns: parent_multi.p:29 parent_multi.q:30
+      │                   │    ├── columns: parent_multi.p:29 parent_multi.q:30
+      │                   │    └── flags: disabled not visible index feature
       │                   └── filters
       │                        ├── p:26 = parent_multi.p:29
       │                        └── q:27 = parent_multi.q:30
@@ -573,7 +590,8 @@ root
                 ├── inner-join (hash)
                 │    ├── columns: g:38!null grandchild.c:39!null grandchild.q:40!null c_old:43!null c_new:44!null q_old:45!null q_new:46
                 │    ├── scan grandchild
-                │    │    └── columns: g:38!null grandchild.c:39 grandchild.q:40
+                │    │    ├── columns: g:38!null grandchild.c:39 grandchild.q:40
+                │    │    └── flags: disabled not visible index feature
                 │    ├── select
                 │    │    ├── columns: c_old:43!null c_new:44!null q_old:45!null q_new:46
                 │    │    ├── with-scan &2
@@ -602,7 +620,8 @@ root
                                │    └── filters
                                │         └── q:48 IS NOT NULL
                                ├── scan child_multi
-                               │    └── columns: child_multi.c:49!null child_multi.q:51
+                               │    ├── columns: child_multi.c:49!null child_multi.q:51
+                               │    └── flags: disabled not visible index feature
                                └── filters
                                     ├── c:47 = child_multi.c:49
                                     └── q:48 = child_multi.q:51
@@ -643,7 +662,8 @@ root
  │         │    │         └── first-agg [as=column3:8]
  │         │    │              └── column3:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:9
  │         └── projections
@@ -661,7 +681,8 @@ root
       │    ├── inner-join (hash)
       │    │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
       │    │    ├── scan child_multi
-      │    │    │    └── columns: c:20!null child_multi.p:21 child_multi.q:22
+      │    │    │    ├── columns: c:20!null child_multi.p:21 child_multi.q:22
+      │    │    │    └── flags: disabled not visible index feature
       │    │    ├── select
       │    │    │    ├── columns: p_old:25 p_new:26!null q_old:27 q_new:28!null
       │    │    │    ├── with-scan &1
@@ -686,7 +707,8 @@ root
       │                   │         ├──  p_new:26 => p:29
       │                   │         └──  q_new:28 => q:30
       │                   ├── scan parent_multi
-      │                   │    └── columns: parent_multi.p:32 parent_multi.q:33
+      │                   │    ├── columns: parent_multi.p:32 parent_multi.q:33
+      │                   │    └── flags: disabled not visible index feature
       │                   └── filters
       │                        ├── p:29 = parent_multi.p:32
       │                        └── q:30 = parent_multi.q:33
@@ -701,7 +723,8 @@ root
                 ├── inner-join (hash)
                 │    ├── columns: g:41!null grandchild.c:42!null grandchild.q:43!null c_old:46!null c_new:47!null q_old:48!null q_new:49!null
                 │    ├── scan grandchild
-                │    │    └── columns: g:41!null grandchild.c:42 grandchild.q:43
+                │    │    ├── columns: g:41!null grandchild.c:42 grandchild.q:43
+                │    │    └── flags: disabled not visible index feature
                 │    ├── select
                 │    │    ├── columns: c_old:46!null c_new:47!null q_old:48!null q_new:49!null
                 │    │    ├── with-scan &2
@@ -726,7 +749,8 @@ root
                                │         ├──  c_new:47 => c:50
                                │         └──  q_new:49 => q:51
                                ├── scan child_multi
-                               │    └── columns: child_multi.c:52!null child_multi.q:54
+                               │    ├── columns: child_multi.c:52!null child_multi.q:54
+                               │    └── flags: disabled not visible index feature
                                └── filters
                                     ├── c:50 = child_multi.c:52
                                     └── q:51 = child_multi.q:54
@@ -783,7 +807,8 @@ root
            │    ├── inner-join (hash)
            │    │    ├── columns: c:15!null child_assn_cast.p:16!null p_old:19!null p_new:20!null
            │    │    ├── scan child_assn_cast
-           │    │    │    └── columns: c:15!null child_assn_cast.p:16
+           │    │    │    ├── columns: c:15!null child_assn_cast.p:16
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p_old:19!null p_new:20!null
            │    │    │    ├── with-scan &1
@@ -807,7 +832,8 @@ root
                           │    └── mapping:
                           │         └──  p_cast:21 => p:22
                           ├── scan parent_assn_cast
-                          │    └── columns: parent_assn_cast.p:23!null
+                          │    ├── columns: parent_assn_cast.p:23!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p:22 = parent_assn_cast.p:23
 
@@ -856,7 +882,8 @@ root
  │         │    │         └── first-agg [as=p2_cast:8]
  │         │    │              └── p2_cast:8
  │         │    ├── scan parent_assn_cast
- │         │    │    └── columns: p:9!null p2:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    ├── columns: p:9!null p2:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── p_cast:7 = p:9
  │         └── projections
@@ -873,7 +900,8 @@ root
            │    ├── inner-join (hash)
            │    │    ├── columns: c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
            │    │    ├── scan child_assn_cast_p2
-           │    │    │    └── columns: c:18!null child_assn_cast_p2.p2:19
+           │    │    │    ├── columns: c:18!null child_assn_cast_p2.p2:19
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p2_old:22 p2_new:23!null
            │    │    │    ├── with-scan &1
@@ -897,7 +925,8 @@ root
                           │    └── mapping:
                           │         └──  p2_cast:24 => p2:25
                           ├── scan parent_assn_cast
-                          │    └── columns: parent_assn_cast.p2:27
+                          │    ├── columns: parent_assn_cast.p2:27
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p2:25 = parent_assn_cast.p2:27
 
@@ -943,7 +972,8 @@ root
  │         │    │    │    │         └── first-agg [as=p2_cast:8]
  │         │    │    │    │              └── p2_cast:8
  │         │    │    │    ├── scan parent_assn_cast
- │         │    │    │    │    └── columns: p:9!null p2:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │    │    ├── columns: p:9!null p2:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │    │    └── flags: disabled not visible index feature
  │         │    │    │    └── filters
  │         │    │    │         └── p_cast:7 = p:9
  │         │    │    └── projections
@@ -966,7 +996,8 @@ root
            │    ├── inner-join (hash)
            │    │    ├── columns: c:21!null child_assn_cast_p2.p2:22!null p2_old:25!null p2_new:26!null
            │    │    ├── scan child_assn_cast_p2
-           │    │    │    └── columns: c:21!null child_assn_cast_p2.p2:22
+           │    │    │    ├── columns: c:21!null child_assn_cast_p2.p2:22
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p2_old:25 p2_new:26!null
            │    │    │    ├── with-scan &1
@@ -990,7 +1021,8 @@ root
                           │    └── mapping:
                           │         └──  p2_cast:27 => p2:28
                           ├── scan parent_assn_cast
-                          │    └── columns: parent_assn_cast.p2:30
+                          │    ├── columns: parent_assn_cast.p2:30
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p2:28 = parent_assn_cast.p2:30
 
@@ -1046,11 +1078,12 @@ root
            │    │    ├── columns: c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null
            │    │    ├── scan child_partial
            │    │    │    ├── columns: c:13!null child_partial.p:14 i:15
-           │    │    │    └── partial index predicates
-           │    │    │         ├── child_partial_p_idx: filters
-           │    │    │         │    └── i:15 > 0
-           │    │    │         └── child_partial_i_idx: filters
-           │    │    │              └── child_partial.p:14 > 0
+           │    │    │    ├── partial index predicates
+           │    │    │    │    ├── child_partial_p_idx: filters
+           │    │    │    │    │    └── i:15 > 0
+           │    │    │    │    └── child_partial_i_idx: filters
+           │    │    │    │         └── child_partial.p:14 > 0
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p_old:18!null p_new:19!null
            │    │    │    ├── with-scan &1
@@ -1075,7 +1108,8 @@ root
                           │    └── mapping:
                           │         └──  p_new:19 => p:23
                           ├── scan parent_partial
-                          │    └── columns: parent_partial.p:24!null
+                          │    ├── columns: parent_partial.p:24!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p:23 = parent_partial.p:24
 
@@ -1130,9 +1164,10 @@ root
            │    │    ├── columns: c:13!null child_partial_ambig.p_new:14!null i:15 p_new_old:18!null p_new_new:19!null
            │    │    ├── scan child_partial_ambig
            │    │    │    ├── columns: c:13!null child_partial_ambig.p_new:14 i:15
-           │    │    │    └── partial index predicates
-           │    │    │         └── child_partial_ambig_i_idx: filters
-           │    │    │              └── child_partial_ambig.p_new:14 > 0
+           │    │    │    ├── partial index predicates
+           │    │    │    │    └── child_partial_ambig_i_idx: filters
+           │    │    │    │         └── child_partial_ambig.p_new:14 > 0
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p_new_old:18!null p_new_new:19!null
            │    │    │    ├── with-scan &1
@@ -1156,7 +1191,8 @@ root
                           │    └── mapping:
                           │         └──  p_new_new:19 => p_new:22
                           ├── scan parent_partial_ambig
-                          │    └── columns: p:23!null
+                          │    ├── columns: p:23!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p_new:22 = p:23
 
@@ -1222,7 +1258,8 @@ root
  │         │    │         └── first-agg [as=p_default:7]
  │         │    │              └── p_default:7
  │         │    ├── scan parent_multi_partial
- │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    ├── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:8
  │         └── projections
@@ -1243,11 +1280,12 @@ root
            │    │    ├── columns: c:20!null child_multi_partial.p:21!null child_multi_partial.q:22!null i:23 p_old:26!null p_new:27 q_old:28!null q_new:29
            │    │    ├── scan child_multi_partial
            │    │    │    ├── columns: c:20!null child_multi_partial.p:21 child_multi_partial.q:22 i:23
-           │    │    │    └── partial index predicates
-           │    │    │         ├── child_multi_partial_p_q_idx: filters
-           │    │    │         │    └── i:23 > 0
-           │    │    │         └── child_multi_partial_i_idx: filters
-           │    │    │              └── (child_multi_partial.p:21 > 0) AND (child_multi_partial.q:22 > 0)
+           │    │    │    ├── partial index predicates
+           │    │    │    │    ├── child_multi_partial_p_q_idx: filters
+           │    │    │    │    │    └── i:23 > 0
+           │    │    │    │    └── child_multi_partial_i_idx: filters
+           │    │    │    │         └── (child_multi_partial.p:21 > 0) AND (child_multi_partial.q:22 > 0)
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p_old:26 p_new:27 q_old:28 q_new:29
            │    │    │    ├── with-scan &1
@@ -1281,7 +1319,8 @@ root
                           │         ├── p:33 IS NOT NULL
                           │         └── q:34 IS NOT NULL
                           ├── scan parent_multi_partial
-                          │    └── columns: parent_multi_partial.p:36 parent_multi_partial.q:37
+                          │    ├── columns: parent_multi_partial.p:36 parent_multi_partial.q:37
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                ├── p:33 = parent_multi_partial.p:36
                                └── q:34 = parent_multi_partial.q:37
@@ -1343,9 +1382,10 @@ root
            │    │    │    ├── columns: c:13!null child_check_ambig.p_new:14!null i:15 p_new_old:18!null p_new_new:19!null
            │    │    │    ├── scan child_check_ambig
            │    │    │    │    ├── columns: c:13!null child_check_ambig.p_new:14 i:15
-           │    │    │    │    └── computed column expressions
-           │    │    │    │         └── i:15
-           │    │    │    │              └── child_check_ambig.p_new:14 * 2
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── i:15
+           │    │    │    │    │         └── child_check_ambig.p_new:14 * 2
+           │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    ├── select
            │    │    │    │    ├── columns: p_new_old:18!null p_new_new:19!null
            │    │    │    │    ├── with-scan &1
@@ -1370,7 +1410,8 @@ root
                           │    └── mapping:
                           │         └──  p_new_new:19 => p_new:22
                           ├── scan parent_check_ambig
-                          │    └── columns: p:23!null
+                          │    ├── columns: p:23!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p_new:22 = p:23
 
@@ -1423,9 +1464,10 @@ root
            │    │    ├── columns: v:15 c:13!null child_virt.p:14
            │    │    ├── scan child_virt
            │    │    │    ├── columns: c:13!null child_virt.p:14
-           │    │    │    └── computed column expressions
-           │    │    │         └── v:15
-           │    │    │              └── child_virt.p:14
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── v:15
+           │    │    │    │         └── child_virt.p:14
+           │    │    │    └── flags: disabled not visible index feature
            │    │    └── projections
            │    │         └── child_virt.p:14 [as=v:15]
            │    ├── select
@@ -1448,7 +1490,8 @@ root
                           │    └── mapping:
                           │         └──  p_new:19 => p:20
                           ├── scan parent_virt
-                          │    └── columns: parent_virt.p:21!null
+                          │    ├── columns: parent_virt.p:21!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p:20 = parent_virt.p:21
 
@@ -1529,6 +1572,7 @@ root
            │    │    ├── fd: ()-->(13,16,17), (13)==(16), (16)==(13)
            │    │    ├── scan t.public.child_diff_type
            │    │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2)
+           │    │    │    ├── flags: disabled not visible index feature
            │    │    │    ├── stats: [rows=1000, distinct(12)=1000, null(12)=0, avgsize(12)=4, distinct(13)=100, null(13)=10, avgsize(13)=4]
            │    │    │    ├── key: (12)
            │    │    │    ├── fd: (12)-->(13)
@@ -1579,6 +1623,7 @@ root
                           │         └── &2: count=1 used-columns=(18)
                           ├── scan t.public.parent_diff_type
                           │    ├── columns: t.public.parent_diff_type.p:20(int!null)
+                          │    ├── flags: disabled not visible index feature
                           │    ├── stats: [rows=1000, distinct(20)=1000, null(20)=0, avgsize(20)=4]
                           │    ├── key: (20)
                           │    └── prune: (20)
@@ -1628,7 +1673,8 @@ root
  │         │    │    │         ├── columns: column1:4!null
  │         │    │    │         └── (0,)
  │         │    │    ├── scan parent_diff_type
- │         │    │    │    └── columns: p:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+ │         │    │    │    ├── columns: p:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+ │         │    │    │    └── flags: disabled not visible index feature
  │         │    │    └── filters
  │         │    │         └── column1:4 = p:5
  │         │    └── projections
@@ -1647,7 +1693,8 @@ root
            │    ├── inner-join (hash)
            │    │    ├── columns: c:14!null child_diff_type.p:15!null p_old:18!null p_new:19!null
            │    │    ├── scan child_diff_type
-           │    │    │    └── columns: c:14!null child_diff_type.p:15
+           │    │    │    ├── columns: c:14!null child_diff_type.p:15
+           │    │    │    └── flags: disabled not visible index feature
            │    │    ├── select
            │    │    │    ├── columns: p_old:18 p_new:19!null
            │    │    │    ├── with-scan &1
@@ -1671,6 +1718,7 @@ root
                           │    └── mapping:
                           │         └──  p_cast:20 => p:21
                           ├── scan parent_diff_type
-                          │    └── columns: parent_diff_type.p:22!null
+                          │    ├── columns: parent_diff_type.p:22!null
+                          │    └── flags: disabled not visible index feature
                           └── filters
                                └── p:21 = parent_diff_type.p:22

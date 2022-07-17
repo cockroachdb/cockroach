@@ -30,7 +30,8 @@ update child
                 │    └── mapping:
                 │         └──  p_new:9 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:12!null
+                │    ├── columns: parent.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -66,7 +67,8 @@ update parent
                 │         └── mapping:
                 │              └──  p_new:11 => p:13
                 ├── scan child
-                │    └── columns: child.p:15!null
+                │    ├── columns: child.p:15!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:12 = child.p:15
 
@@ -106,7 +108,8 @@ update child
                 │         └── mapping:
                 │              └──  c_new:9 => c:11
                 ├── scan grandchild
-                │    └── columns: grandchild.c:13!null
+                │    ├── columns: grandchild.c:13!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── c:10 = grandchild.c:13
 
@@ -135,7 +138,8 @@ update child
                 │    └── mapping:
                 │         └──  p_new:9 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:12!null
+                │    ├── columns: parent.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -159,7 +163,8 @@ update child
                 │    └── mapping:
                 │         └──  child.p:6 => p:9
                 ├── scan parent
-                │    └── columns: parent.p:11!null
+                │    ├── columns: parent.p:11!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:9 = parent.p:11
 
@@ -189,7 +194,8 @@ update child
       │         │    └── mapping:
       │         │         └──  p_new:9 => p:11
       │         ├── scan parent
-      │         │    └── columns: parent.p:13!null
+      │         │    ├── columns: parent.p:13!null
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = parent.p:13
       └── f-k-checks-item: grandchild(c) -> child(c)
@@ -208,7 +214,8 @@ update child
                 │         └── mapping:
                 │              └──  c_new:10 => c:18
                 ├── scan grandchild
-                │    └── columns: grandchild.c:20!null
+                │    ├── columns: grandchild.c:20!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── c:17 = grandchild.c:20
 
@@ -262,7 +269,8 @@ update child
                 │    └── mapping:
                 │         └──  p_new:9 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:12!null
+                │    ├── columns: parent.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -294,7 +302,8 @@ update self
                 │    └── mapping:
                 │         └──  y_new:9 => y:10
                 ├── scan self
-                │    └── columns: x:11!null
+                │    ├── columns: x:11!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── y:10 = x:11
 
@@ -330,7 +339,8 @@ update self
                 │         └── mapping:
                 │              └──  x_new:9 => x:11
                 ├── scan self
-                │    └── columns: y:13!null
+                │    ├── columns: y:13!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── x:10 = y:13
 
@@ -411,7 +421,8 @@ update child_multicol_full
                 │         ├──  b_new:14 => b:16
                 │         └──  a_new:13 => c:17
                 ├── scan parent_multicol
-                │    └── columns: parent_multicol.a:18!null parent_multicol.b:19!null parent_multicol.c:20!null
+                │    ├── columns: parent_multicol.a:18!null parent_multicol.b:19!null parent_multicol.c:20!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── a:15 = parent_multicol.a:18
                      ├── b:16 = parent_multicol.b:19
@@ -488,7 +499,8 @@ update fam
                 │    └── filters
                 │         └── d:19 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:20!null two.b:21!null
+                │    ├── columns: two.a:20!null two.b:21!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── c:18 = two.a:20
                      └── d:19 = two.b:21
@@ -522,7 +534,8 @@ update fam
                 │    └── filters
                 │         └── c:18 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:20!null two.b:21!null
+                │    ├── columns: two.a:20!null two.b:21!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── c:18 = two.a:20
                      └── d:19 = two.b:21
@@ -553,6 +566,7 @@ update child
                 │    └── mapping:
                 │         └──  p_new:9 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:12!null
+                │    ├── columns: parent.p:12!null
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
