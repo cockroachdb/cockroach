@@ -232,6 +232,7 @@ type CreateIndex struct {
 	StorageParams    StorageParams
 	Predicate        Expr
 	Concurrently     bool
+	NotVisible       bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -282,6 +283,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
+	}
+	if node.NotVisible {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 }
 
@@ -978,6 +982,7 @@ type IndexTableDef struct {
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
+	NotVisible       bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1012,6 +1017,9 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
+	}
+	if node.NotVisible {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 }
 
