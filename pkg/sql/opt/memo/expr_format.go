@@ -88,6 +88,12 @@ const (
 	// ExprFmtHideColumns removes column information.
 	ExprFmtHideColumns
 
+	// ExprFmtAlwaysShowInvisibleIndexInfo always shows information about
+	// invisible index. Otherwise, we will only show invisible index info when we
+	// are actually scanning an invisible index. We only want to set this flag on
+	// for optbuilder tests.
+	ExprFmtAlwaysShowInvisibleIndexInfo
+
 	// ExprFmtHideAll shows only the basic structure of the expression.
 	// Note: this flag should be used judiciously, as its meaning changes whenever
 	// we add more flags.
@@ -419,7 +425,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if private.HardLimit.IsSet() {
 			tp.Childf("limit: %s", private.HardLimit)
 		}
-		if !private.Flags.Empty() {
+
+		shouldPrintFlagsBool := private.shouldPrintFlags(md, f.HasFlags(ExprFmtAlwaysShowInvisibleIndexInfo))
+		if shouldPrintFlagsBool {
 			var b strings.Builder
 			b.WriteString("flags:")
 			if private.Flags.NoIndexJoin {
@@ -458,6 +466,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 						b.WriteString(string(idx.Name()))
 						needComma = true
 					}
+				}
+			}
+
+			if private.showInvisibleIndexInfo(md, f.HasFlags(ExprFmtAlwaysShowInvisibleIndexInfo)) {
+				if private.Flags.DisableNotVisibleIndex {
+					b.WriteString(" disabled not visible index feature")
 				}
 			}
 			tp.Child(b.String())
