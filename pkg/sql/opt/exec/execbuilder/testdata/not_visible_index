@@ -1,0 +1,22 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, geom GEOMETRY)
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE INDEX idx_k_invisible ON t1(v) NOT VISIBLE
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE INVERTED INDEX idx_c_partial_invisible ON t1(geom) WHERE k >= v AND v = 3 NOT VISIBLE
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE UNIQUE INDEX unique_idx ON t1(k) NOT VISIBLE
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE TABLE t1_invisible (b INT, INDEX foo (b) WHERE b > 3 NOT VISIBLE)
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE TABLE t2_invisible (k INT PRIMARY KEY, v INT, i INT, p INT, INDEX idx_v_invisible (v) NOT VISIBLE)
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE TABLE t3_invisible (b INT, UNIQUE INDEX foo (b) WHERE b > 3 NOT VISIBLE)

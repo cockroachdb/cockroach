@@ -337,6 +337,13 @@ func TestExecBuild_mvcc(
 	runExecBuildLogicTest(t, "mvcc")
 }
 
+func TestExecBuild_not_visible_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "not_visible_index")
+}
+
 func TestExecBuild_orderby(
 	t *testing.T,
 ) {
