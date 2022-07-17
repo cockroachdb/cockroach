@@ -438,7 +438,7 @@ func resolvePostgresFKs(
 				evalCtx.Ctx(), nil /* txn */, &fks.resolver,
 				parentDB, schema, desc,
 				constraint, backrefs, sql.NewTable,
-				tree.ValidationDefault, evalCtx,
+				tree.ValidationDefault, evalCtx, nil,
 			); err != nil {
 				return err
 			}

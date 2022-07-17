@@ -602,7 +602,7 @@ func addDelayedFKs(
 		if err := sql.ResolveFK(
 			ctx, nil, &resolver, def.db, def.sc, def.tbl, def.def,
 			backrefs, sql.NewTable,
-			tree.ValidationDefault, evalCtx,
+			tree.ValidationDefault, evalCtx, nil,
 		); err != nil {
 			return err
 		}

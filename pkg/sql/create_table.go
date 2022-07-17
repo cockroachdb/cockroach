@@ -862,6 +862,7 @@ func ResolveFK(
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *eval.Context,
+	sentNotVisibleMsgAlready *bool,
 ) error {
 	var originColSet catalog.TableColSet
 	originCols := make([]catalog.Column, len(d.FromCols))
@@ -1047,6 +1048,26 @@ func ResolveFK(
 	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
 		return err
+	}
+
+	// Warn against dropping an index if this is adding a FK constraint to a table
+	// with invisible indexes. Invisible indexes may still be used to police
+	// unique or foreign key constraint check behind the scene. In this case,
+	// dropping the index may behave differently than marking the index invisible.
+	if sentNotVisibleMsgAlready != nil && !*sentNotVisibleMsgAlready {
+		for _, idx := range tbl.Indexes {
+			if idx.NotVisible {
+				*sentNotVisibleMsgAlready = true
+				evalCtx.ClientNoticeSender.BufferClientNotice(
+					ctx,
+					pgnotice.Newf("invisible indexes may still be used for unique or "+
+						"foreign key constraint check, so the query plan may be different from "+
+						"dropping the index completely."),
+				)
+				// If there are several invisible indexes, send the notice only once.
+				break
+			}
+		}
 	}
 
 	var validity descpb.ConstraintValidity
@@ -1770,6 +1791,9 @@ func NewTableDesc(
 		}
 	}
 
+	// This flag is created to avoid sending multiple notices if user is adding
+	// multiple FK constraints or multiple unique invisible indexes.
+	sentNotVisibleMsgAlready := new(bool)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1784,11 +1808,7 @@ func NewTableDesc(
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
-			}
+
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
@@ -1893,10 +1913,19 @@ func NewTableDesc(
 				// We will add the unique constraint below.
 				break
 			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
+
+			// Warn against dropping an index if user is creating a unique invisible
+			// index. Invisible indexes may still be used to police unique or foreign
+			// key constraint check behind the scene. In this case, dropping the index
+			// may behave differently than marking the index invisible.
+			if d.NotVisible && !*sentNotVisibleMsgAlready {
+				*sentNotVisibleMsgAlready = true
+				evalCtx.ClientNoticeSender.BufferClientNotice(
+					ctx,
+					pgnotice.Newf("invisible indexes may still be used for unique or "+
+						"foreign key constraint check, so the query plan may be different from "+
+						"dropping the index completely."),
+				)
 			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
@@ -2202,7 +2231,7 @@ func NewTableDesc(
 		case *tree.ForeignKeyConstraintTableDef:
 			if err := ResolveFK(
 				ctx, txn, fkResolver, db, sc, &desc, d, affected, NewTable,
-				tree.ValidationDefault, evalCtx,
+				tree.ValidationDefault, evalCtx, sentNotVisibleMsgAlready,
 			); err != nil {
 				return nil, err
 			}
