@@ -166,6 +166,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			"%q was not resolved as a table but is %T", resolved, resolved)
 	}
 
+	// This flag is created to avoid sending multiple notices if user is adding
+	// multiple FK constraints.
+	// TODO (wenyihu6): update buffer notice to perform deduplication of notices
+	sentNotVisibleMsgAlready := new(bool)
 	for i, cmd := range n.n.Cmds {
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", cmd.TelemetryName()))
 
@@ -423,6 +427,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						tableState,
 						t.ValidationBehavior,
 						params.p.EvalContext(),
+						sentNotVisibleMsgAlready,
 					)
 				})
 				if err != nil {
