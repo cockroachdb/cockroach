@@ -2286,6 +2286,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
       │    │    └── filters
@@ -2344,6 +2345,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -2402,6 +2404,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
       │    │    └── filters
@@ -2466,6 +2469,7 @@ upsert partial_indexes
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
       │    │    │    └── filters
@@ -2667,6 +2671,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
       │    │    │    └── filters
@@ -2740,6 +2745,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    ├── key: (13)
       │    │    │    │    └── fd: (13)-->(14,16,17)
       │    │    │    └── filters
@@ -2812,6 +2818,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
       │    │    │    └── filters
@@ -2892,6 +2899,7 @@ upsert virt_partial_idx
       │    │    │    │    │    ├── partial index predicates
       │    │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    │    ├── key: (12)
       │    │    │    │    │    └── fd: (12)-->(13,15,16)
       │    │    │    │    └── filters
@@ -3141,6 +3149,7 @@ upsert a
       │    │    ├── fd: ()-->(11-14)
       │    │    ├── scan a
       │    │    │    ├── columns: k:11!null i:12 f:13 s:14
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -3200,6 +3209,7 @@ upsert a
       │    │    ├── fd: ()-->(11-14)
       │    │    ├── scan a
       │    │    │    ├── columns: k:11!null i:12 f:13 s:14
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -3249,6 +3259,7 @@ upsert family
       │    ├── fd: ()-->(11,12)
       │    ├── scan family
       │    │    ├── columns: a:11!null b:12
+      │    │    ├── flags: disabled not visible index feature
       │    │    ├── key: (11)
       │    │    └── fd: (11)-->(12)
       │    └── filters
@@ -3308,6 +3319,7 @@ project
            │    │    ├── fd: ()-->(13,15-17)
            │    │    ├── scan family
            │    │    │    ├── columns: a:13!null c:15 d:16 e:17
+           │    │    │    ├── flags: disabled not visible index feature
            │    │    │    ├── key: (13)
            │    │    │    └── fd: (13)-->(15-17)
            │    │    └── filters
@@ -3362,6 +3374,7 @@ upsert family
       │    │    ├── fd: ()-->(13,15,16)
       │    │    ├── scan family
       │    │    │    ├── columns: a:13!null c:15 d:16
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (13)
       │    │    │    └── fd: (13)-->(15,16)
       │    │    └── filters
@@ -3413,6 +3426,7 @@ upsert mutation
       │    │    ├── fd: ()-->(12-16)
       │    │    ├── scan mutation
       │    │    │    ├── columns: a:12!null b:13 c:14 d:15 e:16
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-16)
       │    │    └── filters
@@ -3578,6 +3592,7 @@ upsert checks
       │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    │    ├── check constraint expressions
       │    │    │    │    │    └── a:11 > 0 [outer=(11), constraints=(/11: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: disabled not visible index feature
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
       │    │    │    └── filters
@@ -3645,6 +3660,7 @@ update uniq
       │              │    └── fd: ()-->(27,29)
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:19!null uniq.w:21
+      │              │    ├── flags: disabled not visible index feature
       │              │    ├── key: (19)
       │              │    └── fd: (19)-->(21)
       │              └── filters
@@ -3672,6 +3688,7 @@ update uniq
                      │    └── fd: ()-->(41,44,45)
                      ├── scan uniq
                      │    ├── columns: uniq.k:33!null uniq.x:36 uniq.y:37
+                     │    ├── flags: disabled not visible index feature
                      │    ├── key: (33)
                      │    └── fd: (33)-->(36,37)
                      └── filters
@@ -3743,6 +3760,7 @@ update uniq_partial
                      │    ├── fd: (14)-->(15,16)
                      │    ├── scan uniq_partial
                      │    │    ├── columns: uniq_partial.k:14!null uniq_partial.v:15 uniq_partial.w:16
+                     │    │    ├── flags: disabled not visible index feature
                      │    │    ├── key: (14)
                      │    │    └── fd: (14)-->(15,16)
                      │    └── filters
@@ -3797,6 +3815,7 @@ upsert uniq_fk_parent
  │    │    │    ├── fd: ()-->(11-14)
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: uniq_fk_parent.k:11!null uniq_fk_parent.a:12 uniq_fk_parent.b:13 uniq_fk_parent.c:14
+ │    │    │    │    ├── flags: disabled not visible index feature
  │    │    │    │    ├── key: (11)
  │    │    │    │    └── fd: (11)-->(12-14), (12)~~>(11,13,14), (13,14)~~>(11,12)
  │    │    │    └── filters
@@ -3829,6 +3848,7 @@ upsert uniq_fk_parent
       │              │    └── fd: ()-->(31,32)
       │              ├── scan uniq_fk_parent
       │              │    ├── columns: uniq_fk_parent.k:24!null uniq_fk_parent.a:25
+      │              │    ├── flags: disabled not visible index feature
       │              │    ├── key: (24)
       │              │    └── fd: (24)-->(25)
       │              └── filters
@@ -3856,6 +3876,7 @@ upsert uniq_fk_parent
                      │    └── fd: ()-->(43,45,46)
                      ├── scan uniq_fk_parent
                      │    ├── columns: uniq_fk_parent.k:36!null uniq_fk_parent.b:38 uniq_fk_parent.c:39
+                     │    ├── flags: disabled not visible index feature
                      │    ├── key: (36)
                      │    └── fd: (36)-->(38,39)
                      └── filters
@@ -3907,6 +3928,7 @@ upsert uniq_fk_parent
  │    │    │    ├── fd: ()-->(10-14)
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13 uniq_fk_parent.d:14
+ │    │    │    │    ├── flags: disabled not visible index feature
  │    │    │    │    ├── key: (10)
  │    │    │    │    └── fd: (10)-->(11-14), (11)~~>(10,12-14), (12,13)~~>(10,11,14)
  │    │    │    └── filters
@@ -3940,6 +3962,7 @@ upsert uniq_fk_parent
       │              │    └── fd: ()-->(30,31)
       │              ├── scan uniq_fk_parent
       │              │    ├── columns: uniq_fk_parent.k:23!null uniq_fk_parent.a:24
+      │              │    ├── flags: disabled not visible index feature
       │              │    ├── key: (23)
       │              │    └── fd: (23)-->(24)
       │              └── filters
@@ -3967,6 +3990,7 @@ upsert uniq_fk_parent
                      │    └── fd: ()-->(42,44,45)
                      ├── scan uniq_fk_parent
                      │    ├── columns: uniq_fk_parent.k:35!null uniq_fk_parent.b:37 uniq_fk_parent.c:38
+                     │    ├── flags: disabled not visible index feature
                      │    ├── key: (35)
                      │    └── fd: (35)-->(37,38)
                      └── filters
@@ -4012,6 +4036,7 @@ delete uniq_fk_parent
       │         │    └── fd: ()-->(15,16)
       │         ├── scan uniq_fk_child
       │         │    ├── columns: uniq_fk_child.b:18 uniq_fk_child.c:19
+      │         │    ├── flags: disabled not visible index feature
       │         │    ├── lax-key: (18,19)
       │         │    └── fd: (19)~~>(18)
       │         └── filters
@@ -4031,7 +4056,8 @@ delete uniq_fk_parent
                 │    ├── key: ()
                 │    └── fd: ()-->(24)
                 ├── scan uniq_fk_child
-                │    └── columns: uniq_fk_child.a:25
+                │    ├── columns: uniq_fk_child.a:25
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── a:24 = uniq_fk_child.a:25 [outer=(24,25), constraints=(/24: (/NULL - ]; /25: (/NULL - ]), fd=(24)==(25), (25)==(24)]
 
@@ -4620,6 +4646,7 @@ project
            │    │    ├── fd: ()-->(16-18,23)
            │    │    ├── scan returning_test
            │    │    │    ├── columns: a:16 b:17 c:18 rowid:23!null
+           │    │    │    ├── flags: disabled not visible index feature
            │    │    │    ├── key: (23)
            │    │    │    └── fd: (23)-->(16-18), (16)~~>(17,18,23)
            │    │    └── filters
@@ -4733,6 +4760,7 @@ project
            │    │              └── d_default:14
            │    ├── scan returning_test
            │    │    ├── columns: a:16 b:17 c:18 d:19 rowid:23!null
+           │    │    ├── flags: disabled not visible index feature
            │    │    ├── key: (23)
            │    │    └── fd: (23)-->(16-19), (16)~~>(17-19,23)
            │    └── filters

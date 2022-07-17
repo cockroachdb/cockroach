@@ -1916,7 +1916,7 @@ memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2]" G3 cols=(2),ordering=+2)
@@ -1938,7 +1938,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (v) u, v, w FROM kuvw
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +3]" G3 cols=(3),ordering=+3)
@@ -1960,7 +1960,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(4),ordering=+4)
@@ -1982,7 +1982,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, w
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -2748,6 +2748,7 @@ upsert xyz
       │    ├── fd: (7)-->(8,9,15-17), (15)-->(16,17)
       │    ├── scan xyz
       │    │    ├── columns: x:15!null y:16 z:17
+      │    │    ├── flags: disabled not visible index feature
       │    │    ├── key: (15)
       │    │    ├── fd: (15)-->(16,17)
       │    │    └── ordering: +15
@@ -2814,6 +2815,7 @@ upsert xyz
       │    ├── fd: (7)-->(8,9,15-17), (15)-->(16,17)
       │    ├── scan xyz
       │    │    ├── columns: x:15!null y:16 z:17
+      │    │    ├── flags: disabled not visible index feature
       │    │    ├── key: (15)
       │    │    ├── fd: (15)-->(16,17)
       │    │    └── ordering: +15
@@ -3097,6 +3099,7 @@ upsert xyz
       │    ├── fd: (6)~~>(7), (13)-->(14,15)
       │    ├── scan xyz
       │    │    ├── columns: x:13!null y:14 z:15
+      │    │    ├── flags: disabled not visible index feature
       │    │    ├── key: (13)
       │    │    ├── fd: (13)-->(14,15)
       │    │    └── ordering: +13

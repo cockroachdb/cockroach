@@ -42,6 +42,12 @@ const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
 
+	// ExprFmtAlwaysShowInvisibleIndexInfo always shows information about
+	// invisible index. Otherwise, we will only show invisible index info when we
+	// are actually scanning an invisible index. We only want to set this flag on
+	// for optbuilder tests.
+	ExprFmtAlwaysShowInvisibleIndexInfo
+
 	// ExprFmtHideMiscProps does not show outer columns, row cardinality, provided
 	// orderings, side effects, or error text in the output.
 	ExprFmtHideMiscProps ExprFmtFlags = 1 << (iota - 1)
@@ -419,7 +425,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if private.HardLimit.IsSet() {
 			tp.Childf("limit: %s", private.HardLimit)
 		}
-		if !private.Flags.Empty() {
+
+		shouldPrintFlagsBool := private.shouldPrintFlags(md, f.HasFlags(ExprFmtAlwaysShowInvisibleIndexInfo))
+		if shouldPrintFlagsBool {
 			var b strings.Builder
 			b.WriteString("flags:")
 			if private.Flags.NoIndexJoin {
@@ -460,7 +468,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					}
 				}
 			}
-			tp.Child(b.String())
+
+			if private.showInvisibleIndexInfo(md, f.HasFlags(ExprFmtAlwaysShowInvisibleIndexInfo)) {
+				if private.Flags.DisableNotVisibleIndex {
+					b.WriteString(" disabled not visible index feature")
+				}
+			}
+			if shouldPrintFlagsBool {
+				tp.Child(b.String())
+			}
 		}
 		f.formatLocking(tp, private.Locking)
 

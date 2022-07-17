@@ -126,6 +126,7 @@ upsert xy
       │    │    │    └── (3, 4)
       │    │    ├── scan xy
       │    │    │    ├── columns: x:7!null y:8
+      │    │    │    ├── flags: disabled not visible index feature
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8)
       │    │    └── filters
