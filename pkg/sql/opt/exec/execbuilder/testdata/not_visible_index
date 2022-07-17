@@ -7,7 +7,14 @@
 # - Check invisible index feature using EXPLAIN
 
 statement ok
-CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE, FAMILY (k, v, i))
+CREATE TABLE t1 (
+  k INT PRIMARY KEY,
+  v INT,
+  i INT,
+  INDEX idx_v_visible(v) VISIBLE,
+  INDEX idx_i_invisible(i) NOT VISIBLE,
+  FAMILY (k, v, i)
+)
 
 statement ok
 CREATE UNIQUE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
@@ -549,7 +556,12 @@ DROP TABLE t2
 # Check Invisible Inverted Index and Partial Inverted Index.
 ##################################################################################
 statement ok
-CREATE TABLE t1 (id INT, data JSONB, geom GEOMETRY, INVERTED INDEX idx_geom_visible(geom) VISIBLE);
+CREATE TABLE t1 (
+  id INT,
+  data JSONB,
+  geom GEOMETRY,
+  INVERTED INDEX idx_geom_visible(geom) VISIBLE
+);
 
 # idx_geom_visible is chosen because it is visible.
 query T
@@ -614,7 +626,11 @@ vectorized: true
       spans: FULL SCAN
 
 statement ok
-CREATE TABLE t2 (id INT, geom2 GEOMETRY, INVERTED INDEX idx_geom2_invisible(geom2) NOT VISIBLE)
+CREATE TABLE t2 (
+  id INT,
+  geom2 GEOMETRY,
+  INVERTED INDEX idx_geom2_invisible(geom2) NOT VISIBLE
+)
 
 # Force INVERTED JOIN will result in error because idx_geom2_invisible is invisible.
 statement error could not produce a query plan conforming to the INVERTED JOIN hint
@@ -798,7 +814,11 @@ statement ok
 CREATE TABLE parent (p INT PRIMARY KEY)
 
 statement ok
-CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), INDEX c_idx_invisible (p) NOT VISIBLE)
+CREATE TABLE child (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p),
+  INDEX c_idx_invisible (p) NOT VISIBLE
+)
 
 # Part 1: When parent deletes or update, invisible indexes on the child table will be used.
 # c_idx_invisible is invisible when no FK is involved (delete on a child table
@@ -997,10 +1017,18 @@ statement ok
 CREATE TABLE parent (p INT PRIMARY KEY, other INT)
 
 statement ok
-CREATE TABLE child_delete (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE, INDEX c_delete_idx_invisible (p) NOT VISIBLE)
+CREATE TABLE child_delete (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE,
+  INDEX c_delete_idx_invisible (p) NOT VISIBLE
+)
 
 statement ok
-CREATE TABLE child_update (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE, INDEX c_update_idx_invisible (p) NOT VISIBLE)
+CREATE TABLE child_update (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE,
+  INDEX c_update_idx_invisible (p) NOT VISIBLE
+)
 
 # c_update_idx_invisible on child table is used for constraint check (delete on
 # a parent table requires FK check). This triggers delete cascade fast path since
@@ -1163,7 +1191,12 @@ subtest alter_index_visibility
 
 # The following tests check error and notices.
 statement ok
-CREATE TABLE t1 (c INT PRIMARY KEY, other INT NOT NULL, INDEX idx_visible (other) VISIBLE, INDEX idx_invisible (other) NOT VISIBLE)
+CREATE TABLE t1 (
+  c INT PRIMARY KEY,
+  other INT NOT NULL,
+  INDEX idx_visible (other) VISIBLE,
+  INDEX idx_invisible (other) NOT VISIBLE
+)
 
 query TTBITTBBB colnames
 SELECT * FROM [SHOW INDEX FROM t1]
@@ -1374,3 +1407,115 @@ vectorized: true
 
 statement ok
 DROP TABLE t
+
+############################################################################
+# We should log notices when dropping an invisible index might be different from marking an index invisible.
+############################################################################
+subtest not_visible_notices
+
+statement ok
+CREATE TABLE t (p INT PRIMARY KEY, INDEX idx_invisible (p))
+
+statement ok
+CREATE UNIQUE INDEX idx_invisible_unique ON t(p) VISIBLE
+
+# Notices if changing a unique index to NotVisible.
+query T noticetrace
+ALTER INDEX idx_invisible_unique NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# No notices if changing a normal index to NotVisible.
+query T noticetrace
+ALTER INDEX idx_invisible NOT VISIBLE
+----
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child (
+  c INT PRIMARY KEY,
+  col1 INT,
+  p INT,
+  FOREIGN KEY (p, col1) REFERENCES parent(p, p),
+  INDEX c_idx_invisible_helpful1 (p, c),
+  INDEX c_idx_invisible_helpful2 (p, c, col1),
+  INDEX c_idx_invisible_helpful3 (col1, c, p),
+  INDEX c_idx_invisible_not_helpful (c, p)
+)
+
+# Indexes on child table is helpful as long as index's first column is present
+# in the FK constraint columns.
+# Notices if the index on the child table is helpful for FK check.
+query T noticetrace
+ALTER INDEX c_idx_invisible_helpful1 NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# Notices if the index on the child table is helpful for FK check.
+query T noticetrace
+ALTER INDEX c_idx_invisible_helpful2 NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# Notices if the index on the child table is helpful for FK check.
+query T noticetrace
+ALTER INDEX c_idx_invisible_helpful3 NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# Index(c, p) is not helpful because c is not present in the FK constraint
+# origin columns. No notices if the index on the child table is not helpful for
+# FK check.
+query T noticetrace
+ALTER INDEX c_idx_invisible_not_helpful NOT VISIBLE
+----
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, c INT, d INT)
+
+statement ok
+CREATE UNIQUE INDEX p_unique_fk ON parent(c)
+
+statement ok
+CREATE UNIQUE INDEX p_unique_fk_duplicate ON parent(c)
+
+statement ok
+CREATE UNIQUE INDEX p_unique_only ON parent(d)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(c))
+
+# Notices if the index on the parent table is helpful for both unique and FK check.
+query T noticetrace
+ALTER INDEX p_unique_fk NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# Still gives notices if there exists two indexes that can be helpful for FK check.
+query T noticetrace
+ALTER INDEX p_unique_fk_duplicate NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+# Notices if the index on the parent table is helpful just for unique check.
+query T noticetrace
+ALTER INDEX p_unique_only NOT VISIBLE
+----
+NOTICE: queries may still use not visible indexes to enforce unique and foreign key constraints
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
