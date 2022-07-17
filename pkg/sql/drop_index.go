@@ -123,6 +123,17 @@ func (n *dropIndexNode) startExec(params runParams) error {
 			shardColName = idx.GetShardColumnName()
 		}
 
+		// Warn against dropping an index if there exists a NotVisible index that may
+		// be used for constraint check behind the scene.
+		if idx.IsNotVisible() {
+			if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndex(idx, tableDesc); notVisibleIndexNotice != nil {
+				params.p.BufferClientNotice(
+					params.ctx,
+					notVisibleIndexNotice,
+				)
+			}
+		}
+
 		// keyColumnOfOtherIndex returns true if the given column is a key
 		// column of an index in the table other than idx.
 		keyColumnOfOtherIndex := func(colID descpb.ColumnID) bool {
