@@ -403,3 +403,15 @@ CREATE INDEX ON opclasses(b blah_ops)
 # inverted, even if the type is invertible.
 statement error operator class "blah_ops" does not exist
 CREATE INDEX ON opclasses(c blah_ops)
+
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, geom GEOMETRY)
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE INDEX idx_k_invisible ON t1(v) NOT VISIBLE
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE INVERTED INDEX idx_c_partial_invisible ON t1(geom) WHERE k >= v AND v = 3 NOT VISIBLE
+
+statement error pq: unimplemented: creating a not visible index is not supported yet
+CREATE UNIQUE INDEX unique_idx ON t1(k) NOT VISIBLE
