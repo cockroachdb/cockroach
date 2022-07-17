@@ -38,6 +38,41 @@ var ScalarFmtInterceptor func(f *ExprFmtCtx, expr opt.ScalarExpr) string
 // formatted output.
 type ExprFmtFlags int
 
+// ExprFmtFlags takes advantages of bit masking and iota. If you want to add a
+// flag here, you should only add flags to hide things but not to show things.
+// Also, you have to add the flag after ExprFmtHideMiscProps and before
+// ExprFmtHideAll.
+
+// iota is initialized as 0 at the start of const and increments by 1 every time
+// a new const is declared. In addition, expressions are also implicitly repeated.
+// For example,
+// const (                              // const (
+//	First  int = iota // 0              // 	First  int = iota * 3 // 0 * 3
+//	Second            // 1              // 	Second                // 1 * 3
+//	Third             // 2              // )
+//	Fourth            // 3
+// )
+
+// In our example here, 1 means the flag is on and 0 means the flag is off.
+//const (
+//	ExprFmtShowAll int = 0 // iota is 0, but it's not used    0000 0000
+//	ExprFmtHideMiscProps int = 1 << (iota - 1)
+//                             // iota is 1, 1 << (1 - 1) 0000 0001 = 1
+//	ExprFmtHideConstraints     // iota is 2, 1 << (2 - 1) 0000 0010 = 2
+//	ExprFmtHideFuncDeps        // iota is 3, 1 << (3 - 1) 0000 0100 = 4
+//  ...
+//  ExprFmtHideAll             // (1 << iota) - 1
+//)
+// If we want to set ExprFmtHideMiscProps and ExprFmtHideConstraints on, we
+// would have f := ExprFmtHideMiscProps | ExprFmtHideConstraints 0000 0011.
+// ExprFmtShowAll has all 0000 0000. This is because all flags represent when
+// something is hiding. If every bit is 0, that just means everything is
+// showing. ExprFmtHideAll is (1 << iota) - 1. For example, if the last const
+// iota is 4, ExprFmtHideAll would have (1 << 4) - 1 which is 0001 0000 - 1 =
+// 0000 1111 which is just setting all flags on => hiding everything. If we have
+// a flag that show things, ShowAll = 0000..000 would actually turn this flag
+// off. Thus, in order for ExprFmtShowAll and ExprFmtHideAll to be correct, we
+// can only add flags to hide things but not flags to show things.
 const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
@@ -87,6 +122,12 @@ const (
 
 	// ExprFmtHideColumns removes column information.
 	ExprFmtHideColumns
+
+	// ExprFmtHideNotVisibleIndexInfo hides information about invisible index. We
+	// will only show invisible index info when we are actually scanning an
+	// invisible index. If this flag is off, we will always show invisible index
+	// info regardless of whether we are actually scanning an invisible index.
+	ExprFmtHideNotVisibleIndexInfo
 
 	// ExprFmtHideAll shows only the basic structure of the expression.
 	// Note: this flag should be used judiciously, as its meaning changes whenever
@@ -419,7 +460,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if private.HardLimit.IsSet() {
 			tp.Childf("limit: %s", private.HardLimit)
 		}
-		if !private.Flags.Empty() {
+
+		if private.shouldPrintFlags(md, f.HasFlags(ExprFmtHideNotVisibleIndexInfo)) {
 			var b strings.Builder
 			b.WriteString("flags:")
 			if private.Flags.NoIndexJoin {
@@ -459,6 +501,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 						needComma = true
 					}
 				}
+			}
+
+			if private.Flags.DisableNotVisibleIndex && private.showNotVisibleIndexInfo(md, f.HasFlags(ExprFmtHideNotVisibleIndexInfo)) {
+				b.WriteString(" disabled not visible index feature")
 			}
 			tp.Child(b.String())
 		}

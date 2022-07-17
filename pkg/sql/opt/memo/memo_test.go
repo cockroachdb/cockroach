@@ -34,7 +34,7 @@ import (
 
 func TestMemo(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideStats
+		memo.ExprFmtHideStats | memo.ExprFmtHideNotVisibleIndexInfo
 	runDataDrivenTest(t, testutils.TestDataPath(t, "memo"), flags)
 }
 
@@ -43,19 +43,20 @@ func TestFormat(t *testing.T) {
 }
 
 func TestLogicalProps(t *testing.T) {
-	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats |
+		memo.ExprFmtHideNotVisibleIndexInfo
 	runDataDrivenTest(t, testutils.TestDataPath(t, "logprops"), flags)
 }
 
 func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
 	runDataDrivenTest(t, testutils.TestDataPath(t, "stats"), flags)
 }
 
 func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
 	runDataDrivenTest(t, testutils.TestDataPath(t, "stats_quality"), flags)
 }
 

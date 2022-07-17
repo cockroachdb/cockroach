@@ -244,9 +244,9 @@ func (b *stmtBundleBuilder) addOptPlans() {
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", formatOptPlan(
-		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	))
-	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications))
+	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.

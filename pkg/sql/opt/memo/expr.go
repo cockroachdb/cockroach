@@ -368,6 +368,17 @@ type ScanFlags struct {
 	Direction   tree.Direction
 	Index       int
 
+	// When the optimizer is performing unique constraint or foreign key
+	// constraint check, we will temporarily disable the not visible index feature
+	// and treat all indexes as they are visible. Default behaviour is to enable
+	// the not visible feature. We will pass this flag, DisableNotVisibleIndex, to
+	// the memo group when we are building a memo group for a ScanOp expression on
+	// the given table. Later on, optimizer will enumerate all indexes on the
+	// table to generate equivalent memo groups. If DisableNotVisibleIndex is
+	// true, optimizer will also generate equivalent memo group using the
+	// invisible index. Otherwise, optimizer will ignore the invisible indexes.
+	DisableNotVisibleIndex bool
+
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
 	ZigzagIndexes util.FastIntSet
@@ -376,6 +387,12 @@ type ScanFlags struct {
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
 	return *sf == ScanFlags{}
+}
+
+// onlyNotVisibleIndexFlagOn returns true if DisableNotVisibleIndex is the only
+// flag set on.
+func (sf *ScanFlags) onlyNotVisibleIndexFlagOn() bool {
+	return *sf == ScanFlags{DisableNotVisibleIndex: true}
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
@@ -676,6 +693,35 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 func (s *ScanPrivate) IsVirtualTable(md *opt.Metadata) bool {
 	tab := md.Table(s.Table)
 	return tab.IsVirtualTable()
+}
+
+// IsNotVisibleIndexScan returns true if the index being scanned is a not
+// visible index.
+func (s *ScanPrivate) IsNotVisibleIndexScan(md *opt.Metadata) bool {
+	index := md.Table(s.Table).Index(s.Index)
+	return index.IsNotVisible()
+}
+
+// showNotVisibleIndexInfo is a helper function that checks if we want to show
+// invisible index info. We don't want to show the information is
+// hideShowNotVisibleIndexInfo is true, and we are not scanning an invisible
+// index. Otherwise, we want to show invisible index info.
+func (s *ScanPrivate) showNotVisibleIndexInfo(md *opt.Metadata, hideNotVisibleIndexInfo bool) bool {
+	return !(hideNotVisibleIndexInfo && !s.IsNotVisibleIndexScan(md))
+}
+
+// shouldPrintFlags is a helper function to check if we want to print the
+// "flags:" for ScanFlags formatting.
+func (s *ScanPrivate) shouldPrintFlags(md *opt.Metadata, hideNotVisibleIndexInfo bool) bool {
+	if s.Flags.Empty() {
+		return false
+	}
+	// If DisableNotVisibleIndex is the only flag on, we only want to print
+	// "flags:" if we are actually going to show invisible index info.
+	if s.Flags.onlyNotVisibleIndexFlagOn() && !s.showNotVisibleIndexInfo(md, hideNotVisibleIndexInfo) {
+		return false
+	}
+	return true
 }
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
