@@ -986,3 +986,12 @@ tbl  CREATE TABLE public.tbl (
      CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
      FAMILY f1 (i, j)
 )
+
+statement error pq: unimplemented: creating an invisible index is not supported yet.
+CREATE TABLE t1_invisible (b INT, INDEX foo (b) WHERE b > 3 NOT VISIBLE)
+
+statement error pq: unimplemented: creating an invisible index is not supported yet.
+CREATE TABLE t2_invisible (k INT PRIMARY KEY, v INT, i INT, p INT, INDEX idx_v_invisible (v) NOT VISIBLE)
+
+statement error pq: unimplemented: creating an invisible index is not supported yet.
+CREATE TABLE t3_invisible (b INT, UNIQUE INDEX foo (b) WHERE b > 3 NOT VISIBLE)

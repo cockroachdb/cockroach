@@ -704,6 +704,10 @@ func (tt *Table) addIndexWithVersion(
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
 	}
 
+	if def.Hidden {
+		panic("unimplemented: creating an invisible index is not supported yet.")
+	}
+
 	idx := &Index{
 		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:   typ != nonUniqueIndex,
