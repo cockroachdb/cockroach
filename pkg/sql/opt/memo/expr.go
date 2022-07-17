@@ -368,6 +368,12 @@ type ScanFlags struct {
 	Direction   tree.Direction
 	Index       int
 
+	// When the optimizer is performing unique constraint or foreign key
+	// constraint check, we will temporarily disable the not visible index feature
+	// and treat all indexes as they are visible. Default behaviour is to enable
+	// the not visible feature.
+	DisableNotVisibleIndex bool
+
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
 	ZigzagIndexes util.FastIntSet
