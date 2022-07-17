@@ -750,9 +750,10 @@ upsert t
       │    │    │    ├── columns: v:11 a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
       │    │    │    ├── scan t
       │    │    │    │    ├── columns: a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:11
-      │    │    │    │              └── a:9 + b:10
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:11
+      │    │    │    │    │         └── a:9 + b:10
+      │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    └── filters
@@ -841,9 +842,10 @@ project
            │    │    ├── columns: v:11 a:9!null b:10
            │    │    ├── scan t
            │    │    │    ├── columns: a:9!null b:10
-           │    │    │    └── computed column expressions
-           │    │    │         └── v:11
-           │    │    │              └── a:9 + b:10
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── v:11
+           │    │    │    │         └── a:9 + b:10
+           │    │    │    └── flags: disabled not visible index feature
            │    │    └── projections
            │    │         └── a:9 + b:10 [as=v:11]
            │    └── filters
@@ -883,11 +885,12 @@ insert t_idx2
       │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15
       │    │    ├── scan t_idx2
       │    │    │    ├── columns: a:13!null b:14 c:15
-      │    │    │    └── computed column expressions
-      │    │    │         ├── v:16
-      │    │    │         │    └── a:13 + b:14
-      │    │    │         └── w:17
-      │    │    │              └── c:15 + 1
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v:16
+      │    │    │    │    │    └── a:13 + b:14
+      │    │    │    │    └── w:17
+      │    │    │    │         └── c:15 + 1
+      │    │    │    └── flags: disabled not visible index feature
       │    │    └── projections
       │    │         ├── a:13 + b:14 [as=v:16]
       │    │         └── c:15 + 1 [as=w:17]
@@ -937,11 +940,12 @@ insert t_idx2
       │    │    │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15
       │    │    │    │    ├── scan t_idx2
       │    │    │    │    │    ├── columns: a:13!null b:14 c:15
-      │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:16
-      │    │    │    │    │         │    └── a:13 + b:14
-      │    │    │    │    │         └── w:17
-      │    │    │    │    │              └── c:15 + 1
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    ├── v:16
+      │    │    │    │    │    │    │    └── a:13 + b:14
+      │    │    │    │    │    │    └── w:17
+      │    │    │    │    │    │         └── c:15 + 1
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
@@ -951,11 +955,12 @@ insert t_idx2
       │    │    │    ├── columns: v:23 w:24 a:20!null b:21 c:22
       │    │    │    ├── scan t_idx2
       │    │    │    │    ├── columns: a:20!null b:21 c:22
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         ├── v:23
-      │    │    │    │         │    └── a:20 + b:21
-      │    │    │    │         └── w:24
-      │    │    │    │              └── c:22 + 1
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    ├── v:23
+      │    │    │    │    │    │    └── a:20 + b:21
+      │    │    │    │    │    └── w:24
+      │    │    │    │    │         └── c:22 + 1
+      │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── projections
       │    │    │         ├── a:20 + b:21 [as=v:23]
       │    │    │         └── c:22 + 1 [as=w:24]
@@ -1022,9 +1027,10 @@ upsert t
       │    │    │    │    ├── columns: v:11 a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
       │    │    │    │    ├── scan t
       │    │    │    │    │    ├── columns: a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
-      │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         └── v:11
-      │    │    │    │    │              └── a:9 + b:10
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:11
+      │    │    │    │    │    │         └── a:9 + b:10
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    │    └── filters
@@ -1080,9 +1086,10 @@ upsert t
       │    │    │    │    ├── columns: v:11 a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
       │    │    │    │    ├── scan t
       │    │    │    │    │    ├── columns: a:9!null b:10 crdb_internal_mvcc_timestamp:12 tableoid:13
-      │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         └── v:11
-      │    │    │    │    │              └── a:9 + b:10
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:11
+      │    │    │    │    │    │         └── a:9 + b:10
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    │    └── filters
@@ -1145,11 +1152,12 @@ upsert t_idx2
       │    │    │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    ├── scan t_idx2
       │    │    │    │    │    ├── columns: a:13!null b:14 c:15 crdb_internal_mvcc_timestamp:18 tableoid:19
-      │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:16
-      │    │    │    │    │         │    └── a:13 + b:14
-      │    │    │    │    │         └── w:17
-      │    │    │    │    │              └── c:15 + 1
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    ├── v:16
+      │    │    │    │    │    │    │    └── a:13 + b:14
+      │    │    │    │    │    │    └── w:17
+      │    │    │    │    │    │         └── c:15 + 1
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
@@ -1216,11 +1224,12 @@ upsert t_idx2
       │    │    │    │    ├── columns: v:16 w:17 a:13!null b:14 c:15 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    ├── scan t_idx2
       │    │    │    │    │    ├── columns: a:13!null b:14 c:15 crdb_internal_mvcc_timestamp:18 tableoid:19
-      │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:16
-      │    │    │    │    │         │    └── a:13 + b:14
-      │    │    │    │    │         └── w:17
-      │    │    │    │    │              └── c:15 + 1
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    ├── v:16
+      │    │    │    │    │    │    │    └── a:13 + b:14
+      │    │    │    │    │    │    └── w:17
+      │    │    │    │    │    │         └── c:15 + 1
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
