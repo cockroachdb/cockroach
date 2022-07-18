@@ -305,7 +305,7 @@ func FormatZone(zone Zone, tp treeprinter.Node) {
 
 	voterChild := zoneChild
 	if zone.VoterConstraintsCount() > 1 {
-		voterChild = voterChild.Childf("voter replica constraints")
+		voterChild = voterChild.Childf("voter replica constraints") //lint:ignore SA4006
 	}
 	for i, n := 0, zone.VoterConstraintsCount(); i < n; i++ {
 		voterConstraint := zone.VoterConstraint(i)
