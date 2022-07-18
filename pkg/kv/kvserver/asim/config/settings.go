@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package config
 
 import "time"
 
@@ -23,11 +23,17 @@ const (
 	defaultPacerMaxIterIterval     = 1 * time.Second
 	defaultStateExchangeInterval   = 10 * time.Second
 	defaultStateExchangeDelay      = 500 * time.Millisecond
+	defaultSplitQPSThreshold       = 2500
+	defaultSplitQPSRetention       = 10 * time.Minute
+	defaultSeed                    = 42
 )
 
 // SimulationSettings controls
 // WIP: Thread these settings through to each of the sim parts.
 type SimulationSettings struct {
+	// Seed is the random source that will be used for any simulator components
+	// that accept a seed.
+	Seed int64
 	// ReplicaChangeBaseDelay is the base delay for all replica movements
 	// (add,remove). It accounts for a fixed overhead of initiating a replica
 	// movement.
@@ -65,11 +71,18 @@ type SimulationSettings struct {
 	// StateExchangeDelay is the delay between sending a state update and all
 	// other stores receiving the update.
 	StateExchangeDelay time.Duration
+	// SplitQPSThreshold is the threshold above which a range will be a
+	// candidate for load based splitting.
+	SplitQPSThreshold float64
+	// SplitQPSRetention is the duration which recorded load will be retained
+	// and factored into load based splitting decisions.
+	SplitQPSRetention time.Duration
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
-func DefaultSimulationSettings() SimulationSettings {
-	return SimulationSettings{
+func DefaultSimulationSettings() *SimulationSettings {
+	return &SimulationSettings{
+		Seed:                    defaultSeed,
 		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
 		ReplicaAddRate:          defaultReplicaAddDelayFactor,
 		SplitQueueDelay:         defaultSplitQueueDelay,
@@ -80,18 +93,18 @@ func DefaultSimulationSettings() SimulationSettings {
 		PacerMaxIterIterval:     defaultPacerMaxIterIterval,
 		StateExchangeInterval:   defaultStateExchangeInterval,
 		StateExchangeDelay:      defaultStateExchangeDelay,
+		SplitQPSThreshold:       defaultSplitQPSThreshold,
+		SplitQPSRetention:       defaultSplitQPSRetention,
 	}
 }
 
 // ReplicaChangeDelayFn returns a function which calculates the delay for
 // adding a replica based on the range size.
-func ReplicaChangeDelayFn(
-	settings SimulationSettings,
-) func(rangeSize int64, add bool) time.Duration {
+func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bool) time.Duration {
 	return func(rangeSize int64, add bool) time.Duration {
-		delay := settings.ReplicaChangeBaseDelay
+		delay := s.ReplicaChangeBaseDelay
 		if add {
-			delay += (time.Duration(rangeSize/(1024*1024)) / time.Duration(settings.ReplicaAddRate))
+			delay += (time.Duration(rangeSize/(1024*1024)) / time.Duration(s.ReplicaAddRate))
 		}
 		return delay
 	}
@@ -99,8 +112,25 @@ func ReplicaChangeDelayFn(
 
 // RangeSplitDelayFn returns a function which calculates the delay for
 // splitting a range.
-func RangeSplitDelayFn(settings SimulationSettings) func() time.Duration {
+func (s *SimulationSettings) RangeSplitDelayFn() func() time.Duration {
 	return func() time.Duration {
-		return settings.SplitQueueDelay
+		return s.SplitQueueDelay
+	}
+}
+
+// SplitQPSThresholdFn returns a function that returns the current QPS split
+// threshold for load based splitting of a range.
+func (s *SimulationSettings) SplitQPSThresholdFn() func() float64 {
+	return func() float64 {
+		return s.SplitQPSThreshold
+	}
+}
+
+// SplitQPSRetentionFn returns a function that returns the current QPS
+// retention duration for load recorded against a range, used in load based
+// split decisions.
+func (s *SimulationSettings) SplitQPSRetentionFn() func() time.Duration {
+	return func() time.Duration {
+		return s.SplitQPSRetention
 	}
 }

@@ -20,15 +20,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
-	settings := asim.DefaultSimulationSettings()
+	settings := config.DefaultSimulationSettings()
 	start := state.TestingStartTime()
 	end := start.Add(1000 * time.Second)
 	interval := 10 * time.Second
@@ -75,19 +77,19 @@ func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
 }
 
 // TestAllocatorSimulatorSpeed tests that the simulation runs at a rate of at
-// least 5 simulated minutes per wall clock second (1:50) for a 32 node
+// least 1.67 simulated minutes per wall clock second (1:100) for a 32 node
 // cluster, with 32000 replicas. The workload is generating 16000 keys per
 // second with a uniform distribution.
-// NB: In practice, on a single thread N2 GCP VM, this completes with a minimum
-// run of 1350ms, approximately 16x faster (1:444) than what this test asserts.
-// The limit is set much higher due to --stress and inconsistent processor
-// speeds. The speedup is not linear w.r.t replica or store count.
-// TODO(kvoli,lidorcarmel): If this test flakes on CI --stress --race, decrease
-// the stores, or decrease replicasPerStore.
 func TestAllocatorSimulatorSpeed(t *testing.T) {
 	ctx := context.Background()
+
+	skipString := "Skipping test under (?stress|?race) as it asserts on speed of the run."
+	skip.UnderStress(t, skipString)
+	skip.UnderStressRace(t, skipString)
+	skip.UnderRace(t, skipString)
+
 	start := state.TestingStartTime()
-	settings := asim.DefaultSimulationSettings()
+	settings := config.DefaultSimulationSettings()
 
 	// Run each simulation for 5 minutes.
 	end := start.Add(5 * time.Minute)

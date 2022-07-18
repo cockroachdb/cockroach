@@ -10,6 +10,7 @@ package schemafeed
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -19,33 +20,38 @@ import (
 
 type tableEventType uint64
 
+//go:generate stringer --type tableEventType --trimprefix tableEvent
+
 const (
-	tableEventTypeUnknown             tableEventType = 0
-	tableEventTypeAddColumnNoBackfill tableEventType = 1 << (iota - 1)
-	tableEventTypeAddColumnWithBackfill
-	tableEventTypeDropColumn
+	tableEventUnknown tableEventType = iota
+	tableEventAddColumnNoBackfill
+	tableEventAddColumnWithBackfill
+	tableEventDropColumn
 	tableEventTruncate
 	tableEventPrimaryKeyChange
 	tableEventLocalityRegionalByRowChange
 	tableEventAddHiddenColumn
+	numEventTypes int = iota
 )
+
+type tableEventTypeSet uint64
 
 var (
 	defaultTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:              false,
-		tableEventTypeAddColumnWithBackfill:   false,
-		tableEventTypeAddColumnNoBackfill:     true,
-		tableEventTypeUnknown:                 true,
+		tableEventDropColumn:                  false,
+		tableEventAddColumnWithBackfill:       false,
+		tableEventAddColumnNoBackfill:         true,
+		tableEventUnknown:                     true,
 		tableEventPrimaryKeyChange:            false,
 		tableEventLocalityRegionalByRowChange: false,
 		tableEventAddHiddenColumn:             true,
 	}
 
 	columnChangeTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:              false,
-		tableEventTypeAddColumnWithBackfill:   false,
-		tableEventTypeAddColumnNoBackfill:     false,
-		tableEventTypeUnknown:                 true,
+		tableEventDropColumn:                  false,
+		tableEventAddColumnWithBackfill:       false,
+		tableEventAddColumnNoBackfill:         false,
+		tableEventUnknown:                     true,
 		tableEventPrimaryKeyChange:            false,
 		tableEventLocalityRegionalByRowChange: false,
 		tableEventAddHiddenColumn:             true,
@@ -59,46 +65,56 @@ var (
 
 // Contains returns true if the receiver includes the given event
 // types.
-func (e tableEventType) Contains(event tableEventType) bool {
-	return e&event == event
+func (e tableEventTypeSet) Contains(event tableEventType) bool {
+	return e&event.mask() != 0
+}
+
+func (e tableEventType) mask() tableEventTypeSet {
+	if e == 0 {
+		return 0
+	}
+	return 1 << (e - 1)
 }
 
 // Clear returns a new tableEventType with the given event types
 // cleared.
-func (e tableEventType) Clear(event tableEventType) tableEventType {
-	return e & (^event)
+func (e tableEventTypeSet) Clear(event tableEventType) tableEventTypeSet {
+	return e & (^event.mask())
 }
 
-func classifyTableEvent(e TableEvent) tableEventType {
-	et := tableEventTypeUnknown
-	if primaryKeyChanged(e) {
-		et = et | tableEventPrimaryKeyChange
-	}
+func (e tableEventTypeSet) empty() bool { return e == 0 }
 
-	if newVisibleColumnBackfillComplete(e) {
-		et = et | tableEventTypeAddColumnWithBackfill
+func (e tableEventTypeSet) String() string {
+	if e.empty() {
+		return tableEventUnknown.String()
 	}
-
-	if newHiddenColumnBackfillComplete(e) {
-		et = et | tableEventAddHiddenColumn
+	var strs []string
+	for et := tableEventType(1); int(et) < numEventTypes; et++ {
+		if e.Contains(et) {
+			strs = append(strs, et.String())
+		}
 	}
+	return strings.Join(strs, "|")
+}
 
-	if newVisibleColumnNoBackfill(e) {
-		et = et | tableEventTypeAddColumnNoBackfill
+func classifyTableEvent(e TableEvent) tableEventTypeSet {
+	var et tableEventTypeSet
+	for _, c := range []struct {
+		eventType tableEventType
+		predicate func(event TableEvent) bool
+	}{
+		{tableEventPrimaryKeyChange, primaryKeyChanged},
+		{tableEventAddColumnWithBackfill, newVisibleColumnBackfillComplete},
+		{tableEventAddHiddenColumn, newHiddenColumnBackfillComplete},
+		{tableEventAddColumnNoBackfill, newVisibleColumnNoBackfill},
+		{tableEventDropColumn, hasNewVisibleColumnDropBackfillMutation},
+		{tableEventTruncate, tableTruncated},
+		{tableEventLocalityRegionalByRowChange, regionalByRowChanged},
+	} {
+		if c.predicate(e) {
+			et |= c.eventType.mask()
+		}
 	}
-
-	if hasNewVisibleColumnDropBackfillMutation(e) {
-		et = et | tableEventTypeDropColumn
-	}
-
-	if tableTruncated(e) {
-		et = et | tableEventTruncate
-	}
-
-	if regionalByRowChanged(e) {
-		et = et | tableEventLocalityRegionalByRowChange
-	}
-
 	return et
 }
 
@@ -114,8 +130,8 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 		return false, errors.Errorf(`"%s" was truncated`, e.Before.GetName())
 	}
 
-	if et == tableEventTypeUnknown {
-		shouldFilter, ok := filter[tableEventTypeUnknown]
+	if et.empty() {
+		shouldFilter, ok := filter[tableEventUnknown]
 		if !ok {
 			return false, errors.AssertionFailedf("policy does not specify how to handle event type %v", et)
 		}
@@ -205,24 +221,61 @@ func regionalByRowChanged(e TableEvent) bool {
 	return e.Before.IsLocalityRegionalByRow() != e.After.IsLocalityRegionalByRow()
 }
 
+func hasNewPrimaryIndexWithNoVisibleColumnChanges(e TableEvent) bool {
+	before, after := e.Before.GetPrimaryIndex(), e.After.GetPrimaryIndex()
+	if before.GetID() == after.GetID() ||
+		before.NumKeyColumns() != after.NumKeyColumns() {
+		return false
+	}
+	for i, n := 0, before.NumKeyColumns(); i < n; i++ {
+		if before.GetKeyColumnID(i) != after.GetKeyColumnID(i) {
+			return false
+		}
+	}
+	collectPublicStoredColumns := func(
+		idx catalog.Index, tab catalog.TableDescriptor,
+	) (cols catalog.TableColSet) {
+		for i, n := 0, idx.NumPrimaryStoredColumns(); i < n; i++ {
+			colID := idx.GetStoredColumnID(i)
+			col, _ := tab.FindColumnWithID(colID)
+			if col.Public() {
+				cols.Add(colID)
+			}
+		}
+		return cols
+	}
+	storedBefore := collectPublicStoredColumns(before, e.Before)
+	storedAfter := collectPublicStoredColumns(after, e.After)
+	return storedBefore.Len() == storedAfter.Len() &&
+		storedBefore.Difference(storedAfter).Empty()
+}
+
 // IsPrimaryIndexChange returns true if the event corresponds to a change
-// in the primary index.
-func IsPrimaryIndexChange(e TableEvent) bool {
-	et := classifyTableEvent(e)
-	return et.Contains(tableEventPrimaryKeyChange)
+// in the primary index. It also returns whether the primary index change
+// corresponds to any change in the visible column set or key ordering.
+// This is useful because when the declarative schema changer drops a column,
+// it does so by adding a new primary index with the column excluded and
+// then swaps to the new primary index. The column logically disappears
+// before the index swap occurs. We want to detect the case of this index
+// swap and not stop changefeeds which are programmed to stop upon schema
+// changes.
+func IsPrimaryIndexChange(e TableEvent) (isPrimaryIndexChange, noVisibleOrderOrColumnChanges bool) {
+	isPrimaryIndexChange = classifyTableEvent(e).Contains(tableEventPrimaryKeyChange)
+	if isPrimaryIndexChange {
+		noVisibleOrderOrColumnChanges = hasNewPrimaryIndexWithNoVisibleColumnChanges(e)
+	}
+	return isPrimaryIndexChange, noVisibleOrderOrColumnChanges
 }
 
 // IsOnlyPrimaryIndexChange returns to true if the event corresponds
 // to a change in the primary index and _only_ a change in the primary
 // index.
 func IsOnlyPrimaryIndexChange(e TableEvent) bool {
-	et := classifyTableEvent(e)
-	return et == tableEventPrimaryKeyChange
+	return classifyTableEvent(e) == tableEventPrimaryKeyChange.mask()
 }
 
 // IsRegionalByRowChange returns true if the event corresponds to a
 // change in the table's locality to or from RegionalByRow.
 func IsRegionalByRowChange(e TableEvent) bool {
-	et := classifyTableEvent(e)
-	return et.Contains(tableEventLocalityRegionalByRowChange)
+	return classifyTableEvent(e).Contains(tableEventLocalityRegionalByRowChange)
 }

@@ -146,7 +146,8 @@ func TestTableEventIsPrimaryIndexChange(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			require.Equalf(t, c.exp, IsPrimaryIndexChange(c.e), "event %v", c.e)
+			got, _ := IsPrimaryIndexChange(c.e)
+			require.Equalf(t, c.exp, got, "event %v", c.e)
 		})
 	}
 }
@@ -243,10 +244,10 @@ func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
 	dropColBackfill := schematestutils.AddColumnDropBackfillMutation
 
 	incompleteFilter := tableEventFilter{
-		// tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   true,
-		// tableEventTypeUnknown:               true,
+		// tableEventDropColumn:            false,
+		tableEventAddColumnWithBackfill: false,
+		tableEventAddColumnNoBackfill:   true,
+		// tableEventUnknown:               true,
 		tableEventPrimaryKeyChange: false,
 	}
 	dropColEvent := TableEvent{

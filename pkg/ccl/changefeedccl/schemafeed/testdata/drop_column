@@ -1,0 +1,28 @@
+exec
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT, l INT)
+----
+
+create f=1
+t
+----
+
+exec
+ALTER TABLE t DROP COLUMN j;
+----
+
+pop f=1
+----
+t 1->2: DropColumn
+t 2->3: Unknown
+t 3->4: AddHiddenColumn
+
+exec
+SET use_declarative_schema_changer=off;
+ALTER TABLE t DROP COLUMN k;
+----
+
+pop f=1
+----
+t 4->5: DropColumn
+t 5->6: Unknown
+t 6->7: AddHiddenColumn
