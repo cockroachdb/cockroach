@@ -478,7 +478,23 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					udtSchema = tree.NewDString(typeMetaName.Schema)
 				}
 
-				err := addRow(
+				// Get the sequence option if it's an identity column.
+				identityStart := tree.DNull
+				identityIncrement := tree.DNull
+				identityMax := tree.DNull
+				identityMin := tree.DNull
+				generatedAsIdentitySeqOpt, err := column.GetGeneratedAsIdentitySequenceOption()
+				if err != nil {
+					return err
+				}
+				if generatedAsIdentitySeqOpt != nil {
+					identityStart = tree.NewDString(strconv.FormatInt(generatedAsIdentitySeqOpt.Start, 10))
+					identityIncrement = tree.NewDString(strconv.FormatInt(generatedAsIdentitySeqOpt.Increment, 10))
+					identityMax = tree.NewDString(strconv.FormatInt(generatedAsIdentitySeqOpt.MaxValue, 10))
+					identityMin = tree.NewDString(strconv.FormatInt(generatedAsIdentitySeqOpt.MinValue, 10))
+				}
+
+				err = addRow(
 					dbNameStr,                         // table_catalog
 					scNameStr,                         // table_schema
 					tree.NewDString(table.GetName()),  // table_name
@@ -516,12 +532,12 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					tree.DNull, // is_self_referencing
 					yesOrNoDatum(column.IsGeneratedAsIdentity()), // is_identity
 					colGeneratedAsIdentity,                       // identity_generation
-					// TODO(janexing): parse the GeneratedAsIdentitySequenceOption to
-					// fill out these "identity_x" columns.
-					tree.DNull,                        // identity_start
-					tree.DNull,                        // identity_increment
-					tree.DNull,                        // identity_maximum
-					tree.DNull,                        // identity_minimum
+					identityStart,                                // identity_start
+					identityIncrement,                            // identity_increment
+					identityMax,                                  // identity_maximum
+					identityMin,                                  // identity_minimum
+					// TODO(janexing): we don't support CYCLE syntax for sequences yet.
+					// https://github.com/cockroachdb/cockroach/issues/20961
 					tree.DNull,                        // identity_cycle
 					yesOrNoDatum(column.IsComputed()), // is_generated
 					colComputed,                       // generation_expression

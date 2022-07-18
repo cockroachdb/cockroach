@@ -10,11 +10,12 @@ func _() {
 	var x [1]struct{}
 	_ = x[implicitTxn-0]
 	_ = x[explicitTxn-1]
+	_ = x[upgradedExplicitTxn-2]
 }
 
-const _txnType_name = "implicitTxnexplicitTxn"
+const _txnType_name = "implicitTxnexplicitTxnupgradedExplicitTxn"
 
-var _txnType_index = [...]uint8{0, 11, 22}
+var _txnType_index = [...]uint8{0, 11, 22, 41}
 
 func (i txnType) String() string {
 	if i < 0 || i >= txnType(len(_txnType_index)-1) {
