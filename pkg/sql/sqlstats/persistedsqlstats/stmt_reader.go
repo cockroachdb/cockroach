@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,6 +112,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"statistics",
 		"plan",
 		"agg_interval",
+		"index_recommendations",
 	}
 
 	// [1]: selection columns
@@ -187,6 +189,13 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 
 	aggInterval := tree.MustBeDInterval(row[8]).Duration
 	stats.AggregationInterval = time.Duration(aggInterval.Nanos())
+
+	recommendations := tree.MustBeDArray(row[9])
+	var indexRecommendations []string
+	for _, s := range recommendations.Array {
+		indexRecommendations = util.CombineUniqueString(indexRecommendations, []string{string(tree.MustBeDString(s))})
+	}
+	stats.Stats.IndexRecommendations = indexRecommendations
 
 	return &stats, nil
 }

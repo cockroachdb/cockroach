@@ -275,6 +275,7 @@ function randomStats(
     },
     nodes: [Long.fromInt(1), Long.fromInt(3), Long.fromInt(4)],
     plan_gists: ["Ais="],
+    index_recommendations: [""],
   };
 }
 

@@ -75,6 +75,7 @@ func (s *stmtStats) jsonFields() jsonFields {
 	return jsonFields{
 		{"statistics", (*innerStmtStats)(s)},
 		{"execution_statistics", (*execStats)(&s.ExecStats)},
+		{"index_recommendations", (*stringArray)(&s.IndexRecommendations)},
 	}
 }
 

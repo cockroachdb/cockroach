@@ -5,6 +5,7 @@ go_library(
     name = "upgrades",
     srcs = [
         "alter_sql_instances_locality.go",
+        "alter_statement_statistics_index_recommendations.go",
         "alter_table_protected_timestamp_records.go",
         "comment_on_index_migration.go",
         "descriptor_utils.go",
@@ -67,6 +68,7 @@ go_test(
     size = "large",
     srcs = [
         "alter_sql_instances_locality_test.go",
+        "alter_statement_statistics_index_recommendations_test.go",
         "alter_table_protected_timestamp_records_test.go",
         "builtins_test.go",
         "comment_on_index_migration_external_test.go",

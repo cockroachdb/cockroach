@@ -121,7 +121,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          }
-       }
+       },
+       "index_recommendations": [{{joinStrings .StringArray}}]
      }
 		 `
 
@@ -239,7 +240,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          }
-       }
+       },
+       "index_recommendations": [{{joinStrings .StringArray}}]
      }
 		 `
 

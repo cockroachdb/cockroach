@@ -191,23 +191,24 @@ type Provider interface {
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	SessionID       clusterunique.ID
-	StatementID     clusterunique.ID
-	AutoRetryCount  int
-	RowsAffected    int
-	ParseLatency    float64
-	PlanLatency     float64
-	RunLatency      float64
-	ServiceLatency  float64
-	OverheadLatency float64
-	BytesRead       int64
-	RowsRead        int64
-	RowsWritten     int64
-	Nodes           []int64
-	StatementType   tree.StatementType
-	Plan            *roachpb.ExplainTreePlanNode
-	PlanGist        string
-	StatementError  error
+	SessionID            clusterunique.ID
+	StatementID          clusterunique.ID
+	AutoRetryCount       int
+	RowsAffected         int
+	ParseLatency         float64
+	PlanLatency          float64
+	RunLatency           float64
+	ServiceLatency       float64
+	OverheadLatency      float64
+	BytesRead            int64
+	RowsRead             int64
+	RowsWritten          int64
+	Nodes                []int64
+	StatementType        tree.StatementType
+	Plan                 *roachpb.ExplainTreePlanNode
+	PlanGist             string
+	StatementError       error
+	IndexRecommendations []string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
