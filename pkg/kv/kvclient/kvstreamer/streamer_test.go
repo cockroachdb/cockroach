@@ -468,33 +468,38 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	rng, _ := randutil.NewTestRand()
-	numRows := rng.Intn(100) + 2
+	numRowsInGroup := rng.Intn(100) + 2
 
-	// We set up two tables such that we'll use the value from the smaller one
-	// to lookup into a secondary index in the larger table.
-	_, err := db.Exec("CREATE TABLE small (n PRIMARY KEY) AS SELECT 1")
+	// We set up two tables such that we'll use the values from the smaller one
+	// to lookup into a secondary index in the larger table. All rows are split
+	// into two "groups" for values n=1 and n=2.
+	_, err := db.Exec("CREATE TABLE small (n PRIMARY KEY) AS VALUES (1), (2)")
 	require.NoError(t, err)
 	_, err = db.Exec("CREATE TABLE large (k INT PRIMARY KEY, n INT, s STRING, INDEX (n, k) STORING (s))")
 	require.NoError(t, err)
-	_, err = db.Exec(fmt.Sprintf("INSERT INTO large SELECT i, 1, repeat('a', i) FROM generate_series(1, %d) AS i", numRows))
+	_, err = db.Exec(fmt.Sprintf("INSERT INTO large SELECT i, 1, repeat('a', i) FROM generate_series(1, %d) AS i", numRowsInGroup))
+	require.NoError(t, err)
+	_, err = db.Exec(fmt.Sprintf("INSERT INTO large SELECT i, 2, repeat('b', i-%[1]d) FROM generate_series(%[1]d+1, 2*%[1]d) AS i", numRowsInGroup))
 	require.NoError(t, err)
 
 	// Split the range for the secondary index into multiple.
 	numRanges := 2
-	if numRows > 2 {
-		numRanges = rng.Intn(numRows-2) + 2
+	if numRowsInGroup > 2 {
+		numRanges = rng.Intn(numRowsInGroup-2) + 2
 	}
-	kValues := make([]int, numRows)
+	kValues := make([]int, numRowsInGroup)
 	for i := range kValues {
 		kValues[i] = i + 1
 	}
-	rng.Shuffle(numRows, func(i, j int) {
+	rng.Shuffle(numRowsInGroup, func(i, j int) {
 		kValues[i], kValues[j] = kValues[j], kValues[i]
 	})
 	splitKValues := kValues[:numRanges]
 	for _, kValue := range splitKValues {
-		_, err = db.Exec(fmt.Sprintf("ALTER INDEX large_n_k_idx SPLIT AT VALUES (1, %d)", kValue))
-		require.NoError(t, err)
+		for _, nValue := range []int{1, 2} {
+			_, err = db.Exec(fmt.Sprintf("ALTER INDEX large_n_k_idx SPLIT AT VALUES (%d, %d)", nValue, kValue))
+			require.NoError(t, err)
+		}
 	}
 
 	// Populate the range cache.
@@ -504,20 +509,41 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	// The crux of the test - run a query that performs a lookup join when
 	// ordering needs to be maintained and then confirm that the results of the
 	// parallel lookups are served in the right order.
-	r := db.QueryRow("SELECT array_agg(s) FROM small INNER LOOKUP JOIN large ON small.n = large.n GROUP BY small.n ORDER BY small.n")
-	var result string
-	err = r.Scan(&result)
+	//
+	// Note that the execution is allowed to change the order of values of 's'
+	// that are part of the same group (i.e. with the same values of 'n') when
+	// feeding into array_agg, so we also add the ORDER BY clause to the
+	// aggregate function itself. In order to get better test coverage, we have
+	// multiple groups.
+	// TODO(yuzefovich): if (when) we start using the InOrder mode for lookup
+	// joins with ordering, we can go back to a single group and remove the
+	// ORDER BY of the aggregate function.
+	r, err := db.Query("SELECT array_agg(s ORDER BY s) FROM small INNER LOOKUP JOIN large ON small.n = large.n GROUP BY small.n ORDER BY small.n")
 	require.NoError(t, err)
-	// The expected result is of the form: {a,aa,aaa,...}.
-	expected := "{"
-	for i := 1; i <= numRows; i++ {
-		if i > 1 {
-			expected += ","
+
+	getExpected := func(letter string) string {
+		// The expected result is of the form: {a,aa,aaa,...} when letter=="a".
+		expected := "{"
+		for i := 1; i <= numRowsInGroup; i++ {
+			if i > 1 {
+				expected += ","
+			}
+			for j := 0; j < i; j++ {
+				expected += letter
+			}
 		}
-		for j := 0; j < i; j++ {
-			expected += "a"
-		}
+		expected += "}"
+		return expected
 	}
-	expected += "}"
-	require.Equal(t, expected, result)
+
+	for count := byte(0); r.Next(); count++ {
+		if count >= 2 {
+			t.Fatal("unexpected number of rows returned")
+		}
+		var result string
+		err = r.Scan(&result)
+		require.NoError(t, err)
+		letter := string(byte('a') + count)
+		require.Equal(t, getExpected(letter), result)
+	}
 }
