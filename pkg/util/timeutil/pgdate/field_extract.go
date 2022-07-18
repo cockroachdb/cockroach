@@ -710,7 +710,7 @@ func (fe *fieldExtract) MakeTimestamp() time.Time {
 	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
 }
 
-// MakeTimestampWIthoutTimezone returns a time.Time containing all extracted
+// MakeTimestampWithoutTimezone returns a time.Time containing all extracted
 // information, minus any timezone information (which is stripped). The returned
 // time always has UTC location. See ParseTimestampWithoutTimezone.
 func (fe *fieldExtract) MakeTimestampWithoutTimezone() time.Time {
