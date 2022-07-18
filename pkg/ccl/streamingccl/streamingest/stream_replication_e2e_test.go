@@ -325,6 +325,8 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	c.compareResult("SELECT * FROM d.t2")
 
 	stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+
+	require.NotNil(t, stats.ReplicationLagInfo)
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
 	require.Equal(t, "", stats.ProducerError)
 

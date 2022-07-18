@@ -59,7 +59,7 @@ func getStreamIngestionStats(
 	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	j, err := registry.LoadJob(evalCtx.Ctx(), ingestionJobID)
+	j, err := registry.LoadJobWithTxn(evalCtx.Ctx(), ingestionJobID, txn)
 	if err != nil {
 		return nil, err
 	}
