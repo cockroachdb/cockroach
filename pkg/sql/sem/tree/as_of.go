@@ -231,7 +231,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 			syn = true
 		}
 		// Attempt to parse as timestamp.
-		if dt, _, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
+		if dt, _, err := ParseDTimestampTZ(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			ts.Synthetic = syn
 			break
