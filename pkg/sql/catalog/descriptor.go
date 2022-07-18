@@ -60,6 +60,9 @@ const (
 	// IgnorePKSwaps is used in MakeFirstMutationPublic to indicate that the
 	// table descriptor returned should include newly added constraints.
 	IgnorePKSwaps
+	// RetainDroppingColumns is used in MakeFirstMutationPublic to indicate that
+	// the table descriptor should include newly dropped columns.
+	RetainDroppingColumns
 )
 
 // DescriptorBuilder interfaces are used to build catalog.Descriptor

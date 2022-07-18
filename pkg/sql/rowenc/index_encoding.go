@@ -1130,8 +1130,8 @@ func getStoredColumnsForPrimaryIndex(
 	// It should be rare to never that we come across an index which is encoded
 	// as a primary index but with a version older than this version.
 	// Nevertheless, for safety, we assume at that version that the stored
-	// columns set is not populated and instead we defer to the colMap to compute
-	// the complete set before subtracting the key columns.
+	// columns set is not populated, and instead we defer to the colMap to
+	// compute the complete set before subtracting the key columns.
 	if index.GetVersion() < descpb.PrimaryIndexWithStoredColumnsVersion {
 		var allColumn catalog.TableColSet
 		colMap.ForEach(func(colID descpb.ColumnID, _ int) {
