@@ -1103,7 +1103,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   sample_plan         JSONB,
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL,
-  txn_fingerprint_id  STRING
+  txn_fingerprint_id  STRING,
+  index_recommendations STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -1156,6 +1157,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			}
 
+			indexRecommendations := tree.NewDArray(types.String)
+			for _, recommendation := range stats.Stats.IndexRecommendations {
+				if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+					return err
+				}
+			}
+
 			err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),                           // node_id
 				tree.NewDString(stats.Key.App),                            // application_name
@@ -1199,6 +1207,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDString(stats.Key.Database), // database_name
 				execNodeIDs,                         // exec_node_ids
 				txnFingerprintID,                    // txn_fingerprint_id
+				indexRecommendations,                // index_recommendations
 			)
 			if err != nil {
 				return err
@@ -5368,7 +5377,8 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
     metadata                   JSONB NOT NULL,
     statistics                 JSONB NOT NULL,
     sampled_plan               JSONB NOT NULL,
-    aggregation_interval       INTERVAL NOT NULL
+    aggregation_interval       INTERVAL NOT NULL,
+    index_recommendations      STRING[]
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -5399,7 +5409,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
-		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
+		row := make(tree.Datums, 9 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
@@ -5434,6 +5444,13 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
+				indexRecommendations := tree.NewDArray(types.String)
+				for _, recommendation := range statistics.Stats.IndexRecommendations {
+					if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+						return err
+					}
+				}
+
 				row = row[:0]
 				row = append(row,
 					aggregatedTs,                        // aggregated_ts
@@ -5445,6 +5462,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 					tree.NewDJSON(statisticsJSON),       // statistics
 					tree.NewDJSON(plan),                 // plan
 					aggInterval,                         // aggregation_interval
+					indexRecommendations,                // index_recommendations
 				)
 
 				return pusher.pushRow(row...)
@@ -5470,7 +5488,8 @@ SELECT
   max(metadata) as metadata,
   crdb_internal.merge_statement_stats(array_agg(statistics)),
   max(sampled_plan),
-  aggregation_interval
+  aggregation_interval,
+  array_remove(array_agg(index_rec), null) AS index_recommendations
 FROM (
   SELECT
       aggregated_ts,
@@ -5481,7 +5500,8 @@ FROM (
       metadata,
       statistics,
       sampled_plan,
-      aggregation_interval
+      aggregation_interval,
+      index_recommendations
   FROM
       crdb_internal.cluster_statement_statistics
   UNION ALL
@@ -5494,10 +5514,12 @@ FROM (
           metadata,
           statistics,
           plan,
-          agg_interval
+          agg_interval,
+          index_recommendations
       FROM
           system.statement_statistics
 )
+LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON TRUE
 GROUP BY
   aggregated_ts,
   fingerprint_id,
@@ -5511,6 +5533,7 @@ GROUP BY
 		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
 		{Name: "plan_hash", Typ: types.Bytes},
 		{Name: "app_name", Typ: types.String},
+		{Name: "index_recommendations", Typ: types.StringArray},
 		{Name: "metadata", Typ: types.Jsonb},
 		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "sampled_plan", Typ: types.Jsonb},

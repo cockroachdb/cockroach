@@ -325,6 +325,9 @@ const (
 	// AlterSystemSQLInstancesAddLocality adds a locality column to the
 	// system.sql_instances table.
 	AlterSystemSQLInstancesAddLocality
+	// AlterSystemStatementStatisticsAddIndexRecommendations adds an
+	// index_recommendations column to the system.statement_statistics table.
+	AlterSystemStatementStatisticsAddIndexRecommendations
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -557,6 +560,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
+	},
+	{
+		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
 	},
 
 	// *************************************************
