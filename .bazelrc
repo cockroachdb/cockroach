@@ -1,3 +1,9 @@
+# No-op configurations for compatibility with future .rc files.
+# TODO(michae2): Remove --noexperimental_google_legacy_api dummy flags when
+# https://github.com/bazelbuild/bazel/issues/12844 is fixed.
+build:lintonbuild --noexperimental_google_legacy_api
+build:nolintonbuild --noexperimental_google_legacy_api
+
 build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off,gss --experimental_proto_descriptor_sets_include_source_info
 test --config=test
 build:test --define gotags=bazel,crdb_test,gss --test_env=TZ=
