@@ -140,6 +140,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add column index_recommendations to table system.statement_statistics",
+		toCV(clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations),
+		NoPrecondition,
+		alterSystemStatementStatisticsAddIndexRecommendations,
+	),
 }
 
 func init() {
