@@ -31,10 +31,10 @@ exp,benchmark
 15,CreateRole/create_role_with_2_options
 16,CreateRole/create_role_with_3_options
 14,CreateRole/create_role_with_no_options
-16,DropDatabase/drop_database_0_tables
-17,DropDatabase/drop_database_1_table
-18,DropDatabase/drop_database_2_tables
-19,DropDatabase/drop_database_3_tables
+15,DropDatabase/drop_database_0_tables
+16,DropDatabase/drop_database_1_table
+17,DropDatabase/drop_database_2_tables
+18,DropDatabase/drop_database_3_tables
 20,DropRole/drop_1_role
 27,DropRole/drop_2_roles
 34,DropRole/drop_3_roles
