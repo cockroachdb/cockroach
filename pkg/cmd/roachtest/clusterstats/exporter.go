@@ -221,6 +221,12 @@ func (cs *clusterStatCollector) getStatSummary(
 
 	trimmedTaggedSeries, n, trimmedInterval := TrimTaggedSeries(ctx, l, taggedSeries)
 
+	// When there are no values returned in the trimmed interval, return an
+	// error, to log and skip this summary.
+	if n == 0 {
+		return ret, errors.Errorf("No timeseries values found")
+	}
+
 	// We are unable to find the label name requested in the returned time
 	// series.
 	if _, ok := trimmedTaggedSeries[summaryQuery.Stat.LabelName]; !ok {

@@ -33,7 +33,7 @@ import (
 
 // The duration of no rebalancing actions taken before we assume the
 // configuration is in a steady state and assess balance.
-const allocatorStableSeconds = 10
+const allocatorStableSeconds = 120
 
 func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
@@ -51,7 +51,7 @@ func registerAllocator(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
-				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "1",
+				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10",
 			); err != nil {
 				t.Fatal(err)
 			}
