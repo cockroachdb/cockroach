@@ -11,7 +11,6 @@
 import moment from "moment";
 import { TimeScale, TimeScaleOption, TimeScaleOptions } from "./timeScaleTypes";
 import { dateFormat, timeFormat } from "./timeScaleDropdown";
-import React from "react";
 
 /**
  * timeScale1hMinOptions is a preconfigured set of time scales with 1h minimum that can be

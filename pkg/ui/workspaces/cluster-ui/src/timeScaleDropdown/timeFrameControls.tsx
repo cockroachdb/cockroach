@@ -47,7 +47,7 @@ export const TimeFrameControls = ({
       <ButtonGroup>
         <Tooltip
           placement="bottom"
-          title="previous time interval"
+          title="Previous time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -62,7 +62,7 @@ export const TimeFrameControls = ({
         </Tooltip>
         <Tooltip
           placement="bottom"
-          title="next time interval"
+          title="Next time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -78,7 +78,7 @@ export const TimeFrameControls = ({
       </ButtonGroup>
       <Tooltip
         placement="bottom"
-        title="past day"
+        title="Most recent interval"
         mouseEnterDelay={delay}
         mouseLeaveDelay={delay}
       >

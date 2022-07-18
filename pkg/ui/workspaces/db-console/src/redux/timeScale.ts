@@ -16,7 +16,7 @@
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
-import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
+import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
@@ -32,34 +32,6 @@ export const SET_METRICS_FIXED_WINDOW =
 export interface TimeWindow {
   start: moment.Moment;
   end: moment.Moment;
-}
-
-/**
- * TimeScale describes the requested dimensions of TimeWindows; it
- * prescribes a length for the window, along with a period of time that a
- * newly created TimeWindow will remain valid.
- */
-export interface TimeScale {
-  /**
-   * The key used to index in to the defaultTimeScaleOptions collection.
-   * The key is "Custom" when specifying a custom time that is not one of the default options
-   */
-  key?: string;
-  // The size of a global time window. Default is ten minutes.
-  windowSize: moment.Duration;
-  // The length of time the global time window is valid. The current time window
-  // is invalid if now > (metricsTime.currentWindow.end + windowValid). Default is ten
-  // seconds. If fixedWindowEnd is set this is ignored.
-  windowValid?: moment.Duration;
-  // The expected duration of individual samples for queries at this time scale.
-  sampleSize: moment.Duration;
-  /**
-   * The fixed end time of the window, or false if it should be a dynamically moving "now".
-   * Typically, when the `key` property is a default option, `fixedWindowEnd` should be false.
-   * And when the `key` property is "Custom" `fixedWindowEnd` should be a specific Moment.
-   * It is unclear if there are legitimate reasons for the two being out of sync.
-   */
-  fixedWindowEnd: moment.Moment | false;
 }
 
 export class TimeScaleState {
