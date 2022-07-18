@@ -488,7 +488,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				identityIncrement := tree.DNull
 				identityMax := tree.DNull
 				identityMin := tree.DNull
-				generatedAsIdentitySeqOpt, err := column.GetGeneratedAsIdentitySequenceOption()
+				generatedAsIdentitySeqOpt, err := column.GetGeneratedAsIdentitySequenceOption(column.GetType().Width())
 				if err != nil {
 					return err
 				}
