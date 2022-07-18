@@ -48,7 +48,7 @@ func RecentNormalizedRunnableGoroutines() float64 {
 }
 
 // If you get a compilation error here, the Go version you are using is not
-// supported by this package. Cross-check the structures in runtime_go1.17.go
+// supported by this package. Cross-check the structures in runtime_go1.18.go
 // against those in the new Go's runtime, and if they are still accurate adjust
 // the build tag in that file to accept the version. If they don't match, you
 // will have to add a new version of that file.

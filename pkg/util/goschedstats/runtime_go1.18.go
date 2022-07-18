@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 //
-// The structure definitions in this file have been cross-checked against go1.17
-// and go1.18. Before allowing newer versions, please check that the structures
+// The structure definitions in this file have been cross-checked against go1.18.
+// Before allowing newer versions, please check that the structures
 // still match with those in go/src/runtime.
 
-//go:build gc && go1.17 && !go1.19
-// +build gc,go1.17,!go1.19
+//go:build gc && go1.18 && !go1.19
+// +build gc,go1.18,!go1.19
 
 package goschedstats
 
@@ -53,10 +53,8 @@ type p struct {
 	pcache      pageCache
 	raceprocctx uintptr
 
-	// NOTE: the runtime does not have a deferpool struct type. We use one here to
-	// conditionally configure the size of these fields based on the go version.
-	// See runtime_deferpool_go1.17.go and runtime_deferpool_go1.18.go.
-	deferpool deferpool
+	deferpool    []uintptr // pool of available defer structs (see panic.go)
+	deferpoolbuf [32]uintptr
 
 	// Cache of goroutine ids, amortizes accesses to runtime·sched.goidgen.
 	goidcache    uint64
