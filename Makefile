@@ -764,6 +764,8 @@ COCKROACH      := ./cockroach$(SUFFIX)
 COCKROACHOSS   := ./cockroachoss$(SUFFIX)
 COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 COCKROACHSQL   := ./cockroach-sql$(SUFFIX)
+INSTRUMENT     := ./instrument$(SUFFIX)
+INSTRUMENTSHORT := ./instrumentshort$(SUFFIX)
 
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
@@ -980,7 +982,7 @@ $(go-targets): override LINKFLAGS += \
 # The build.utcTime format must remain in sync with TimeFormat in
 # pkg/build/info.go. It is not installed in tests or in `buildshort` to avoid
 # busting the cache on every rebuild.
-$(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
+$(COCKROACH) $(COCKROACHSHORT) $(COCKROACHOSS) instrument instrumentshort go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
@@ -1073,8 +1075,8 @@ benchshort: override TESTFLAGS += -benchtime=1ns -short
 
 # ANTITHESIS INSTRUMENTATION
 # NB: This currently requires the Antithesis Go Instrumentation Package to be
-# installed (default path at /opt/antithesis), and libvoidstar.so symlinked
-# into /usr/lib prior to instrumenting and building.
+# installed (default path at /opt/antithesis), and libvoidstar.so 
+# in /opt/antithesis/lib prior to instrumenting and building.
 # TODO(sarkesian): remove requirement to symlink libvoidstar.so
 ANTITHESIS ?= /opt/antithesis
 INSTRUMENTOR_BIN ?= $(ANTITHESIS)/bin/goinstrumentor
@@ -1095,8 +1097,8 @@ instrumentation-prereqs:
 ifeq (, $(shell which $(INSTRUMENTOR_BIN)))
 	$(error $(INSTRUMENTOR_BIN) not found, please install Antithesis Instrumentor)
 endif
-ifeq (, $(wildcard /usr/lib/libvoidstar.so))
-	$(error /usr/lib/libvoidstar.so not found, please install Antithesis Instrumentor)
+ifeq (, $(shell stat /opt/antithesis/lib/libvoidstar.so))
+	$(error /opt/antithesis/lib/libvoidstar.so not found, please install Antithesis Instrumentor)
 endif
 ifndef INSTRUMENTATION_TMP
 	$(error INSTRUMENTATION_TMP must be defined with `make $@`)
