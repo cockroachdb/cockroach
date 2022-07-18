@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -524,8 +525,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	if len(cookies) == 0 {
 		t.Fatalf("good login got no cookies: %v", response)
 	}
-
-	sessionCookie, err := decodeSessionCookie(cookies[0])
+	sessionCookie, err := findAndDecodeSessionCookie(context.Background(), cookies)
 	if err != nil {
 		t.Fatalf("failed to decode session cookie: %s", err)
 	}
@@ -835,6 +835,100 @@ func TestGRPCAuthentication(t *testing.T) {
 			if exp := `client certificate CN=testuser,O=Cockroach cannot be used to perform RPC on tenant {1}`; !testutils.IsError(err, exp) {
 				t.Errorf("expected %q error, but got %v", exp, err)
 			}
+		})
+	}
+}
+
+func TestCreateAggregatedSessionCookieValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name        string
+		mapArg      []sessionCookieValue
+		resExpected string
+	}{
+		{"standard arg", []sessionCookieValue{
+			{name: "system", setCookie: "session=abcd1234"},
+			{name: "app", setCookie: "session=efgh5678"}},
+			"abcd1234,system,efgh5678,app",
+		},
+		{"empty arg", []sessionCookieValue{}, ""},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("create-session-cookie/%s", test.name), func(t *testing.T) {
+			res := createAggregatedSessionCookieValue(test.mapArg)
+			require.Equal(t, test.resExpected, res)
+		})
+	}
+}
+
+func TestFindSessionCookieValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	normalSessionStr := "abcd1234,system,efgh5678,app"
+	tests := []struct {
+		name          string
+		cookieArg     []*http.Cookie
+		resExpected   string
+		errorExpected bool
+	}{
+		{"standard args", []*http.Cookie{
+			{
+				Name:  MultitenantSessionCookieName,
+				Value: normalSessionStr,
+				Path:  "/",
+			},
+			{
+				Name:  TenantSelectCookieName,
+				Value: "system",
+				Path:  "/",
+			},
+		}, "abcd1234", false},
+		{"no multitenant session cookie", []*http.Cookie{
+			{
+				Name:  TenantSelectCookieName,
+				Value: "system",
+				Path:  "/",
+			},
+		}, "", false},
+		{"no tenant cookie", []*http.Cookie{
+			{
+				Name:  MultitenantSessionCookieName,
+				Value: normalSessionStr,
+				Path:  "/",
+			},
+		}, "abcd1234", false},
+		{"empty string tenant cookie", []*http.Cookie{
+			{
+				Name:  MultitenantSessionCookieName,
+				Value: normalSessionStr,
+				Path:  "/",
+			},
+			{
+				Name:  TenantSelectCookieName,
+				Value: "",
+				Path:  "/",
+			},
+		}, "abcd1234", false},
+		{"no tenant name match", []*http.Cookie{
+			{
+				Name:  MultitenantSessionCookieName,
+				Value: normalSessionStr,
+				Path:  "/",
+			},
+			{
+				Name:  TenantSelectCookieName,
+				Value: "app2",
+				Path:  "/",
+			},
+		}, "", true},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("find-session-cookie/%s", test.name), func(t *testing.T) {
+			res, err := findSessionCookieValue(test.cookieArg)
+			require.Equal(t, test.resExpected, res)
+			require.Equal(t, test.errorExpected, err != nil)
 		})
 	}
 }
