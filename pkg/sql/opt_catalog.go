@@ -861,6 +861,7 @@ func newOptTable(
 	}
 
 	// Build the indexes.
+	// TODO(wenyihu6): check if need to populate NotVisible property here
 	ot.indexes = make([]optIndex, 1+len(secondaryIndexes))
 
 	for i := range ot.indexes {
