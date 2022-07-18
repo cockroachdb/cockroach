@@ -12,24 +12,22 @@ import React, { useEffect } from "react";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Button } from "src/button";
 import Helmet from "react-helmet";
-import { Text } from "@cockroachlabs/ui-components";
 import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
 import { Link, useHistory, match } from "react-router-dom";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import { SummaryCard } from "src/summaryCard";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr } from "../util/constants";
+import { executionIdAttr, DATE_FORMAT_24_UTC } from "../util";
 import { ActiveStatement } from "src/activeExecutions";
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 
 import styles from "./statementDetails.module.scss";
 import { SqlBox } from "src/sql/box";
-import { DATE_FORMAT_24_UTC } from "../util";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
@@ -95,58 +93,61 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
               <SummaryCard className={cx("summary-card")}>
                 <Row>
                   <Col>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Start Time (UTC)</Text>
-                      <Text>{statement.start.format(DATE_FORMAT_24_UTC)}</Text>
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Elapsed Time</Text>
-                      <Text>{statement.elapsedTimeSeconds} s</Text>
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Status</Text>
-                      <Text>
-                        <StatusIcon status={statement.status} />
-                        {statement.status}
-                      </Text>
-                    </div>
+                    <SummaryCardItem
+                      label="Start Time (UTC)"
+                      value={statement.start.format(DATE_FORMAT_24_UTC)}
+                    />
+                    <SummaryCardItem
+                      label="Elapsed Time"
+                      value={`${statement.elapsedTimeSeconds} s`}
+                    />
+                    <SummaryCardItem
+                      label="Status"
+                      value={
+                        <>
+                          <StatusIcon status={statement.status} />
+                          {statement.status}
+                        </>
+                      }
+                    />
                   </Col>
                 </Row>
               </SummaryCard>
             </Col>
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Application Name</Text>
-                  {statement.application}
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>User Name</Text>
-                  {statement.user}
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Client Address</Text>
-                  {statement.clientAddress}
-                </div>
+                <SummaryCardItem
+                  label="Application Name"
+                  value={statement.application}
+                />
+                <SummaryCardItem label="User Name" value={statement.user} />
+                <SummaryCardItem
+                  label="Client Address"
+                  value={statement.clientAddress}
+                />
                 <p className={summaryCardStylesCx("summary--card__divider")} />
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Session ID</Text>
-                  <Link
-                    className={cx("text-link")}
-                    to={`/session/${statement.sessionID}`}
-                  >
-                    {statement.sessionID}
-                  </Link>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Transaction Execution ID</Text>
-                  <Link
-                    className={cx("text-link")}
-                    to={`/execution/transaction/${statement.transactionID}`}
-                  >
-                    {statement.transactionID}
-                  </Link>
-                </div>
+                <SummaryCardItem
+                  label="Session ID"
+                  value={
+                    <Link
+                      className={cx("text-link")}
+                      to={`/session/${statement.sessionID}`}
+                    >
+                      {statement.sessionID}
+                    </Link>
+                  }
+                />
+                <SummaryCardItem
+                  label="Transaction Execution ID"
+                  value={
+                    <Link
+                      className={cx("text-link")}
+                      to={`/execution/transaction/${statement.transactionID}`}
+                    >
+                      {statement.transactionID}
+                    </Link>
+                  }
+                />
               </SummaryCard>
             </Col>
           </Row>

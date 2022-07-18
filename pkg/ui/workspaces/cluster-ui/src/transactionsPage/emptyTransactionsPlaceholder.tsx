@@ -51,10 +51,8 @@ function getMessage(type: TransactionViewType): EmptyTableProps {
     case TransactionViewType.FINGERPRINTS:
     default:
       return {
-        title: "No transactions since this page was last cleared",
+        title: "No transactions in the selected time interval",
         icon: emptyTableResultsImg,
-        message:
-          "Transactions are cleared every hour by default, or according to your configuration.",
         footer,
       };
   }

@@ -50,10 +50,8 @@ function getMessage(type: StatementViewType): EmptyTableProps {
     case StatementViewType.FINGERPRINTS:
     default:
       return {
-        title: "No SQL statements since this page was last cleared",
+        title: "No SQL statements in the selected time interval",
         icon: emptyTableResultsImg,
-        message:
-          "Statements are cleared every hour by default, or according to your configuration.",
         footer,
       };
   }

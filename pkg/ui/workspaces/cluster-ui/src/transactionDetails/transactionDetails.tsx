@@ -35,7 +35,7 @@ import {
   statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
 import { Loading } from "../loading";
-import { SummaryCard } from "../summaryCard";
+import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import {
   Bytes,
   calculateTotalWorkload,
@@ -334,6 +334,41 @@ export class TransactionDetails extends React.Component<
                 <span className={cx("tooltip-info")}>unavailable</span>
               </Tooltip>
             );
+            const meansRows = `${formatNumberForDisplay(
+              transactionStats.rows_read.mean,
+              formatTwoPlaces,
+            )} / 
+            ${formatNumberForDisplay(transactionStats.bytes_read.mean, Bytes)}`;
+            const bytesRead = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  transactionStats.exec_stats.network_bytes.mean,
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
+            const maxMem = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  transactionStats.exec_stats.max_mem_usage.mean,
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
+            const maxDisc = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  _.get(transactionStats, "exec_stats.max_disk_usage.mean", 0),
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
 
             return (
               <React.Fragment>
@@ -352,17 +387,13 @@ export class TransactionDetails extends React.Component<
                       <SummaryCard
                         className={transactionDetailsStylesCx("summary-card")}
                       >
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Heading type="h5">Mean transaction time</Heading>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats?.service_lat.mean,
-                              duration,
-                            )}
-                          </Text>
-                        </div>
+                        <SummaryCardItem
+                          label="Mean transaction time"
+                          value={formatNumberForDisplay(
+                            transactionStats?.service_lat.mean,
+                            duration,
+                          )}
+                        />
                         <p
                           className={summaryCardStylesCx(
                             "summary--card__divider",
@@ -375,79 +406,29 @@ export class TransactionDetails extends React.Component<
                             Transaction resource usage
                           </Heading>
                         </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Mean rows/bytes read</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.rows_read.mean,
-                              formatTwoPlaces,
-                            )}
-                            {" / "}
-                            {formatNumberForDisplay(
-                              transactionStats.bytes_read.mean,
-                              Bytes,
-                            )}
-                          </Text>
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Bytes read over network</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                transactionStats.exec_stats.network_bytes.mean,
-                                Bytes,
-                              )}
-                            </Text>
+                        <SummaryCardItem
+                          label="Mean rows/bytes read"
+                          value={meansRows}
+                        />
+                        <SummaryCardItem
+                          label="Bytes read over network"
+                          value={bytesRead}
+                        />
+                        <SummaryCardItem
+                          label="Mean rows written"
+                          value={formatNumberForDisplay(
+                            transactionStats.rows_written?.mean,
+                            formatTwoPlaces,
                           )}
-                          {unavailableTooltip}
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Mean rows written</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.rows_written?.mean,
-                              formatTwoPlaces,
-                            )}
-                          </Text>
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Max memory usage</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                transactionStats.exec_stats.max_mem_usage.mean,
-                                Bytes,
-                              )}
-                            </Text>
-                          )}
-                          {unavailableTooltip}
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Max scratch disk usage</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                _.get(
-                                  transactionStats,
-                                  "exec_stats.max_disk_usage.mean",
-                                  0,
-                                ),
-                                Bytes,
-                              )}
-                            </Text>
-                          )}
-                          {unavailableTooltip}
-                        </div>
+                        />
+                        <SummaryCardItem
+                          label="Max memory usage"
+                          value={maxMem}
+                        />
+                        <SummaryCardItem
+                          label="Max scratch disk usage"
+                          value={maxDisc}
+                        />
                       </SummaryCard>
                     </Col>
                   </Row>

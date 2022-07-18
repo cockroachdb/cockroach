@@ -463,6 +463,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			for _, rkv := range iter.RangeKeys() {
 				rangeKVs++
+				if b == nil {
+					b = kvSS.newBatch()
+				}
 				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 				if err != nil {
 					return 0, err
@@ -1171,7 +1174,6 @@ func SendEmptySnapshot(
 	// The snapshot must use a Pebble snapshot, since it requires consistent
 	// iterators.
 	engSnapshot := eng.NewSnapshot()
-	defer engSnapshot.Close()
 
 	// Create an OutgoingSnapshot to send.
 	outgoingSnap, err := snapshot(
@@ -1184,13 +1186,16 @@ func SendEmptySnapshot(
 		// up behind a long running snapshot. We want this to go through
 		// quickly.
 		kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE,
-		eng.NewSnapshot(), // needs consistent iterators
+		engSnapshot,
 		desc.RangeID,
 		raftentry.NewCache(1), // cache is not used
 		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
 		desc.StartKey,
 	)
 	if err != nil {
+		// Close() is not idempotent, and will be done by outgoingSnap.Close() if
+		// the snapshot was successfully created.
+		engSnapshot.Close()
 		return err
 	}
 	defer outgoingSnap.Close()
