@@ -146,7 +146,8 @@ func TestTableEventIsPrimaryIndexChange(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			require.Equalf(t, c.exp, IsPrimaryIndexChange(c.e), "event %v", c.e)
+			got, _ := IsPrimaryIndexChange(c.e)
+			require.Equalf(t, c.exp, got, "event %v", c.e)
 		})
 	}
 }
