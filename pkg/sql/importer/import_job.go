@@ -256,8 +256,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
 
-		// Check if the tables being imported into are starting empty, in which
-		// case we can cheaply clear-range instead of revert-range to cleanup.
+		// Check if the tables being imported into are starting empty, in which case
+		// we can cheaply clear-range instead of revert-range to cleanup (or if the
+		// cluster has finalized to 22.1, use DeleteRange without predicate
+		// filtering).
 		for i := range details.Tables {
 			if !details.Tables[i].IsNew {
 				tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
@@ -1461,6 +1463,11 @@ func (r *importResumer) dropTables(
 		return nil
 	}
 
+	// useDeleteRange indicates that the cluster has been finalized to 22.1 and
+	// can use MVCC compatible DeleteRange to with range tombstones during an import
+	// rollback.
+	useDeleteRange := r.settings.Version.IsActive(ctx, clusterversion.MVCCRangeTombstones)
+
 	var tableWasEmpty bool
 	var intoTable catalog.TableDescriptor
 	for _, tbl := range details.Tables {
@@ -1497,25 +1504,46 @@ func (r *importResumer) dropTables(
 		// it was rolled back to its pre-IMPORT state, and instead provide a manual
 		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
-
-		// disallowShadowingBelow=writeTS used to write means no existing keys could
-		// have been covered by a key imported and the table was offline to other
-		// writes, so even if GC has run it would not have GC'ed any keys to which
-		// we need to revert, so we can safely ignore the target-time GC check.
-		const ignoreGC = true
-		if err := sql.RevertTables(ctx, txn.DB(), execCfg, []catalog.TableDescriptor{intoTable}, ts, ignoreGC,
-			sql.RevertTableDefaultBatchSize); err != nil {
-			return errors.Wrap(err, "rolling back partially completed IMPORT")
+		if useDeleteRange {
+			predicates := roachpb.DeleteRangePredicates{StartTime: ts}
+			if err := sql.DeleteTableWithPredicate(
+				ctx,
+				execCfg.DB,
+				execCfg.Codec,
+				&execCfg.Settings.SV,
+				execCfg.DistSender,
+				intoTable,
+				predicates, sql.RevertTableDefaultBatchSize); err != nil {
+				return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
+			}
+		} else {
+			// disallowShadowingBelow=writeTS used to write means no existing keys could
+			// have been covered by a key imported and the table was offline to other
+			// writes, so even if GC has run it would not have GC'ed any keys to which
+			// we need to revert, so we can safely ignore the target-time GC check.
+			const ignoreGC = true
+			if err := sql.RevertTables(ctx, txn.DB(), execCfg, []catalog.TableDescriptor{intoTable}, ts, ignoreGC,
+				sql.RevertTableDefaultBatchSize); err != nil {
+				return errors.Wrap(err, "rolling back partially completed IMPORT via RevertRange")
+			}
 		}
 	} else if tableWasEmpty {
-		// Set a DropTime on the table descriptor to differentiate it from an
-		// older-format (v1.1) descriptor. This enables ClearTableData to use a
-		// RangeClear for faster data removal, rather than removing by chunks.
-		intoTable.TableDesc().DropTime = int64(1)
-		if err := gcjob.ClearTableData(
-			ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, intoTable,
-		); err != nil {
-			return errors.Wrapf(err, "clearing data for table %d", intoTable.GetID())
+		if useDeleteRange {
+			if err := gcjob.DeleteAllTableData(
+				ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, intoTable,
+			); err != nil {
+				return errors.Wrap(err, "rolling back IMPORT INTO in empty table via DeleteRange")
+			}
+		} else {
+			// Set a DropTime on the table descriptor to differentiate it from an
+			// older-format (v1.1) descriptor. This enables ClearTableData to use a
+			// RangeClear for faster data removal, rather than removing by chunks.
+			intoTable.TableDesc().DropTime = int64(1)
+			if err := gcjob.ClearTableData(
+				ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, intoTable,
+			); err != nil {
+				return errors.Wrapf(err, "rolling back IMPORT INTO in empty table via ClearRange")
+			}
 		}
 	}
 
