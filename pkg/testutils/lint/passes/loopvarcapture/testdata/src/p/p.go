@@ -23,6 +23,7 @@ import (
 
 var (
 	intID         = func(n int) int { return n }
+	boolID        = func(b bool) bool { return b }
 	doWork        = func() {}
 	runFunc       = func(f func()) { f() }
 	someCondition = func() bool { return true }
@@ -162,17 +163,160 @@ func FuncLitArg() {
 	}
 }
 
-// Synchronization is another example of a technically safe use of a
-// loop variable in a Go routine that we decide to flag anyway.
+// Synchronization exercises the synchronization detection mechanisms
+// in the linter; when synchronization is detected, references to loop
+// variables in Go routines are not flagged.
 func Synchronization() {
+	outerChan := make(chan error)
+
 	for _, n := range collection {
-		var wg sync.WaitGroup
+		var wg1 sync.WaitGroup
+		wg1.Add(1)
 		go func() {
-			defer wg.Done()
+			defer wg1.Done()
+			intID(n) // this is OK
+		}()
+
+		chan1 := make(chan error)
+		chan2 := make(chan error)
+		go func() {
+			if len(collection) == 0 {
+				intID(n) // this is OK
+			}
+
+			chan1 <- nil // channel is waited on at the end of the loop
+		}()
+
+		go func() {
+			defer close(chan2)
+			intID(n) // this is OK
+		}()
+
+		go func() {
+			defer close(outerChan)
+			intID(n)         // want `loop variable 'n' captured by reference`
+			outerChan <- nil // outerChan is *not* read in the loop
+		}()
+
+		var wg2 sync.WaitGroup
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			// this is *not* safe because wg2 is not Waited in the loop
 			intID(n) // want `loop variable 'n' captured by reference`
 		}()
 
-		wg.Wait()
+		goodClosure := func() {
+			defer wg1.Done()
+			fmt.Printf("working on %d\n", n)
+		}
+		badClosure := func() {
+			defer wg2.Done() // not waited on in the loop
+			fmt.Printf("working on %d\n", n)
+		}
+
+		wrapper1 := func() { goodClosure() }
+		wrapper2 := func() { badClosure() }
+
+		go func() {
+			doWork()
+			goodClosure() // this is OK, we wait on wg1 in the loop
+		}()
+
+		go func() {
+			badClosure() // want `'badClosure' function captures loop variable 'n' by reference`
+			doWork()
+		}()
+
+		go func() {
+			doWork()
+			wrapper1() // this is OK, we wait on wg1 in the loop
+		}()
+
+		go func() {
+			doWork()
+			wrapper2() // want `'wrapper2' function captures loop variable 'n' \(via 'badClosure'\)`
+		}()
+
+		go goodClosure()
+		go badClosure() // want `'badClosure' function captures loop variable 'n' by reference`
+
+		go wrapper1()
+		go wrapper2() // want `'wrapper2' function captures loop variable 'n' \(via 'badClosure'\)`
+
+		var wg3 sync.WaitGroup
+		wg3.Add(1)
+		wg3.Wait()
+
+		go func() {
+			defer wg3.Done()
+			// not OK: wg3 is waited on *before* the Go routine is spawned
+			intID(n) // want `loop variable 'n' captured by reference`
+		}()
+
+		// overwrite `close` builtin
+		close := func(c chan error) {
+			fmt.Print("not actually closing channel %v\n", c)
+		}
+		go func() {
+			// while it's not good practice to overwrite Go builtins, we
+			// make sure that if you do so, we still flag an unsafe use
+			// of the loop variable `n`
+			defer close(chan1)
+			intID(n) // want `loop variable 'n' captured by reference`
+		}()
+
+		defer func() {
+			wg1.Done()
+			// this is still invalid, as this function will be called when
+			// the function returns, no matter what the loop does.
+			intID(n) // want `loop variable 'n' captured by reference`
+		}()
+
+		// reading from a channel in a `range` loop is also a way to
+		// provide synchronization
+		rangeChan := make(chan error)
+		go func() {
+			doWork()
+			rangeChan <- nil
+			intID(n) // this is OK -- synchronized below
+			rangeChan <- nil
+		}()
+
+		for _, c := range rangeChan {
+			doWork()
+		}
+
+		wg1.Wait()
+		<-chan1
+		<-chan2
+	}
+
+	<-outerChan
+}
+
+// Select tests for common patterns using `select`, inspired by real
+// examples in the CockroachDB codebase
+func Select(t *testing.T) {
+	for _, b := range []bool{true, false} {
+		cmd1Done := make(chan error)
+		cmd2Done := make(chan error)
+
+		go func() {
+			args := boolID(b) // this is OK due to the synchronization with cmd2Done
+			fmt.Printf("args: %v\n", args)
+			cmd2Done <- nil
+		}()
+
+		select {
+		case pErr := <-cmd2Done:
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+
+		case pErr := <-cmd1Done:
+			t.Fatal("cmd1 should have been blocked, got: %v", pErr)
+		}
 	}
 }
 
@@ -399,13 +543,9 @@ func CapturingGoRoutineFunctions() {
 func RespectsNolintComments() {
 	for _, n := range collection {
 		var eg errgroup.Group
-		var wg sync.WaitGroup
-		wg.Add(1)
-
 		badClosure := func() { fmt.Printf("n = %d\n", n) }
 
 		go func() {
-			defer wg.Done()
 			//nolint:loopvarcapture
 			intID(n)
 
@@ -426,7 +566,5 @@ func RespectsNolintComments() {
 			//nolint:loopvarcapture
 			intID(n)
 		}()
-
-		wg.Wait()
 	}
 }
