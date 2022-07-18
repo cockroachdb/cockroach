@@ -317,6 +317,7 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 	// All partitionFilters are expected to build constraints. If they don't,
 	// let's not hide the problem by still generating a locality-optimized search
 	// that doesn't fully cover local spans.
+	//lint:ignore S1009 grandfathered
 	if remainingFilters != nil && len(remainingFilters) > 0 {
 		return nil, false
 	}
