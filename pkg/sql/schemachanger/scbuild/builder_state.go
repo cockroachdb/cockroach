@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -804,8 +805,7 @@ func (b *builderState) ResolveColumn(
 		if p.IsExistenceOptional {
 			return nil
 		}
-		panic(pgerror.Newf(pgcode.UndefinedColumn,
-			"column %q not found in relation %q", columnName, rel.GetName()))
+		panic(colinfo.NewUndefinedColumnError(string(columnName)))
 	}
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)

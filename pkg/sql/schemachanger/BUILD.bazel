@@ -9,7 +9,7 @@ filegroup(
 
 go_test(
     name = "schemachanger_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "end_to_end_test.go",
         "main_test.go",

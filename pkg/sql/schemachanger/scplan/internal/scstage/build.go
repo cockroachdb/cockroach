@@ -12,6 +12,7 @@ package scstage
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -638,20 +639,32 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 			Revertible:    isRevertible(next),
 		}
 	})
-	// Populate the descriptor states.
-	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
-		for i := range state.RelevantStatements {
-			stmt := &state.RelevantStatements[i]
-			if stmt.StatementRank != stmtRank {
-				continue
-			}
-			return
+	mkStmt := func(rank uint32) scpb.DescriptorState_Statement {
+		return scpb.DescriptorState_Statement{
+			Statement:     bc.targetState.Statements[rank],
+			StatementRank: rank,
 		}
-		state.RelevantStatements = append(state.RelevantStatements,
-			scpb.DescriptorState_Statement{
-				Statement:     bc.targetState.Statements[stmtRank],
-				StatementRank: stmtRank,
-			})
+	}
+	// Populate the descriptor states.
+	addToRelevantStatements := func(
+		srs []scpb.DescriptorState_Statement, stmtRank uint32,
+	) []scpb.DescriptorState_Statement {
+		n := len(srs)
+		if i := sort.Search(n, func(i int) bool {
+			return srs[i].StatementRank >= stmtRank
+		}); i == n {
+			srs = append(srs, mkStmt(stmtRank))
+		} else if srs[i].StatementRank != stmtRank {
+			srs = append(srs, scpb.DescriptorState_Statement{})
+			copy(srs[i+1:], srs[i:])
+			srs[i] = mkStmt(stmtRank)
+		}
+		return srs
+	}
+	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
+		state.RelevantStatements = addToRelevantStatements(
+			state.RelevantStatements, stmtRank,
+		)
 	}
 	for i, t := range bc.targetState.Targets {
 		descID := screl.GetDescID(t.Element())

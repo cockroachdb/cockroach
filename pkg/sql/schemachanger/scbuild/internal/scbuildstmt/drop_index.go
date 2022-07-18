@@ -141,7 +141,7 @@ func dropSecondaryIndex(
 	// In this case, if we were to drop 'ui' and no other unique constraint can be
 	// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
 	//and drop 'fk' as well.
-	maybeDropDependentFKConstraints(b, sie, index.String(), dropBehavior)
+	maybeDropDependentFKConstraints(b, sie, index, dropBehavior)
 
 	// If shard index, also drop the shard column and all check constraints that
 	// uses this shard column if no other index uses the shard column.
@@ -149,7 +149,7 @@ func dropSecondaryIndex(
 
 	// If expression index, also drop the expression column if no other index is
 	// using the expression column.
-	dropAdditionallyForExpressionIndex(b, sie, index.String())
+	dropAdditionallyForExpressionIndex(b, sie)
 
 	// Finally, drop the index's resolved elements.
 	toBeDroppedIndexElms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
@@ -204,7 +204,7 @@ func maybeDropDependentViews(
 func maybeDropDependentFKConstraints(
 	b BuildCtx,
 	toBeDroppedIndex *scpb.SecondaryIndex,
-	toBeDroppedIndexName string,
+	toBeDroppedIndexName *tree.TableIndexName,
 	dropBehavior tree.DropBehavior,
 ) {
 	scpb.ForEachForeignKeyConstraint(b.BackReferences(toBeDroppedIndex.TableID), func(
@@ -227,8 +227,8 @@ func maybeDropDependentFKConstraints(
 		// references), so, we will need to remove the dependent FK
 		// constraint as well.
 		if dropBehavior != tree.DropCascade {
-			_, _, ns := scpb.FindNamespace(b.QueryByID(toBeDroppedIndex.TableID))
-			panic(fmt.Errorf("%q is referenced by foreign key from table %q", toBeDroppedIndexName, ns.Name))
+			_, _, ns := scpb.FindNamespace(b.QueryByID(e.TableID))
+			panic(fmt.Errorf("%q is referenced by foreign key from table %q", toBeDroppedIndexName.Index, ns.Name))
 		}
 
 		// TODO (xiang): enable resolving and dropping FK constraint elements.
@@ -308,9 +308,7 @@ func maybeDropAdditionallyForShardedIndex(
 // dropAdditionallyForExpressionIndex attempts to drop the additional
 // expression column if the to-be-dropped index is an expression index
 // and no other index uses this expression column.
-func dropAdditionallyForExpressionIndex(
-	b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex, toBeDroppedIndexName string,
-) {
+func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex) {
 	keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
 	scpb.ForEachColumn(b.QueryByID(toBeDroppedIndex.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, ce *scpb.Column,

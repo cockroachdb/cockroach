@@ -234,7 +234,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if err != nil {
 			panic(err)
 		}
-		shardColName := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames)
+		shardColName := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames, n)
 		index.Sharding = &catpb.ShardedDescriptor{
 			IsSharded:    true,
 			Name:         shardColName,
@@ -312,7 +312,7 @@ func nextRelationIndexID(b BuildCtx, relation scpb.Element) catid.IndexID {
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string,
+	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string, n tree.NodeFormatter,
 ) (shardColName string) {
 	shardColName = tabledesc.GetShardColumnName(colNames, int32(shardBuckets))
 	elts := b.QueryByID(tbl.TableID)
@@ -362,7 +362,7 @@ func maybeCreateAndAddShardCol(
 			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
 		},
 	}
-	addColumn(b, spec)
+	addColumn(b, spec, n)
 	return shardColName
 }
 
