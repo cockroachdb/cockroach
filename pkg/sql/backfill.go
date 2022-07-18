@@ -1892,7 +1892,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 		// add it to the Collection's synthetic descriptors, so that we can use
 		// SQL below to perform the validation.
 		fakeDesc, err := tableDesc.MakeFirstMutationPublic(
-			catalog.IgnoreConstraints, catalog.RetainDroppingColumns,
+			catalog.IgnoreConstraints, catalog.IgnorePKSwaps, catalog.RetainDroppingColumns,
 		)
 		if err != nil {
 			return 0, err
