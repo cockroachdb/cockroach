@@ -237,6 +237,45 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 	return pgerror.Newf(pgcode.DependentObjectsStillExist, format, args...)
 }
 
+// NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
+// column which is a part of the table's primary key.
+//
+// Note that this limitation is not fundamental; in postgres when dropping a
+// primary key column, it would silently drop the primary key constraint. At
+// the time of writing, cockroach does not permit dropping a primary key
+// constraint as it may require populating a new implicit rowid column for the
+// implicit primary key we use.
+func NewColumnReferencedByPrimaryKeyError(colName string) error {
+	return pgerror.Newf(pgcode.InvalidColumnReference,
+		"column %q is referenced by the primary key", colName)
+}
+
+// NewColumnReferencedByComputedColumnError is returned when dropping a column
+// and that column being dropped is referenced by a computed column. Note that
+// the cockroach behavior where this error is returned does not match the
+// postgres behavior.
+func NewColumnReferencedByComputedColumnError(droppingColumn, computedColumn string) error {
+	return pgerror.Newf(
+		pgcode.InvalidColumnReference,
+		"column %q is referenced by computed column %q",
+		droppingColumn,
+		computedColumn,
+	)
+}
+
+// NewUniqueConstraintReferencedByForeignKeyError generates an error to be
+// returned when dropping a unique constraint that is relied upon by an
+// inbound foreign key constraint.
+func NewUniqueConstraintReferencedByForeignKeyError(
+	uniqueConstraintOrIndexToDrop, tableName string,
+) error {
+	return pgerror.Newf(
+		pgcode.DependentObjectsStillExist,
+		"%q is referenced by foreign key from table %q",
+		uniqueConstraintOrIndexToDrop, tableName,
+	)
+}
+
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	return pgerror.Wrapf(origErr, pgcode.RangeUnavailable, "key range id:%d is unavailable", rangeID)
