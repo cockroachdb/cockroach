@@ -495,6 +495,8 @@ func mysqlTableToCockroach(
 		if raw.Info.Primary {
 			idxName = tree.Name(tabledesc.PrimaryKeyIndexName(name))
 		}
+		// TODO(wenyihu6): support importing mysql CREATE TABLE statement with not
+		// visible index.
 		idx := tree.IndexTableDef{Name: idxName, Columns: elems}
 		if raw.Info.Primary || raw.Info.Unique {
 			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{IndexTableDef: idx, PrimaryKey: raw.Info.Primary})
