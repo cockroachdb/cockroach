@@ -126,6 +126,14 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
+// NewReadWriteSystemTablePrivilegeDescriptor is used to construct a privilege
+// descriptor owned by the passed in user which has `ReadWriteData` privilege
+// for the admin and root role. It is used for tables in the system database
+// that are meant to have read/write privileges.
+func NewReadWriteSystemTablePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor {
+	return NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, owner)
+}
+
 // NewVirtualTablePrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has SELECT privilege for the public role. It is
 // used for virtual tables.
@@ -337,9 +345,9 @@ func (p *PrivilegeDescriptor) Revoke(
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
 // allowed privilege set for the object.
-// It requires the ID of the descriptor it is applied on to determine whether
-// it is is a system descriptor, because superusers do not always have full
-// privileges for those.
+// It requires the ID of the descriptor it is applied on to determine whether it
+// is a system descriptor, because superusers do not always have full privileges
+// for those.
 // It requires the objectType to determine the superset of privileges allowed
 // for regular users.
 func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(

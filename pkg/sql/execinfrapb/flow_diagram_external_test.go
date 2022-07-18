@@ -53,7 +53,7 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 		  this_is_a_super_duper_long_name_that_is_longer_than_any_reasonable_wrapping_limit_and_must_appear_on_its_own_line INT,
 		  z INT
 		)`,
-		catpb.NewBasePrivilegeDescriptor(username.NodeUserName()),
+		catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.NodeUserName()),
 	)
 	if err != nil {
 		t.Fatal(err)

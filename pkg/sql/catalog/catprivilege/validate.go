@@ -13,6 +13,7 @@ package catprivilege
 import (
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -53,6 +54,12 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	privs := SystemSuperuserPrivileges(objectNameKey)
 	if privs != nil {
 		return privs
+	}
+	// If the object is not a registered system table but is in the system
+	// database then return the same privileges a registered system table would
+	// get.
+	if objectNameKey.GetParentID() == keys.SystemDatabaseID {
+		return privilege.ReadWriteData
 	}
 	return catpb.DefaultSuperuserPrivileges
 }

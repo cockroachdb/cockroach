@@ -67,7 +67,7 @@ func TestInitialKeys(t *testing.T) {
 			keys.SystemDatabaseID,
 			descpb.ID(1000 /* suitably large descriptor ID */),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			catpb.NewBasePrivilegeDescriptor(username.NodeUserName()),
+			catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.NodeUserName()),
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -1977,7 +1977,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
+			d.desc.Privileges = catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(clusterversion.TestingClusterVersion, desc)
@@ -2037,7 +2037,6 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			},
 		},
 		{
@@ -2120,13 +2119,12 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			},
 		},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
+			d.desc.Privileges = catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V21_2)}, desc)
@@ -2532,7 +2530,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			var cb nstree.MutableCatalog
 			cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
 			for _, otherDesc := range test.otherDescs {
-				otherDesc.Privileges = catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
+				otherDesc.Privileges = catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.AdminRoleName())
 				cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 			}
 			desc := NewBuilder(&test.desc).BuildImmutable()

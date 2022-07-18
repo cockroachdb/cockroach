@@ -640,7 +640,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: descpb.InterleavedFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
+		Privileges:    catpb.NewReadWriteSystemTablePrivilegeDescriptor(username.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
 				Name:              "fk",

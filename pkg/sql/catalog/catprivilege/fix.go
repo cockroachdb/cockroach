@@ -11,6 +11,7 @@
 package catprivilege
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -85,6 +86,11 @@ func MaybeFixPrivileges(
 	if systemPrivs != nil {
 		// System databases and tables have custom maximum allowed privileges.
 		allowedPrivilegesBits = systemPrivs.ToBitField()
+	} else if parentID == keys.SystemDatabaseID {
+		// If the object is not a registered system table but is in the system
+		// database then return the same privileges as a read write system table
+		// would get.
+		allowedPrivilegesBits = privilege.ReadWriteData.ToBitField()
 	}
 
 	changed := false

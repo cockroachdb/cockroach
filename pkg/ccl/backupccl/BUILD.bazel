@@ -108,6 +108,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/upgrade/upgrades",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/contextutil",
