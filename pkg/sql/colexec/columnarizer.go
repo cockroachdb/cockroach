@@ -215,6 +215,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 		oldRows := c.buffered
 		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
 		_ = newRows[len(oldRows)]
+		//lint:ignore S1001
 		for i := 0; i < len(oldRows); i++ {
 			//gcassert:bce
 			newRows[i] = oldRows[i]
