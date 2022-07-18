@@ -768,6 +768,8 @@ COCKROACH      := ./cockroach$(SUFFIX)
 COCKROACHOSS   := ./cockroachoss$(SUFFIX)
 COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 COCKROACHSQL   := ./cockroach-sql$(SUFFIX)
+INSTRUMENT     := ./instrument$(SUFFIX)
+INSTRUMENTSHORT := ./instrumentshort$(SUFFIX)
 
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
@@ -984,7 +986,7 @@ $(go-targets): override LINKFLAGS += \
 # The build.utcTime format must remain in sync with TimeFormat in
 # pkg/build/info.go. It is not installed in tests or in `buildshort` to avoid
 # busting the cache on every rebuild.
-$(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
+$(COCKROACH) $(COCKROACHSHORT) $(COCKROACHOSS) instrument instrumentshort go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
@@ -1074,6 +1076,69 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # -benchtime=1ns runs one iteration of each benchmark. The -short flag is set so
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
+
+# ANTITHESIS INSTRUMENTATION
+# NB: This currently requires the Antithesis Go Instrumentation Package to be
+# installed (default path at /opt/antithesis), and libvoidstar.so 
+# in /opt/antithesis/lib prior to instrumenting and building.
+# TODO(sarkesian): remove requirement to symlink libvoidstar.so
+ANTITHESIS ?= /opt/antithesis
+INSTRUMENTOR_BIN ?= $(ANTITHESIS)/bin/goinstrumentor
+INSTRUMENTOR_EXCLUDE_VENDOR ?=
+instrumentation-deps = $(if $(filter instrumentshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+
+## Output path for instrumented code and symbols when running instrumented builds, e.g. "$HOME/tmp". Must be outside the repository.
+INSTRUMENTATION_TMP :=
+
+.PHONY: instrument
+instrument: ## Build the CockroachDB binary using Antithesis instrumentation.
+
+.PHONY: instrumentshort
+instrumentshort: ## Build the CockroachDB binary using Antithesis instrumentation, without the admin UI.
+
+.PHONY: instrumentation-prereqs
+instrumentation-prereqs:
+ifeq (, $(shell which $(INSTRUMENTOR_BIN)))
+	$(error $(INSTRUMENTOR_BIN) not found, please install Antithesis Instrumentor)
+endif
+ifeq (, $(shell stat /opt/antithesis/lib/libvoidstar.so))
+	$(error /opt/antithesis/lib/libvoidstar.so not found, please install Antithesis Instrumentor)
+endif
+ifndef INSTRUMENTATION_TMP
+	$(error INSTRUMENTATION_TMP must be defined with `make $@`)
+endif
+
+.instrumentor_exclusions.tmp:
+	@echo "regenerating $@"
+	VENDOR_EXCLUDE_ALL=$(INSTRUMENTOR_EXCLUDE_VENDOR) ./build/instrumentation/gen_exclusions.sh > $@
+
+.PHONY: instrumentcode
+instrumentcode: instrumentation-prereqs $(instrumentation-deps) .instrumentor_exclusions.tmp
+	rm -rf $(INSTRUMENTATION_TMP)
+	mkdir -p $(INSTRUMENTATION_TMP)
+	$(INSTRUMENTOR_BIN) -exclude .instrumentor_exclusions.tmp -stderrthreshold=WARNING \
+		-antithesis $(ANTITHESIS)/instrumentation/go/wrappers . $(INSTRUMENTATION_TMP)
+
+instrument instrumentshort: instrumentation-prereqs instrumentcode
+	./build/instrumentation/vendor_antithesis.sh $(INSTRUMENTATION_TMP)
+	cd $(INSTRUMENTATION_TMP)/customer && \
+		$(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	cp $(INSTRUMENTATION_TMP)/customer/$@ ./$@
+	# copy instrumentation artifacts
+	mkdir -p ./artifacts/instrument
+	cp $(INSTRUMENTATION_TMP)/symbols/go-*.sym.tsv ./artifacts/instrument
+	cp /opt/antithesis/lib/libvoidstar.so ./artifacts/instrument/libvoidstar.so
+	cd  ./artifacts/instrument && ln -sf ../../$@ cockroach-instrumented
+
+.PHONY: cleaninstrument
+cleaninstrument: ## Clean up instrumentation artifacts and instrumented code.
+cleaninstrument:
+ifdef INSTRUMENTATION_TMP
+	rm -rf $(INSTRUMENTATION_TMP)
+endif
+	rm -f .instrumentor_exclusions.tmp
+	for f in instrument*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
+	rm -f cockroach-instrumented
 
 .PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
