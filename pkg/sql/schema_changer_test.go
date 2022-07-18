@@ -346,48 +346,46 @@ func runSchemaChangeWithOperations(
 	// Run a variety of operations during the backfill.
 	ctx := context.Background()
 
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, conn.Close()) }()
+	exec := func(sql string, args ...interface{}) {
+		t.Helper()
+		_, err := conn.ExecContext(ctx, sql, args...)
+		if err != nil {
+			t.Error(err)
+		}
+	}
 	// Update some rows.
 	var updatedKeys []int
 	for i := 0; i < 10; i++ {
 		k := rand.Intn(maxValue)
 		v := maxValue + i + 1
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, v, k); err != nil {
-			t.Error(err)
-		}
+		exec(`UPDATE t.test SET v = $1 WHERE k = $2`, v, k)
 		updatedKeys = append(updatedKeys, k)
 	}
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
 		if rand.Float32() < 0.5 || !useUpsert {
-			if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
-				t.Error(err)
-			}
+			exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k)
 		} else {
-			if _, err := sqlDB.Exec(`UPSERT INTO t.test (k,v) VALUES ($1, $2)`, k, maxValue-k); err != nil {
-				t.Error(err)
-			}
+			exec(`UPSERT INTO t.test (k,v) VALUES ($1, $2)`, k, maxValue-k)
 		}
 	}
 
 	// Delete some rows.
 	deleteStartKey := rand.Intn(maxValue - 10)
 	for i := 0; i < 10; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
-			t.Error(err)
-		}
+		exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i)
 	}
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
 		if rand.Float32() < 0.5 || !useUpsert {
-			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-				t.Error(err)
-			}
+			exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k)
 		} else {
-			if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-				t.Error(err)
-			}
+			exec(`UPSERT INTO t.test VALUES($1, $2)`, k, maxValue-k)
 		}
 	}
 
@@ -395,17 +393,15 @@ func runSchemaChangeWithOperations(
 	numInserts := 10
 	for i := 0; i < numInserts; i++ {
 		k := maxValue + i + 1
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $1)`, k); err != nil {
-			t.Error(err)
-		}
+		exec(`INSERT INTO t.test VALUES($1, $1)`, k)
 	}
 
 	wg.Wait() // for schema change to complete.
 
 	// Verify the number of keys left behind in the table to
 	// validate schema change operations. We wait for any SCHEMA
-	// CHANGE GC jobs to complete to ensure our key count doesn't
-	// include keys from a temporary index.
+	// CHANGE GC jobs for temp indexes to show that the temp index
+	// has been cleared.
 	if _, err := sqlDB.Exec(`SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC')`); err != nil {
 		t.Fatal(err)
 	}
@@ -590,8 +586,6 @@ func TestRaceWithBackfill(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 		},
-		// Disable GC job.
-		// GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
@@ -616,14 +610,15 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 `); err != nil {
 		t.Fatal(err)
 	}
-
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	// Add a zone config for the table so that garbage collection happens rapidly.
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
 	// Bulk insert.
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
-
-	// Split the table into multiple ranges.
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	var sps []sql.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
 		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
@@ -2181,6 +2176,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
+
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
 				if backfillNotification != nil {
@@ -2219,14 +2215,20 @@ CREATE TABLE t.test (
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v;`); err != nil {
+		if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test DROP column v;
+`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
 	<-notification
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column v INT DEFAULT 0;`); !testutils.IsError(err, `column "v" being dropped, try again later`) {
+	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ADD column v INT DEFAULT 0;
+`); !testutils.IsError(err, `column "v" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 
@@ -2241,6 +2243,10 @@ CREATE TABLE t.test (
 // Test a DROP failure on a unique column. The rollback
 // process might not be able to reconstruct the index and thus
 // purges the rollback. For now this is considered acceptable.
+//
+// TODO(ajwerner): This test is not relevant in the declarative schema
+// changer; in the declarative schema changer we don't stop upholding
+// the constraint too soon.
 func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2318,7 +2324,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	go func() {
 		defer wg.Done()
 		// This query stays blocked until the end of the test.
-		_, _ = sqlDB.Exec(`ALTER TABLE t.test DROP column v`)
+		// Note that we must use the legacy schema changer because this test
+		// uses knobs that don't make sense in the declarative schema changer.
+		_, _ = sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test DROP column v`)
 	}()
 
 	// Wait until the job is reverted.
@@ -6112,6 +6122,8 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 // job, after reversing the mutations the job is set up to throw an error so
 // that mutations are attempted to be reverted again. The mutation shouldn't be
 // attempted to be reversed twice.
+//
+// NOTE: This test only exercises the legacy schema changer.
 func TestMultipleRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6178,7 +6190,9 @@ func TestMultipleRevert(t *testing.T) {
 	runner.Exec(t, `CREATE DATABASE t;`)
 	runner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);`)
 	runner.Exec(t, `INSERT INTO t.test VALUES (1, 2);`)
-	runner.ExpectErr(t, "job canceled by user", `ALTER TABLE t.public.test DROP COLUMN v;`)
+	runner.ExpectErr(t, "job canceled by user", `
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.public.test DROP COLUMN v;`)
 
 	// Ensure that the schema change was rolled back.
 	rows := runner.QueryStr(t, "SELECT * FROM t.test")

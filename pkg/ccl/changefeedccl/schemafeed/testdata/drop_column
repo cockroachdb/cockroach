@@ -14,7 +14,12 @@ pop f=1
 ----
 t 1->2: DropColumn
 t 2->3: Unknown
-t 3->4: AddHiddenColumn
+t 3->4: Unknown
+t 4->5: Unknown
+t 5->6: Unknown
+t 6->7: PrimaryKeyChange (no column changes)
+t 7->8: Unknown
+t 8->9: AddHiddenColumn
 
 exec
 SET use_declarative_schema_changer=off;
@@ -23,6 +28,6 @@ ALTER TABLE t DROP COLUMN k;
 
 pop f=1
 ----
-t 4->5: DropColumn
-t 5->6: Unknown
-t 6->7: AddHiddenColumn
+t 9->10: DropColumn
+t 10->11: Unknown
+t 11->12: AddHiddenColumn

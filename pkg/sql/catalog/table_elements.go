@@ -201,13 +201,15 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
-	// ForcePut, if true, forces all writes to use Put rather than CPut or InitPut.
+	// ForcePut forces all writes to use Put rather than CPut or InitPut.
 	//
 	// Users of this options should take great care as it
 	// effectively mean unique constraints are not respected.
 	//
-	// Currently (2022-01-19) this two users: delete preserving
-	// indexes and merging indexes.
+	// Currently (2022-07-15) there are three users:
+	//   * delete preserving indexes
+	//   * merging indexes
+	//   * dropping primary indexes
 	//
 	// Delete preserving encoding indexes are used only as a log of
 	// index writes during backfill, thus we can blindly put values into
@@ -218,6 +220,11 @@ type Index interface {
 	// are merged into the index. Uniqueness for such indexes is
 	// checked by the schema changer before they are brought back
 	// online.
+	//
+	// In the case of dropping primary indexes, we always ensure that
+	// there's a replacement primary index which has become public.
+	// The reason we must not use cput is that the new primary index
+	// may not store all the columns stored in this index.
 	ForcePut() bool
 
 	// CreatedAt is an approximate timestamp at which the index was created.

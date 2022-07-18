@@ -2239,6 +2239,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 	mutationID := desc.Mutations[0].MutationID
 	i := 0
 	policy := makeMutationPublicationPolicy(filters...)
+	var clone []descpb.DescriptorMutation
 	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
 			// Mutations are applied in a FIFO order. Only apply the first set
@@ -2246,14 +2247,19 @@ func (desc *wrapper) MakeFirstMutationPublic(
 			break
 		}
 		i++
-		if policy.shouldSkip(&mutation) {
-			continue
-		}
-		if err := table.MakeMutationComplete(mutation); err != nil {
-			return nil, err
+		switch {
+		case policy.shouldSkip(&mutation):
+			// Don't add to clone.
+		case policy.shouldRetain(&mutation):
+			mutation.Direction = descpb.DescriptorMutation_ADD
+			fallthrough
+		default:
+			if err := table.MakeMutationComplete(mutation); err != nil {
+				return nil, err
+			}
 		}
 	}
-	table.Mutations = table.Mutations[i:]
+	table.Mutations = append(clone, table.Mutations[i:]...)
 	table.Version++
 	return table, nil
 }
@@ -2282,6 +2288,15 @@ func (p mutationPublicationPolicy) shouldSkip(m *descpb.DescriptorMutation) bool
 		return p.includes(catalog.IgnorePKSwaps)
 	case m.GetConstraint() != nil:
 		return p.includes(catalog.IgnoreConstraints)
+	default:
+		return false
+	}
+}
+
+func (p mutationPublicationPolicy) shouldRetain(m *descpb.DescriptorMutation) bool {
+	switch {
+	case m.GetColumn() != nil && m.Direction == descpb.DescriptorMutation_DROP:
+		return p.includes(catalog.RetainDroppingColumns)
 	default:
 		return false
 	}

@@ -226,7 +226,7 @@ func alterTableAddColumn(
 	// Add secondary indexes for this column.
 	var primaryIdx *scpb.PrimaryIndex
 
-	if newPrimary := addColumn(b, spec); newPrimary != nil {
+	if newPrimary := addColumn(b, spec, t); newPrimary != nil {
 		primaryIdx = newPrimary
 	} else {
 		publicTargets := b.QueryByID(tbl.TableID).Filter(
@@ -278,7 +278,7 @@ type addColumnSpec struct {
 
 // addColumn is a helper function which adds column element targets and ensures
 // that the new column is backed by a primary index, which it returns.
-func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
+func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *scpb.PrimaryIndex) {
 	b.Add(spec.col)
 	if spec.fam != nil {
 		b.Add(spec.fam)
@@ -303,7 +303,7 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	tableID := spec.tbl.TableID
 	existing, freshlyAdded := getPrimaryIndexes(b, tableID)
 	if freshlyAdded != nil {
-		handleAddColumnFreshlyAddedPrimaryIndex(b, spec, freshlyAdded)
+		handleAddColumnFreshlyAddedPrimaryIndex(b, spec, freshlyAdded, n)
 		return freshlyAdded
 	}
 
@@ -373,12 +373,21 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 // table and a previous command has already created a new primary index. In
 // this situation, we need to add the new column to this new primary index.
 func handleAddColumnFreshlyAddedPrimaryIndex(
-	b BuildCtx, spec addColumnSpec, freshlyAdded *scpb.PrimaryIndex,
+	b BuildCtx, spec addColumnSpec, freshlyAdded *scpb.PrimaryIndex, n tree.NodeFormatter,
 ) {
-	// TODO(ajwerner): Make sure we aren't removing any columns from this index.
+	// Check to make sure we aren't removing any columns from this index.
 	// If we are, it means that this transaction is both adding and removing
 	// physical columns from the table, and we need an intermediate, transient
 	// primary index.
+	//
+	// TODO(ajwerner): Handle adding and dropping columns in the same statement
+	// and transaction.
+	if haveDroppingColumn := !b.QueryByID(freshlyAdded.TableID).
+		Filter(isColumnFilter).
+		Filter(absentTargetFilter).
+		IsEmpty(); haveDroppingColumn {
+		panic(scerrors.NotImplementedErrorf(n, "DROP COLUMN after ADD COLUMN"))
+	}
 
 	var tempIndex *scpb.TemporaryIndex
 	scpb.ForEachTemporaryIndex(b.QueryByID(spec.tbl.TableID), func(
