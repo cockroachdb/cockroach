@@ -480,7 +480,7 @@ func assignSequenceOptions(
 	if err := checkDupSeqOption(optsNode); err != nil {
 		return err
 	}
-	if err := schemaexpr.AssignSequenceOptions(opts, optsNode, setDefaults, existingType); err != nil {
+	if err := schemaexpr.AssignSequenceOptions(opts, optsNode, setDefaults, existingType, p.SessionData().DefaultIntSize); err != nil {
 		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 	if err := assignSequenceOwner(ctx, p, opts, optsNode, sequenceID, sequenceParentID); err != nil {

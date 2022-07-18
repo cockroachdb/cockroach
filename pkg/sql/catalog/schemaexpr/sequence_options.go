@@ -15,7 +15,9 @@ import (
 // descriptor to a descpb.TableDescriptor_SequenceOpts.
 // Note that this function is used to acquire the sequence option for the
 // information schema table, so it doesn't parse for the sequence owner info.
-func ParseSequenceOpts(s string) (*descpb.TableDescriptor_SequenceOpts, error) {
+func ParseSequenceOpts(
+	s string, defaultIntSize int32,
+) (*descpb.TableDescriptor_SequenceOpts, error) {
 	stmt, err := parser.ParseOne("CREATE SEQUENCE fake_seq " + s)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot parse sequence option")
@@ -29,12 +31,7 @@ func ParseSequenceOpts(s string) (*descpb.TableDescriptor_SequenceOpts, error) {
 	opts := &descpb.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	if err := AssignSequenceOptions(
-		opts,
-		createSeqNode.Options,
-		true, /* setDefaults */
-		nil,  /* existingType */
-	); err != nil {
+	if err := AssignSequenceOptions(opts, createSeqNode.Options, true, nil, defaultIntSize); err != nil {
 		return nil, err
 	}
 
@@ -117,11 +114,12 @@ func AssignSequenceOptions(
 	optsNode tree.SequenceOptions,
 	setDefaults bool,
 	existingType *types.T,
+	defaultIntSize int32,
 ) error {
 	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
-	var integerType = types.Int
+	integerType := parser.NakedIntTypeFromDefaultIntSize(defaultIntSize)
 	// All other defaults are dependent on the value of increment
 	// and the AS integerType. (i.e. whether the sequence is ascending
 	// or descending, bigint vs. smallint)
@@ -138,23 +136,23 @@ func AssignSequenceOptions(
 	}
 	isAscending := opts.Increment > 0
 
+	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
+	if err != nil {
+		return err
+	}
+
 	// Set increment-dependent defaults.
 	if setDefaults {
 		if isAscending {
 			opts.MinValue = 1
-			opts.MaxValue = math.MaxInt64
+			opts.MaxValue = upperIntBound
 			opts.Start = opts.MinValue
 		} else {
-			opts.MinValue = math.MinInt64
+			opts.MinValue = lowerIntBound
 			opts.MaxValue = -1
 			opts.Start = opts.MaxValue
 		}
 		opts.CacheSize = 1
-	}
-
-	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
-	if err != nil {
-		return err
 	}
 
 	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
