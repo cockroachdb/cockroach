@@ -461,7 +461,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		server := c.firstServer.Server
 		ctx = server.AnnotateCtx(ctx)
 
-		if err := server.RunInitialSQL(ctx, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
+		if err := server.RunInitialSQL(ctx, c.demoCtx.NumNodes < 3, true /* createAppTenant */, demoUsername, demoPassword); err != nil {
 			return err
 		}
 		if c.demoCtx.Insecure {

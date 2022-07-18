@@ -786,16 +786,8 @@ func (ts *TestServer) StartTenant(
 			}
 		}
 	} else if !params.SkipTenantCheck {
-		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-			ctx, "testserver-check-tenant-active", nil,
-			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
-			params.TenantID.ToUint64(),
-		)
-		if err != nil {
+		if err := checkTenantExistsAndIsActive(ctx, ts.Server.sqlServer.execCfg, params.TenantID); err != nil {
 			return nil, err
-		}
-		if rowCount == 0 {
-			return nil, errors.New("not found")
 		}
 	}
 

@@ -176,6 +176,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/startupmigrations",
         "//pkg/storage",

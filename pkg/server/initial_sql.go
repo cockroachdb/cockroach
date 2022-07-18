@@ -28,7 +28,7 @@ import (
 // If adminUser is non-empty, an admin user with that name is
 // created upon initialization. Its password is then also returned.
 func (s *Server) RunInitialSQL(
-	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
+	ctx context.Context, startSingleNode, createAppTenant bool, adminUser, adminPassword string,
 ) error {
 	newCluster := s.InitialStart() && s.NodeID() == kvserver.FirstNodeID
 	if !newCluster {
@@ -54,12 +54,39 @@ func (s *Server) RunInitialSQL(
 		}
 	}
 
+	if createAppTenant {
+		if err := s.createAppTenant(ctx); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 // RunInitialSQL implements cli.serverStartupInterface.
-func (s *SQLServerWrapper) RunInitialSQL(context.Context, bool, string, string) error {
+func (s *SQLServerWrapper) RunInitialSQL(context.Context, bool, bool, string, string) error {
 	return nil
+}
+
+// createAppTenant creates an application tenant if it does
+// not exist yet.
+// TODO(knz): Replace this by a long-running migration.
+// See: https://github.com/cockroachdb/cockroach/issues/91051
+func (s *Server) createAppTenant(ctx context.Context) error {
+	ie := s.sqlServer.internalExecutor
+	_, err := ie.Exec(
+		ctx, "create-app-tenant", nil, /* txn */
+		// This query picks up the first available ID automatically.
+		`
+WITH tid AS (
+  SELECT id+1 AS newid
+    FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
+   WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.id=u.id+1)
+     AND NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name='app')
+   LIMIT 1
+) SELECT "".crdb_internal.create_tenant(newid, 'app') FROM tid
+`)
+	return err
 }
 
 // createAdminUser creates an admin user with the given name.

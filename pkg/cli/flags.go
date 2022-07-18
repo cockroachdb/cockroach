@@ -537,6 +537,12 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		// TODO(knz): publicize this machinery.
+		cliflagcfg.BoolFlag(f, &startCtx.disableInMemoryTenant, cliflags.DisableInMemoryTenant)
+		_ = f.MarkHidden(cliflags.DisableInMemoryTenant.Name)
+		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortOffset, cliflags.SecondaryTenantPortOffset)
+		_ = f.MarkHidden(cliflags.SecondaryTenantPortOffset.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.

@@ -65,6 +65,7 @@ go_library(
         "tcp_keepalive_manager.go",
         "tenant.go",
         "tenant_admin.go",
+        "tenant_server_controller.go",
         "tenant_status.go",
         "testing_knobs.go",
         "testserver.go",

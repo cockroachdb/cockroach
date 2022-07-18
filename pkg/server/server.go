@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -1838,4 +1840,22 @@ func (s *Server) Drain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	return s.drain.runDrain(ctx, verbose)
+}
+
+// MakeServerOptionsForURL creates the input for MakeURLForServer().
+// Beware of not calling this too early; the server address
+// is finalized late in the network initialization sequence.
+func MakeServerOptionsForURL(
+	baseCfg *base.Config,
+) (clientsecopts.ClientSecurityOptions, clientsecopts.ServerParameters) {
+	clientConnOptions := clientsecopts.ClientSecurityOptions{
+		Insecure: baseCfg.Insecure,
+		CertsDir: baseCfg.SSLCertsDir,
+	}
+	serverParams := clientsecopts.ServerParameters{
+		ServerAddr:      baseCfg.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+	return clientConnOptions, serverParams
 }

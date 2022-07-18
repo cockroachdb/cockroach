@@ -494,6 +494,10 @@ var startCtx struct {
 
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
+
+	// disableInMemoryTenant stops the instantiation of an in-memory
+	// SQL server for a secondary tenant.
+	disableInMemoryTenant bool
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -514,6 +518,7 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.disableInMemoryTenant = false
 }
 
 // drainCtx captures the command-line parameters of the `node drain`
