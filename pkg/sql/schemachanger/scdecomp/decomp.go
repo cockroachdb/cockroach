@@ -365,7 +365,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
-		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOption(),
+		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
 		PgAttributeNum:                    col.GetPGAttributeNum(),
 		IsSystemColumn:                    col.IsSystemColumn(),
 	}

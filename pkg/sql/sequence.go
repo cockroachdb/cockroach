@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -391,162 +390,14 @@ func readOnlyError(s string) error {
 		"cannot execute %s in a read-only transaction", s)
 }
 
-func getSequenceIntegerBounds(
-	integerType *types.T,
-) (lowerIntBound int64, upperIntBound int64, err error) {
-	switch integerType {
-	case types.Int2:
-		return math.MinInt16, math.MaxInt16, nil
-	case types.Int4:
-		return math.MinInt32, math.MaxInt32, nil
-	case types.Int:
-		return math.MinInt64, math.MaxInt64, nil
-	}
-
-	return 0, 0, pgerror.Newf(
-		pgcode.InvalidParameterValue,
-		"CREATE SEQUENCE option AS received type %s, must be integer",
-		integerType,
-	)
-}
-
-func setSequenceIntegerBounds(
-	opts *descpb.TableDescriptor_SequenceOpts,
-	integerType *types.T,
-	isAscending bool,
-	setMinValue bool,
-	setMaxValue bool,
-) error {
-	var minValue int64 = math.MinInt64
-	var maxValue int64 = math.MaxInt64
-
-	if isAscending {
-		minValue = 1
-
-		switch integerType {
-		case types.Int2:
-			maxValue = math.MaxInt16
-		case types.Int4:
-			maxValue = math.MaxInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	} else {
-		maxValue = -1
-		switch integerType {
-		case types.Int2:
-			minValue = math.MinInt16
-		case types.Int4:
-			minValue = math.MinInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	}
-	if setMinValue {
-		opts.MinValue = minValue
-	}
-	if setMaxValue {
-		opts.MaxValue = maxValue
-	}
-	return nil
-}
-
-// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
-// starting with defaults and overriding them with user-provided options.
-func assignSequenceOptions(
+func assignSequenceOwner(
 	ctx context.Context,
 	p *planner,
 	opts *descpb.TableDescriptor_SequenceOpts,
 	optsNode tree.SequenceOptions,
-	setDefaults bool,
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
-	existingType *types.T,
 ) error {
-	wasAscending := opts.Increment > 0
-
-	// Set the default integer type of a sequence.
-	var integerType = types.Int
-	// All other defaults are dependent on the value of increment
-	// and the AS integerType. (i.e. whether the sequence is ascending
-	// or descending, bigint vs. smallint)
-	for _, option := range optsNode {
-		if option.Name == tree.SeqOptIncrement {
-			opts.Increment = *option.IntVal
-		} else if option.Name == tree.SeqOptAs {
-			integerType = option.AsIntegerType
-			opts.AsIntegerType = integerType.SQLString()
-		}
-	}
-	if opts.Increment == 0 {
-		return pgerror.New(
-			pgcode.InvalidParameterValue, "INCREMENT must not be zero")
-	}
-	isAscending := opts.Increment > 0
-
-	// Set increment-dependent defaults.
-	if setDefaults {
-		if isAscending {
-			opts.MinValue = 1
-			opts.MaxValue = math.MaxInt64
-			opts.Start = opts.MinValue
-		} else {
-			opts.MinValue = math.MinInt64
-			opts.MaxValue = -1
-			opts.Start = opts.MaxValue
-		}
-		// No Caching
-		opts.CacheSize = 1
-	}
-
-	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
-	if err != nil {
-		return err
-	}
-
-	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
-	if opts.AsIntegerType != "" {
-		// We change MINVALUE and MAXVALUE if it is the originally set to the default during ALTER.
-		setMinValue := setDefaults
-		setMaxValue := setDefaults
-		if !setDefaults && existingType != nil {
-			existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
-			if err != nil {
-				return err
-			}
-			if (wasAscending && opts.MinValue == 1) || (!wasAscending && opts.MinValue == existingLowerIntBound) {
-				setMinValue = true
-			}
-			if (wasAscending && opts.MaxValue == existingUpperIntBound) || (!wasAscending && opts.MaxValue == -1) {
-				setMaxValue = true
-			}
-		}
-
-		if err := setSequenceIntegerBounds(
-			opts,
-			integerType,
-			isAscending,
-			setMinValue,
-			setMaxValue,
-		); err != nil {
-			return err
-		}
-	}
-
-	// Fill in all other options.
-	var restartVal *int64
 	optionsSeen := map[string]bool{}
 	for _, option := range optsNode {
 		// Error on duplicate options.
@@ -555,39 +406,7 @@ func assignSequenceOptions(
 			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
 		optionsSeen[option.Name] = true
-
 		switch option.Name {
-		case tree.SeqOptCycle:
-			return unimplemented.NewWithIssue(20961,
-				"CYCLE option is not supported")
-		case tree.SeqOptNoCycle:
-			// Do nothing; this is the default.
-		case tree.SeqOptCache:
-			if v := *option.IntVal; v >= 1 {
-				opts.CacheSize = v
-			} else {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"CACHE (%d) must be greater than zero", v)
-			}
-		case tree.SeqOptIncrement:
-			// Do nothing; this has already been set.
-		case tree.SeqOptMinValue:
-			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if option.IntVal != nil {
-				opts.MinValue = *option.IntVal
-			}
-		case tree.SeqOptMaxValue:
-			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if option.IntVal != nil {
-				opts.MaxValue = *option.IntVal
-			}
-		case tree.SeqOptStart:
-			opts.Start = *option.IntVal
-		case tree.SeqOptRestart:
-			// The RESTART option does not get saved, but still gets validated below.
-			restartVal = option.IntVal
-		case tree.SeqOptVirtual:
-			opts.Virtual = true
 		case tree.SeqOptOwnedBy:
 			if p == nil {
 				return pgerror.Newf(pgcode.Internal,
@@ -630,90 +449,43 @@ func assignSequenceOptions(
 			}
 		}
 	}
+	return nil
+}
 
-	if setDefaults || (wasAscending && opts.Start == 1) || (!wasAscending && opts.Start == -1) {
-		// If start option not specified, set it to MinValue (for ascending sequences)
-		// or MaxValue (for descending sequences).
-		// We only do this if we're setting it for the first time, or the sequence was
-		// ALTERed with the default original values.
-		if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
-			if opts.Increment > 0 {
-				opts.Start = opts.MinValue
-			} else {
-				opts.Start = opts.MaxValue
-			}
+// checkDupSeqOption check if there is any duplicate sequence option.
+func checkDupSeqOption(optsNode tree.SequenceOptions) error {
+	optionsSeen := map[string]bool{}
+	for _, option := range optsNode {
+		// Error on duplicate options.
+		_, seenBefore := optionsSeen[option.Name]
+		if seenBefore {
+			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
+		optionsSeen[option.Name] = true
 	}
+	return nil
+}
 
-	if opts.MinValue < lowerIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MINVALUE (%d) must be greater than (%d) for type %s",
-			opts.MinValue,
-			lowerIntBound,
-			integerType.SQLString(),
-		)
+// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
+// starting with defaults and overriding them with user-provided options.
+func assignSequenceOptions(
+	ctx context.Context,
+	p *planner,
+	opts *descpb.TableDescriptor_SequenceOpts,
+	optsNode tree.SequenceOptions,
+	setDefaults bool,
+	sequenceID descpb.ID,
+	sequenceParentID descpb.ID,
+	existingType *types.T,
+) error {
+	if err := checkDupSeqOption(optsNode); err != nil {
+		return err
 	}
-	if opts.MaxValue < lowerIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MAXVALUE (%d) must be greater than (%d) for type %s",
-			opts.MaxValue,
-			lowerIntBound,
-			integerType.SQLString(),
-		)
+	if err := schemaexpr.AssignSequenceOptions(opts, optsNode, setDefaults, existingType); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
-	if opts.MinValue > upperIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MINVALUE (%d) must be less than (%d) for type %s",
-			opts.MinValue,
-			upperIntBound,
-			integerType.SQLString(),
-		)
-	}
-	if opts.MaxValue > upperIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MAXVALUE (%d) must be less than (%d) for type %s",
-			opts.MaxValue,
-			upperIntBound,
-			integerType.SQLString(),
-		)
-	}
-	if opts.Start > opts.MaxValue {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be greater than MAXVALUE (%d)",
-			opts.Start,
-			opts.MaxValue,
-		)
-	}
-	if opts.Start < opts.MinValue {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be less than MINVALUE (%d)",
-			opts.Start,
-			opts.MinValue,
-		)
-	}
-	if restartVal != nil {
-		if *restartVal > opts.MaxValue {
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"RESTART value (%d) cannot be greater than MAXVALUE (%d)",
-				*restartVal,
-				opts.MaxValue,
-			)
-		}
-		if *restartVal < opts.MinValue {
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"RESTART value (%d) cannot be less than MINVALUE (%d)",
-				*restartVal,
-				opts.MinValue,
-			)
-		}
+	if err := assignSequenceOwner(ctx, p, opts, optsNode, sequenceID, sequenceParentID); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 	return nil
 }
