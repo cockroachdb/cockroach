@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -658,6 +659,13 @@ If problems persist, please see %s.`
 
 			// Now let SQL clients in.
 			if err := s.AcceptClients(ctx); err != nil {
+				return err
+			}
+
+			// Also start the SQL service for the secondary tenant.
+			// TODO(knz): Do this dynamically upon first use.
+			// See: https://github.com/cockroachdb/cockroach/issues/84604
+			if _, _, err := s.StartInMemoryTenantServer(ctx, roachpb.MakeTenantID(appTenantID)); err != nil {
 				return err
 			}
 

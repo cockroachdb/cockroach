@@ -95,7 +95,7 @@ func CreateTenantRecord(
 		}
 		return errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
-		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+		return errors.AssertionFailedf("unexpected number of rows affected: %d", num)
 	}
 
 	if u := info.Usage; u != nil {

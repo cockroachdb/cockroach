@@ -56,8 +56,22 @@ func runInitialSQL(
 		}
 	}
 
+	// Create a secondary tenant.
+	if err := s.RunLocalSQL(ctx,
+		func(ctx context.Context, ie *sql.InternalExecutor) error {
+			_, err := ie.Exec(
+				ctx, "create-app-tenant", nil,
+				`SELECT "".crdb_internal.create_tenant($1)`, appTenantID)
+			return err
+		}); err != nil {
+		return err
+	}
+
 	return nil
 }
+
+// TODO(knz): make this configurable.
+const appTenantID = 2
 
 // createAdminUser creates an admin user with the given name.
 func createAdminUser(ctx context.Context, s *server.Server, adminUser, adminPassword string) error {
