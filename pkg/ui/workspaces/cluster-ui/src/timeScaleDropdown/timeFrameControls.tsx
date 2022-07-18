@@ -45,7 +45,7 @@ export const TimeFrameControls = ({
       <ButtonGroup>
         <Tooltip
           placement="bottom"
-          title="previous timeframe"
+          title="previous time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -53,14 +53,14 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.LEFT)}
             disabled={left}
             className={cx("_action", left ? "disabled" : "active")}
-            aria-label={"previous timeframe"}
+            aria-label={"previous time interval"}
           >
             <CaretLeft className={cx("icon")} />
           </Button>
         </Tooltip>
         <Tooltip
           placement="bottom"
-          title="next timeframe"
+          title="next time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -68,7 +68,7 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.RIGHT)}
             disabled={right}
             className={cx("_action", right ? "disabled" : "active")}
-            aria-label={"next timeframe"}
+            aria-label={"next time interval"}
           >
             <CaretRight className={cx("icon")} />
           </Button>
@@ -76,7 +76,7 @@ export const TimeFrameControls = ({
       </ButtonGroup>
       <Tooltip
         placement="bottom"
-        title="Now"
+        title="past 1 day"
         mouseEnterDelay={delay}
         mouseLeaveDelay={delay}
       >
