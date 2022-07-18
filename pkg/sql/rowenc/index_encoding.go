@@ -587,7 +587,9 @@ func EncodeInvertedIndexTableKeys(
 		// need to pass in the inverted index column kind to this function.
 		// We pad the keys when writing them to the index.
 		// TODO(jordan): why are we doing this padding at all? Postgres does it.
-		return encodeTrigramInvertedIndexTableKeys(string(*val.(*tree.DString)), inKey, version, true /* pad */)
+		// val could be a DOidWrapper, so we need to use the unwrapped datum
+		// here.
+		return encodeTrigramInvertedIndexTableKeys(string(*datum.(*tree.DString)), inKey, version, true /* pad */)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -672,7 +674,9 @@ func EncodeExistsInvertedIndexSpans(
 	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.StringFamily:
-		s := string(*val.(*tree.DString))
+		// val could be a DOidWrapper, so we need to use the unwrapped datum
+		// here.
+		s := string(*datum.(*tree.DString))
 		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
 	case types.ArrayFamily:
 		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
