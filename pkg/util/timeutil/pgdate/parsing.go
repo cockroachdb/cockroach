@@ -210,7 +210,7 @@ func ParseTimestamp(
 // For example, all these inputs return 2020-06-26 01:02:03 +0000 UTC:
 //   - '2020-06-26 01:02:03';
 //   - '2020-06-26 01:02:03+04';
-//   - 'now', if the local local time (in the current timezone) is
+//   - 'now', if the local time (in the current timezone) is
 //     2020-06-26 01:02:03. Note that this does not represent the same time
 //     instant, but the one that "reads" the same in UTC.
 //
