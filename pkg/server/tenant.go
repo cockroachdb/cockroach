@@ -107,6 +107,9 @@ type SQLServerWrapper struct {
 
 	// Used for multi-tenant cost control (on the tenant side).
 	costController multitenant.TenantSideCostController
+
+	// TODO(davidh): demo only...
+	baseCfg BaseConfig
 }
 
 // Drain idempotently activates the draining mode.
@@ -305,6 +308,9 @@ func NewTenantServer(
 
 		externalStorageBuilder: args.externalStorageBuilder,
 		costController:         args.costController,
+
+		// TODO(davidh): demo only
+		baseCfg: baseCfg,
 	}, nil
 }
 

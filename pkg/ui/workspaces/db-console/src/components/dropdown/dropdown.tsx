@@ -30,6 +30,7 @@ export interface DropdownProps {
   dropdownToggleButton?: () => React.ReactNode;
   className?: string;
   menuPlacement?: "right" | "left";
+  icon?: JSX.Element;
 }
 
 interface DropdownState {
@@ -40,16 +41,19 @@ interface DropdownButtonProps {
   children: React.ReactNode;
   isOpen: boolean;
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
+  icon?: JSX.Element;
 }
 
 function DropdownButton(props: DropdownButtonProps) {
-  const { children } = props;
+  const { children, icon } = props;
   return (
     <Button
       type="flat"
       size="small"
       iconPosition="right"
-      icon={() => <Icon className="collapse-toggle__icon" type="caret-down" />}
+      icon={() =>
+        icon || <Icon className="collapse-toggle__icon" type="caret-down" />
+      }
     >
       {children}
     </Button>
@@ -79,13 +83,17 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
   };
 
   renderDropdownToggleButton = () => {
-    const { children, dropdownToggleButton } = this.props;
+    const { children, dropdownToggleButton, icon } = this.props;
     const { isOpen } = this.state;
 
     if (dropdownToggleButton) {
       return dropdownToggleButton();
     } else {
-      return <DropdownButton isOpen={isOpen}>{children}</DropdownButton>;
+      return (
+        <DropdownButton isOpen={isOpen} icon={icon}>
+          {children}
+        </DropdownButton>
+      );
     }
   };
 

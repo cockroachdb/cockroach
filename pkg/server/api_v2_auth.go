@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -325,7 +326,28 @@ func (a *authenticationV2Mux) getSession(
 	var decoded []byte
 	var err error
 	for i := range possibleSessions {
-		decoded, err = base64.StdEncoding.DecodeString(possibleSessions[i])
+		var session string
+		// This case is if the session cookie has a multi-tenant pattern.
+		if strings.Contains(possibleSessions[i], ",") {
+			tenantName := findTenantCookie(req.Cookies())
+			if tenantName == "" {
+				return "", nil, http.StatusBadRequest, errors.New("unable to find tenant cookie")
+			}
+			sessionSlice := strings.FieldsFunc(possibleSessions[i], func(r rune) bool {
+				return r == ',' || r == '&'
+			})
+			for idx, val := range sessionSlice {
+				if val == tenantName && idx > 0 {
+					session = sessionSlice[idx-1]
+				}
+			}
+			if session == "" {
+				return "", nil, http.StatusBadRequest, errors.New("unable to find session cookie value")
+			}
+		} else {
+			session = possibleSessions[i]
+		}
+		decoded, err = base64.StdEncoding.DecodeString(session)
 		if err != nil {
 			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
 			continue

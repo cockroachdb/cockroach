@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -305,6 +307,7 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
+
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
@@ -627,7 +630,30 @@ func (am *authenticationMux) getSession(
 			continue
 		}
 		found = true
-		cookie, err = decodeSessionCookie(c)
+		sessionCookie := c
+		// This case is if the session cookie has a multi-tenant pattern.
+
+		if strings.Contains(c.Value, ",") {
+			tenantName := findTenantCookie(cookies)
+			if tenantName == "" {
+				return "", nil, apiInternalError(req.Context(), errors.New("unable to find tenant cookie"))
+			}
+			sessionSlice := strings.FieldsFunc(c.Value, func(r rune) bool {
+				return r == ',' || r == '&'
+			})
+			var encodedSession string
+			for idx, val := range sessionSlice {
+				if val == tenantName && idx > 0 {
+					encodedSession = sessionSlice[idx-1]
+				}
+			}
+			if encodedSession == "" {
+				return "", nil, apiInternalError(req.Context(), errors.New("unable to find session cookie value"))
+			}
+			sessionCookie.Value = encodedSession
+
+		}
+		cookie, err = decodeSessionCookie(sessionCookie)
 		if err != nil {
 			// Multiple cookies with the same name may be included in the
 			// header. We continue searching even if we find a matching
@@ -652,6 +678,15 @@ func (am *authenticationMux) getSession(
 	}
 
 	return username, cookie, nil
+}
+
+func findTenantCookie(cookies []*http.Cookie) string {
+	for _, c := range cookies {
+		if c.Name == TenantSelectCookieName {
+			return c.Value
+		}
+	}
+	return catconstants.SystemTenantName
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {

@@ -11,14 +11,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -195,40 +197,206 @@ const TenantSelectCookieName = `tenant`
 // If no tenant is specified, the default tenant is used.
 func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	tenantName := getTenantNameFromHTTPRequest(r)
+	tenantName, nameProvided := getTenantNameFromHTTPRequest(r)
 	s, err := c.getOrCreateServer(ctx, tenantName)
 	if err != nil {
 		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "cannot find tenant")
 		return
 	}
-
+	// if the client didnt specify tenant name call these for login/logout.
+	if !nameProvided {
+		if r.URL.Path == loginPath {
+			c.loginFanout().ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == logoutPath {
+			c.logoutFanout().ServeHTTP(w, r)
+			return
+		}
+	}
 	s.getHTTPHandlerFn()(w, r)
 }
 
-func getTenantNameFromHTTPRequest(r *http.Request) string {
+func getTenantNameFromHTTPRequest(r *http.Request) (string, bool) {
 	// Highest priority is manual override on the URL query parameters.
 	const tenantNameParamInQueryURL = "tenant_name"
 	if tenantName := r.URL.Query().Get(tenantNameParamInQueryURL); tenantName != "" {
-		return tenantName
+		return tenantName, true
 	}
 
 	// If not in parameters, try an explicit header.
 	if tenantName := r.Header.Get(TenantSelectHeader); tenantName != "" {
-		return tenantName
+		return tenantName, true
 	}
 
 	// No parameter, no explicit header. Is there a cookie?
 	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
-		return c.Value
+		return c.Value, true
 	}
 
 	// No luck so far.
 	//
 	// TODO(knz): Make the default tenant route for HTTP configurable.
 	// See: https://github.com/cockroachdb/cockroach/issues/91741
-	return catconstants.SystemTenantName
+	return catconstants.SystemTenantName, false
+}
+
+type sessionWriter struct {
+	header http.Header
+	buf    bytes.Buffer
+	code   int
+}
+
+func (sw *sessionWriter) Header() http.Header {
+	return sw.header
+}
+
+func (sw *sessionWriter) WriteHeader(statusCode int) {
+	sw.code = statusCode
+}
+
+func (sw *sessionWriter) Write(data []byte) (int, error) {
+	return sw.buf.Write(data)
+}
+
+func (c *serverController) getCurrentTenantNames() []string {
+	var serverNames []string
+	c.mu.Lock()
+	for name := range c.mu.servers {
+		serverNames = append(serverNames, name)
+	}
+	c.mu.Unlock()
+	return serverNames
+}
+
+func getSessionFromCookie(sessionStr string, name string) (string, error) {
+	sessions := strings.Split(sessionStr, "&")
+	for _, session := range sessions {
+		ids := strings.Split(session, ",")
+		if len(ids) != 2 {
+			return "", errors.New("session is not in the correct format")
+		}
+		if ids[1] == name {
+			return ids[0], nil
+		}
+	}
+	return "", errors.New("session not found")
+}
+
+// login for all tenant, find better nane
+func (c *serverController) loginFanout() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		tenantNames := c.getCurrentTenantNames()
+		var sessionsStr string
+		clonedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Warning(ctx, "unable to write body")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+
+		for _, name := range tenantNames { // system, app0
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
+			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
+			server, err := c.getOrCreateServer(ctx, name)
+			if err != nil {
+				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
+			setCookieHeader := sw.Header().Get("set-cookie")
+
+			if len(setCookieHeader) == 0 {
+				log.Warningf(ctx, "unable to find session cookie for tenant %q", name)
+			} else {
+				sessionCookieSlice := strings.Split(strings.ReplaceAll(setCookieHeader, "session=", ""), ";")
+				sessionsStr += sessionCookieSlice[0] + "," + name + "&"
+			}
+		}
+		if len(sessionsStr) > 0 {
+			sessionsStr = sessionsStr[:len(sessionsStr)-1]
+			cookie := http.Cookie{
+				Name:     SessionCookieName,
+				Value:    sessionsStr,
+				Path:     "/",
+				HttpOnly: false,
+			}
+			http.SetCookie(w, &cookie)
+			// The tenant cookie needs to be set at some point in order for
+			// the dropdown to have a current selection on first load.
+			cookie = http.Cookie{
+				Name:     TenantSelectCookieName,
+				Value:    catconstants.SystemTenantName,
+				Path:     "/",
+				HttpOnly: false,
+			}
+			http.SetCookie(w, &cookie)
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	})
+}
+
+func (c *serverController) logoutFanout() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		tenantNames := c.getCurrentTenantNames()
+		clonedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Warning(ctx, "unable to write body")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		sessionCookie, err := r.Cookie(SessionCookieName)
+		if err != nil {
+			log.Warning(ctx, "unable to find session cookie")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		for _, name := range tenantNames {
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
+			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
+			relevantSession, err := getSessionFromCookie(sessionCookie.Value, name)
+			if err != nil {
+				log.Warningf(ctx, "%q", err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			newReq.Header.Set("Cookie", "session="+relevantSession)
+			server, err := c.getOrCreateServer(ctx, name)
+			if err != nil {
+				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
+			if sw.header.Get("Set-Cookie") == "" {
+				log.Warningf(ctx, "logout for tenant %q failed", name)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}
+		cookie := http.Cookie{
+			Name:     SessionCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Expires:  timeutil.Unix(0, 0),
+		}
+		http.SetCookie(w, &cookie)
+		cookie = http.Cookie{
+			Name:     TenantSelectCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: false,
+			Expires:  timeutil.Unix(0, 0),
+		}
+		http.SetCookie(w, &cookie)
+		w.WriteHeader(http.StatusOK)
+	})
 }
 
 // TestingGetSQLAddrForTenant extracts the SQL address for the target tenant.
