@@ -381,7 +381,8 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
    metadata JSONB NOT NULL,
    statistics JSONB NOT NULL,
    sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
 )  CREATE TABLE crdb_internal.cluster_statement_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
@@ -391,7 +392,8 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
    metadata JSONB NOT NULL,
    statistics JSONB NOT NULL,
    sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_transaction_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
@@ -1041,7 +1043,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
    exec_node_ids INT8[] NOT NULL,
-   txn_fingerprint_id STRING NULL
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
@@ -1084,7 +1087,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
    exec_node_ids INT8[] NOT NULL,
-   txn_fingerprint_id STRING NULL
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,
@@ -1401,7 +1405,8 @@ CREATE VIEW crdb_internal.statement_statistics (
   metadata,
   statistics,
   sampled_plan,
-  aggregation_interval
+  aggregation_interval,
+  index_recommendations
 ) AS SELECT
     aggregated_ts,
     fingerprint_id,
@@ -1411,7 +1416,8 @@ CREATE VIEW crdb_internal.statement_statistics (
     max(metadata) AS metadata,
     crdb_internal.merge_statement_stats(array_agg(statistics)),
     max(sampled_plan),
-    aggregation_interval
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
   FROM
     (
       SELECT
@@ -1423,7 +1429,8 @@ CREATE VIEW crdb_internal.statement_statistics (
         metadata,
         statistics,
         sampled_plan,
-        aggregation_interval
+        aggregation_interval,
+        index_recommendations
       FROM
         crdb_internal.cluster_statement_statistics
       UNION ALL
@@ -1436,10 +1443,12 @@ CREATE VIEW crdb_internal.statement_statistics (
           metadata,
           statistics,
           plan,
-          agg_interval
+          agg_interval,
+          index_recommendations
         FROM
           system.statement_statistics
     )
+  LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
   GROUP BY
     aggregated_ts,
     fingerprint_id,
@@ -1455,7 +1464,8 @@ CREATE VIEW crdb_internal.statement_statistics (
   metadata,
   statistics,
   sampled_plan,
-  aggregation_interval
+  aggregation_interval,
+  index_recommendations
 ) AS SELECT
     aggregated_ts,
     fingerprint_id,
@@ -1465,7 +1475,8 @@ CREATE VIEW crdb_internal.statement_statistics (
     max(metadata) AS metadata,
     crdb_internal.merge_statement_stats(array_agg(statistics)),
     max(sampled_plan),
-    aggregation_interval
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
   FROM
     (
       SELECT
@@ -1477,7 +1488,8 @@ CREATE VIEW crdb_internal.statement_statistics (
         metadata,
         statistics,
         sampled_plan,
-        aggregation_interval
+        aggregation_interval,
+        index_recommendations
       FROM
         crdb_internal.cluster_statement_statistics
       UNION ALL
@@ -1490,10 +1502,12 @@ CREATE VIEW crdb_internal.statement_statistics (
           metadata,
           statistics,
           plan,
-          agg_interval
+          agg_interval,
+          index_recommendations
         FROM
           system.statement_statistics
     )
+  LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
   GROUP BY
     aggregated_ts,
     fingerprint_id,
