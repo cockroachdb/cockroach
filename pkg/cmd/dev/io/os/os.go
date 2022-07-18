@@ -408,6 +408,32 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 	return strings.Split(strings.TrimSpace(output), "\n"), nil
 }
 
+// ListSubdirectories lists all the subdirectories of the given directory non-recursively.
+func (o *OS) ListSubdirectories(path string) ([]string, error) {
+	command := fmt.Sprintf("find %s -maxdepth 1 -type d", path)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	output, err := o.Next(command, func() (output string, err error) {
+		var ret []string
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return "", err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				ret = append(ret, entry.Name())
+			}
+		}
+		return fmt.Sprintf("%s\n", strings.Join(ret, "\n")), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSpace(output), "\n"), nil
+}
+
 // CurrentUserAndGroup returns the user and effective group.
 func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
 	command := "id"
