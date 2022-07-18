@@ -937,7 +937,6 @@ func (ts *TestServer) StartTenant(
 		case <-stopper.ShouldQuiesce():
 		}
 	}()
-
 	if err := sw.Start(ctx); err != nil {
 		return nil, err
 	}
