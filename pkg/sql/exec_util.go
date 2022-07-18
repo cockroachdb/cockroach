@@ -2285,9 +2285,17 @@ func (st *SessionTracing) StartTracing(
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
-		// We're hijacking this span and we're never going to un-hijack it, so it's
-		// up to us to finish it.
-		sp.Finish()
+		// Since we're hijacking this span and we're never going to un-hijack
+		// it, it's up to us to make sure it is finished somehow. Unfortunately,
+		// we cannot just finish it right away because in some cases the span
+		// will be used later (if the verbosity is high enough, during the
+		// context cancellation). To go around that, we pass the responsibility
+		// of finishing the span to the cancellation function.
+		cancelTxnCtx := st.ex.state.cancel
+		st.ex.state.cancel = func() {
+			cancelTxnCtx()
+			sp.Finish()
+		}
 
 		st.ex.state.Ctx, _ = tracing.EnsureChildSpan(
 			newConnCtx, st.ex.server.cfg.AmbientCtx.Tracer, "session tracing")
