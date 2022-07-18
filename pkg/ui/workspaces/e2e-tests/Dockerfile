@@ -9,29 +9,15 @@ RUN apt install libresolv-wrapper
 # Add the compiled CRDB binary
 ADD ./cockroach /usr/bin/cockroach
 
-# Switch to the non-root user
+# Switch to the non-root user included by default
 USER node
 
-## Install e2e test dependencies to a scratch directory during the build phase
-## so they don't get overwritten when tests are mounted
-#WORKDIR /scratch
-#ADD ./pkg/ui/.yarnrc ./
-#ADD ./pkg/ui/workspaces/e2e-tests/package.json ./pkg/ui/workspaces/e2e-tests/yarn.lock ./
-#RUN yarn install --ignore-scripts
-
+# Add the tests and install NPM dependencies
 WORKDIR /cypress
+COPY --chown=node ./pkg/ui/yarn-vendor ./yarn-vendor/
+COPY --chown=node ./pkg/ui/workspaces/e2e-tests ./
 ADD ./pkg/ui/.yarnrc ./
-RUN ls -l
-COPY ./pkg/ui/yarn-vendor ./yarn-vendor/
-RUN ls -l
-RUN ls -l ./yarn-vendor/
-COPY ./pkg/ui/workspaces/e2e-tests ./
-RUN ls -l
 RUN yarn install
 
-# Run tests during the execution phase, assuming pkg/ui/workspaces/e2e-tests was
-# mounted to /cypress during the build. This allows the dependencies to be
-# cached within the built container, but the tests to be iterated on with
-# minimal overhead.
 ENV COCKROACH=/usr/bin/cockroach
-CMD ["/usr/bin/yarn", "test"]
+CMD ["/usr/local/bin/yarn", "test"]
