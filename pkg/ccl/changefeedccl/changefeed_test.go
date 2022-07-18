@@ -2681,6 +2681,12 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			})
 		})
 		t.Run("drop column", func(t *testing.T) {
+			// Sinkless feeds are not currently able to restart in the face of
+			// any schema changes. Dropping a column in the declarative schema
+			// changer means that an extra error will occur.
+			if _, isSinkless := f.(*sinklessFeedFactory); isSinkless {
+				skip.WithIssue(t, 84511)
+			}
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE drop_column`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (0, NULL)`)
@@ -2697,12 +2703,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			dropColumn = feed(t, f, `CREATE CHANGEFEED FOR drop_column `+
 				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
 			defer closeFeed(t, dropColumn)
-			// NB: You might expect to only see the new row here but we'll see them
-			// all because we cannot distinguish between the index backfill and
-			// foreground writes. See #35738.
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [0]->{"after": {"a": 0}}`,
-				`drop_column: [1]->{"after": {"a": 1}}`,
 				`drop_column: [2]->{"after": {"a": 2}}`,
 			})
 		})
