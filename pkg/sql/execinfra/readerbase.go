@@ -229,7 +229,7 @@ func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
 // useStreamerEnabled determines whether the Streamer API should be used.
 // TODO(yuzefovich): remove this in 23.1.
 var useStreamerEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.TenantWritable,
 	"sql.distsql.use_streamer.enabled",
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+

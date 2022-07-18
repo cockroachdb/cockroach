@@ -32,10 +32,16 @@ import (
 )
 
 // dataDistribution is an abstraction for testing that represents a stream of
-// MVCCKeyValues. The stream may indicate that a value is an intent by returning
+// MVCCKeyValues and MVCCRangeKeyValues. Each call would return either point
+// value or range tombstone, but not both.
+// The stream may indicate that a point value is an intent by returning
 // a non-nil transaction. If an intent is returned it must have a higher
 // timestamp than any other version written for the key.
-type dataDistribution func() (storage.MVCCKeyValue, *roachpb.Transaction, bool)
+// Range key values could only be tombstones and can't have transaction or
+// intent placed on them.
+type dataDistribution func() (
+	storage.MVCCKeyValue, storage.MVCCRangeKeyValue, *roachpb.Transaction, bool,
+)
 
 // setupTest writes the data from this distribution into eng. All data should
 // be a part of the range represented by desc.
@@ -46,11 +52,19 @@ func (ds dataDistribution) setupTest(
 	var maxTs hlc.Timestamp
 	var ms enginepb.MVCCStats
 	for {
-		kv, txn, ok := ds()
+		kv, rangeKV, txn, ok := ds()
 		if !ok {
 			break
 		}
-		if txn == nil {
+		if rangeKey := rangeKV.RangeKey; len(rangeKey.StartKey) > 0 {
+			require.Nil(t, txn, "invalid test data, range can't use transaction")
+			require.Zero(t, len(kv.Key.Key),
+				"invalid test data, range can't be used together with value: key=%s, rangeKey=%s",
+				kv.Key.String(), rangeKey.String())
+			err := storage.MVCCDeleteRangeUsingTombstone(ctx, eng, &ms, rangeKey.StartKey,
+				rangeKey.EndKey, rangeKey.Timestamp, hlc.ClockTimestamp{}, nil, nil, 1)
+			require.NoError(t, err, "failed to put delete range")
+		} else if txn == nil {
 			if kv.Key.Timestamp.IsEmpty() {
 				require.NoError(t, eng.PutUnversioned(kv.Key.Key, kv.Value))
 			} else {
@@ -73,6 +87,9 @@ func (ds dataDistribution) setupTest(
 		if !kv.Key.Timestamp.Less(maxTs) {
 			maxTs = kv.Key.Timestamp
 		}
+		if ts := rangeKV.RangeKey.Timestamp; !ts.Less(maxTs) {
+			maxTs = ts
+		}
 	}
 	require.NoError(t, eng.Flush())
 	snap := eng.NewSnapshot()
@@ -80,6 +97,100 @@ func (ds dataDistribution) setupTest(
 	ms, err := rditer.ComputeStatsForRange(&desc, snap, maxTs.WallTime)
 	require.NoError(t, err)
 	return ms
+}
+
+type dataFeedItem struct {
+	kv  storage.MVCCKeyValue
+	rkv storage.MVCCRangeKeyValue
+	txn *roachpb.Transaction
+}
+
+func (i *dataFeedItem) String() string {
+	if i.txn != nil {
+		return fmt.Sprintf("%s ! %s", i.kv.Key.String(), i.txn.ID.String())
+	}
+	if len(i.kv.Key.Key) > 0 {
+		return i.kv.Key.String()
+	}
+	return i.rkv.RangeKey.String()
+}
+
+// sortedDistribution consume provided distribution fully and produce a
+// distribution with data ordered by timestamp. This distribution is helpful
+// for range key tombstones as they must be placed on top of multiple existing
+// point keys.
+func sortedDistribution(dist dataDistribution) dataDistribution {
+	var allData []dataFeedItem
+	for {
+		kv, rkv, txn, ok := dist()
+		if !ok {
+			break
+		}
+		allData = append(allData, dataFeedItem{kv: kv, rkv: rkv, txn: txn})
+	}
+	isPoint := func(d dataFeedItem) bool {
+		return len(d.kv.Key.Key) > 0
+	}
+	meta := func(i int) (roachpb.Key, hlc.Timestamp, bool) {
+		if !isPoint(allData[i]) {
+			return allData[i].rkv.RangeKey.StartKey, allData[i].rkv.RangeKey.Timestamp, false
+		}
+		return allData[i].kv.Key.Key, allData[i].kv.Key.Timestamp, true
+	}
+	sort.Slice(allData, func(i, j int) bool {
+		ki, ti, pi := meta(i)
+		kj, tj, _ := meta(j)
+		switch ti.Compare(tj) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+		switch ki.Compare(kj) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+		return pi
+	})
+
+	var lastTs hlc.Timestamp
+	var lastIsPoint = true
+	for i, v := range allData {
+		switch {
+		case isPoint(v) && !lastIsPoint && v.kv.Key.Timestamp.LessEq(lastTs):
+			lastTs.WallTime++
+			allData[i].kv.Key.Timestamp = lastTs
+			lastIsPoint = true
+		case isPoint(v) && lastIsPoint && v.kv.Key.Timestamp.Less(lastTs):
+			allData[i].kv.Key.Timestamp = lastTs
+		case !isPoint(v) && !lastIsPoint && v.rkv.RangeKey.Timestamp.LessEq(lastTs):
+			lastTs.WallTime++
+			allData[i].rkv.RangeKey.Timestamp = lastTs
+		case !isPoint(v) && lastIsPoint && v.rkv.RangeKey.Timestamp.LessEq(lastTs):
+			lastTs.WallTime++
+			allData[i].rkv.RangeKey.Timestamp = lastTs
+			lastIsPoint = false
+		default:
+			lastIsPoint = isPoint(v)
+			if lastIsPoint {
+				lastTs = v.kv.Key.Timestamp
+			} else {
+				lastTs = v.rkv.RangeKey.Timestamp
+			}
+		}
+	}
+
+	return func() (storage.MVCCKeyValue, storage.MVCCRangeKeyValue, *roachpb.Transaction, bool) {
+		if len(allData) == 0 {
+			return storage.MVCCKeyValue{}, storage.MVCCRangeKeyValue{}, nil, false
+		}
+		defer func() {
+			allData = allData[1:]
+		}()
+		return allData[0].kv, allData[0].rkv, allData[0].txn, true
+	}
 }
 
 // maxRetriesAllowed is limiting how many times we could retry when generating
@@ -101,17 +212,16 @@ func newDataDistribution(
 	versionsPerKey func() int,
 	intentFrac float64,
 	oldIntentFrac float64, // within intents(!)
+	rangeKeyFrac float64,
 	totalKeys int,
 	rng *rand.Rand,
 ) dataDistribution {
-	// TODO(ajwerner): provide a mechanism to control the rate of expired intents
-	// or the intent age. Such a knob would likely require decoupling intents from
-	// other keys.
+	rangeKeyDist := rangeKeyDistribution(keyDist)
 	var (
 		// Remaining values (all versions of all keys together with intents).
 		remaining = totalKeys
 		// Key for the objects currently emitted (if versions are not empty).
-		key roachpb.Key
+		key, endKey roachpb.Key
 		// Set of key.String() to avoid generating data for the same key multiple
 		// times.
 		seen = map[string]struct{}{}
@@ -121,7 +231,7 @@ func newDataDistribution(
 		hasIntent bool
 	)
 
-	generatePointKey := func() (nextKey roachpb.Key, keyTimestamps []hlc.Timestamp, hasIntent bool) {
+	generatePointKey := func() (nextKey, unusedEndKey roachpb.Key, keyTimestamps []hlc.Timestamp, hasIntent bool) {
 		hasIntent = rng.Float64() < intentFrac
 		oldIntent := hasIntent && rng.Float64() < oldIntentFrac
 		for retries := 0; len(keyTimestamps) == 0; retries++ {
@@ -186,14 +296,27 @@ func newDataDistribution(
 			}
 			retries = 0
 		}
-		return nextKey, keyTimestamps, hasIntent
+		return nextKey, unusedEndKey, keyTimestamps, hasIntent
 	}
 
-	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+	generateRangeKey := func() (startKey, endKey roachpb.Key, timestamps []hlc.Timestamp, hasIntent bool) {
+		var ts hlc.Timestamp
+		for {
+			ts = tsDist()
+			if ts.Less(minIntentTs) {
+				break
+			}
+		}
+		timestamps = []hlc.Timestamp{ts}
+		startKey, endKey = rangeKeyDist()
+		return startKey, endKey, timestamps, false
+	}
+
+	return func() (storage.MVCCKeyValue, storage.MVCCRangeKeyValue, *roachpb.Transaction, bool) {
 		if remaining == 0 {
 			// Throw away temp key data, because we reached the end of sequence.
 			seen = nil
-			return storage.MVCCKeyValue{}, nil, false
+			return storage.MVCCKeyValue{}, storage.MVCCRangeKeyValue{}, nil, false
 		}
 		defer func() { remaining-- }()
 
@@ -201,12 +324,28 @@ func newDataDistribution(
 			// Loop because we can have duplicate keys or unacceptable values, in that
 			// case we retry key from scratch.
 			for len(timestamps) == 0 {
-				key, timestamps, hasIntent = generatePointKey()
+				if rng.Float64() < rangeKeyFrac {
+					key, endKey, timestamps, hasIntent = generateRangeKey()
+				} else {
+					key, endKey, timestamps, hasIntent = generatePointKey()
+				}
 			}
 			seen[string(key)] = struct{}{}
 		}
 		ts := timestamps[0]
 		timestamps = timestamps[1:]
+
+		if len(endKey) > 0 {
+			return storage.MVCCKeyValue{},
+				storage.MVCCRangeKeyValue{
+					RangeKey: storage.MVCCRangeKey{
+						StartKey:  key,
+						EndKey:    endKey,
+						Timestamp: ts,
+					},
+				}, nil, true
+		}
+
 		var txn *roachpb.Transaction
 		// On the last version, we generate a transaction as needed.
 		if len(timestamps) == 0 && hasIntent {
@@ -222,7 +361,7 @@ func newDataDistribution(
 		return storage.MVCCKeyValue{
 			Key:   storage.MVCCKey{Key: key, Timestamp: ts},
 			Value: valueDist().RawBytes,
-		}, txn, true
+		}, storage.MVCCRangeKeyValue{}, txn, true
 	}
 }
 
@@ -236,26 +375,50 @@ type distSpec interface {
 // uniformDistSpec is a distSpec which represents uniform distributions over its
 // various dimensions.
 type uniformDistSpec struct {
-	tsSecFrom, tsSecTo               int64 // seconds
+	tsSecFrom, tsSecTo int64
+	// Intents are split into two categories with distinct time ranges.
+	// All intents have lower timestamp bound to ensure they don't overlap with
+	// range tombstones since we will not be able to put a range tombstone over
+	// intent.
+	// Additionally, we have two time thresholds for intents. This is needed to
+	// ensure that we have certain fraction of intents GC'able since they lay
+	// below certain threshold.
 	tsSecMinIntent, tsSecOldIntentTo int64
 	keySuffixMin, keySuffixMax       int
 	valueLenMin, valueLenMax         int
 	deleteFrac                       float64
+	// keysPerValue parameters determine number of versions for a key. This number
+	// includes tombstones and intents which may be present on top of the history.
 	keysPerValueMin, keysPerValueMax int
-	intentFrac, oldIntentFrac        float64
+	// Fractions define how likely is that a key will belong to one of categories.
+	// If we only had a single version for each key, then that would be fraction
+	// of total number of objects, but if we have many versions, this value would
+	// roughly be total objects/avg(keysPerValueMin, keysPerValueMax) * frac.
+	intentFrac, oldIntentFrac float64
+	rangeKeyFrac              float64
 }
 
 var _ distSpec = uniformDistSpec{}
 
 func (ds uniformDistSpec) dist(maxRows int, rng *rand.Rand) dataDistribution {
+	if ds.tsSecMinIntent <= ds.tsSecFrom && ds.rangeKeyFrac > 0 {
+		panic("min intent ts should be set if range key generation is needed")
+	}
+	if ds.tsSecOldIntentTo <= ds.tsSecMinIntent && ds.oldIntentFrac > 0 {
+		panic("old intent ts must be lower than min intent ts if old intents are enabled")
+	}
 	return newDataDistribution(
-		uniformTimestampDistribution(ds.tsSecFrom*time.Second.Nanoseconds(), ds.tsSecTo*time.Second.Nanoseconds(), rng),
+		uniformTimestampDistribution(ds.tsSecFrom*time.Second.Nanoseconds(),
+			ds.tsSecTo*time.Second.Nanoseconds(), rng),
 		hlc.Timestamp{WallTime: ds.tsSecMinIntent * time.Second.Nanoseconds()},
 		hlc.Timestamp{WallTime: ds.tsSecOldIntentTo * time.Second.Nanoseconds()},
-		uniformTableStringKeyDistribution(ds.desc().StartKey.AsRawKey(), ds.keySuffixMin, ds.keySuffixMax, rng),
+		uniformTableStringKeyDistribution(ds.desc().StartKey.AsRawKey(), ds.keySuffixMin,
+			ds.keySuffixMax, rng),
 		uniformValueStringDistribution(ds.valueLenMin, ds.valueLenMax, ds.deleteFrac, rng),
 		uniformValuesPerKey(ds.keysPerValueMin, ds.keysPerValueMax, rng),
-		ds.intentFrac, ds.oldIntentFrac,
+		ds.intentFrac,
+		ds.oldIntentFrac,
+		ds.rangeKeyFrac,
 		maxRows,
 		rng,
 	)
@@ -275,12 +438,12 @@ func (ds uniformDistSpec) String() string {
 			"keySuffix=[%d,%d],"+
 			"valueLen=[%d,%d],"+
 			"keysPerValue=[%d,%d],"+
-			"deleteFrac=%f,intentFrac=%f",
+			"deleteFrac=%f,intentFrac=%f,oldIntentFrac=%f,rangeFrac=%f",
 		ds.tsSecFrom, ds.tsSecTo,
 		ds.keySuffixMin, ds.keySuffixMax,
 		ds.valueLenMin, ds.valueLenMax,
 		ds.keysPerValueMin, ds.keysPerValueMax,
-		ds.deleteFrac, ds.intentFrac)
+		ds.deleteFrac, ds.intentFrac, ds.oldIntentFrac, ds.rangeKeyFrac)
 }
 
 // uniformTimestamp returns an hlc timestamp distribution with a wall time
@@ -372,5 +535,18 @@ func uniformTableStringKeyDistribution(
 		lenSuffix := suffixMin + rng.Intn(n)
 		key := randutil.RandString(rng, lenSuffix, randutil.PrintableKeyAlphabet)
 		return encoding.EncodeBytesAscending(prefix[0:len(prefix):len(prefix)], []byte(key))
+	}
+}
+
+func rangeKeyDistribution(keyDist func() roachpb.Key) func() (roachpb.Key, roachpb.Key) {
+	return func() (roachpb.Key, roachpb.Key) {
+		k1 := keyDist()
+		k2 := keyDist()
+		for ; k1.Equal(k2); k2 = keyDist() {
+		}
+		if k1.Compare(k2) > 0 {
+			return k2, k1
+		}
+		return k1, k2
 	}
 }

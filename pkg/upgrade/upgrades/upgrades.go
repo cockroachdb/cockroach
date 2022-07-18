@@ -55,23 +55,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"add column avgSize to table system.table_statistics",
-		toCV(clusterversion.AlterSystemTableStatisticsAddAvgSizeCol),
-		NoPrecondition,
-		alterSystemTableStatisticsAddAvgSize,
-	),
-	upgrade.NewTenantUpgrade(
-		"seed system.span_configurations with configs for existing tenants",
-		toCV(clusterversion.SeedTenantSpanConfigs),
-		NoPrecondition,
-		seedTenantSpanConfigsMigration,
-	),
-	upgrade.NewTenantUpgrade("insert missing system.namespace entries for public schemas",
-		toCV(clusterversion.InsertPublicSchemaNamespaceEntryOnRestore),
-		NoPrecondition,
-		insertMissingPublicSchemaNamespaceEntry,
-	),
-	upgrade.NewTenantUpgrade(
 		"add column target to system.protected_ts_records",
 		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
 		NoPrecondition,

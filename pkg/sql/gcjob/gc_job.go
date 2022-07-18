@@ -13,10 +13,13 @@ package gcjob
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -93,6 +96,36 @@ func performGC(
 	return nil
 }
 
+// unsplitRangesInSpan unsplits any manually splits ranges within a span.
+func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) error {
+	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "unsplit-ranges-in-span"), span)
+	if err != nil {
+		return err
+	}
+	for _, r := range ranges {
+		var desc roachpb.RangeDescriptor
+		if err := r.ValueProto(&desc); err != nil {
+			return err
+		}
+
+		if !span.ContainsKey(desc.StartKey.AsRawKey()) {
+			continue
+		}
+
+		if !desc.GetStickyBit().IsEmpty() {
+			// Swallow "key is not the start of a range" errors because it would mean
+			// that the sticky bit was removed and merged concurrently. DROP TABLE
+			// should not fail because of this.
+			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+				!strings.Contains(err.Error(), "is not the start of a range") {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func unsplitRangesForTables(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -108,7 +141,7 @@ func unsplitRangesForTables(
 			Key:    startKey,
 			EndKey: startKey.PrefixEnd(),
 		}
-		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
 			return err
 		}
 	}
@@ -134,7 +167,7 @@ func unsplitRangesForIndexes(
 			EndKey: startKey.PrefixEnd(),
 		}
 
-		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
 			return err
 		}
 	}

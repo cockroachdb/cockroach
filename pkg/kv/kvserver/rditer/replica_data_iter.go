@@ -22,6 +22,16 @@ type KeyRange struct {
 	Start, End roachpb.Key
 }
 
+// ReplicaDataIteratorOptions defines ReplicaMVCCDataIterator creation options.
+type ReplicaDataIteratorOptions struct {
+	// See NewReplicaMVCCDataIterator for details.
+	Reverse bool
+	// IterKind is passed to underlying iterator to select desired value types.
+	IterKind storage.MVCCIterKind
+	// KeyTypes is passed to underlying iterator to select desired key types.
+	KeyTypes storage.IterKeyType
+}
+
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
 // (which can be made to look like an MVCCKey) key / value
 // rows in a range, including system-local metadata and user data.
@@ -36,14 +46,15 @@ type KeyRange struct {
 // TODO(sumeer): merge with ReplicaEngineDataIterator. We can use an EngineIterator
 // for MVCC key ranges and convert from EngineKey to MVCCKey.
 type ReplicaMVCCDataIterator struct {
+	ReplicaDataIteratorOptions
+
 	reader   storage.Reader
 	curIndex int
 	ranges   []KeyRange
 	// When it is non-nil, it represents the iterator for curIndex.
 	// A non-nil it is valid, else it is either done, or err != nil.
-	it      storage.MVCCIterator
-	err     error
-	reverse bool
+	it  storage.MVCCIterator
+	err error
 }
 
 // ReplicaEngineDataIterator provides a complete iteration over all data in a
@@ -208,9 +219,9 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 // replica. It iterates over the replicated key ranges excluding the lock
 // table key range. Separated locks are made to appear as interleaved. The
 // iterator can do one of reverse or forward iteration, based on whether
-// seekEnd is true or false, respectively. With reverse iteration, it is
-// initially positioned at the end of the last range, else it is initially
-// positioned at the start of the first range.
+// Reverse is true or false in ReplicaDataIteratorOptions, respectively.
+// With reverse iteration, it is initially positioned at the end of the last
+// range, else it is initially positioned at the start of the first range.
 //
 // The iterator requires the reader.ConsistentIterators is true, since it
 // creates a different iterator for each replicated key range. This is because
@@ -220,17 +231,17 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 // TODO(erikgrinaker): ReplicaMVCCDataIterator does not support MVCC range keys.
 // This should be deprecated in favor of e.g. ReplicaEngineDataIterator.
 func NewReplicaMVCCDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
+	d *roachpb.RangeDescriptor, reader storage.Reader, opts ReplicaDataIteratorOptions,
 ) *ReplicaMVCCDataIterator {
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
 	}
 	ri := &ReplicaMVCCDataIterator{
-		reader:  reader,
-		ranges:  MakeReplicatedKeyRangesExceptLockTable(d),
-		reverse: seekEnd,
+		ReplicaDataIteratorOptions: opts,
+		reader:                     reader,
+		ranges:                     MakeReplicatedKeyRangesExceptLockTable(d),
 	}
-	if ri.reverse {
+	if ri.Reverse {
 		ri.curIndex = len(ri.ranges) - 1
 	} else {
 		ri.curIndex = 0
@@ -249,12 +260,13 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			return
 		}
 		ri.it = ri.reader.NewMVCCIterator(
-			storage.MVCCKeyAndIntentsIterKind,
+			ri.IterKind,
 			storage.IterOptions{
 				LowerBound: ri.ranges[ri.curIndex].Start,
 				UpperBound: ri.ranges[ri.curIndex].End,
+				KeyTypes:   ri.KeyTypes,
 			})
-		if ri.reverse {
+		if ri.Reverse {
 			ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.ranges[ri.curIndex].End))
 		} else {
 			ri.it.SeekGE(storage.MakeMVCCMetadataKey(ri.ranges[ri.curIndex].Start))
@@ -263,7 +275,7 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			ri.err = err
 			return
 		}
-		if ri.reverse {
+		if ri.Reverse {
 			ri.curIndex--
 		} else {
 			ri.curIndex++
@@ -281,7 +293,7 @@ func (ri *ReplicaMVCCDataIterator) Close() {
 
 // Next advances to the next key in the iteration.
 func (ri *ReplicaMVCCDataIterator) Next() {
-	if ri.reverse {
+	if ri.Reverse {
 		panic("Next called on reverse iterator")
 	}
 	ri.it.Next()
@@ -298,7 +310,7 @@ func (ri *ReplicaMVCCDataIterator) Next() {
 
 // Prev advances the iterator one key backwards.
 func (ri *ReplicaMVCCDataIterator) Prev() {
-	if !ri.reverse {
+	if !ri.Reverse {
 		panic("Prev called on forward iterator")
 	}
 	ri.it.Prev()
@@ -340,10 +352,29 @@ func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
 	return ri.it.UnsafeKey()
 }
 
+// RangeBounds returns the range bounds for the current range key, or an
+// empty span if there are none. The returned keys are only valid until the
+// next iterator call.
+func (ri *ReplicaMVCCDataIterator) RangeBounds() roachpb.Span {
+	return ri.it.RangeBounds()
+}
+
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
 func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
+}
+
+// RangeKeys exposes RangeKeys from underlying iterator. See
+// storage.SimpleMVCCIterator for details.
+func (ri *ReplicaMVCCDataIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+	return ri.it.RangeKeys()
+}
+
+// HasPointAndRange exposes HasPointAndRange from underlying iterator. See
+// storage.SimpleMVCCIterator for details.
+func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
+	return ri.it.HasPointAndRange()
 }
 
 // NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the

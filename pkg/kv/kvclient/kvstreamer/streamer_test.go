@@ -504,7 +504,10 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	// The crux of the test - run a query that performs a lookup join when
 	// ordering needs to be maintained and then confirm that the results of the
 	// parallel lookups are served in the right order.
-	r := db.QueryRow("SELECT array_agg(s) FROM small INNER LOOKUP JOIN large ON small.n = large.n GROUP BY small.n ORDER BY small.n")
+	// TODO(yuzefovich): remove ORDER BY clause inside array_agg when the lookup
+	// joins use the InOrder mode of the streamer when ordering needs to be
+	// maintained.
+	r := db.QueryRow("SELECT array_agg(s ORDER BY s) FROM small INNER LOOKUP JOIN large ON small.n = large.n GROUP BY small.n ORDER BY small.n")
 	var result string
 	err = r.Scan(&result)
 	require.NoError(t, err)

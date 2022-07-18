@@ -164,29 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// TargetBytesAvoidExcess prevents exceeding BatchRequest.Header.TargetBytes
-	// except when there is a single value in the response. 21.2 DistSender logic
-	// requires the limit to always be overshot in order to properly enforce
-	// limits when splitting requests.
-	TargetBytesAvoidExcess
-	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
-	// of span that RPCs get on the server depending on the tracing context.
-	TraceIDDoesntImplyStructuredRecording
-	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
-	// table system.table_statistics that contains a new statistic.
-	AlterSystemTableStatisticsAddAvgSizeCol
-	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
-	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
-	MVCCAddSSTable
-	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
-	// have an entry in system.namespace upon being restored.
-	InsertPublicSchemaNamespaceEntryOnRestore
-	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
-	// "drop table"/"truncate table" to async gc jobs
-	UnsplitRangesInAsyncGCJobs
-	// ValidateGrantOption checks whether the current user granting privileges to
-	// another user holds the grant option for those privileges
-	ValidateGrantOption
 	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
 	// Pebble version that provides block property collectors that can be used
 	// for fine-grained time bound iteration. See
@@ -196,23 +173,6 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
-	// SelectRPCsTakeTracingInfoInband switches the way tracing works for a couple
-	// of common RPCs. Tracing information for these select RPCs is no longer
-	// marshaled from the client to the server as gRPC metadata, and the gRPC
-	// server interceptor is no longer in charge of transparently creating server
-	// spans. Instead, trace information is carried by the respective request
-	// protos (the client is responsible for filling it in explicitly), and the
-	// server-side handler is responsible for opening a span manually.
-	SelectRPCsTakeTracingInfoInband
-	// PreSeedTenantSpanConfigs precedes SeedTenantSpanConfigs, and enables the
-	// creation of initial span config records for newly created tenants.
-	PreSeedTenantSpanConfigs
-	// SeedTenantSpanConfigs populates system.span_configurations with seed
-	// data for secondary tenants. This state is what ensures that we always
-	// split on tenant boundaries when using the span configs infrastructure.
-	// This version comes with a migration to populate the same seed data
-	// for existing tenants.
-	SeedTenantSpanConfigs
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
@@ -225,9 +185,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// ScanWholeRows is the version at which the Header.WholeRowsOfSize parameter
-	// was introduced, preventing limited scans from returning partial rows.
-	ScanWholeRows
 	// SCRAM authentication is available.
 	SCRAMAuthentication
 	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
@@ -267,10 +224,6 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// DisableSystemConfigGossipTrigger is a follow-up to EnableSpanConfigStore
-	// to disable the data propagation mechanism it and the entire spanconfig
-	// infrastructure obviates.
-	DisableSystemConfigGossipTrigger
 	// MVCCIndexBackfiller supports MVCC-compliant index
 	// backfillers via a new BACKFILLING index state, delete
 	// preserving temporary indexes, and a post-backfill merging
@@ -279,9 +232,6 @@ const (
 	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
 	// during joint configuration, including to VOTER_INCOMING replicas.
 	EnableLeaseHolderRemoval
-	// BackupResolutionInJob defaults to resolving backup destinations during the
-	// execution of a backup job rather than during planning.
-	BackupResolutionInJob
 	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
 	// for raft log truncation, by allowing each replica to treat a truncation
 	// proposal as an upper bound on what should be truncated.
@@ -304,9 +254,6 @@ const (
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
-	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
-	// when DateStyle/IntervalStyle is enabled.
-	DateStyleIntervalStyleCastRewrite
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -316,8 +263,6 @@ const (
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
-	// ForecastStats enables statistics forecasting per table.
-	ForecastStats
 	// SuperRegions enables the usage on super regions.
 	SuperRegions
 	// EnableNewChangefeedOptions enables the usage of new changefeed options
@@ -421,52 +366,12 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     TargetBytesAvoidExcess,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
-	},
-	{
-		Key:     TraceIDDoesntImplyStructuredRecording,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
-	},
-	{
-		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
-	},
-	{
-		Key:     MVCCAddSSTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
-	},
-	{
-		Key:     InsertPublicSchemaNamespaceEntryOnRestore,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
-	},
-	{
-		Key:     UnsplitRangesInAsyncGCJobs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 20},
-	},
-	{
-		Key:     ValidateGrantOption,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 22},
-	},
-	{
 		Key:     PebbleFormatBlockPropertyCollector,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
 	},
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     SelectRPCsTakeTracingInfoInband,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     PreSeedTenantSpanConfigs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 30},
-	},
-	{
-		Key:     SeedTenantSpanConfigs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 32},
 	},
 	{
 		Key:     PublicSchemasWithDescriptors,
@@ -483,10 +388,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     ScanWholeRows,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 42},
 	},
 	{
 		Key:     SCRAMAuthentication,
@@ -529,10 +430,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 	{
-		Key:     DisableSystemConfigGossipTrigger,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 66},
-	},
-	{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
@@ -542,10 +439,6 @@ var versionsSingleton = keyedVersions{
 	},
 	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
 	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
-	{
-		Key:     BackupResolutionInJob,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
-	},
 	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
 	{
 		Key:     LooselyCoupledRaftLogTruncation,
@@ -576,10 +469,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
 	{
-		Key:     DateStyleIntervalStyleCastRewrite,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
-	},
-	{
 		Key:     EnableNewStoreRebalancer,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
 	},
@@ -590,10 +479,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AutoStatsTableSettings,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
-	},
-	{
-		Key:     ForecastStats,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 102},
 	},
 	{
 		Key:     SuperRegions,
