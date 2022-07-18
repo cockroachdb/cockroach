@@ -29,9 +29,6 @@ import Adapter from "enzyme-adapter-react-16";
 // }
 
 //TODO(barag): does this need to all be in a beforeAll()/afterAll so we can restore all of these mocks?
-
-import "@testing-library/jest-dom";
-
 Enzyme.configure({ adapter: new Adapter() });
 
 /**
@@ -65,9 +62,3 @@ afterAll(() => {
   delete window.matchMedia;
   delete window.fetch;
 });
-
-// afterAll(() => {
-//   console.log("[setupTests::afterAll] writing v8 heap snapshot…");
-//   const dst = v8.writeHeapSnapshot();
-//   console.log("[setupTests::afterAll] done. see", dst);
-// });
