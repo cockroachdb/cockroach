@@ -1136,13 +1136,10 @@ func BenchmarkPlanning(b *testing.B) {
 	})
 }
 
-// BenchmarkIndexJoin measure an index-join with 1000 rows.
-func BenchmarkIndexJoin(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		// The table will have an extra column not contained in the index to force a
-		// join with the PK.
-		create := `
+func setupIndexJoinBenchmark(b *testing.B, db *sqlutils.SQLRunner) {
+	// The table will have an extra column not contained in the index to force a
+	// join with the PK.
+	create := `
 		 CREATE TABLE tidx (
 				 k INT NOT NULL,
 				 v INT NULL,
@@ -1152,17 +1149,38 @@ func BenchmarkIndexJoin(b *testing.B) {
 				 FAMILY "primary" (k, v, extra)
 		 )
 		`
-		// We'll insert 1000 rows with random values below 1000 in the index.
-		// We'll then force scanning of the secondary index which will require
-		// performing an index join to get 'extra' column.
-		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+	// We'll insert 1000 rows with random values below 1000 in the index.
+	// We'll then force scanning of the secondary index which will require
+	// performing an index join to get 'extra' column.
+	insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
-		db.Exec(b, create)
-		db.Exec(b, insert)
+	db.Exec(b, create)
+	db.Exec(b, insert)
+}
+
+// BenchmarkIndexJoin measure an index-join with 1000 rows.
+func BenchmarkIndexJoin(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		setupIndexJoinBenchmark(b, db)
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
 			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
+		}
+	})
+}
+
+// BenchmarkIndexJoinOrdering is the same as BenchmarkIndexJoin when the
+// ordering needs to be maintained.
+func BenchmarkIndexJoinOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		setupIndexJoinBenchmark(b, db)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000 order by v")
 		}
 	})
 }
