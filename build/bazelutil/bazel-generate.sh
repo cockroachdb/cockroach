@@ -16,6 +16,9 @@ files_unchanged_from_upstream () {
     return 1
   fi
 
+  # NB: This logic is duplicated in pkg/cmd/dev/test.go. Any changes to the git
+  # commands here probably needs to be mirrored there.
+
   # First, figure out the correct remote.
   UPSTREAM=$(git remote -v | grep 'github.com[/:]cockroachdb/cockroach.*(fetch)' | awk '{print $1}') || return 1
   if [ -z "$UPSTREAM" ]; then
