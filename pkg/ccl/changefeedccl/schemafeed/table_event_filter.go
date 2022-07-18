@@ -221,10 +221,50 @@ func regionalByRowChanged(e TableEvent) bool {
 	return e.Before.IsLocalityRegionalByRow() != e.After.IsLocalityRegionalByRow()
 }
 
+func hasNewPrimaryIndexWithNoVisibleColumnChanges(e TableEvent) bool {
+	before, after := e.Before.GetPrimaryIndex(), e.After.GetPrimaryIndex()
+	if before.GetID() == after.GetID() ||
+		before.NumKeyColumns() != after.NumKeyColumns() {
+		return false
+	}
+	for i, n := 0, before.NumKeyColumns(); i < n; i++ {
+		if before.GetKeyColumnID(i) != after.GetKeyColumnID(i) {
+			return false
+		}
+	}
+	collectPublicStoredColumns := func(
+		idx catalog.Index, tab catalog.TableDescriptor,
+	) (cols catalog.TableColSet) {
+		for i, n := 0, idx.NumPrimaryStoredColumns(); i < n; i++ {
+			colID := idx.GetStoredColumnID(i)
+			col, _ := tab.FindColumnWithID(colID)
+			if col.Public() {
+				cols.Add(colID)
+			}
+		}
+		return cols
+	}
+	storedBefore := collectPublicStoredColumns(before, e.Before)
+	storedAfter := collectPublicStoredColumns(after, e.After)
+	return storedBefore.Len() == storedAfter.Len() &&
+		storedBefore.Difference(storedAfter).Empty()
+}
+
 // IsPrimaryIndexChange returns true if the event corresponds to a change
-// in the primary index.
-func IsPrimaryIndexChange(e TableEvent) bool {
-	return classifyTableEvent(e).Contains(tableEventPrimaryKeyChange)
+// in the primary index. It also returns whether the primary index change
+// corresponds to any change in the visible column set or key ordering.
+// This is useful because when the declarative schema changer drops a column,
+// it does so by adding a new primary index with the column excluded and
+// then swaps to the new primary index. The column logically disappears
+// before the index swap occurs. We want to detect the case of this index
+// swap and not stop changefeeds which are programmed to stop upon schema
+// changes.
+func IsPrimaryIndexChange(e TableEvent) (isPrimaryIndexChange, noVisibleOrderOrColumnChanges bool) {
+	isPrimaryIndexChange = classifyTableEvent(e).Contains(tableEventPrimaryKeyChange)
+	if isPrimaryIndexChange {
+		noVisibleOrderOrColumnChanges = hasNewPrimaryIndexWithNoVisibleColumnChanges(e)
+	}
+	return isPrimaryIndexChange, noVisibleOrderOrColumnChanges
 }
 
 // IsOnlyPrimaryIndexChange returns to true if the event corresponds
