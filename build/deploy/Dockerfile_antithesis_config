@@ -1,0 +1,6 @@
+FROM scratch
+
+COPY docker-compose.yml .
+COPY run_bank_workload.sh .
+COPY test_docker_compose.sh .
+
