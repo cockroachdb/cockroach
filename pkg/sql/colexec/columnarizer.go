@@ -215,6 +215,9 @@ func (c *Columnarizer) Next() coldata.Batch {
 		oldRows := c.buffered
 		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
 		_ = newRows[len(oldRows)]
+		// The S1001 lint would tell us to use `copy` here, but
+		// we would like to keep the gcassert.
+		//lint:ignore S1001
 		for i := 0; i < len(oldRows); i++ {
 			//gcassert:bce
 			newRows[i] = oldRows[i]
