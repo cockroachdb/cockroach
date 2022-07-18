@@ -29,6 +29,12 @@ joinOnColumnID(a, b, desc-id, col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
     - $b[ColumnID] = $col-id
+indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
+    - $index[IndexID] = $index-id
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index-column[DescID] = $_
+    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
 joinOnConstraintID(a, b, desc-id, constraint-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ConstraintID] = $constraint-id
@@ -37,12 +43,6 @@ index-dependents(index, dep, table-id, index-id):
     - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
     - joinOnIndexID($dep, $index, $table-id, $index-id)
-indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
-    - $index[IndexID] = $index-id
-    - $index-column[Type] = '*scpb.IndexColumn'
-    - $index-column[DescID] = $_
-    - joinOnColumnID($column, $index-column, $table-id, $column-id)
-    - joinOnIndexID($index, $index-column, $table-id, $index-id)
 sourceIndexNotSet(index):
     - $index[SourceIndexID] != 0
 columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):

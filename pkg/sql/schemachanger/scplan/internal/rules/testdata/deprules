@@ -29,6 +29,12 @@ joinOnColumnID(a, b, desc-id, col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
     - $b[ColumnID] = $col-id
+indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
+    - $index[IndexID] = $index-id
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index-column[DescID] = $_
+    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
 joinOnConstraintID(a, b, desc-id, constraint-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ConstraintID] = $constraint-id
@@ -37,12 +43,6 @@ index-dependents(index, dep, table-id, index-id):
     - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
     - joinOnIndexID($dep, $index, $table-id, $index-id)
-indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
-    - $index[IndexID] = $index-id
-    - $index-column[Type] = '*scpb.IndexColumn'
-    - $index-column[DescID] = $_
-    - joinOnColumnID($column, $index-column, $table-id, $column-id)
-    - joinOnIndexID($index, $index-column, $table-id, $index-id)
 sourceIndexNotSet(index):
     - $index[SourceIndexID] != 0
 columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
@@ -418,6 +418,23 @@ deprules
     - columnTypeIsNotBeingDropped(*scpb.ColumnType)($column-type)
     - joinTargetNode($column-type, $column-type-target, $column-type-node)
     - joinTargetNode($column, $column-target, $column-node)
+- name: indexes containing columns reach absent before column
+  from: index-node
+  kind: Precedence
+  to: column-node
+  query:
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $column[Type] = '*scpb.Column'
+    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
+    - $column-type[Type] = '*scpb.ColumnType'
+    - joinOnColumnID($column, $column-type, $table-id, $column-id)
+    - $index-target[TargetStatus] = ABSENT
+    - $column-target[TargetStatus] = ABSENT
+    - $index-node[CurrentStatus] = ABSENT
+    - $column-node[CurrentStatus] = ABSENT
+    - columnTypeIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - joinTargetNode($index, $index-target, $index-node)
+    - joinTargetNode($column, $column-target, $column-node)
 - name: partial predicate removed right before secondary index when not dropping relation
   from: partial-predicate-node
   kind: SameStagePrecedence
@@ -433,7 +450,7 @@ deprules
     - secondaryIndexPartialIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - joinTargetNode($partial-predicate, $partial-predicate-target, $partial-predicate-node)
     - joinTargetNode($index, $index-target, $index-node)
-- name: column depends on primary index
+- name: adding column depends on primary index
   from: index-node
   kind: Precedence
   to: column-node
@@ -443,7 +460,7 @@ deprules
     - columnInPrimaryIndexSwap($index, $column, $index-column, $table-id, $column-id, $index-id)
     - $index-target[TargetStatus] = PUBLIC
     - $column-target[TargetStatus] = PUBLIC
-    - $status IN [WRITE_ONLY, PUBLIC]
+    - $status IN [PUBLIC]
     - $index-node[CurrentStatus] = $status
     - $column-node[CurrentStatus] = $status
     - joinTargetNode($index, $index-target, $index-node)
@@ -621,6 +638,20 @@ deprules
     - indexes-id-less(scpb.Element, scpb.Element)($a, $b)
     - joinTargetNode($index-a, $index-a-target, $index-a-node)
     - joinTargetNode($index-b, $index-b-target, $index-b-node)
+- name: column is WRITE_ONLY before temporary index is WRITE_ONLY
+  from: column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $index[Type] = '*scpb.TemporaryIndex'
+    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
+    - $column-target[TargetStatus] = PUBLIC
+    - $index-target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-node[CurrentStatus] = WRITE_ONLY
+    - $index-node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($column, $column-target, $column-node)
+    - joinTargetNode($index, $index-target, $index-node)
 - name: ensure columns are in increasing order
   from: later-column-node
   kind: SameStagePrecedence
