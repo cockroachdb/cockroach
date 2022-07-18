@@ -1984,7 +1984,12 @@ func (s *adminServer) Jobs(
 		return nil, serverError(ctx, err)
 	}
 
-	j, err := s.jobsHelper(ctx, req, userName)
+	j, err := jobsHelper(
+		ctx,
+		req,
+		userName,
+		s.server.sqlServer,
+	)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1993,8 +1998,11 @@ func (s *adminServer) Jobs(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *adminServer) jobsHelper(
-	ctx context.Context, req *serverpb.JobsRequest, userName security.SQLUsername,
+func jobsHelper(
+	ctx context.Context,
+	req *serverpb.JobsRequest,
+	userName security.SQLUsername,
+	sqlServer *SQLServer,
 ) (_ *serverpb.JobsResponse, retErr error) {
 	retryRunningCondition := "status='running' AND next_run > now() AND num_runs > 1"
 	retryRevertingCondition := "status='reverting' AND next_run > now() AND num_runs > 1"
@@ -2033,7 +2041,7 @@ func (s *adminServer) jobsHelper(
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
-	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+	it, err := sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-jobs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		q.String(), q.QueryArguments()...,
@@ -2146,7 +2154,7 @@ func (s *adminServer) Job(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	r, err := s.jobHelper(ctx, request, userName)
+	r, err := jobHelper(ctx, request, userName, s.server.sqlServer)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2155,8 +2163,11 @@ func (s *adminServer) Job(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *adminServer) jobHelper(
-	ctx context.Context, request *serverpb.JobRequest, userName security.SQLUsername,
+func jobHelper(
+	ctx context.Context,
+	request *serverpb.JobRequest,
+	userName security.SQLUsername,
+	sqlServer *SQLServer,
 ) (_ *serverpb.JobResponse, retErr error) {
 	const query = `
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
@@ -2165,7 +2176,7 @@ func (s *adminServer) jobHelper(
 	  						 next_run, num_runs, execution_events::string
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
-	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+	row, cols, err := sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-job", nil,
 		sessiondata.InternalExecutorOverride{User: userName},
 		query,
