@@ -614,7 +614,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.index = idx
 	tableScan.disableBatchLimit()
 
-	if !ef.isExplain {
+	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -676,7 +676,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	}
 
-	if !ef.isExplain {
+	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -811,7 +811,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	}
 	tableScan.index = idx
 
-	if !ef.isExplain {
+	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),
@@ -875,7 +875,7 @@ func (ef *execFactory) constructScanForZigzag(
 		return nil, err
 	}
 
-	if !ef.isExplain {
+	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tableDesc.GetID()),
 			IndexID: roachpb.IndexID(index.GetID()),
