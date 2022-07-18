@@ -66,12 +66,15 @@ type Server struct {
 	spy        logSpy
 }
 
+type serverTickleFn = func(ctx context.Context, name string) error
+
 // NewServer sets up a debug server.
 func NewServer(
 	ambientContext log.AmbientContext,
 	st *cluster.Settings,
 	hbaConfDebugFn http.HandlerFunc,
 	profiler pprofui.Profiler,
+	serverTickleFn serverTickleFn,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -109,6 +112,15 @@ func NewServer(
 
 	// Register the stopper endpoint, which lists all active tasks.
 	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
+
+	if serverTickleFn != nil {
+		// Register the server tickling function.
+		//
+		// TODO(knz): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/84585 is
+		// implemented.
+		mux.Handle("/debug/tickle", handleTickle(serverTickleFn))
+	}
 
 	// Set up the vmodule endpoint.
 	vsrv := &vmoduleServer{}
@@ -265,4 +277,26 @@ If you are not redirected automatically, follow this <a href='/#/debug'>link</a>
 </body>
 </html>
 `)
+}
+
+type handleTickle serverTickleFn
+
+func (h handleTickle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	opts := r.URL.Query()
+	var name string
+	if n := opts["name"]; len(n) > 0 {
+		name = n[0]
+	}
+	w.Header().Add("Content-type", "text/plain")
+	if name == "" {
+		fmt.Fprint(w, "no name specified")
+		return
+	}
+	ctx := r.Context()
+	err := serverTickleFn(h)(ctx, name)
+	if err != nil {
+		fmt.Fprint(w, err)
+		return
+	}
+	fmt.Fprintf(w, "server for tenant %q was tickled", name)
 }
