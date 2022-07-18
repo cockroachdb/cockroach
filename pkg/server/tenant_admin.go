@@ -148,3 +148,43 @@ func (t *tenantAdminServer) Drain(
 
 	return t.drain.handleDrain(ctx, req, stream)
 }
+
+func (t *tenantAdminServer) Jobs(
+	ctx context.Context, req *serverpb.JobsRequest,
+) (_ *serverpb.JobsResponse, retErr error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	j, err := jobsHelper(
+		ctx,
+		req,
+		userName,
+		t.sqlServer,
+		t.sqlServer.cfg,
+		&t.sqlServer.cfg.Settings.SV,
+	)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return j, nil
+}
+
+func (t *tenantAdminServer) Job(
+	ctx context.Context, request *serverpb.JobRequest,
+) (_ *serverpb.JobResponse, retErr error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+	r, err := jobHelper(ctx, request, userName, t.sqlServer)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return r, nil
+}
