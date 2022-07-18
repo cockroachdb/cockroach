@@ -20,6 +20,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/username",
+        "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/storage",
