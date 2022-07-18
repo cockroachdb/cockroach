@@ -209,6 +209,21 @@ RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/au
   && chmod +x /usr/local/bin/autouseradd \
   && rm autouseradd.tar.gz
 
+# install Antithesis instrumentation library and binary
+
+# N.B. since the instrumentation library is not OSS, it's not included
+#      you can untar it and then copy the required artifacts into the builder's workdir
+#unzip antithesis_instrumentation*.zip -d /opt/antithesis/
+#cp /opt/antithesis/instrumentation/go/wrappers/wrappers.go build/builder/
+#cp /opt/antithesis/instrumentation/go/wrappers/go.mod build/builder/
+#cp /opt/antithesis/bin/goinstrumentor build/builder/
+#cp /opt/antithesis/lib/libvoidstar.so build/builder/
+
+RUN mkdir -p /opt/antithesis/bin/ && mkdir -p /opt/antithesis/lib/ && mkdir -p /opt/antithesis/instrumentation/go/wrappers/
+COPY libvoidstar.so /opt/antithesis/lib/
+COPY goinstrumentor /opt/antithesis/bin/
+COPY go.mod wrappers.go /opt/antithesis/instrumentation/go/wrappers/
+
 COPY entrypoint.sh /usr/local/bin
 
 ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home", "--", "entrypoint.sh"]
