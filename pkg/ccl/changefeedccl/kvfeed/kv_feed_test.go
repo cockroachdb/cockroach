@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -391,7 +392,7 @@ func (f rawEventFeed) run(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- *kvclient.RangeFeedEnvelope,
 ) error {
 	var startAfter hlc.Timestamp
 	for _, s := range spans {
@@ -414,7 +415,7 @@ func (f rawEventFeed) run(
 	f = f[i:]
 	for i := range f {
 		select {
-		case eventC <- &f[i]:
+		case eventC <- &kvclient.RangeFeedEnvelope{RangeFeedEvent: &f[i]}:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
