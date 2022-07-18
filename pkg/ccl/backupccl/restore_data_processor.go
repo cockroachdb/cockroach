@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -409,11 +408,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	defer sst.cleanup()
 
 	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
-	if writeAtBatchTS && !evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
-		return roachpb.BulkOpSummary{}, errors.Newf(
-			"cannot use %s until version %s", restoreAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
-		)
-	}
 
 	// If the system tenant is restoring a guest tenant span, we don't want to
 	// forward all the restored data to now, as there may be importing tables in

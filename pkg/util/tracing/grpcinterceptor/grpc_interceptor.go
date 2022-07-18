@@ -49,8 +49,8 @@ func setGRPCErrorTag(sp *tracing.Span, err error) {
 // BatchMethodName is the method name of Internal.Batch RPC.
 const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
 
-// SendKVBatchMethodName is the method name for adminServer.SendKVBatch.
-const SendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
+// sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
+const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
 
 // SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
 const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
@@ -64,7 +64,7 @@ const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
 // tracing because it's not worth it.
 func methodExcludedFromTracing(method string) bool {
 	return method == BatchMethodName ||
-		method == SendKVBatchMethodName ||
+		method == sendKVBatchMethodName ||
 		method == SetupFlowMethodName ||
 		method == flowStreamMethodName
 }
@@ -205,16 +205,8 @@ func injectSpanMeta(
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
-//
-// compatibilityMode is a callback that will be used to check whether the node
-// (still) needs compatibility with 21.2. If it doesn't, then a more performant
-// trace propagation mechanism is used. The compatibility check is built as a
-// callback rather than directly checking the cluster version because this
-// tracing package cannot use cluster settings.
 func ClientInterceptor(
-	tracer *tracing.Tracer,
-	init func(*tracing.Span),
-	compatibilityMode func(ctx context.Context) bool,
+	tracer *tracing.Tracer, init func(*tracing.Span),
 ) grpc.UnaryClientInterceptor {
 	if init == nil {
 		init = func(*tracing.Span) {}
@@ -247,7 +239,7 @@ func ClientInterceptor(
 
 		// For most RPCs we pass along tracing info as gRPC metadata. Some select
 		// RPCs carry the tracing in the request protos, which is more efficient.
-		if compatibilityMode(ctx) || !methodExcludedFromTracing(method) {
+		if !methodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
 		var err error

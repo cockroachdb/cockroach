@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -137,8 +136,7 @@ func EvalAddSSTable(
 	}
 
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
-	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.MVCCAddSSTable) &&
-		AddSSTableRequireAtRequestTimestamp.Get(&cArgs.EvalCtx.ClusterSettings().SV) &&
+	if AddSSTableRequireAtRequestTimestamp.Get(&cArgs.EvalCtx.ClusterSettings().SV) &&
 		sstToReqTS.IsEmpty() {
 		return result.Result{}, errors.AssertionFailedf(
 			"AddSSTable requests must set SSTTimestampToRequestTimestamp")

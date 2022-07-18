@@ -1715,6 +1715,15 @@ func (*ShowCompletions) observerStatement() {}
 func (*ShowCompletions) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*ShowCreateFunction) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowCreateFunction) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateFunction) StatementTag() string { return "SHOW CREATE FUNCTION" }
+
+// StatementReturnType implements the Statement interface.
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1926,14 +1935,15 @@ func (n *ShowTenantClusterSettingList) String() string   { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
-func (node *ShowCreateAllSchemas) String() string        { return AsString(node) }
-func (node *ShowCreateAllTables) String() string         { return AsString(node) }
-func (node *ShowCreateAllTypes) String() string          { return AsString(node) }
+func (n *ShowCreateAllSchemas) String() string           { return AsString(n) }
+func (n *ShowCreateAllTables) String() string            { return AsString(n) }
+func (n *ShowCreateAllTypes) String() string             { return AsString(n) }
 func (n *ShowCreateSchedules) String() string            { return AsString(n) }
 func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }
 func (n *ShowEnums) String() string                      { return AsString(n) }
 func (n *ShowFullTableScans) String() string             { return AsString(n) }
+func (n *ShowCreateFunction) String() string             { return AsString(n) }
 func (n *ShowGrants) String() string                     { return AsString(n) }
 func (n *ShowHistogram) String() string                  { return AsString(n) }
 func (n *ShowSchedules) String() string                  { return AsString(n) }

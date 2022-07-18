@@ -941,6 +941,13 @@ message GCRequest {
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+
+  message GCRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  }
+  repeated GCRangeKey range_keys = 6 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 
@@ -2451,10 +2458,8 @@ message Header {
   int64 max_span_request_keys = 8;
   // If set to a non-zero value, sets a target (in bytes) for how large the
   // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). For cluster versions
-  // 21.2 and below, the target will be overshot. For 22.1 and above, the
-  // target will only be overshot when the first result is larger than the
-  // target (see TargetBytesAvoidExcess cluster version), unless
+  // and limits the number of rows scanned (and returned). The target will only
+  // be overshot when the first result is larger than the target, unless
   // target_bytes_allow_empty is set. A suitable resume span will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
@@ -2462,9 +2467,7 @@ message Header {
   // option as well.
   int64 target_bytes = 15;
   // If true, allow returning an empty result when the first result exceeds a
-  // limit (e.g. TargetBytes). Only effective on 22.1 clusters with
-  // TargetBytesAvoidExcess version gate enabled. Only supported by Get, Scan,
-  // and ReverseScan.
+  // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
   bool allow_empty = 23;
   // If positive, Scan and ReverseScan requests with limits (MaxSpanRequestKeys
   // or TargetBytes) will not return results with partial SQL rows at the end

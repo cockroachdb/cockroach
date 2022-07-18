@@ -109,7 +109,7 @@ func TestSetMinVersion(t *testing.T) {
 	// Advancing the store cluster version to another cluster version
 	// that does not advance the Pebble format major version should
 	// leave the format major version unchanged.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.ValidateGrantOption))
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.Start22_1))
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
 

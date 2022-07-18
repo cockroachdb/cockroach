@@ -55,7 +55,9 @@ type collectingGCer struct {
 	keys [][]roachpb.GCRequest_GCKey
 }
 
-func (c *collectingGCer) GC(_ context.Context, keys []roachpb.GCRequest_GCKey) error {
+func (c *collectingGCer) GC(
+	_ context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
 	c.keys = append(c.keys, keys)
 	return nil
 }
@@ -564,20 +566,143 @@ var intentsAfterDelete = `
  1 |
 `
 
+var deleteRangeData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |     *-
+>5 |   .-
+ 4 | .-
+ 3 |
+ 2 | a b C
+ 1 |
+`
+
+var deleteRangeDataWithNewerValues = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 |
+ 8 | A C E *---
+ 7 |
+ 6 |     *-G
+>5 |   .-
+ 4 | .-      I
+ 3 |
+ 2 | b d F H i
+ 1 |
+`
+
+var deleteRangeMultipleValues = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |   *---
+>5 |   
+ 4 | .-
+ 3 |
+ 2 | a B C
+ 1 |
+`
+
+var deleteRangeDataWithIntents = `
+   | a  b  c  d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | !A !C !E
+ 7 |
+ 6 |       *--
+>5 |    .--
+ 4 | .--
+ 3 |
+ 2 | b  d  F
+ 1 |
+`
+
+// This case verifies that if range tombstone stack caching is working correctly
+// when different keys have different removal thresholds.
+var differentRangeStacksPerPoint = `
+   | a  bb ccc  d
+---+---------------
+ 9 |
+>8 |    B3
+ 7 | .----------
+ 6 |    b2
+ 5 | .----------
+ 4 | a2 b1
+ 3 | .----------
+ 2 | a1
+ 1 |
+`
+
+var deleteFragmentedRanges = `
+   | a  b  c  d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | A  C  F
+ 7 |
+ 6 |       
+>5 |    .--
+ 4 |    d
+ 3 | .--------
+ 2 | b  f  g
+ 1 |
+`
+
+var deleteMergesRanges = `
+   | a  bb ccc  d
+---+---------------
+ 9 | 
+ 8 | A  B  F
+ 7 | *----------
+ 6 | *----------
+>5 |    .--
+ 4 |
+ 3 |    c
+ 2 |
+ 1 |
+`
+
+var avoidMergingDifferentTs = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 | *--
+ 7 |    *--
+ 6 | 
+>5 | .-----
+ 4 |
+ 3 |
+ 2 |
+ 1 |
+`
+
 func TestGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, d := range []struct {
 		name string
 		data string
 	}{
-		{"single", singleValueData},
-		{"multiple_newer", multipleValuesNewerData},
-		{"multiple_older", multipleValuesOlderData},
-		{"delete", deleteData},
-		{"delete_with_newer", deleteWithNewerData},
-		{"multiple_values", multipleValuesData},
-		{"intents", intents},
-		{"intents_after_data", intentsAfterData},
-		{"intents_after_delete", intentsAfterDelete},
+		{name: "single", data: singleValueData},
+		{name: "multiple_newer", data: multipleValuesNewerData},
+		{name: "multiple_older", data: multipleValuesOlderData},
+		{name: "delete", data: deleteData},
+		{name: "delete_with_newer", data: deleteWithNewerData},
+		{name: "multiple_values", data: multipleValuesData},
+		{name: "intents", data: intents},
+		{name: "intents_after_data", data: intentsAfterData},
+		{name: "intents_after_delete", data: intentsAfterDelete},
+		{name: "delete_range_data", data: deleteRangeData},
+		{name: "delete_range_data_newer", data: deleteRangeDataWithNewerValues},
+		{name: "delete_range_multiple_points", data: deleteRangeMultipleValues},
+		{name: "delete_range_with_intents", data: deleteRangeDataWithIntents},
+		{name: "delete_with_different_range_stacks", data: differentRangeStacksPerPoint},
+		{name: "delete_fragments_ranges", data: deleteFragmentedRanges},
+		{name: "delete_merges_rages", data: deleteMergesRanges},
+		{name: "avoid_merging_different_ts", data: avoidMergingDifferentTs},
 	} {
 		t.Run(d.name, func(t *testing.T) {
 			runTest(t, d.data)
@@ -609,10 +734,18 @@ func runTest(t *testing.T, data string) {
 		gcer.resolveIntents, gcer.resolveIntentsAsync)
 	require.NoError(t, err)
 	require.Empty(t, gcer.intents, "expecting no intents")
-	require.NoError(t, storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.requests(), gcTS))
+	require.NoError(t,
+		storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcTS))
+
+	for _, batch := range gcer.rangeKeyBatches() {
+		rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
+			desc.EndKey.AsRawKey(), batch)
+		require.NoError(t,
+			storage.MVCCGarbageCollectRangeKeys(ctx, eng, &stats, rangeKeys))
+	}
 
 	ctrlEng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
+	defer ctrlEng.Close()
 	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
 
 	if log.V(1) {
@@ -628,6 +761,10 @@ func runTest(t *testing.T, data string) {
 	}
 
 	requireEqualReaders(t, ctrlEng, eng, desc)
+
+	// Age stats to the same TS before comparing.
+	expectedStats.AgeTo(now.WallTime)
+	stats.AgeTo(now.WallTime)
 	require.Equal(t, expectedStats, stats, "mvcc stats don't match the data")
 }
 
@@ -635,6 +772,8 @@ func runTest(t *testing.T, data string) {
 func requireEqualReaders(
 	t *testing.T, exected storage.Reader, actual storage.Reader, desc roachpb.RangeDescriptor,
 ) {
+	// First compare only points. We assert points and ranges separately for
+	// simplicity.
 	itExp := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
@@ -642,6 +781,7 @@ func requireEqualReaders(
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
 	defer itExp.Close()
+	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
 	itActual := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
@@ -650,8 +790,8 @@ func requireEqualReaders(
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
 	defer itActual.Close()
-	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	itActual.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
 	for {
 		okExp, err := itExp.Valid()
 		require.NoError(t, err, "failed to iterate values")
@@ -667,18 +807,59 @@ func requireEqualReaders(
 			itActual.UnsafeKey())
 		require.True(t, bytes.Equal(itExp.UnsafeValue(), itActual.UnsafeValue()),
 			"expected value not equal to actual for key %s", itExp.UnsafeKey())
-
 		itExp.Next()
 		itActual.Next()
+	}
+
+	// Compare only ranges.
+	itExpRanges := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itExpRanges.Close()
+	itExpRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
+	itActualRanges := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itActualRanges.Close()
+	itActualRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
+	for {
+		okExp, err := itExpRanges.Valid()
+		require.NoError(t, err, "failed to iterate ranges")
+		okAct, err := itActualRanges.Valid()
+		require.NoError(t, err, "failed to iterate ranges")
+		if !okExp && !okAct {
+			break
+		}
+
+		require.Equal(t, okExp, okAct, "range iterators have different number of elements")
+		require.EqualValues(t, itExpRanges.RangeKeys(), itActualRanges.RangeKeys(), "range keys")
+		itExpRanges.Next()
+		itActualRanges.Next()
 	}
 }
 
 // dataItem is element read from test table containing mvcc key value along with
 // metadata needed for filtering.
 type dataItem struct {
-	value storage.MVCCKeyValue
-	txn   *roachpb.Transaction
-	live  bool
+	value         storage.MVCCKeyValue
+	txn           *roachpb.Transaction
+	rangeKeyValue storage.MVCCRangeKeyValue
+	live          bool
+}
+
+func (d dataItem) timestamp() hlc.Timestamp {
+	if !d.value.Key.Timestamp.IsEmpty() {
+		return d.value.Key.Timestamp
+	}
+	return d.rangeKeyValue.RangeKey.Timestamp
 }
 
 type tableData []dataItem
@@ -719,14 +900,9 @@ func readTableData(
 	parsePoint := func(val string, i int, ts hlc.Timestamp) int {
 		val = strings.TrimSpace(val)
 		if len(val) > 0 {
-			value := []byte(val)
-			// Special meaning for deletions.
-			if val == "*" || val == "." {
-				value = nil
-			}
 			var txn *roachpb.Transaction
 			if val[0] == '!' {
-				value = value[1:]
+				val = val[1:]
 				txn = &roachpb.Transaction{
 					Status:                 roachpb.PENDING,
 					ReadTimestamp:          ts,
@@ -737,8 +913,9 @@ func readTableData(
 				txn.Key = txn.ID.GetBytes()
 			}
 			var v roachpb.Value
-			if value != nil {
-				v.SetBytes(value)
+			// Special meaning for deletions.
+			if val != "*" && val != "." {
+				v.SetString(val)
 			}
 			kv := storage.MVCCKeyValue{
 				Key: storage.MVCCKey{
@@ -751,6 +928,36 @@ func readTableData(
 			items = append(items, dataItem{value: kv, txn: txn, live: live})
 		}
 		return i + 1
+	}
+
+	parseRange := func(val, l string, i int, ts hlc.Timestamp) int {
+		startKey := columnKeys[i]
+		// Handle range key. We are modifying outer loop index here.
+		p := columnPositions[i+1] - 1
+		// Find where range definition ends.
+		for ; p < columnPositions[len(columnPositions)-1] && l[p] == '-'; p++ {
+		}
+		// Find key following the end of range.
+		for i++; i < len(columnKeys) && columnPositions[i] < p; i++ {
+		}
+		// Extract value from the first element.
+		value := val[0]
+		if value != '*' && value != '.' {
+			panic("test data only supports range deletions")
+		}
+		live := value == '*'
+		// Add range to data.
+		endKey := columnKeys[i]
+		items = append(items, dataItem{
+			rangeKeyValue: storage.MVCCRangeKeyValue{
+				RangeKey: storage.MVCCRangeKey{
+					StartKey:  startKey,
+					EndKey:    endKey,
+					Timestamp: ts,
+				},
+			}, live: live,
+		})
+		return i
 	}
 
 	var gcTS hlc.Timestamp
@@ -769,7 +976,7 @@ func readTableData(
 		require.NoError(t, err, "Failed to parse timestamp from %s", l)
 		require.Less(t, tsInt, lastTs, "Timestamps should be decreasing")
 		lastTs = tsInt
-		return hlc.Timestamp{WallTime: tsInt}
+		return hlc.Timestamp{WallTime: tsInt * time.Second.Nanoseconds()}
 	}
 
 	for _, l := range lines {
@@ -793,7 +1000,11 @@ func readTableData(
 		ts := parseTS(l)
 		for i := 0; i < len(columnKeys); {
 			val := l[columnPositions[i]:columnPositions[i+1]]
-			i = parsePoint(val, i, ts)
+			if val[len(val)-1] == '-' {
+				i = parseRange(val, l, i, ts)
+			} else {
+				i = parsePoint(val, i, ts)
+			}
 		}
 	}
 
@@ -802,19 +1013,19 @@ func readTableData(
 		items[i], items[j] = items[j], items[i]
 	}
 
-	return items, gcTS, items[len(items)-1].value.Key.Timestamp.Add(1, 0)
+	return items, gcTS, items[len(items)-1].timestamp().Add(1, 0)
 }
 
 // fullDistribution creates a data distribution that contains all data read from
 // table.
 func (d tableData) fullDistribution() dataDistribution {
 	items := d
-	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+	return func() (storage.MVCCKeyValue, storage.MVCCRangeKeyValue, *roachpb.Transaction, bool) {
 		if len(items) == 0 {
-			return storage.MVCCKeyValue{}, nil, false
+			return storage.MVCCKeyValue{}, storage.MVCCRangeKeyValue{}, nil, false
 		}
 		defer func() { items = items[1:] }()
-		return items[0].value, items[0].txn, true
+		return items[0].value, items[0].rangeKeyValue, items[0].txn, true
 	}
 }
 
@@ -822,10 +1033,10 @@ func (d tableData) fullDistribution() dataDistribution {
 // marked as live (see table data format above).
 func (d tableData) liveDistribution() dataDistribution {
 	items := d
-	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+	return func() (storage.MVCCKeyValue, storage.MVCCRangeKeyValue, *roachpb.Transaction, bool) {
 		for {
 			if len(items) == 0 {
-				return storage.MVCCKeyValue{}, nil, false
+				return storage.MVCCKeyValue{}, storage.MVCCRangeKeyValue{}, nil, false
 			}
 			if items[0].live {
 				break
@@ -833,12 +1044,89 @@ func (d tableData) liveDistribution() dataDistribution {
 			items = items[1:]
 		}
 		defer func() { items = items[1:] }()
-		return items[0].value, items[0].txn, true
+		return items[0].value, items[0].rangeKeyValue, items[0].txn, true
 	}
 }
 
+// engineData reads all engine data as tableCells in no particular order.
 func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []tableCell {
 	var result []tableCell
+
+	rangeIt := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer rangeIt.Close()
+	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	makeRangeCells := func(rks []storage.MVCCRangeKey) (tc []tableCell) {
+		for _, rk := range rks {
+			tc = append(tc, tableCell{
+				key: storage.MVCCKey{
+					Key:       rk.StartKey,
+					Timestamp: rk.Timestamp,
+				},
+				endKey: rk.EndKey,
+				value:  ".",
+			})
+		}
+		return tc
+	}
+	var partialRangeKeys []storage.MVCCRangeKey
+	var lastEnd roachpb.Key
+	for {
+		ok, err := rangeIt.Valid()
+		require.NoError(t, err, "failed to iterate range keys")
+		if !ok {
+			break
+		}
+		_, r := rangeIt.HasPointAndRange()
+		if r {
+			span := rangeIt.RangeBounds()
+			newKeys := rangeIt.RangeKeys()
+			if lastEnd.Equal(span.Key) {
+				// Try merging keys by timestamp.
+				var newPartial []storage.MVCCRangeKey
+				i, j := 0, 0
+				for i < len(newKeys) && j < len(partialRangeKeys) {
+					switch newKeys[i].RangeKey.Timestamp.Compare(partialRangeKeys[j].Timestamp) {
+					case 1:
+						newPartial = append(newPartial, newKeys[i].RangeKey.Clone())
+						i++
+					case 0:
+						newPartial = append(newPartial, storage.MVCCRangeKey{
+							StartKey:  partialRangeKeys[j].StartKey,
+							EndKey:    newKeys[i].RangeKey.EndKey.Clone(),
+							Timestamp: partialRangeKeys[j].Timestamp,
+						})
+						i++
+						j++
+					case -1:
+						newPartial = append(newPartial, partialRangeKeys[j].Clone())
+						j++
+					}
+				}
+				for ; i < len(newKeys); i++ {
+					newPartial = append(newPartial, newKeys[i].RangeKey.Clone())
+				}
+				for ; j < len(partialRangeKeys); j++ {
+					newPartial = append(newPartial, partialRangeKeys[j].Clone())
+				}
+				partialRangeKeys = newPartial
+			} else {
+				result = append(result, makeRangeCells(partialRangeKeys)...)
+				partialRangeKeys = make([]storage.MVCCRangeKey, len(newKeys))
+				for i, rk := range newKeys {
+					partialRangeKeys[i] = rk.RangeKey.Clone()
+				}
+			}
+			lastEnd = span.EndKey.Clone()
+		}
+		rangeIt.NextKey()
+	}
+	result = append(result, makeRangeCells(partialRangeKeys)...)
+
 	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
@@ -878,13 +1166,23 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 }
 
 type tableCell struct {
-	key   storage.MVCCKey
+	key storage.MVCCKey
+	// Optional endKey for range keys.
+	endKey roachpb.Key
+	// Formatted key value (could be value, deletion or intent).
 	value string
 }
 
 type columnInfo struct {
 	key            string
 	maxValueLength int
+	position       int
+	formatStr      string
+}
+
+type cellValue struct {
+	value  string
+	endKey string
 }
 
 // formatTable renders table with data. expecting data to be sorted naturally:
@@ -892,66 +1190,254 @@ type columnInfo struct {
 // prefix if provided defines start of the key, that would be stripped from the
 // keys to avoid clutter.
 func formatTable(data []tableCell, prefix roachpb.Key) []string {
-	prefixStr := ""
+	// Table with no data is a special case.
+	if len(data) == 0 {
+		return nil
+	}
+
+	keyPrefixStr := ""
 	if prefix != nil {
-		prefixStr = prefix.String()
+		keyPrefixStr = prefix.String()
 	}
 	keyRe := regexp.MustCompile(`^/"(.*)"$`)
-	var foundKeys []columnInfo
-	var lastKey roachpb.Key
-	rowData := make(map[int64][]string)
+	columnName := func(key roachpb.Key) string {
+		keyStr := key.String()
+		if strings.Index(keyStr, keyPrefixStr) == 0 {
+			keyStr = keyStr[len(keyPrefixStr):]
+			if keyRe.FindSubmatch([]byte(keyStr)) != nil {
+				keyStr = keyStr[2 : len(keyStr)-1]
+			}
+		}
+		return keyStr
+	}
+
+	// Table data indexed by ts, key.
+	keyData := make(map[string]columnInfo)
+
+	addKeyColumn := func(key roachpb.Key, columnLen int) {
+		keyStr := key.String()
+		if column, ok := keyData[keyStr]; !ok {
+			title := columnName(key)
+			if titleLen := len(title); columnLen < len(title) {
+				columnLen = titleLen
+			}
+			keyData[keyStr] = columnInfo{
+				key:            title,
+				maxValueLength: columnLen,
+			}
+		} else {
+			if columnLen > column.maxValueLength {
+				column.maxValueLength = columnLen
+				keyData[keyStr] = column
+			}
+		}
+	}
+
+	sparseTable := make(map[int64]map[string]cellValue)
 	for _, c := range data {
 		ts := c.key.Timestamp.WallTime
 		key := c.key.Key.String()
-		if strings.Index(key, prefixStr) == 0 {
-			key = key[len(prefixStr):]
-			if keyRe.FindSubmatch([]byte(key)) != nil {
-				key = key[2 : len(key)-1]
-			}
+		addKeyColumn(c.key.Key, len(c.value))
+		if _, ok := sparseTable[ts]; !ok {
+			sparseTable[ts] = make(map[string]cellValue)
 		}
-		if !c.key.Key.Equal(lastKey) {
-			foundKeys = append(foundKeys, columnInfo{
-				key:            key,
-				maxValueLength: len(key),
-			})
-			lastKey = c.key.Key
+		endKey := ""
+		if len(c.endKey) > 0 {
+			endKey = c.endKey.String()
 		}
-		row := rowData[ts]
-		for len(row) < len(foundKeys)-1 {
-			row = append(row, "")
-		}
-		rowData[ts] = append(row, c.value)
-		valueLen := len(c.value)
-		if i := len(foundKeys) - 1; valueLen > foundKeys[i].maxValueLength {
-			foundKeys[i].maxValueLength = valueLen
+		sparseTable[ts][key] = cellValue{c.value, endKey}
+		if len(c.endKey) > 0 {
+			addKeyColumn(c.endKey, 0)
 		}
 	}
-	var tss []int64
-	for ts := range rowData {
-		tss = append(tss, ts)
-	}
-	sort.Slice(tss, func(i, j int) bool {
-		return tss[i] > tss[j]
-	})
 
-	lsLen := len(fmt.Sprintf("%d", tss[0]))
-	rowPrefixFmt := fmt.Sprintf(" %%%dd | ", lsLen)
+	// Build table key positions for ease of iterations.
+	var keySeq []string
+	for k := range keyData {
+		keySeq = append(keySeq, k)
+	}
+	sort.Strings(keySeq)
+	base := 0
+	for _, k := range keySeq {
+		kd := keyData[k]
+		kd.position = base
+		kd.formatStr = fmt.Sprintf("%%-%ds", kd.maxValueLength)
+		base += kd.maxValueLength + 1
+		keyData[k] = kd
+	}
+	// Build key sequence.
+	var tsSeq []int64
+	for ts := range sparseTable {
+		tsSeq = append(tsSeq, ts)
+	}
+	sort.Slice(tsSeq, func(i, j int) bool {
+		return tsSeq[i] > tsSeq[j]
+	})
 
 	var result []string
 
+	lsLen := len(fmt.Sprintf("%d", tsSeq[0]/time.Second.Nanoseconds()))
+	rowPrefixFmt := fmt.Sprintf(" %%%dd | ", lsLen)
 	firstRow := fmt.Sprintf(" %s | ", strings.Repeat(" ", lsLen))
-	for _, colInfo := range foundKeys {
-		firstRow += fmt.Sprintf(fmt.Sprintf("%%%ds ", colInfo.maxValueLength), colInfo.key)
+	for _, key := range keySeq {
+		colInfo := keyData[key]
+		firstRow += fmt.Sprintf(colInfo.formatStr, colInfo.key)
+		firstRow += " "
 	}
 	result = append(result, firstRow)
 	result = append(result, strings.Repeat("-", len(firstRow)))
-	for _, ts := range tss {
-		row := rowData[ts]
-		rowStr := fmt.Sprintf(rowPrefixFmt, ts)
-		for i, v := range row {
-			rowStr += fmt.Sprintf(fmt.Sprintf("%%%ds ", foundKeys[i].maxValueLength), v)
+
+	for _, ts := range tsSeq {
+		row := sparseTable[ts]
+		rowStr := fmt.Sprintf(rowPrefixFmt, ts/time.Second.Nanoseconds())
+		curLen := 0
+		for _, key := range keySeq {
+			if v, ok := row[key]; ok {
+				colInfo := keyData[key]
+				pos := colInfo.position
+				gap := pos - curLen
+				valStr := strings.Repeat(" ", gap)
+				if len(v.endKey) > 0 {
+					rangeEnd := keyData[v.endKey].position
+					rangeLen := rangeEnd - pos - len(v.value)
+					valStr += v.value + strings.Repeat("-", rangeLen)
+				} else {
+					valStr += fmt.Sprintf(colInfo.formatStr, v.value)
+				}
+				rowStr += valStr
+				curLen += len(valStr)
+			}
 		}
 		result = append(result, rowStr)
 	}
 	return result
+}
+
+func TestRangeKeyBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mkKey := func(key string) roachpb.Key {
+		var k roachpb.Key
+		k = append(k, keys.SystemSQLCodec.TablePrefix(42)...)
+		k = append(k, key...)
+		return k
+	}
+
+	mkKvs := func(start, end string, tss ...int) []storage.MVCCRangeKeyValue {
+		var result []storage.MVCCRangeKeyValue
+		for _, ts := range tss {
+			result = append(result, storage.MVCCRangeKeyValue{
+				RangeKey: storage.MVCCRangeKey{
+					StartKey: mkKey(start),
+					EndKey:   mkKey(end),
+					Timestamp: hlc.Timestamp{
+						WallTime: int64(ts) * time.Second.Nanoseconds(),
+					},
+				},
+			})
+		}
+		return result
+	}
+
+	mkGCr := func(start, end string, ts int) roachpb.GCRequest_GCRangeKey {
+		return roachpb.GCRequest_GCRangeKey{
+			StartKey: mkKey(start),
+			EndKey:   mkKey(end),
+			Timestamp: hlc.Timestamp{
+				WallTime: int64(ts) * time.Second.Nanoseconds(),
+			},
+		}
+	}
+
+	for _, data := range []struct {
+		name      string
+		data      [][]storage.MVCCRangeKeyValue
+		batchSize int64
+		expect    []roachpb.GCRequest_GCRangeKey
+	}{
+		{
+			name: "single batch",
+			data: [][]storage.MVCCRangeKeyValue{
+				mkKvs("a", "b", 5, 3, 1),
+				mkKvs("c", "d", 5, 2, 1),
+			},
+			batchSize: 99999,
+			expect: []roachpb.GCRequest_GCRangeKey{
+				mkGCr("a", "b", 5),
+				mkGCr("c", "d", 5),
+			},
+		},
+		{
+			name: "merge adjacent",
+			data: [][]storage.MVCCRangeKeyValue{
+				mkKvs("a", "b", 5, 3, 1),
+				mkKvs("b", "c", 5, 2),
+				mkKvs("c", "d", 3, 2),
+			},
+			batchSize: 99999,
+			expect: []roachpb.GCRequest_GCRangeKey{
+				mkGCr("a", "c", 5),
+				mkGCr("c", "d", 3),
+			},
+		},
+		{
+			name: "batch split stack",
+			data: [][]storage.MVCCRangeKeyValue{
+				mkKvs("a", "b", 5, 3, 1),
+				mkKvs("b", "c", 5, 2),
+				mkKvs("c", "d", 3, 2),
+			},
+			batchSize: 40, // We could only fit 2 keys in a batch.
+			expect: []roachpb.GCRequest_GCRangeKey{
+				mkGCr("a", "b", 3),
+				mkGCr("a", "b", 5),
+				mkGCr("b", "c", 2),
+				mkGCr("b", "c", 5),
+				mkGCr("c", "d", 2),
+				mkGCr("c", "d", 3),
+			},
+		},
+		{
+			name: "batch split keys",
+			data: [][]storage.MVCCRangeKeyValue{
+				mkKvs("a", "b", 5, 3, 1),
+				mkKvs("b", "c", 5, 2, 1),
+				mkKvs("c", "d", 3, 2),
+			},
+			batchSize: 50, // We could only fit 3 keys in a batch.
+			expect: []roachpb.GCRequest_GCRangeKey{
+				mkGCr("a", "b", 5),
+				mkGCr("b", "c", 5),
+				mkGCr("c", "d", 3),
+			},
+		},
+		{
+			name: "batch split and merge",
+			data: [][]storage.MVCCRangeKeyValue{
+				mkKvs("a", "b", 5, 3),
+				mkKvs("b", "c", 5, 2),
+				mkKvs("c", "d", 5, 1),
+			},
+			batchSize: 85, // We could only fit 5 keys in a batch.
+			expect: []roachpb.GCRequest_GCRangeKey{
+				mkGCr("a", "c", 5),
+				mkGCr("c", "d", 1),
+				mkGCr("c", "d", 5),
+			},
+		},
+	} {
+		t.Run(data.name, func(t *testing.T) {
+			gcer := makeFakeGCer()
+			b := rangeKeyBatcher{
+				gcer:      &gcer,
+				batchSize: data.batchSize,
+			}
+			for _, d := range data.data {
+				require.NoError(t, b.addAndMaybeFlushRangeFragment(ctx, d), "failed to gc ranges")
+			}
+			require.NoError(t, b.flushPendingFragments(ctx), "failed to gc ranges")
+			require.EqualValues(t, data.expect, gcer.rangeKeys())
+		})
+	}
 }
