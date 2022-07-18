@@ -1686,3 +1686,8 @@ SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
 {2,3}
 {2,3}
 {2,3,5}
+
+# Regression test for incorrectly unwrapping a DOidWrapper (#84569).
+statement ok
+CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops DESC));
+INSERT INTO t84569 (name_col) VALUES ('X'::NAME)
