@@ -76,6 +76,22 @@ type MakeAddedIndexDeleteAndWriteOnly struct {
 	IndexID descpb.IndexID
 }
 
+// MakeBackfilledIndexMerging transitions an index addition mutation from
+// DELETE_ONLY to MERGING.
+type MakeBackfilledIndexMerging struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+// MakeMergedIndexWriteOnly transitions an index addition mutation from
+// MERGING to WRITE_ONLY.
+type MakeMergedIndexWriteOnly struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
 // MakeBackfillingIndexDeleteOnly transitions an index addition mutation from
 // BACKFILLING to DELETE_ONLY.
 type MakeBackfillingIndexDeleteOnly struct {

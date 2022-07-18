@@ -209,7 +209,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │                 - 106
 │                 - 107
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 6 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
 │                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL
@@ -218,7 +218,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │
 ├── • PostCommitPhase
 │   │
-│   ├── • Stage 1 of 6 in PostCommitPhase
+│   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -232,6 +232,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │   │   │
 │   │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
 │   │   │       │ DELETE_ONLY → WRITE_ONLY
+│   │   │       │
+│   │   │       ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │       │     rule: "column is WRITE_ONLY before temporary index is WRITE_ONLY"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │   │   │       │     rule: "index-column added to index before temp index receives writes"
@@ -257,9 +260,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 2 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 2 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 2 of 6 in PostCommitPhase
+│   ├── • Stage 2 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -282,7 +285,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │             SourceIndexID: 1
 │   │             TableID: 106
 │   │
-│   ├── • Stage 3 of 6 in PostCommitPhase
+│   ├── • Stage 3 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -303,9 +306,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 4 of 6 with 1 MutationType op pending
+│   │             RunningStatus: PostCommitPhase stage 4 of 7 with 1 MutationType op pending
 │   │
-│   ├── • Stage 4 of 6 in PostCommitPhase
+│   ├── • Stage 4 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -314,7 +317,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │   │
 │   │   └── • 4 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeBackfilledIndexMerging
 │   │       │     IndexID: 2
 │   │       │     TableID: 106
 │   │       │
@@ -326,9 +329,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 5 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 5 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 5 of 6 in PostCommitPhase
+│   ├── • Stage 5 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -342,12 +345,35 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │             TableID: 106
 │   │             TemporaryIndexID: 3
 │   │
-│   └── • Stage 6 of 6 in PostCommitPhase
+│   ├── • Stage 6 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │         MERGED → WRITE_ONLY
+│   │   │
+│   │   └── • 4 Mutation operations
+│   │       │
+│   │       ├── • MakeMergedIndexWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 107
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 1 ValidationType op pending
+│   │
+│   └── • Stage 7 of 7 in PostCommitPhase
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
 │       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │         MERGED → VALIDATED
+│       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
 │           │
@@ -382,7 +408,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
     │   │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │   │         rule: "column depends on primary index"
+    │   │   │         rule: "adding column depends on primary index"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
