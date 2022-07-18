@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -129,6 +130,9 @@ type TestTenantInterface interface {
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
+	// GetEncodedSession returns a byte array containing a valid auth
+	// session.
+	GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error)
 
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
