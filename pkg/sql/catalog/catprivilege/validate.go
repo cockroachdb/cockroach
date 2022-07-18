@@ -12,7 +12,9 @@ package catprivilege
 
 import (
 	"reflect"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -53,6 +55,17 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	privs := SystemSuperuserPrivileges(objectNameKey)
 	if privs != nil {
 		return privs
+	}
+	// Cluster restores move certain system tables to a higher ID to prevent
+	// conflicts with non-system descriptors that are going to be restored. The
+	// newly created tables in the system database will be given ReadWrite
+	// privileges.
+	//
+	// TODO(adityamaru,dt): Remove once we fix the handling of dynamic system
+	// table IDs during restore.
+	if objectNameKey.GetParentID() == keys.SystemDatabaseID &&
+		strings.Contains(objectNameKey.GetName(), RestoreCopySystemTablePrefix) {
+		return privilege.ReadWriteData
 	}
 	return catpb.DefaultSuperuserPrivileges
 }

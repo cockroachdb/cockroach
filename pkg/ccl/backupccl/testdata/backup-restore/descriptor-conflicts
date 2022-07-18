@@ -1,0 +1,156 @@
+# descriptor-conflicts tests that a backup with non-system descriptors at IDs
+# that conflict with system tables in the restoring cluster are handled
+# appropriately during a cluster restore. The conflicting system tables in the
+# restoring cluster should be copied to a descriptor ID higher than any
+# descriptor in the backup.
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE foo;
+CREATE SCHEMA foo.bar;
+CREATE TYPE foo.bar.baz AS ENUM('a', 'b', 'c');
+CREATE TABLE foo.bar.bat (pk int primary key, b foo.bar.baz);
+INSERT INTO foo.bar.bat VALUES (1, 'a'),(2, 'b'),(3, 'c');
+ALTER TABLE foo.bar.bat CONFIGURE ZONE USING gc.ttlseconds=999;
+COMMENT ON TABLE foo.bar.bat IS 'should survive';
+CREATE ROLE hamburger;
+ALTER ROLE hamburger IN DATABASE foo SET application_name='helper';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://0/conflicting-descriptors';
+----
+
+new-server name=s2 share-io-dir=s1
+----
+
+# Create 4 dummy system tables that will have conflicting IDs with the database,
+# schema, type, and table created in s1.
+
+create-dummy-system-table
+----
+
+create-dummy-system-table
+----
+
+create-dummy-system-table
+----
+
+create-dummy-system-table
+----
+
+exec-sql
+INSERT INTO system.crdb_internal_copy_104 VALUES ('tab_104', true, now(), 'b')
+----
+
+exec-sql
+INSERT INTO system.crdb_internal_copy_105 VALUES ('tab_105', true, now(), 'b')
+----
+
+exec-sql
+INSERT INTO system.crdb_internal_copy_106 VALUES ('tab_106', true, now(), 'b')
+----
+
+exec-sql
+INSERT INTO system.crdb_internal_copy_107 VALUES ('tab_107', true, now(), 'b')
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/conflicting-descriptors';
+----
+
+query-sql
+SELECT count(1) FROM [SHOW TABLES FROM system] WHERE table_name LIKE 'crdb_internal_copy_%';
+----
+4
+
+query-sql
+SELECT max(id) FROM system.namespace WHERE name NOT LIKE 'crdb_internal_copy_%';
+----
+112
+
+# We should have remapped the 4 conflicting system tables to IDs higher than any
+# descriptor in the backup.
+query-sql
+SELECT id FROM system.namespace WHERE name LIKE 'crdb_internal_copy_%' ORDER BY id;
+----
+113
+114
+115
+116
+
+# Be paranoid and check that there is no descriptor with ID above the 4th remapped system table.
+query-sql
+SELECT count(*) FROM system.namespace WHERE id > 116;
+----
+0
+
+# The system table IDs should have been replaced by restored descriptors.
+query-sql
+SELECT name, id FROM system.namespace WHERE id IN (104,105,106,107);
+----
+data 104
+foo 107
+public 105
+bank 106
+
+# Check that we have copied over the system table rows correctly.
+query-sql
+SELECT name, value FROM system.crdb_internal_copy_104
+----
+tab_104 true
+
+query-sql
+SELECT name, value FROM system.crdb_internal_copy_105
+----
+tab_105 true
+
+query-sql
+SELECT name, value FROM system.crdb_internal_copy_106
+----
+tab_106 true
+
+query-sql
+SELECT name, value FROM system.crdb_internal_copy_107
+----
+tab_107 true
+
+# Sanity check that we can write to the keyspace where we had conflicting
+# descriptors on restore.
+exec-sql
+INSERT INTO data.bank VALUES (100,100,'');
+----
+
+exec-sql
+INSERT INTO system.crdb_internal_copy_107 VALUES ('tab_107_1', true, now(), 'b')
+----
+
+query-sql
+SELECT * FROM foo.bar.bat;
+----
+1 a
+2 b
+3 c
+
+query-sql
+SHOW ZONE CONFIGURATION FROM TABLE foo.bar.bat;
+----
+TABLE foo.bar.bat ALTER TABLE foo.bar.bat CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 999,
+	num_replicas = 3,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SELECT comment FROM [SHOW TABLES FROM foo WITH COMMENT] WHERE table_name = 'bat';
+----
+should survive
+
+query-sql
+select role_name, settings FROM system.database_role_settings AS drs JOIN system.namespace AS ns ON ns.id = drs.database_id WHERE ns.name = 'foo';
+----
+hamburger {application_name=helper}

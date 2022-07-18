@@ -116,6 +116,13 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.True(t, dir.IsDir())
 			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
 			require.NoError(t, err)
+
+			// TODO(adityamaru): Figure out how to generate a 20.1.7 fixture using the
+			// updated `create_cluster.sql` file.
+			if strings.Contains(dir.Name(), "v20.1.7") {
+				t.Run(dir.Name(), deprecatedRestoreOldVersionClusterTest(exportDir))
+				continue
+			}
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
 		}
 	})
@@ -505,7 +512,7 @@ func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
 	}
 }
 
-func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
+func deprecatedRestoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		externalDir, dirCleanup := testutils.TempDir(t)
 		ctx := context.Background()
@@ -553,6 +560,105 @@ ORDER BY
 			{"non-system", "3"},
 		})
 		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank", [][]string{{"1"}})
+	}
+}
+
+func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		externalDir, dirCleanup := testutils.TempDir(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Disabling the test tenant due to test failures. More
+				// investigation is required. Tracked with #76378.
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            externalDir,
+			},
+		})
+		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		defer func() {
+			tc.Stopper().Stop(ctx)
+			dirCleanup()
+		}()
+		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+		require.NoError(t, err)
+
+		// Ensure that the restore succeeds.
+		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
+
+		sqlDB.CheckQueryResults(t, "SHOW DATABASES", [][]string{
+			{"data", "root", "NULL", "{}", "NULL"},
+			{"defaultdb", "root", "NULL", "{}", "NULL"},
+			{"postgres", "root", "NULL", "{}", "NULL"},
+			{"system", "node", "NULL", "{}", "NULL"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SHOW SCHEMAS", [][]string{
+			{"crdb_internal", "NULL"},
+			{"information_schema", "NULL"},
+			{"pg_catalog", "NULL"},
+			{"pg_extension", "NULL"},
+			{"public", "admin"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "", "{}"},
+			{"craig", "", "{}"},
+			{"root", "", "{admin}"},
+		})
+
+		sqlDB.Exec(t, `USE data;`)
+		sqlDB.CheckQueryResults(t, "SHOW TYPES", [][]string{
+			{"foo", "bat", "root"},
+		})
+		sqlDB.CheckQueryResults(t, "SELECT schema_name, table_name, type, owner FROM [SHOW TABLES]", [][]string{
+			{"public", "bank", "table", "root"},
+		})
+
+		// Now validate that the namespace table doesn't have more than one entry
+		// for the same ID.
+		sqlDB.CheckQueryResults(t, `
+SELECT 
+CASE WHEN count(distinct id) = count(id)
+THEN 'unique' ELSE 'duplicates' 
+END
+FROM system.namespace;`, [][]string{{"unique"}})
+
+		sqlDB.CheckQueryResults(t, "SELECT comment FROM system.comments", [][]string{
+			{"database comment string"},
+			{"table comment string"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SELECT \"localityKey\", \"localityValue\" FROM system.locations WHERE \"localityValue\" = 'nyc'", [][]string{
+			{"city", "nyc"},
+		})
+
+		// In the backup, Public schemas for non-system databases have ID 29. These
+		// should all be updated to explicit public schemas.
+		sqlDB.CheckQueryResults(t, `SELECT
+	if((id = 29), 'system', 'non-system') AS is_system_schema, count(*) as c
+FROM
+	system.namespace
+WHERE
+	"parentSchemaID" = 0 AND name = 'public'
+GROUP BY
+	is_system_schema
+ORDER BY
+	c ASC`, [][]string{
+			{"system", "1"},
+			{"non-system", "3"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank",
+			[][]string{{"1", "a"}, {"2", "b"}, {"3", "c"}})
+
+		// Check that we can select from every known system table and haven't
+		// clobbered any.
+		for systemTableName, config := range systemTableBackupConfiguration {
+			if !config.expectMissingInSystemTenant {
+				sqlDB.Exec(t, fmt.Sprintf("SELECT * FROM system.%s", systemTableName))
+			}
+		}
 	}
 }
 
