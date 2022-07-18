@@ -78,7 +78,7 @@ export const TimeFrameControls = ({
       </ButtonGroup>
       <Tooltip
         placement="bottom"
-        title="past 1 day"
+        title="past day"
         mouseEnterDelay={delay}
         mouseLeaveDelay={delay}
       >

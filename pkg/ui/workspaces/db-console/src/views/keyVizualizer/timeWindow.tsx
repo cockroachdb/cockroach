@@ -25,7 +25,7 @@ export const KeyVizualizerTimeWindow = () => {
       windowValid: moment.duration(15, "minutes"),
       sampleSize: moment.duration(30, "seconds"),
     },
-    "Past 1 Hour": {
+    "Past Hour": {
       windowSize: moment.duration(1, "hour"),
       windowValid: moment.duration(15, "minutes"),
       sampleSize: moment.duration(30, "seconds"),
@@ -35,7 +35,7 @@ export const KeyVizualizerTimeWindow = () => {
       windowValid: moment.duration(15, "minutes"),
       sampleSize: moment.duration(1, "minutes"),
     },
-    "Past 1 Day": {
+    "Past Day": {
       windowSize: moment.duration(1, "day"),
       windowValid: moment.duration(15, "minutes"),
       sampleSize: moment.duration(5, "minutes"),
