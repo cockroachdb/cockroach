@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,19 +10,21 @@
 
 @require '~src/components/core/index.styl'
 
-.page-header
-  height 100%
-  display flex
-  flex-direction row
-  flex-flow wrap
-  align-items center
-  padding $spacing-x-small 0
-  .text
-    font-family $font-family--semi-bold
-    color $colors--neutral-8
-  :last-child
-    margin-left auto
+.tenant-dropdown
+    display flex
+    flex-direction row
+    align-items center
+    padding 8px 12px
+    background $colors--neutral-0
+    border 1px solid $colors--neutral-4
+    border-radius 3px
 
-.page-header > *
-  margin-right $spacing-small
-  margin-bottom 0
+.tenant-selected
+    color $colors--neutral-7
+    padding-right 6px
+    font-weight 600
+    font-size 14px
+    font-family $font-family--semi-bold
+
+.tenant-caret-down
+    fill $colors--neutral-7
