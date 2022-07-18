@@ -10,6 +10,8 @@ go_library(
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_gostdlib//go/format",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
     ],
 )
 

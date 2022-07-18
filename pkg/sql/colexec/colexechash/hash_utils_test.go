@@ -12,7 +12,6 @@ package colexechash
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -63,7 +62,7 @@ func TestHashFunctionFamily(t *testing.T) {
 	// We expect that about 1/numBuckets keys remained in the same bucket, so if
 	// the actual number deviates by more than a factor of 3, we fail the test.
 	if nKeys*3/int(numBuckets) < numKeysInSameBucket {
-		t.Fatal(fmt.Sprintf("too many keys remained in the same bucket: expected about %d, actual %d",
-			nKeys/int(numBuckets), numKeysInSameBucket))
+		t.Fatalf("too many keys remained in the same bucket: expected about %d, actual %d",
+			nKeys/int(numBuckets), numKeysInSameBucket)
 	}
 }
