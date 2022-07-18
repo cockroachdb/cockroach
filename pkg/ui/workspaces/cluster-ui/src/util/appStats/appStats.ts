@@ -139,6 +139,15 @@ export function addStatementStats(
     planGists = b.plan_gists;
   }
 
+  let indexRec: string[] = [];
+  if (a.index_recommendations && b.index_recommendations) {
+    indexRec = unique(a.index_recommendations.concat(b.index_recommendations));
+  } else if (a.index_recommendations) {
+    indexRec = a.index_recommendations;
+  } else if (b.index_recommendations) {
+    indexRec = b.index_recommendations;
+  }
+
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -187,6 +196,7 @@ export function addStatementStats(
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
     plan_gists: planGists,
+    index_recommendations: indexRec,
   };
 }
 

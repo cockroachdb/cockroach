@@ -1608,6 +1608,7 @@ system              public             check_sampling_probability               
 system              public             primary                                                                                                         system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
 system              public             630200280_42_10_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_11_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
+system              public             630200280_42_12                                                                                                 system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_1_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_2_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_3_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
@@ -1913,6 +1914,7 @@ system         public        statement_statistics             fingerprint_id    
 system         public        statement_statistics             node_id                                                                                                   system              public             primary
 system         public        statement_statistics             plan_hash                                                                                                 system              public             primary
 system         public        statement_statistics             transaction_fingerprint_id                                                                                system              public             primary
+system         public        statement_statistics             index_recommendations                                                                                     system              public             primary
 system         public        table_statistics                 statisticID                                                                                               system              public             primary
 system         public        table_statistics                 tableID                                                                                                   system              public             primary
 system         public        tenant_settings                  name                                                                                                      system              public             primary
@@ -2184,6 +2186,7 @@ system         public        statement_statistics             plan              
 system         public        statement_statistics             plan_hash                                                                                                 4
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
+system         public        statement_statistics             index_recommendations                                                                                     12
 system         public        table_statistics                 avgSize                                                                                                   10
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
