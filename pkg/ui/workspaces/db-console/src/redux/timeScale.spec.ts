@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
+import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
 import * as timeScale from "./timeScale";
 import moment from "moment";
 
@@ -32,7 +32,7 @@ describe("time scale reducer", function () {
     });
 
     it("should create the correct SET_SCALE action to set time window settings", function () {
-      const payload: timeScale.TimeScale = {
+      const payload: TimeScale = {
         windowSize: moment.duration(10, "s"),
         windowValid: moment.duration(10, "s"),
         sampleSize: moment.duration(10, "s"),
