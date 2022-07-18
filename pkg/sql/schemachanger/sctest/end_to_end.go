@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -139,7 +140,7 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
-				writeExplainDiagrams(t, path, setupStmts, stmts, stmtStates)
+				checkExplainDiagrams(t, path, setupStmts, stmts, stmtStates, d.Rewrite)
 				return replaceNonDeterministicOutput(deps.SideEffectLog())
 
 			default:
@@ -156,10 +157,15 @@ const (
 	explainVerboseDirName = "explain_verbose"
 )
 
-// writeExplainDiagrams writes out the compact and verbose explain diagrams
-// for the statements and plans from the test.
-func writeExplainDiagrams(
-	t *testing.T, path string, setupStmts, stmts parser.Statements, states []scpb.CurrentState,
+// checkExplainDiagrams checks the output of the compact and verbose explain
+// diagrams for the statements and plans from the test. If rewrite is passed,
+// the plans will be rewritten.
+func checkExplainDiagrams(
+	t *testing.T,
+	path string,
+	setupStmts, stmts parser.Statements,
+	states []scpb.CurrentState,
+	rewrite bool,
 ) {
 	makeSharedPrefix := func() []byte {
 		var prefixBuf bytes.Buffer
@@ -189,26 +195,42 @@ func writeExplainDiagrams(
 	explainDir := mkdir(explainDirName)
 	explainVerboseDir := mkdir(explainVerboseDirName)
 	baseName := filepath.Base(path)
-	makeFile := func(dir string, i int) *os.File {
+	makeFile := func(dir string, i int, openFunc func(string) (*os.File, error)) *os.File {
 		name := baseName
 		if len(stmts) > 1 {
 			name = fmt.Sprintf("%s.%d", name, i)
 		}
-		explainFile, err := os.Create(filepath.Join(dir, name))
-		require.NoError(t, err)
-		_, err = explainFile.Write(makeStatementPrefix(i))
+		explainFile, err := openFunc(filepath.Join(dir, name))
 		require.NoError(t, err)
 		return explainFile
 	}
-	writePlan := func(dir, tag string, i int, fn func() (string, error)) {
-		file := makeFile(dir, i)
-		_, err := fmt.Fprintf(file, "EXPLAIN (%s) %s;\n----\n", tag, stmts[i].SQL)
+	writePlan := func(file io.Writer, tag string, i int, fn func() (string, error)) {
+		_, err := file.Write(makeStatementPrefix(i))
+		require.NoError(t, err)
+		_, err = fmt.Fprintf(file, "EXPLAIN (%s) %s;\n----\n", tag, stmts[i].SQL)
 		require.NoError(t, err)
 		out, err := fn()
 		require.NoError(t, err)
-		_, err = file.WriteString(out)
+		_, err = io.WriteString(file, out)
 		require.NoError(t, err)
-		require.NoError(t, file.Close())
+	}
+	writePlanToFile := func(dir, tag string, i int, fn func() (string, error)) {
+		file := makeFile(dir, i, os.Create)
+		defer func() { require.NoError(t, file.Close()) }()
+		writePlan(file, tag, i, fn)
+	}
+	checkPlan := func(dir, tag string, i int, fn func() (string, error)) {
+		file := makeFile(dir, i, os.Open)
+		defer func() { require.NoError(t, file.Close()) }()
+		var buf bytes.Buffer
+		writePlan(&buf, tag, i, fn)
+		got, err := io.ReadAll(file)
+		require.NoError(t, err)
+		require.Equal(t, string(got), buf.String(), filepath.Base(dir))
+	}
+	action := checkPlan
+	if rewrite {
+		action = writePlanToFile
 	}
 	for i, stmt := range stmts {
 		pl, err := scplan.MakePlan(states[i], scplan.Params{
@@ -217,8 +239,8 @@ func writeExplainDiagrams(
 			SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 		})
 		require.NoErrorf(t, err, "%d: %s", i, stmt.SQL)
-		writePlan(explainDir, "ddl", i, pl.ExplainCompact)
-		writePlan(explainVerboseDir, "ddl, verbose", i, pl.ExplainVerbose)
+		action(explainDir, "ddl", i, pl.ExplainCompact)
+		action(explainVerboseDir, "ddl, verbose", i, pl.ExplainVerbose)
 	}
 }
 
