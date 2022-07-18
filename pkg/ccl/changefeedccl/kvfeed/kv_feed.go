@@ -283,12 +283,21 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		highWater := rangeFeedResumeFrontier.Frontier()
 		boundaryType := jobspb.ResolvedSpan_BACKFILL
-		if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
-			boundaryType = jobspb.ResolvedSpan_EXIT
-		} else if events, err := f.tableFeed.Peek(ctx, highWater.Next()); err == nil && isPrimaryKeyChange(events) {
-			boundaryType = jobspb.ResolvedSpan_RESTART
-		} else if err != nil {
+		events, err := f.tableFeed.Peek(ctx, highWater.Next())
+		if err != nil {
 			return err
+		}
+		// Detect whether the event corresponds to a primary index change. Also
+		// detect whether that primary index change corresponds to any change in
+		// the primary key or in the set of visible columns. If it corresponds to
+		// no such change, than it may be a column being dropped physically and
+		// should not trigger a failure in the `stop` policy.
+		primaryIndexChange, noColumnChanges := isPrimaryKeyChange(events)
+		if primaryIndexChange && (noColumnChanges ||
+			f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyStop) {
+			boundaryType = jobspb.ResolvedSpan_RESTART
+		} else if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
+			boundaryType = jobspb.ResolvedSpan_EXIT
 		}
 		// Resolve all of the spans as a boundary if the policy indicates that
 		// we should do so.
@@ -306,13 +315,17 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	}
 }
 
-func isPrimaryKeyChange(events []schemafeed.TableEvent) bool {
+func isPrimaryKeyChange(
+	events []schemafeed.TableEvent,
+) (isPrimaryIndexChange, hasNoColumnChanges bool) {
+	hasNoColumnChanges = true
 	for _, ev := range events {
-		if schemafeed.IsPrimaryIndexChange(ev) {
-			return true
+		if ok, noColumnChange := schemafeed.IsPrimaryIndexChange(ev); ok {
+			isPrimaryIndexChange = true
+			hasNoColumnChanges = hasNoColumnChanges && noColumnChange
 		}
 	}
-	return false
+	return isPrimaryIndexChange, isPrimaryIndexChange && hasNoColumnChanges
 }
 
 // filterCheckpointSpans filters spans which have already been completed,
