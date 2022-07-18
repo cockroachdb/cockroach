@@ -19,5 +19,6 @@ COPY --chown=node ./pkg/ui/workspaces/e2e-tests ./
 ADD ./pkg/ui/.yarnrc ./
 RUN yarn install
 
+ENV IS_DOCKER=1
 ENV COCKROACH=/usr/bin/cockroach
-CMD ["/usr/local/bin/yarn", "test"]
+CMD yarn test

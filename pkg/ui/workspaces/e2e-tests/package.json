@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@testing-library/cypress": "^8.0.2",
+    "@types/node": "16",
     "cypress": "^10.3.0",
     "typescript": "^4.6.3"
   }
