@@ -197,7 +197,7 @@ func TestBlobClientReadFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(content, tc.fileContent) {
-				t.Fatal(fmt.Sprintf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content))
+				t.Fatalf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content)
 			}
 		})
 	}
@@ -279,7 +279,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 				t.Fatal(err, "unable to read fetched file")
 			}
 			if !bytes.Equal(content, byteContent) {
-				t.Fatal(fmt.Sprintf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content))
+				t.Fatalf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content)
 			}
 		})
 	}

@@ -288,8 +288,7 @@ func newDataDistribution(
 					panic("generation rules are too restrictive, can't generate more data")
 				}
 				nextKey = keyDist()
-				sk := string(nextKey)
-				if _, ok := seen[sk]; ok {
+				if _, ok := seen[string(nextKey)]; ok {
 					continue
 				}
 				break

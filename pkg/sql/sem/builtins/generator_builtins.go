@@ -1657,9 +1657,7 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_recordset must be an array of objects")
 	}
 	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
-	for i := range j.input.D {
-		output.D[i] = j.input.D[i]
-	}
+	copy(output.D, j.input.D)
 	if err := eval.PopulateRecordWithJSON(j.evalCtx, obj, j.input.ResolvedType(), output); err != nil {
 		return nil, err
 	}

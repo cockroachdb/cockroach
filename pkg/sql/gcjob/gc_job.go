@@ -12,7 +12,6 @@ package gcjob
 
 import (
 	"context"
-	"math"
 	"strings"
 	"time"
 
@@ -257,7 +256,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 
 		// Refresh the status of all elements in case any GC TTLs have changed.
 		var expired bool
-		earliestDeadline := timeutil.Unix(0, math.MaxInt64)
+		var earliestDeadline time.Time
 		if details.Tenant == nil {
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			expired, earliestDeadline = refreshTables(

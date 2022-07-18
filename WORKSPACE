@@ -17,12 +17,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "5c30bd2e086ba5e8b6265599c090cac97afac91062c84beb5c36b62961016ba9",
-    strip_prefix = "cockroachdb-rules_go-7336768",
+    sha256 = "72f7456307988b1ee4f2d32bae8ac88b50c857b126b164f667f94427d85fb705",
+    strip_prefix = "cockroachdb-rules_go-5a4682c",
     urls = [
-        # cockroachdb/rules_go as of 7336768b31d5af41cd46d5defb58560a93b3ba98
-        # (upstream release-0.32 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-118-g7336768.tar.gz",
+        # cockroachdb/rules_go as of 5a4682cd1eda7e7308107f3ff4adb981a81a953c
+        # (upstream release-0.33 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-130-g5a4682c.tar.gz",
     ],
 )
 
@@ -140,11 +140,11 @@ http_archive(
         "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
         "@com_github_cockroachdb_cockroach//build/patches:go_googleapis.patch",
     ],
-    sha256 = "e8b434794608a9af0c0721cfaeedebe37d3676a4ee9dbeed868e5e2982b5abcc",
-    strip_prefix = "googleapis-10c88bb5c489c8ad1edb0e7f6a17cdd07147966e",
-    # master, as of 2022-05-09
+    sha256 = "9181bb36a1df4f397375ec5aa480db797b882073518801e3a20b0e46418f2f90",
+    strip_prefix = "googleapis-530ca55953b470ab3b37dc9de37fcfa59410b741",
+    # master, as of 2022-06-05
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/10c88bb5c489c8ad1edb0e7f6a17cdd07147966e.zip",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/530ca55953b470ab3b37dc9de37fcfa59410b741.zip",
     ],
 )
 
@@ -165,15 +165,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.17.11.darwin-amd64.tar.gz", "4f924c534230de8f0e1c7369f611c0310efd21fc2d9438b13bc2703af9dda25a"),
-        "darwin_arm64": ("go1.17.11.darwin-arm64.tar.gz", "b8e1ab009c2ff8dea462c7a1263d1f3f38e90ab5262e74c76d70e41a4db320be"),
-        "freebsd_amd64": ("go1.17.11.freebsd-amd64.tar.gz", "da78bcd5efa24cfa8ca3ccf0d222f7d66b755c4200d404869984ebdcfc7b6aa7"),
-        "linux_amd64": ("go1.17.11.linux-amd64.tar.gz", "d69a4fe2694f795d8e525c72b497ededc209cb7185f4c3b62d7a98dd6227b3fe"),
-        "linux_arm64": ("go1.17.11.linux-arm64.tar.gz", "adefa7412c6798f9cad02d1e8336fc2242f5bade30c5b32781759181e01961b7"),
-        "windows_amd64": ("go1.17.11.windows-amd64.zip", "88e60b92069d8e0932ca5d8bd8227d1693b9570fa2afbedadcc680749c428d54"),
+        "darwin_amd64": ("go1.18.4.darwin-amd64.tar.gz", "315e1a2b21a827c68da1b7f492b5dcbe81d8df8a79ebe50922df9588893f87f0"),
+        "darwin_arm64": ("go1.18.4.darwin-arm64.tar.gz", "04eed623d5143ffa44965b618b509e0beccccfd3a4a1bfebc0cdbcf906046769"),
+        "freebsd_amd64": ("go1.18.4.freebsd-amd64.tar.gz", "fb00f8aaffcc80e0a2bd39db1d8e8e21ef0a691c564f7b7601383dd6adad4042"),
+        "linux_amd64": ("go1.18.4.linux-amd64.tar.gz", "c9b099b68d93f5c5c8a8844a89f8db07eaa58270e3a1e01804f17f4cf8df02f5"),
+        "linux_arm64": ("go1.18.4.linux-arm64.tar.gz", "35014d92b50d97da41dade965df7ebeb9a715da600206aa59ce1b2d05527421f"),
+        "windows_amd64": ("go1.18.4.windows-amd64.zip", "dfb93c517e050ba0cfc066802b38a8e7cda2ef666efd634859356b33f543cc49"),
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
-    version = "1.17.11",
+    version = "1.18.4",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
