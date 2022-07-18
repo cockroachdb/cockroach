@@ -12,7 +12,6 @@ import React from "react";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router";
-import { assert } from "chai";
 import { Sidebar } from "./index";
 
 describe("LayoutSidebar", () => {
@@ -38,9 +37,9 @@ describe("LayoutSidebar", () => {
         isSingleNodeCluster={true}
       />,
     );
-    assert.isFalse(
+    expect(
       wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
-    );
+    ).toBe(false);
   });
 
   it("shows Network Latency link for multi node cluster", () => {
@@ -52,8 +51,8 @@ describe("LayoutSidebar", () => {
         isSingleNodeCluster={false}
       />,
     );
-    assert.isTrue(
+    expect(
       wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
-    );
+    ).toBe(true);
   });
 });

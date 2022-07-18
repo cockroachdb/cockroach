@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import moment from "moment";
 
 import { channel } from "redux-saga";
@@ -67,7 +66,7 @@ describe("Query Management Saga", function () {
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
       it("does not run refresh again if query is currently in progress", function () {
@@ -76,7 +75,7 @@ describe("Query Management Saga", function () {
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
       it("does refresh again if query is allowed to finish.", function () {
@@ -86,7 +85,7 @@ describe("Query Management Saga", function () {
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 2);
+            expect(queryCounterCalled).toBe(2);
           });
       });
       it("correctly records error (and does not retry).", function () {
@@ -95,12 +94,15 @@ describe("Query Management Saga", function () {
           .dispatch(refresh(testQueryError))
           .silentRun()
           .then(runResult => {
-            assert.isObject(runResult.storeState[testQueryError.id]);
-            assert.equal(
-              runResult.storeState[testQueryError.id].lastError,
+            expect(typeof runResult.storeState[testQueryError.id]).toBe(
+              "object",
+            );
+            expect(runResult.storeState[testQueryError.id].lastError).toEqual(
               sentinelError,
             );
-            assert.isFalse(runResult.storeState[testQueryError.id].isRunning);
+            expect(runResult.storeState[testQueryError.id].isRunning).toBe(
+              false,
+            );
           });
       });
       it("immediately runs a saga if refresh is called even if AUTO_REFRESH wait is active", function () {
@@ -111,7 +113,7 @@ describe("Query Management Saga", function () {
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 2);
+            expect(queryCounterCalled).toBe(2);
           });
       });
     });
@@ -122,7 +124,7 @@ describe("Query Management Saga", function () {
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
       it("does not run again if query result is considered current.", function () {
@@ -132,7 +134,7 @@ describe("Query Management Saga", function () {
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
       it("runs again after a delay while refresh refcount is positive.", function () {
@@ -158,7 +160,7 @@ describe("Query Management Saga", function () {
           .dispatch(autoRefresh(selfStopQuery))
           .silentRun()
           .then(() => {
-            assert.equal(queryCalled, 6);
+            expect(queryCalled).toBe(6);
           });
       });
       it("Uses retry delay when errors are encountered", function () {
@@ -168,7 +170,7 @@ describe("Query Management Saga", function () {
           .then(() => {
             // RefreshTimeout is high enough that it would only be
             // called once.
-            assert.isAtLeast(queryErrorCalled, 3);
+            expect(queryErrorCalled).toBeGreaterThanOrEqual(3);
           });
       });
       it("sets inRunning flag on reducer when query is running.", function () {
@@ -185,9 +187,13 @@ describe("Query Management Saga", function () {
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(runResult => {
-            assert.isTrue(runResult.storeState[neverResolveQuery.id].isRunning);
-            assert.isFalse(runResult.storeState[testQueryCounter.id].isRunning);
-            assert.equal(queryCounterCalled, 1);
+            expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
+              true,
+            );
+            expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
+              false,
+            );
+            expect(queryCounterCalled).toBe(1);
           });
       });
       it("continues to count AUTO_REFRESH refcounts even while query is running", function () {
@@ -238,7 +244,7 @@ describe("Query Management Saga", function () {
           resolveQuery();
           await testFinished;
 
-          assert.equal(queryCalledCount, 3);
+          expect(queryCalledCount).toBe(3);
         })();
       });
     });
@@ -264,7 +270,7 @@ describe("Query Management Saga", function () {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.shouldRefreshQuery = true;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
       it("correctly handles AUTO_REFRESH action", function () {
         const state = new ManagedQuerySagaState();
@@ -277,8 +283,8 @@ describe("Query Management Saga", function () {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.autoRefreshCount = 1;
-        assert.equal(state.autoRefreshCount, 1);
-        assert.deepEqual(state, expected);
+        expect(state.autoRefreshCount).toBe(1);
+        expect(state).toEqual(expected);
       });
       it("correctly handles STOP_AUTO_REFRESH action", function () {
         const state = new ManagedQuerySagaState();
@@ -291,8 +297,8 @@ describe("Query Management Saga", function () {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.autoRefreshCount = -1;
-        assert.equal(state.autoRefreshCount, -1);
-        assert.deepEqual(state, expected);
+        expect(state.autoRefreshCount).toBe(-1);
+        expect(state).toEqual(expected);
       });
     });
 

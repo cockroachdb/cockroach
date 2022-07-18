@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackStatementDetailsSubnavSelection";
 
@@ -25,7 +24,7 @@ describe("trackSubnavSelection", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)(subNavKey);
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send a track call with the correct event", () => {
@@ -37,7 +36,7 @@ describe("trackSubnavSelection", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(event === expected);
+    expect(event === expected).toBe(true);
   });
 
   it("send the correct payload", () => {
@@ -48,6 +47,6 @@ describe("trackSubnavSelection", () => {
     const sent = spy.getCall(0).args[0];
     const selection = get(sent, "properties.selection");
 
-    assert.isTrue(selection === subNavKey);
+    expect(selection === subNavKey).toBe(true);
   });
 });

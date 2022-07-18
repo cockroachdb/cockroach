@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router-dom";
 import { parseSplatParams } from "./parseSplatParams";
@@ -31,8 +30,7 @@ describe("parseSplatParams", () => {
     history.push("/overview/map/region=us-west/zone=a");
     match.path = "/overview/map/";
 
-    assert.equal(
-      parseSplatParams(match, history.location),
+    expect(parseSplatParams(match, history.location)).toEqual(
       "region=us-west/zone=a",
     );
   });
@@ -41,8 +39,7 @@ describe("parseSplatParams", () => {
     history.push("/overview/map/region=us-west/zone=a");
     match.path = "/overview/map";
 
-    assert.equal(
-      parseSplatParams(match, history.location),
+    expect(parseSplatParams(match, history.location)).toEqual(
       "region=us-west/zone=a",
     );
   });
@@ -51,6 +48,6 @@ describe("parseSplatParams", () => {
     history.push("/overview/map");
     match.path = "/overview/map";
 
-    assert.equal(parseSplatParams(match, history.location), "");
+    expect(parseSplatParams(match, history.location)).toEqual("");
   });
 });

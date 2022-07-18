@@ -1995,7 +1995,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables,
+			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables, t.Op.NullableArgs,
 		)
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
@@ -2116,22 +2116,21 @@ func planProjectionOperators(
 		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
 		return op, resultIdx, typs, err
 	case *tree.CoalesceExpr:
-		// We handle CoalesceExpr by planning the equivalent CASE expression,
-		// namely
+		// We handle CoalesceExpr by planning the equivalent CASE expression.
+		// Each WHEN condition is `IS DISTINCT FROM NULL` if the expression in the
+		// Coalesce allows that operation, otherwise, IS NOT NULL is used.
+		// For example,
+		//
 		//   CASE
 		//     WHEN CoalesceExpr.Exprs[0] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[0]
-		//     WHEN CoalesceExpr.Exprs[1] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[1]
+		//     WHEN CoalesceExpr.Exprs[1] IS NOT NULL THEN CoalesceExpr.Exprs[1]
 		//     ...
 		//   END
 		whens := make([]*tree.When, len(t.Exprs))
 		for i := range whens {
 			whens[i] = &tree.When{
-				Cond: tree.NewTypedComparisonExpr(
-					treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
-					t.Exprs[i].(tree.TypedExpr),
-					tree.DNull,
-				),
-				Val: t.Exprs[i],
+				Cond: t.GetWhenCondition(i),
+				Val:  t.Exprs[i],
 			}
 		}
 		caseExpr, err := tree.NewTypedCaseExpr(
@@ -2147,7 +2146,7 @@ func planProjectionOperators(
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
+			columnTypes, input, acc, factory, nil /* binFn */, t, releasables, t.Op.NullableArgs,
 		)
 	case tree.Datum:
 		op, err = projectDatum(t)
@@ -2314,6 +2313,7 @@ func planProjectionExpr(
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 	releasables *[]execreleasable.Releasable,
+	nullableArgs bool,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	if err := checkSupportedProjectionExpr(left, right); err != nil {
 		return nil, resultIdx, typs, err
@@ -2350,7 +2350,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 		)
 	} else {
 		var leftIdx int
@@ -2427,7 +2427,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 				)
 			}
 		} else {
@@ -2442,7 +2442,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = colexecproj.GetProjectionOperator(
 				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
-				resultIdx, evalCtx, binOp, cmpExpr,
+				resultIdx, evalCtx, binOp, cmpExpr, nullableArgs,
 			)
 		}
 	}

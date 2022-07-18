@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import React from "react";
 import * as sinon from "sinon";
@@ -76,7 +75,7 @@ describe("<LineGraph>", function () {
   it("should render a root component on mount", () => {
     const wrapper = linegraph({ ...mockProps });
     const root = wrapper.find(".linegraph");
-    assert.equal(root.length, 1);
+    expect(root.length).toBe(1);
   });
 
   it("should set a new chart on update", () => {
@@ -101,7 +100,7 @@ describe("<LineGraph>", function () {
       },
     });
     const result = _.isEmpty(instance.u);
-    assert.equal(result, false);
+    expect(result).toEqual(false);
   });
 
   it("should update the existing chart", () => {
@@ -166,7 +165,7 @@ describe("<LineGraph>", function () {
         ],
       },
     });
-    assert.isTrue(setDataSpy.called);
+    expect(setDataSpy.called).toBe(true);
   });
 });
 
@@ -188,6 +187,6 @@ describe("fillGaps", () => {
       1634735810000,
     ];
     const result = fillGaps(data, sampleDuration);
-    assert.equal(result.length, 50);
+    expect(result.length).toBe(50);
   });
 });

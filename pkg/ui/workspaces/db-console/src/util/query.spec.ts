@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { propsToQueryString, queryByName } from "./query";
 import { Location } from "history";
 import _ from "lodash";
@@ -49,11 +48,11 @@ describe("Query utils", () => {
 
       const querystring = propsToQueryString(testValues);
 
-      assert(/a=testa/.test(querystring));
-      assert(/b=testb/.test(querystring));
-      assert.lengthOf(querystring.match(/=/g), 2);
-      assert.lengthOf(querystring.match(/&/g), 1);
-      assert.deepEqual(testValues, decodeQueryString(querystring));
+      expect(/a=testa/.test(querystring)).toBeTruthy();
+      expect(/b=testb/.test(querystring)).toBeTruthy();
+      expect(querystring.match(/=/g).length).toBe(2);
+      expect(querystring.match(/&/g).length).toBe(1);
+      expect(testValues).toEqual(decodeQueryString(querystring));
     });
 
     it("handles falsy values correctly", function () {
@@ -69,15 +68,14 @@ describe("Query utils", () => {
 
       const querystring = propsToQueryString(testValues);
 
-      assert(/false=false/.test(querystring));
-      assert(/0=0/.test(querystring));
-      assert(/([^A-Za-z]|^)=([^A-Za-z]|$)/.test(querystring));
-      assert.lengthOf(querystring.match(/=/g), 3);
-      assert.lengthOf(querystring.match(/&/g), 2);
-      assert.notOk(/undefined/.test(querystring));
-      assert.notOk(/null/.test(querystring));
-      assert.deepEqual(
-        { false: "false", "": "", 0: "0" },
+      expect(/false=false/.test(querystring)).toBeTruthy();
+      expect(/0=0/.test(querystring)).toBeTruthy();
+      expect(/([^A-Za-z]|^)=([^A-Za-z]|$)/.test(querystring)).toBeTruthy();
+      expect(querystring.match(/=/g).length).toBe(3);
+      expect(querystring.match(/&/g).length).toBe(2);
+      expect(/undefined/.test(querystring)).toBeFalsy();
+      expect(/null/.test(querystring)).toBeFalsy();
+      expect({ false: "false", "": "", 0: "0" }).toEqual(
         decodeQueryString(querystring),
       );
     });
@@ -91,8 +89,10 @@ describe("Query utils", () => {
 
       const querystring = propsToQueryString(testValues);
 
-      assert(querystring.match(/%/g).length > (key + value).match(/%/g).length);
-      assert.deepEqual(testValues, decodeQueryString(querystring));
+      expect(
+        querystring.match(/%/g).length > (key + value).match(/%/g).length,
+      ).toBeTruthy();
+      expect(testValues).toEqual(decodeQueryString(querystring));
     });
 
     it("handles non-string values", function () {
@@ -107,17 +107,16 @@ describe("Query utils", () => {
       };
 
       const querystring = propsToQueryString(testValues);
-      assert.deepEqual(
-        _.mapValues(testValues, _.toString),
+      expect(_.mapValues(testValues, _.toString)).toEqual(
         decodeQueryString(querystring),
       );
     });
   });
   describe("queryByName", () => {
     it("get key from query", () => {
-      assert.equal(queryByName(location, "start"), "1581478532");
-      assert.equal(queryByName(location, "test"), null);
-      assert.equal(queryByName(location, undefined), null);
+      expect(queryByName(location, "start")).toEqual("1581478532");
+      expect(queryByName(location, "test")).toEqual(null);
+      expect(queryByName(location, undefined)).toEqual(null);
     });
   });
 });

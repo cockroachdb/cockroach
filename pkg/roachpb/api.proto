@@ -1425,7 +1425,15 @@ message ExternalStorage {
     string server_enc_mode  = 9;
     string server_kms_id = 10  [(gogoproto.customname) = "ServerKMSID"];
     string storage_class = 11;
-    string role_arn = 12;
+
+    // RoleARN if non-empty, is the ARN of the role that should be assumed in
+    // order to access this storage.
+    string role_arn = 12 [(gogoproto.customname) = "RoleARN"];
+
+    // DelegateRoleARNs are the ARNs of intermediate roles in an assume role
+    // chain. These roles will be assumed in the order they appear in the list
+    // so that the role specified by RoleARN can be assumed.
+    repeated string delegate_role_arns = 13 [(gogoproto.customname) = "DelegateRoleARNs"];
   }
   message GCS {
     string bucket = 1;
@@ -1442,11 +1450,19 @@ message ExternalStorage {
     // be assumed in order to access this storage.
     string assume_role = 6;
 
+    // AssumeRoleDelegates are the intermediate service account email addresses
+    // in an assume role chain. These delegates will be assumed in the order
+    // they appear in the list so that the service account specified by
+    // AssumeRole can be assumed.
+    repeated string assume_role_delegates = 8;
+
     // BearerToken is a temporary bearer token that could be used to access the
     // storage. This token is only used for "specified" auth mode and if
     // Credentials is not supplied. Currently only OAuth 2.0 tokens are
     // supported.
     string bearer_token = 7;
+
+    // Next ID: 9
   }
   message Azure {
     string container = 1;

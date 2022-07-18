@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import moment from "moment";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { JobsPage, JobsPageProps } from "./jobsPage";
@@ -53,12 +52,11 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
 
 describe("Jobs", () => {
   it("format duration", () => {
-    assert.equal(formatDuration(moment.duration(0)), "00:00:00");
-    assert.equal(formatDuration(moment.duration(5, "minutes")), "00:05:00");
-    assert.equal(formatDuration(moment.duration(5, "hours")), "05:00:00");
-    assert.equal(formatDuration(moment.duration(110, "hours")), "110:00:00");
-    assert.equal(
-      formatDuration(moment.duration(12345, "hours")),
+    expect(formatDuration(moment.duration(0))).toEqual("00:00:00");
+    expect(formatDuration(moment.duration(5, "minutes"))).toEqual("00:05:00");
+    expect(formatDuration(moment.duration(5, "hours"))).toEqual("05:00:00");
+    expect(formatDuration(moment.duration(110, "hours"))).toEqual("110:00:00");
+    expect(formatDuration(moment.duration(12345, "hours"))).toEqual(
       "12345:00:00",
     );
   });

@@ -1352,6 +1352,16 @@ func (expr *NullIfExpr) TypeCheck(
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
+	leftType := typedSubExprs[0].ResolvedType()
+	rightType := typedSubExprs[1].ResolvedType()
+	_, ok := CmpOps[treecmp.EQ].LookupImpl(leftType, rightType)
+	if !ok {
+		op := treecmp.ComparisonOperator{Symbol: treecmp.EQ}
+		err = pgerror.Newf(
+			pgcode.UndefinedFunction, "unsupported comparison operator: <%s> %s <%s>",
+			leftType, op, rightType)
+		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
+	}
 
 	expr.Expr1, expr.Expr2 = typedSubExprs[0], typedSubExprs[1]
 	expr.typ = retType

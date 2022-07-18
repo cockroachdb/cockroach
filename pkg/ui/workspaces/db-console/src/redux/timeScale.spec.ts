@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import * as timeScale from "./timeScale";
 import moment from "moment";
@@ -25,8 +24,7 @@ describe("time scale reducer", function () {
           end,
         },
       };
-      assert.deepEqual(
-        timeScale.setMetricsMovingWindow({ start, end }),
+      expect(timeScale.setMetricsMovingWindow({ start, end })).toEqual(
         expectedSetting,
       );
     });
@@ -38,7 +36,7 @@ describe("time scale reducer", function () {
         sampleSize: moment.duration(10, "s"),
         fixedWindowEnd: false,
       };
-      assert.deepEqual(timeScale.setTimeScale(payload), {
+      expect(timeScale.setTimeScale(payload)).toEqual({
         type: timeScale.SET_SCALE,
         payload,
       });
@@ -47,11 +45,10 @@ describe("time scale reducer", function () {
 
   describe("reducer", () => {
     it("should have the correct default value.", () => {
-      assert.deepEqual(
+      expect(
         timeScale.timeScaleReducer(undefined, { type: "unknown" }),
-        new timeScale.TimeScaleState(),
-      );
-      assert.deepEqual(new timeScale.TimeScaleState().scale, {
+      ).toEqual(new timeScale.TimeScaleState());
+      expect(new timeScale.TimeScaleState().scale).toEqual({
         ...defaultTimeScaleOptions["Past 10 Minutes"],
         key: "Past 10 Minutes",
         fixedWindowEnd: false,
@@ -68,13 +65,12 @@ describe("time scale reducer", function () {
           end,
         };
         expected.metricsTime.shouldUpdateMetricsWindowFromScale = false;
-        assert.deepEqual(
+        expect(
           timeScale.timeScaleReducer(
             undefined,
             timeScale.setMetricsMovingWindow({ start, end }),
           ),
-          expected,
-        );
+        ).toEqual(expected);
       });
     });
 
@@ -91,7 +87,7 @@ describe("time scale reducer", function () {
           fixedWindowEnd: false,
         };
         expected.metricsTime.shouldUpdateMetricsWindowFromScale = true;
-        assert.deepEqual(
+        expect(
           timeScale.timeScaleReducer(
             undefined,
             timeScale.setTimeScale({
@@ -101,8 +97,7 @@ describe("time scale reducer", function () {
               fixedWindowEnd: false,
             }),
           ),
-          expected,
-        );
+        ).toEqual(expected);
       });
     });
   });

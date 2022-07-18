@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { createHashHistory } from "history";
 
 import { MetricConstants, INodeStatus } from "src/util/proto";
@@ -66,7 +65,7 @@ describe("node data selectors", function () {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID).toEqual({
         1: "(n1) addressA",
         2: "(n2) addressB",
         3: "(n3) addressC",
@@ -86,7 +85,7 @@ describe("node data selectors", function () {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID).toEqual({
         1: "(n1) addressA",
         2: "(n2) addressB",
         3: "(n3) addressC",
@@ -131,8 +130,8 @@ describe("node data selectors", function () {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.equal(addressesByID[1], "[decommissioned] (n1) addressA");
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID[1]).toEqual("[decommissioned] (n1) addressA");
+      expect(addressesByID).toEqual({
         1: "[decommissioned] (n1) addressA",
         2: "(n2) addressB",
         3: "[decommissioned] (n3) addressC",
@@ -147,7 +146,7 @@ describe("node data selectors", function () {
 
     it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
-      assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
+      expect(nodeDisplayNameByIDSelector(store.getState())).toEqual({});
     });
   });
 
@@ -178,7 +177,7 @@ describe("node data selectors", function () {
       store.dispatch(nodesReducerObj.receiveData(data));
       const state = store.getState();
 
-      assert.deepEqual(selectStoreIDsByNodeID(state), {
+      expect(selectStoreIDsByNodeID(state)).toEqual({
         1: ["1", "2", "3"],
         2: ["4"],
         3: ["5", "6"],
@@ -215,7 +214,7 @@ describe("node data selectors", function () {
         ["v22.1", 2],
         ["v21.1.7", 1],
       ]);
-      assert.deepEqual(numNodesByVersionsSelector(state), expectedResult);
+      expect(numNodesByVersionsSelector(state)).toEqual(expectedResult);
     });
   });
 });
@@ -255,7 +254,7 @@ describe("selectCommissionedNodeStatuses", function () {
 
     const result = selectCommissionedNodeStatuses(state);
 
-    assert.deepEqual(result, nodeStatuses);
+    expect(result).toEqual(nodeStatuses);
   });
 
   const testCases: [string, LivenessStatus, INodeStatus[]][] = [
@@ -284,7 +283,7 @@ describe("selectCommissionedNodeStatuses", function () {
 
       const result = selectCommissionedNodeStatuses(state);
 
-      assert.deepEqual(result, expected);
+      expect(result).toEqual(expected);
     });
   });
 });
@@ -318,16 +317,16 @@ describe("sumNodeStats", function () {
       2: LivenessStatus.NODE_STATUS_LIVE,
     };
     const actual = sumNodeStats(nodeStatuses, livenessStatusByNodeID);
-    assert.equal(actual.nodeCounts.healthy, 2);
-    assert.equal(actual.capacityTotal, 200);
-    assert.equal(actual.capacityUsed, 20);
+    expect(actual.nodeCounts.healthy).toBe(2);
+    expect(actual.capacityTotal).toBe(200);
+    expect(actual.capacityUsed).toBe(20);
     // usable = used + available.
-    assert.equal(actual.capacityUsable, 100);
+    expect(actual.capacityUsable).toBe(100);
   });
 
   it("returns empty stats if liveness statuses are not provided", () => {
     const { nodeCounts, ...restStats } = sumNodeStats(nodeStatuses, {});
-    Object.entries(restStats).forEach(([_, value]) => assert.equal(value, 0));
-    Object.entries(nodeCounts).forEach(([_, value]) => assert.equal(value, 0));
+    Object.entries(restStats).forEach(([_, value]) => expect(value).toBe(0));
+    Object.entries(nodeCounts).forEach(([_, value]) => expect(value).toBe(0));
   });
 });
