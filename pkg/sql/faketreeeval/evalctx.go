@@ -406,7 +406,7 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
+	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.InternalRows, error) {

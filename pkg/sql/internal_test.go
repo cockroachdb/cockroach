@@ -149,11 +149,10 @@ func TestInternalFullTableScan(t *testing.T) {
 		"pq: query `SELECT * FROM t` contains a full table/index scan which is explicitly disallowed",
 		err.Error())
 
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.Start(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor(), mon.MakeBoundAccount())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -189,13 +188,11 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0;")
 	require.NoError(t, err)
 
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.Start(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor(), mon.MakeBoundAccount())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
-
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
 }
@@ -322,11 +319,10 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	}
 
 	expDB := "foo"
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.Start(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor(), mon.MakeBoundAccount())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -390,11 +386,10 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
+		mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+		mon.Start(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor(), mon.MakeBoundAccount())
 		ie := sql.MakeInternalExecutor(
-			context.Background(),
-			s.(*server.TestServer).Server.PGServer().SQLServer,
-			sql.MemoryMetrics{},
-			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+			s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{

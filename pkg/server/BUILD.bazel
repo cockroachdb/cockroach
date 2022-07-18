@@ -335,6 +335,7 @@ go_test(
         "servemode_test.go",
         "server_http_test.go",
         "server_import_ts_test.go",
+        "server_internal_executor_factory_test.go",
         "server_systemlog_gc_test.go",
         "server_test.go",
         "settings_cache_test.go",

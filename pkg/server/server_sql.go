@@ -170,6 +170,12 @@ type SQLServer struct {
 	// connection management tools learning this status from health checks.
 	// This is set to true when the server has started accepting client conns.
 	isReady syncutil.AtomicBool
+
+	// internalExecutorFactoryMemMonitor is the memory monitor corresponding to the
+	// InternalExecutorFactory singleton. It only gets closed when
+	// Server is closed. Every InternalExecutor created via the factory
+	// uses this memory monitor.
+	internalExecutorFactoryMemMonitor *mon.BytesMonitor
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -872,6 +878,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
+	// We use one BytesMonitor for all InternalExecutor's created by the
+	// ieFactory.
+	// Note that ieFactoryMonitor does not have to be closed, the parent
+	// monitor comes from server. ieFactoryMonitor is a singleton attached
+	// to server, if server is closed, we don't have to worry about
+	// returning the memory allocated to ieFactoryMonitor since the
+	// parent monitor is being closed anyway.
+	ieFactoryMonitor := mon.NewMonitor(
+		"internal executor factory",
+		mon.MemoryResource,
+		internalMemMetrics.CurBytesCount,
+		internalMemMetrics.MaxBytesHist,
+		-1,            /* use default increment */
+		math.MaxInt64, /* noteworthy */
+		cfg.Settings,
+	)
+	ieFactoryMonitor.Start(ctx, pgServer.SQLServer.GetBytesMonitor(), mon.BoundAccount{})
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
@@ -879,12 +902,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
 	) sqlutil.InternalExecutor {
-		ie := sql.MakeInternalExecutor(
-			ctx,
-			pgServer.SQLServer,
-			internalMemMetrics,
-			cfg.Settings,
-		)
+		ie := sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
@@ -914,9 +932,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
-	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
-		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
-	)
+	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
@@ -1051,35 +1067,36 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
-		ambientCtx:                     cfg.BaseConfig.AmbientCtx,
-		stopper:                        cfg.stopper,
-		sqlIDContainer:                 cfg.nodeIDContainer,
-		pgServer:                       pgServer,
-		distSQLServer:                  distSQLServer,
-		execCfg:                        execCfg,
-		internalExecutor:               cfg.circularInternalExecutor,
-		leaseMgr:                       leaseMgr,
-		blobService:                    blobService,
-		tracingService:                 tracingService,
-		tenantConnect:                  cfg.tenantConnect,
-		sessionRegistry:                cfg.sessionRegistry,
-		jobRegistry:                    jobRegistry,
-		statsRefresher:                 statsRefresher,
-		temporaryObjectCleaner:         temporaryObjectCleaner,
-		internalMemMetrics:             internalMemMetrics,
-		sqlMemMetrics:                  sqlMemMetrics,
-		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
-		sqlLivenessProvider:            cfg.sqlLivenessProvider,
-		sqlInstanceProvider:            cfg.sqlInstanceProvider,
-		metricsRegistry:                cfg.registry,
-		diagnosticsReporter:            reporter,
-		spanconfigMgr:                  spanConfig.manager,
-		spanconfigSQLTranslatorFactory: spanConfig.sqlTranslatorFactory,
-		spanconfigSQLWatcher:           spanConfig.sqlWatcher,
-		settingsWatcher:                settingsWatcher,
-		systemConfigWatcher:            cfg.systemConfigWatcher,
-		isMeta1Leaseholder:             cfg.isMeta1Leaseholder,
-		cfg:                            cfg.BaseConfig,
+		ambientCtx:                        cfg.BaseConfig.AmbientCtx,
+		stopper:                           cfg.stopper,
+		sqlIDContainer:                    cfg.nodeIDContainer,
+		pgServer:                          pgServer,
+		distSQLServer:                     distSQLServer,
+		execCfg:                           execCfg,
+		internalExecutor:                  cfg.circularInternalExecutor,
+		leaseMgr:                          leaseMgr,
+		blobService:                       blobService,
+		tracingService:                    tracingService,
+		tenantConnect:                     cfg.tenantConnect,
+		sessionRegistry:                   cfg.sessionRegistry,
+		jobRegistry:                       jobRegistry,
+		statsRefresher:                    statsRefresher,
+		temporaryObjectCleaner:            temporaryObjectCleaner,
+		internalMemMetrics:                internalMemMetrics,
+		sqlMemMetrics:                     sqlMemMetrics,
+		stmtDiagnosticsRegistry:           stmtDiagnosticsRegistry,
+		sqlLivenessProvider:               cfg.sqlLivenessProvider,
+		sqlInstanceProvider:               cfg.sqlInstanceProvider,
+		metricsRegistry:                   cfg.registry,
+		diagnosticsReporter:               reporter,
+		spanconfigMgr:                     spanConfig.manager,
+		spanconfigSQLTranslatorFactory:    spanConfig.sqlTranslatorFactory,
+		spanconfigSQLWatcher:              spanConfig.sqlWatcher,
+		settingsWatcher:                   settingsWatcher,
+		systemConfigWatcher:               cfg.systemConfigWatcher,
+		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
+		cfg:                               cfg.BaseConfig,
+		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
 	}, nil
 }
 
@@ -1192,8 +1209,10 @@ func (s *SQLServer) preStart(
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
-	migrationsExecutor := sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
+	ieMon.Start(ctx, s.pgServer.SQLServer.GetBytesMonitor(), mon.BoundAccount{})
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	migrationsExecutor := sql.MakeInternalExecutor(s.pgServer.SQLServer, s.internalMemMetrics, ieMon)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
