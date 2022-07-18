@@ -28,6 +28,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDsStringifiedSelector } from "src/redux/nodes";
 import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import { getCookieValue, setCookie } from "src/redux/cookies";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -166,28 +167,15 @@ const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
 
   // currentNodeIDCookie will either be empty or contain two elements
   // with the cookie name and value we're looking for
-  const currentNodeIDCookie: string[] = document.cookie
-    .split(";")
-    .map(cookieString => {
-      return cookieString.split("=").map(kv => {
-        return kv.trim();
-      });
-    })
-    .find(cookie => {
-      return cookie[0] === remoteNodeIDCookieName;
-    });
+  const currentNodeIDCookie: string = getCookieValue(remoteNodeIDCookieName);
   const setNodeIDCookie = (nodeID: string) => {
-    document.cookie = `${remoteNodeIDCookieName}=${nodeID};path=/`;
+    setCookie(remoteNodeIDCookieName, nodeID);
     location.reload();
   };
   let currentNodeID = props.nodeID;
   let proxyEnabled = false;
-  if (
-    currentNodeIDCookie &&
-    currentNodeIDCookie.length == 2 &&
-    currentNodeIDCookie[1] !== ""
-  ) {
-    currentNodeID = currentNodeIDCookie[1];
+  if (currentNodeIDCookie) {
+    currentNodeID = currentNodeIDCookie;
     if (currentNodeID !== "local" && currentNodeID !== "") {
       proxyEnabled = true;
     }
