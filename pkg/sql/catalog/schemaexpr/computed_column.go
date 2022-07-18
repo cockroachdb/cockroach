@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -166,12 +167,7 @@ func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Col
 
 		err = iterColDescriptors(desc, expr, func(colVar catalog.Column) error {
 			if colVar.GetID() == col.GetID() {
-				return pgerror.Newf(
-					pgcode.InvalidColumnReference,
-					"column %q is referenced by computed column %q",
-					col.GetName(),
-					c.GetName(),
-				)
+				return sqlerrors.NewColumnReferencedByComputedColumnError(col.GetName(), c.GetName())
 			}
 			return nil
 		})
