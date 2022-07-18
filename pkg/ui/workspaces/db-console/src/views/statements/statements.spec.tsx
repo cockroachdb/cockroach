@@ -527,6 +527,7 @@ function makeStats(): Required<StatementStatistics> {
     },
     nodes: [Long.fromInt(1), Long.fromInt(2), Long.fromInt(3)],
     plan_gists: ["Ais="],
+    index_recommendations: [],
   };
 }
 
