@@ -964,13 +964,19 @@ func (r *Registry) cleanupOldJobsPage(
 	if len(toDelete.Array) > 0 {
 		log.Infof(ctx, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
-		var nDeleted int
+		const infoStmt = `DELETE FROM system.job_info WHERE job_id = ANY($1)`
+		var nDeleted, nDeletedInfos int
 		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
+		if nDeletedInfos, err = r.ex.Exec(
+			ctx, "gc-jobs", nil /* txn */, infoStmt, toDelete,
+		); err != nil {
+			return false, 0, errors.Wrap(err, "deleting old jobs")
+		}
+		log.Infof(ctx, "cleaned up %d expired job records and %d expired info records", nDeleted, nDeletedInfos)
 	}
 	// If we got as many rows as we asked for, there might be more.
 	morePages := numRows == pageSize
