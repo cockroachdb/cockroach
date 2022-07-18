@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/streaming",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",

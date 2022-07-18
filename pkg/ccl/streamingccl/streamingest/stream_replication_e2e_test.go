@@ -101,6 +101,9 @@ func (c *tenantStreamingClusters) getDestTenantSQL() *sqlutils.SQLRunner {
 func (c *tenantStreamingClusters) compareResult(query string) {
 	sourceData := c.srcTenantSQL.QueryStr(c.t, query)
 	destData := c.getDestTenantSQL().QueryStr(c.t, query)
+	fmt.Println("compare result for query:", query)
+	fmt.Println("src data:", sourceData)
+	fmt.Println("dest data:", destData)
 	require.Equal(c.t, sourceData, destData)
 }
 
@@ -550,4 +553,53 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): now this has the same race issue with
+	// TestPartitionedStreamReplicationClient, please fix them together in the future.
+	skip.UnderRace(t, "disabled under race")
+
+	ctx := context.Background()
+	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	// initial scan
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Introduce a DeleteRange on t1 and t2.
+	checkDelRangeOnTable := func(table string) {
+		srcCodec := keys.MakeSQLCodec(c.args.srcTenantID)
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			c.srcSysServer.DB(), srcCodec, "d", table)
+		tableSpan := desc.PrimaryIndexSpan(srcCodec)
+
+		// Introduce a DelRange on the table span.
+		srcTimeBeforeDelRange := c.srcSysServer.Clock().Now()
+		require.NoError(t, c.srcSysServer.DB().DelRangeUsingTombstone(ctx,
+			tableSpan.Key, tableSpan.EndKey))
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s", table))
+
+		// Point-in-time query, check if the DeleteRange is MVCC-compatible.
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s AS OF SYSTEM TIME %d",
+			table, srcTimeBeforeDelRange.WallTime))
+	}
+
+	// Test on two tables to check if the range keys sst batcher
+	// can work on multiple flushes.
+	checkDelRangeOnTable("t1")
+	checkDelRangeOnTable("t2")
 }

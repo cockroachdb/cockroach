@@ -470,7 +470,17 @@ func (reg *registry) PublishToOverlapping(
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
 		if r.catchUpTimestamp.Less(minTS) {
-			r.publish(ctx, event, allocation)
+			eventToPublish := event
+			if event.SST != nil {
+				newSST := *event.SST
+				newSST.RegisteredSpan = r.span
+				eventToPublish = &roachpb.RangeFeedEvent{SST: &newSST}
+			} else if event.DeleteRange != nil {
+				newDelRange := *event.DeleteRange
+				newDelRange.RegisteredSpan = r.span
+				eventToPublish = &roachpb.RangeFeedEvent{DeleteRange: &newDelRange}
+			}
+			r.publish(ctx, eventToPublish, allocation)
 		}
 		return false, nil
 	})
@@ -526,6 +536,7 @@ func (reg *registry) forOverlappingRegs(
 	if span.EqualValue(all) {
 		reg.tree.Do(matchFn)
 	} else {
+		//fmt.Println("sst span to match: ", span)
 		reg.tree.DoMatching(matchFn, span.AsRange())
 	}
 
