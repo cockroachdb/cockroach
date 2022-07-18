@@ -20,7 +20,6 @@ DEV_DEPENDENCIES = [
     "@npm_db_console//@babel/plugin-transform-runtime",
     "@npm_db_console//@cockroachlabs/eslint-config",
     "@npm_db_console//@storybook/react",
-    "@npm_db_console//@testing-library/jest-dom",
     "@npm_db_console//@testing-library/react",
     "@npm_db_console//@testing-library/user-event",
     "@npm_db_console//@types/analytics-node",
