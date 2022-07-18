@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import Long from "long";
 import moment from "moment";
 import { RouteComponentProps } from "react-router-dom";
@@ -63,7 +62,7 @@ describe("selectStatements", () => {
     const props = makeEmptyRouteProps();
     const result = selectStatements(state, props);
 
-    assert.isNull(result);
+    expect(result).toBeNull();
   });
 
   it("returns the statements currently loaded", () => {
@@ -74,7 +73,7 @@ describe("selectStatements", () => {
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
-    assert.equal(result.length, 3);
+    expect(result.length).toBe(3);
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(
       stmt => stmt.key.key_data.query,
@@ -82,7 +81,7 @@ describe("selectStatements", () => {
     expectedFingerprints.sort();
     const actualFingerprints = result.map((stmt: any) => stmt.label);
     actualFingerprints.sort();
-    assert.deepEqual(actualFingerprints, expectedFingerprints);
+    expect(actualFingerprints).toEqual(expectedFingerprints);
   });
 
   it("returns the statements without Internal for default ALL filter", () => {
@@ -98,7 +97,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 2);
+    expect(result.length).toBe(2);
   });
 
   it("coalesces statements from different apps", () => {
@@ -113,9 +112,9 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
-    assert.equal(result[0].label, stmtA.key.key_data.query);
-    assert.equal(result[0].stats.count.toNumber(), sumCount);
+    expect(result.length).toBe(1);
+    expect(result[0].label).toEqual(stmtA.key.key_data.query);
+    expect(result[0].stats.count.toNumber()).toEqual(sumCount);
   });
 
   it("coalesces statements with differing node ids", () => {
@@ -131,7 +130,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toBe(1);
   });
 
   it("coalesces statements with differing distSQL and failed values", () => {
@@ -148,7 +147,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toBe(1);
   });
 
   it("filters out statements when app param is set", () => {
@@ -164,7 +163,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toBe(1);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
@@ -180,7 +179,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toBe(1);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
@@ -194,7 +193,7 @@ describe("selectStatements", () => {
     );
     const props = makeRoutePropsWithApp("$ internal");
     const result = selectStatements(state, props);
-    assert.equal(result.length, 1);
+    expect(result.length).toBe(1);
   });
 });
 
@@ -204,7 +203,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, []);
+    expect(result).toEqual([]);
   });
 
   it("returns all the apps that appear in the statements", () => {
@@ -220,7 +219,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, [unset, "cockroach sql", "foobar"]);
+    expect(result).toEqual([unset, "cockroach sql", "foobar"]);
   });
 });
 
@@ -230,7 +229,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 0);
+    expect(result).toBe(0);
   });
 
   it("returns the number of statement fingerprints", () => {
@@ -241,7 +240,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 3);
+    expect(result).toBe(3);
   });
 
   it("coalesces statements from different apps", () => {
@@ -256,7 +255,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toBe(1);
   });
 
   it("coalesces statements with differing node ids", () => {
@@ -271,7 +270,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toBe(1);
   });
 
   it("coalesces statements with differing distSQL and failed keys", () => {
@@ -287,7 +286,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toBe(1);
   });
 });
 
@@ -297,7 +296,7 @@ describe("selectLastReset", () => {
 
     const result = selectLastReset(state);
 
-    assert.equal(result, "unknown");
+    expect(result).toEqual("unknown");
   });
 
   it("returns the formatted timestamp if valid", () => {
@@ -306,7 +305,7 @@ describe("selectLastReset", () => {
 
     const result = selectLastReset(state);
 
-    assert.equal(moment.utc(result).unix(), timestamp);
+    expect(moment.utc(result).unix()).toEqual(timestamp);
   });
 });
 
@@ -317,7 +316,7 @@ describe("selectStatement", () => {
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails;
 
-    assert.isNull(result);
+    expect(result).toBeNull();
   });
 
   it("returns the statement currently loaded", () => {
@@ -338,14 +337,14 @@ describe("selectStatement", () => {
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails.statement;
 
-    assert.equal(result.metadata.query, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
-    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
-    assert.equal(longToInt(result.metadata.failed_count), 0);
-    assert.equal(longToInt(result.metadata.full_scan_count), 0);
-    assert.equal(longToInt(result.metadata.vec_count), 0);
-    assert.equal(longToInt(result.metadata.total_count), 1);
+    expect(result.metadata.query).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.metadata.app_names).toEqual([stmtA.key.key_data.app]);
+    expect(longToInt(result.metadata.dist_sql_count)).toBe(0);
+    expect(longToInt(result.metadata.failed_count)).toBe(0);
+    expect(longToInt(result.metadata.full_scan_count)).toBe(0);
+    expect(longToInt(result.metadata.vec_count)).toBe(0);
+    expect(longToInt(result.metadata.total_count)).toBe(1);
   });
 
   it("filters out statements when app param is set", () => {
@@ -372,14 +371,14 @@ describe("selectStatement", () => {
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails.statement;
 
-    assert.equal(result.metadata.query, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
-    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
-    assert.equal(longToInt(result.metadata.failed_count), 0);
-    assert.equal(longToInt(result.metadata.full_scan_count), 0);
-    assert.equal(longToInt(result.metadata.vec_count), 0);
-    assert.equal(longToInt(result.metadata.total_count), 1);
+    expect(result.metadata.query).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.metadata.app_names).toEqual([stmtA.key.key_data.app]);
+    expect(longToInt(result.metadata.dist_sql_count)).toBe(0);
+    expect(longToInt(result.metadata.failed_count)).toBe(0);
+    expect(longToInt(result.metadata.full_scan_count)).toBe(0);
+    expect(longToInt(result.metadata.vec_count)).toBe(0);
+    expect(longToInt(result.metadata.total_count)).toBe(1);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
@@ -401,14 +400,14 @@ describe("selectStatement", () => {
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails.statement;
 
-    assert.equal(result.metadata.query, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.metadata.app_names, [stmtA.key.key_data.app]);
-    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
-    assert.equal(longToInt(result.metadata.failed_count), 0);
-    assert.equal(longToInt(result.metadata.full_scan_count), 0);
-    assert.equal(longToInt(result.metadata.vec_count), 0);
-    assert.equal(longToInt(result.metadata.total_count), 1);
+    expect(result.metadata.query).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.metadata.app_names).toEqual([stmtA.key.key_data.app]);
+    expect(longToInt(result.metadata.dist_sql_count)).toBe(0);
+    expect(longToInt(result.metadata.failed_count)).toBe(0);
+    expect(longToInt(result.metadata.full_scan_count)).toBe(0);
+    expect(longToInt(result.metadata.vec_count)).toBe(0);
+    expect(longToInt(result.metadata.total_count)).toBe(1);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
@@ -434,15 +433,15 @@ describe("selectStatement", () => {
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails?.statement;
 
-    assert.equal(result.metadata.query, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    expect(result.metadata.query).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
     // Statements with internal app prefix should have "$ internal" as app name
-    assert.deepEqual(result.metadata.app_names, ["$ internal_stmnt_app"]);
-    assert.equal(longToInt(result.metadata.dist_sql_count), 0);
-    assert.equal(longToInt(result.metadata.failed_count), 0);
-    assert.equal(longToInt(result.metadata.full_scan_count), 0);
-    assert.equal(longToInt(result.metadata.vec_count), 0);
-    assert.equal(longToInt(result.metadata.total_count), 1);
+    expect(result.metadata.app_names).toEqual(["$ internal_stmnt_app"]);
+    expect(longToInt(result.metadata.dist_sql_count)).toBe(0);
+    expect(longToInt(result.metadata.failed_count)).toBe(0);
+    expect(longToInt(result.metadata.full_scan_count)).toBe(0);
+    expect(longToInt(result.metadata.vec_count)).toBe(0);
+    expect(longToInt(result.metadata.total_count)).toBe(1);
   });
 });
 

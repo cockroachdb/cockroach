@@ -578,5 +578,5 @@ func CheckNoPermission(
 		t.Fatalf("expected error when listing %s with no permissions", storeURI)
 	}
 
-	require.Regexp(t, "Error 403", err)
+	require.Regexp(t, "(failed|unable) to list", err)
 }

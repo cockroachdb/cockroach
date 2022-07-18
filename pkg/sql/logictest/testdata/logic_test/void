@@ -40,3 +40,110 @@ query T
 SELECT crdb_internal.void_func()
 ----
 ·
+
+# Regression test for #83754. Postgres does not error out, but is inconsistent
+# in evaluation. For example, `SELECT ''::VOID IS DISTINCT FROM NULL::UNKNOWN;`
+# errors out, but `SELECT ''::VOID IS DISTINCT FROM NULL;` does not.
+# This is due to normalization into an IS NOT NULL op when one operand is NULL.
+# The NULL with type cast is not recognized as NULL.
+# We will stay consistent and have both cases error out to avoid different
+# behavior between normalized and unnormalized expressions.
+statement error pq: unsupported comparison operator: <void> IS DISTINCT FROM <unknown>
+SELECT ''::VOID IS DISTINCT FROM NULL
+
+statement ok
+SET vectorize=on
+
+# Regression test for #83754. Vectorized execution should not error out.
+query T
+SELECT
+  COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+  (VALUES (''::VOID), (NULL), (NULL), (''::VOID)) AS tab_115318 (col_199168)
+ORDER BY
+  tab_115318.col_199168
+----
+NULL
+NULL
+·
+·
+
+# Regression test for #83754. Illegal type comparison should be caught in the
+# parser.
+statement error pq: incompatible NULLIF expressions: unsupported comparison operator: <void> = <unknown>
+SELECT NULLIF(tab_115318.a, tab_115318.b) AS col_199169
+FROM
+  (VALUES (''::VOID, NULL), (NULL, NULL)) AS tab_115318 (a, b)
+ORDER BY
+  tab_115318.a;
+
+statement error pq: incompatible NULLIF expressions: unsupported comparison operator: <void> = <void>
+SELECT NULLIF(tab_115318.a, tab_115318.b) AS col_199169
+FROM
+  (VALUES (''::VOID, ''::VOID), (NULL, NULL)) AS tab_115318 (a, b)
+ORDER BY
+  tab_115318.col_199168;
+
+# Regression test for #83754. Tuple type should be handled properly.
+query T
+SELECT
+  COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+  (VALUES ((NULL, 1)), (NULL)) AS tab_115318 (col_199168)
+ORDER BY
+  tab_115318.col_199168
+----
+NULL
+(,1)
+
+statement ok
+SET vectorize=off
+
+# Regression test for #83754.
+# Non-vectorized and vectorized results should match.
+query T
+SELECT
+  COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+  (VALUES (''::VOID), (NULL), (NULL), (''::VOID)) AS tab_115318 (col_199168)
+ORDER BY
+  tab_115318.col_199168
+----
+NULL
+NULL
+·
+·
+
+# Regression test for #83754.
+# Non-vectorized and vectorized results should match.
+statement error pq: incompatible NULLIF expressions: unsupported comparison operator: <void> = <unknown>
+SELECT NULLIF(tab_115318.a, tab_115318.b) AS col_199169
+FROM
+  (VALUES (''::VOID, NULL), (NULL, NULL)) AS tab_115318 (a, b)
+ORDER BY
+  tab_115318.a;
+
+# Regression test for #83754.
+# Non-vectorized and vectorized results should match.
+statement error pq: incompatible NULLIF expressions: unsupported comparison operator: <void> = <void>
+SELECT NULLIF(tab_115318.a, tab_115318.b) AS col_199169
+FROM
+  (VALUES (''::VOID, ''::VOID), (NULL, NULL)) AS tab_115318 (a, b)
+ORDER BY
+  tab_115318.col_199168;
+
+# Regression test for #83754.
+# Non-vectorized and vectorized results should match.
+query T
+SELECT
+  COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+  (VALUES ((NULL, 1)), (NULL)) AS tab_115318 (col_199168)
+ORDER BY
+  tab_115318.col_199168
+----
+NULL
+(,1)
+
+statement ok
+RESET vectorize

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import _ from "lodash";
 import Long from "long";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
@@ -25,26 +24,27 @@ type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 describe("metrics reducer", function () {
   describe("actions", function () {
     it("requestMetrics() creates the correct action type.", function () {
-      assert.equal(metrics.requestMetrics("id", null).type, metrics.REQUEST);
+      expect(metrics.requestMetrics("id", null).type).toEqual(metrics.REQUEST);
     });
 
     it("receiveMetrics() creates the correct action type.", function () {
-      assert.equal(
-        metrics.receiveMetrics("id", null, null).type,
+      expect(metrics.receiveMetrics("id", null, null).type).toEqual(
         metrics.RECEIVE,
       );
     });
 
     it("errorMetrics() creates the correct action type.", function () {
-      assert.equal(metrics.errorMetrics("id", null).type, metrics.ERROR);
+      expect(metrics.errorMetrics("id", null).type).toEqual(metrics.ERROR);
     });
 
     it("fetchMetrics() creates the correct action type.", function () {
-      assert.equal(metrics.fetchMetrics().type, metrics.FETCH);
+      expect(metrics.fetchMetrics().type).toEqual(metrics.FETCH);
     });
 
     it("fetchMetricsComplete() creates the correct action type.", function () {
-      assert.equal(metrics.fetchMetricsComplete().type, metrics.FETCH_COMPLETE);
+      expect(metrics.fetchMetricsComplete().type).toEqual(
+        metrics.FETCH_COMPLETE,
+      );
     });
   });
 
@@ -61,7 +61,7 @@ describe("metrics reducer", function () {
         inFlight: 0,
         queries: metrics.metricQuerySetReducer(undefined, { type: "unknown" }),
       };
-      assert.deepEqual(state, expected);
+      expect(state).toEqual(expected);
     });
 
     it("should correctly dispatch requestMetrics", function () {
@@ -81,12 +81,12 @@ describe("metrics reducer", function () {
         state,
         metrics.requestMetrics(componentID, request),
       );
-      assert.isDefined(state.queries);
-      assert.isDefined(state.queries[componentID]);
-      assert.lengthOf(_.keys(state.queries), 1);
-      assert.equal(state.queries[componentID].nextRequest, request);
-      assert.isUndefined(state.queries[componentID].data);
-      assert.isUndefined(state.queries[componentID].error);
+      expect(state.queries).toBeDefined();
+      expect(state.queries[componentID]).toBeDefined();
+      expect(_.keys(state.queries).length).toBe(1);
+      expect(state.queries[componentID].nextRequest).toEqual(request);
+      expect(state.queries[componentID].data).toBeUndefined();
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function () {
@@ -110,13 +110,13 @@ describe("metrics reducer", function () {
         state,
         metrics.receiveMetrics(componentID, request, response),
       );
-      assert.isDefined(state.queries);
-      assert.isDefined(state.queries[componentID]);
-      assert.lengthOf(_.keys(state.queries), 1);
-      assert.equal(state.queries[componentID].data, null);
-      assert.equal(state.queries[componentID].request, null);
-      assert.isUndefined(state.queries[componentID].nextRequest);
-      assert.isUndefined(state.queries[componentID].error);
+      expect(state.queries).toBeDefined();
+      expect(state.queries[componentID]).toBeDefined();
+      expect(_.keys(state.queries).length).toBe(1);
+      expect(state.queries[componentID].data).toBeUndefined();
+      expect(state.queries[componentID].request).toBeUndefined();
+      expect(state.queries[componentID].nextRequest).toBeUndefined();
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch receiveMetrics with a matching nextRequest", function () {
@@ -145,12 +145,12 @@ describe("metrics reducer", function () {
         state,
         metrics.receiveMetrics(componentID, request, response),
       );
-      assert.isDefined(state.queries);
-      assert.isDefined(state.queries[componentID]);
-      assert.lengthOf(_.keys(state.queries), 1);
-      assert.equal(state.queries[componentID].data, response);
-      assert.equal(state.queries[componentID].request, request);
-      assert.isUndefined(state.queries[componentID].error);
+      expect(state.queries).toBeDefined();
+      expect(state.queries[componentID]).toBeDefined();
+      expect(_.keys(state.queries).length).toBe(1);
+      expect(state.queries[componentID].data).toEqual(response);
+      expect(state.queries[componentID].request).toEqual(request);
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch errorMetrics", function () {
@@ -159,21 +159,21 @@ describe("metrics reducer", function () {
         state,
         metrics.errorMetrics(componentID, error),
       );
-      assert.isDefined(state.queries);
-      assert.isDefined(state.queries[componentID]);
-      assert.lengthOf(_.keys(state.queries), 1);
-      assert.equal(state.queries[componentID].error, error);
-      assert.isUndefined(state.queries[componentID].request);
-      assert.isUndefined(state.queries[componentID].data);
+      expect(state.queries).toBeDefined();
+      expect(state.queries[componentID]).toBeDefined();
+      expect(_.keys(state.queries).length).toBe(1);
+      expect(state.queries[componentID].error).toEqual(error);
+      expect(state.queries[componentID].request).toBeUndefined();
+      expect(state.queries[componentID].data).toBeUndefined();
     });
 
     it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function () {
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
-      assert.equal(state.inFlight, 1);
+      expect(state.inFlight).toBe(1);
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
-      assert.equal(state.inFlight, 2);
+      expect(state.inFlight).toBe(2);
       state = metrics.metricsReducer(state, metrics.fetchMetricsComplete());
-      assert.equal(state.inFlight, 1);
+      expect(state.inFlight).toBe(1);
     });
   });
 
@@ -258,7 +258,7 @@ describe("metrics reducer", function () {
             .then(result => {
               const { effects } = result;
               // Verify the order of call dispatches.
-              assert.deepEqual(effects.call, [
+              expect(effects.call).toEqual([
                 delay(0),
                 call(metrics.batchAndSendRequests, [
                   requestAction.payload,
@@ -274,7 +274,7 @@ describe("metrics reducer", function () {
                 ]),
               ]);
               // Verify that all beginAction puts were dispatched.
-              assert.deepEqual(effects.put, [
+              expect(effects.put).toEqual([
                 put(beginAction),
                 put(beginAction),
                 put(beginAction),

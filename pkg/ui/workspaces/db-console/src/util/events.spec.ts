@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { EventInfo, getDroppedObjectsText } from "src/util/events";
 
 describe("getDroppedObjectsText", function () {
@@ -39,7 +38,7 @@ describe("getDroppedObjectsText", function () {
     const expected = "2 schema objects were dropped: foo, bar";
 
     versions.forEach(eventInfoVersion => {
-      assert.equal(expected, getDroppedObjectsText(eventInfoVersion));
+      expect(expected).toEqual(getDroppedObjectsText(eventInfoVersion));
     });
   });
 });

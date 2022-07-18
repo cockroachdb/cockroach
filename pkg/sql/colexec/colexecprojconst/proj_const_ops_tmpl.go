@@ -122,12 +122,30 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec._RET_TYP()
+		// {{/*
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
+		// */}}
 		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
+
+		// {{/*
+		// If nullableArgs is true, the function’s definition can handle null
+		// arguments. We would still want to perform the projection, and there is no
+		// need to call projVec.SetNulls(). The behaviour will just be the same as
+		// _HAS_NULLS is false. Since currently only ConcatDatumDatum needs this
+		// nullableArgs == true behaviour, logic for nullableArgs is only added to
+		// the if statement for function with Datum, Datum. If we later introduce
+		// another projection operation that has nullableArgs == true, we should
+		// update this code accordingly.
+		// */}}
+		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		// {{else}}
+		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		// {{end}}
+		if hasNullsAndNotNullable {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -159,11 +177,13 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, false)
 		}
 	}
+	// {{/*
 	// _outNulls has been updated from within the _ASSIGN function to include
 	// any NULLs that resulted from the projection.
 	// If _HAS_NULLS is true, union _outNulls with the set of input Nulls.
 	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
 	// projVec.Nulls() so there is no need to call projVec.SetNulls().
+	// */}}
 	// {{if _HAS_NULLS}}
 	projVec.SetNulls(_outNulls.Or(*colNulls))
 	// {{end}}
@@ -261,6 +281,7 @@ func GetProjection_CONST_SIDEConstOperator(
 	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
+	nullableArgs bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -268,6 +289,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
+		nullableArgs:   nullableArgs,
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}

@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -72,9 +73,9 @@ const (
 	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
 	KMSRegionParam = "REGION"
 
-	// AWSRoleArnParam is the query parameter for the 'role ARN' in an AWS
-	// URI, use if credentials are being verified with Assume Role.
-	AWSRoleArnParam = "AWS_ROLE_ARN"
+	// AssumeRoleParam is the query parameter for the chain of AWS Role ARNs to
+	// assume.
+	AssumeRoleParam = "ASSUME_ROLE"
 )
 
 type s3Storage struct {
@@ -140,22 +141,24 @@ var reuseSession = settings.RegisterBoolSetting(
 // requests).
 type s3ClientConfig struct {
 	// copied from ExternalStorage_S3.
-	endpoint, region, bucket, accessKey, secret, tempToken, auth, roleArn string
+	endpoint, region, bucket, accessKey, secret, tempToken, auth, roleARN string
+	delegateRoleARNs                                                      []string
 	// log.V(2) decides session init params so include it in key.
 	verbose bool
 }
 
 func clientConfig(conf *roachpb.ExternalStorage_S3) s3ClientConfig {
 	return s3ClientConfig{
-		endpoint:  conf.Endpoint,
-		region:    conf.Region,
-		bucket:    conf.Bucket,
-		accessKey: conf.AccessKey,
-		secret:    conf.Secret,
-		tempToken: conf.TempToken,
-		auth:      conf.Auth,
-		verbose:   log.V(2),
-		roleArn:   conf.RoleArn,
+		endpoint:         conf.Endpoint,
+		region:           conf.Region,
+		bucket:           conf.Bucket,
+		accessKey:        conf.AccessKey,
+		secret:           conf.Secret,
+		tempToken:        conf.TempToken,
+		auth:             conf.Auth,
+		verbose:          log.V(2),
+		roleARN:          conf.RoleARN,
+		delegateRoleARNs: conf.DelegateRoleARNs,
 	}
 }
 
@@ -192,7 +195,10 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
-	setIf(AWSRoleArnParam, conf.RoleArn)
+	if conf.RoleARN != "" {
+		roles := append(conf.DelegateRoleARNs, conf.RoleARN)
+		q.Set(AssumeRoleParam, strings.Join(roles, ","))
+	}
 
 	s3URL := url.URL{
 		Scheme:   "s3",
@@ -207,19 +213,21 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_s3
+	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
 	conf.S3Config = &roachpb.ExternalStorage_S3{
-		Bucket:        uri.Host,
-		Prefix:        uri.Path,
-		AccessKey:     uri.Query().Get(AWSAccessKeyParam),
-		Secret:        uri.Query().Get(AWSSecretParam),
-		TempToken:     uri.Query().Get(AWSTempTokenParam),
-		Endpoint:      uri.Query().Get(AWSEndpointParam),
-		Region:        uri.Query().Get(S3RegionParam),
-		Auth:          uri.Query().Get(cloud.AuthParam),
-		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
-		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
-		StorageClass:  uri.Query().Get(S3StorageClassParam),
-		RoleArn:       uri.Query().Get(AWSRoleArnParam),
+		Bucket:           uri.Host,
+		Prefix:           uri.Path,
+		AccessKey:        uri.Query().Get(AWSAccessKeyParam),
+		Secret:           uri.Query().Get(AWSSecretParam),
+		TempToken:        uri.Query().Get(AWSTempTokenParam),
+		Endpoint:         uri.Query().Get(AWSEndpointParam),
+		Region:           uri.Query().Get(S3RegionParam),
+		Auth:             uri.Query().Get(cloud.AuthParam),
+		ServerEncMode:    uri.Query().Get(AWSServerSideEncryptionMode),
+		ServerKMSID:      uri.Query().Get(AWSServerSideEncryptionKMSID),
+		StorageClass:     uri.Query().Get(S3StorageClassParam),
+		RoleARN:          assumeRole,
+		DelegateRoleARNs: delegateRoles,
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -274,29 +282,6 @@ func MakeS3Storage(
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
-	case cloud.AuthParamAssume:
-		{
-			if conf.RoleArn == "" {
-				return nil, errors.Errorf(
-					"%s is set to '%s', but %s must be set",
-					cloud.AuthParam,
-					cloud.AuthParamAssume,
-					AWSRoleArnParam,
-				)
-			}
-			// User can specify the account that is assuming the role, or if left
-			// unspecified, it will be retrieved from the default credentials
-			// chain.
-			if (conf.AccessKey == "") != (conf.Secret == "") {
-				return nil, errors.Errorf(
-					"%s is set to '%s', but %s and %s must both be set for a specified user or neither for implicit",
-					cloud.AuthParam,
-					cloud.AuthParamAssume,
-					AWSAccessKeyParam,
-					AWSSecretParam,
-				)
-			}
-		}
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
@@ -334,7 +319,7 @@ func MakeS3Storage(
 	s3ClientCache.Lock()
 	defer s3ClientCache.Unlock()
 
-	if s3ClientCache.key == s.opts {
+	if reflect.DeepEqual(s3ClientCache.key, s.opts) {
 		s.cached = s3ClientCache.client
 		return s, nil
 	}
@@ -417,15 +402,25 @@ func newClient(
 		if err != nil {
 			return s3Client{}, "", errors.Wrap(err, "new aws session")
 		}
-	case cloud.AuthParamAssume:
-		if conf.accessKey != "" {
-			opts.Config.WithCredentials(credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken))
+	}
+
+	if conf.roleARN != "" {
+		for _, role := range conf.delegateRoleARNs {
+			intermediateCreds := stscreds.NewCredentials(sess, role)
+			opts.Config.Credentials = intermediateCreds
+
+			sess, err = session.NewSessionWithOptions(opts)
+			if err != nil {
+				return s3Client{}, "", errors.Wrap(err, "session with intermediate credentials")
+			}
 		}
+
+		creds := stscreds.NewCredentials(sess, conf.roleARN)
+		opts.Config.Credentials = creds
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
-			return s3Client{}, "", errors.Wrap(err, "new aws session")
+			return s3Client{}, "", errors.Wrap(err, "session with assume role credentials")
 		}
-		sess.Config.Credentials = stscreds.NewCredentials(sess, conf.roleArn)
 	}
 
 	region := conf.region

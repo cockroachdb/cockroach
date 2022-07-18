@@ -16,7 +16,6 @@ import {
   LocalSettingsState,
   localSettingsReducer,
 } from "./localsettings";
-import { assert } from "chai";
 
 describe("Local Settings", function () {
   describe("actions", function () {
@@ -27,8 +26,7 @@ describe("Local Settings", function () {
         key: settingName,
         value: settingValue,
       };
-      assert.deepEqual(
-        setLocalSetting(settingName, settingValue).payload,
+      expect(setLocalSetting(settingName, settingValue).payload).toEqual(
         expectedSetting,
       );
     });
@@ -36,10 +34,7 @@ describe("Local Settings", function () {
 
   describe("reducer", function () {
     it("should have the correct default value.", function () {
-      assert.deepEqual(
-        localSettingsReducer(undefined, { type: "unknown" }),
-        {},
-      );
+      expect(localSettingsReducer(undefined, { type: "unknown" })).toEqual({});
     });
 
     describe("SET_UI_VALUE", function () {
@@ -53,12 +48,12 @@ describe("Local Settings", function () {
           undefined,
           setLocalSetting(key, value),
         );
-        assert.deepEqual(actual, expected);
+        expect(actual).toEqual(expected);
 
         const key2 = "another-setting";
         expected[key2] = value;
         actual = localSettingsReducer(actual, setLocalSetting(key2, value));
-        assert.deepEqual(actual, expected);
+        expect(actual).toEqual(expected);
       });
 
       it("should correctly overwrite previous values.", function () {
@@ -70,10 +65,9 @@ describe("Local Settings", function () {
         const initial: LocalSettingsState = {
           [key]: "oldvalue",
         };
-        assert.deepEqual(
+        expect(
           localSettingsReducer(initial, setLocalSetting(key, value)),
-          expected,
-        );
+        ).toEqual(expected);
       });
     });
   });
@@ -104,7 +98,7 @@ describe("Local Settings", function () {
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      assert.equal(numberSetting.selector(topLevelState), 99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
     });
 
     it("sets values correctly.", function () {
@@ -114,7 +108,7 @@ describe("Local Settings", function () {
         99,
       );
       dispatch(numberSetting.set(20));
-      assert.deepEqual(topLevelState, {
+      expect(topLevelState).toEqual({
         localSettings: {
           [settingName]: 20,
         },
@@ -133,7 +127,7 @@ describe("Local Settings", function () {
       );
       dispatch(numberSetting.set(20));
       dispatch(stringSetting.set("hello"));
-      assert.deepEqual(topLevelState, {
+      expect(topLevelState).toEqual({
         localSettings: {
           [settingName]: 20,
           [settingName2]: "hello",
@@ -147,9 +141,9 @@ describe("Local Settings", function () {
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      assert.equal(numberSetting.selector(topLevelState), 99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
       dispatch(numberSetting.set(5));
-      assert.equal(numberSetting.selector(topLevelState), 5);
+      expect(numberSetting.selector(topLevelState)).toBe(5);
     });
   });
 });

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import * as sinon from "sinon";
 
 import Analytics from "analytics-node";
@@ -70,7 +69,7 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      assert.isTrue(pageSpy.notCalled);
+      expect(pageSpy.notCalled).toBe(true);
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
@@ -81,7 +80,7 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      assert.isTrue(pageSpy.notCalled);
+      expect(pageSpy.notCalled).toBe(true);
     });
 
     it("correctly calls segment on a page call", function () {
@@ -92,8 +91,8 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      assert.isTrue(pageSpy.calledOnce);
-      assert.deepEqual(pageSpy.args[0][0], {
+      expect(pageSpy.calledOnce).toBe(true);
+      expect(pageSpy.args[0][0]).toEqual({
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -111,14 +110,14 @@ describe("analytics listener", function () {
       } as Location);
 
       setClusterData(store);
-      assert.isTrue(pageSpy.notCalled);
+      expect(pageSpy.notCalled).toBe(true);
 
       sync.page({
         pathname: "/test/path/2",
       } as Location);
 
-      assert.equal(pageSpy.callCount, 2);
-      assert.deepEqual(pageSpy.args[0][0], {
+      expect(pageSpy.callCount).toBe(2);
+      expect(pageSpy.args[0][0]).toEqual({
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -126,7 +125,7 @@ describe("analytics listener", function () {
           search: "",
         },
       });
-      assert.deepEqual(pageSpy.args[1][0], {
+      expect(pageSpy.args[1][0]).toEqual({
         userId: clusterID,
         name: "/test/path/2",
         properties: {
@@ -149,8 +148,8 @@ describe("analytics listener", function () {
         pathname: "/test/username/path",
       } as Location);
 
-      assert.isTrue(pageSpy.calledOnce);
-      assert.deepEqual(pageSpy.args[0][0], {
+      expect(pageSpy.calledOnce).toBe(true);
+      expect(pageSpy.args[0][0]).toEqual({
         userId: clusterID,
         name: "/test/[redacted]/path",
         properties: {
@@ -224,7 +223,7 @@ describe("analytics listener", function () {
 
         sync.page(createLocation(input));
 
-        assert.isTrue(pageSpy.calledOnce);
+        expect(pageSpy.calledOnce).toBe(true);
 
         const actualArgs = pageSpy.args[0][0];
         const expectedArgs = {
@@ -235,15 +234,7 @@ describe("analytics listener", function () {
             search: expectedLocation.search,
           },
         };
-        assert.deepEqual(
-          actualArgs,
-          expectedArgs,
-          `Expected:\n${JSON.stringify(
-            expectedArgs,
-            null,
-            2,
-          )}\nActual:\n${JSON.stringify(actualArgs, null, 2)}\n`,
-        );
+        expect(actualArgs).toEqual(expectedArgs);
       });
     });
   });
@@ -286,7 +277,7 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      assert.isTrue(identifySpy.notCalled);
+      expect(identifySpy.notCalled).toBe(true);
     });
 
     it("does nothing if version info is not available", function () {
@@ -295,7 +286,7 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      assert.isTrue(identifySpy.notCalled);
+      expect(identifySpy.notCalled).toBe(true);
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
@@ -305,7 +296,7 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      assert.isTrue(identifySpy.notCalled);
+      expect(identifySpy.notCalled).toBe(true);
     });
 
     it("sends the correct value of clusterID, version and enterprise", function () {
@@ -317,8 +308,8 @@ describe("analytics listener", function () {
         const sync = new AnalyticsSync(analytics, store, []);
         sync.identify();
 
-        assert.isTrue(identifySpy.calledOnce);
-        assert.deepEqual(identifySpy.args[0][0], {
+        expect(identifySpy.calledOnce).toBe(true);
+        expect(identifySpy.args[0][0]).toEqual({
           userId: clusterID,
           traits: {
             version: "0.1",
@@ -337,7 +328,7 @@ describe("analytics listener", function () {
       sync.identify();
       sync.identify();
 
-      assert.isTrue(identifySpy.calledOnce);
+      expect(identifySpy.calledOnce).toBe(true);
     });
   });
 
@@ -367,7 +358,7 @@ describe("analytics listener", function () {
         event: "test",
       });
 
-      assert.isTrue(trackSpy.notCalled);
+      expect(trackSpy.notCalled).toBe(true);
     });
 
     it("add userId to track calls using the cluster_id", () => {
@@ -387,8 +378,8 @@ describe("analytics listener", function () {
       };
       const message = trackSpy.args[0][0];
 
-      assert.isTrue(trackSpy.calledOnce);
-      assert.deepEqual(message, expected);
+      expect(trackSpy.calledOnce).toBe(true);
+      expect(message).toEqual(expected);
     });
 
     it("add the page path to properties", () => {
@@ -415,8 +406,8 @@ describe("analytics listener", function () {
       };
       const message = trackSpy.args[0][0];
 
-      assert.isTrue(trackSpy.calledOnce);
-      assert.deepEqual(message, expected);
+      expect(trackSpy.calledOnce).toBe(true);
+      expect(message).toEqual(expected);
     });
   });
 });

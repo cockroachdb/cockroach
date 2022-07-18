@@ -22,7 +22,6 @@ import {
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
 import { mapDispatchToProps, mapStateToProps } from "./redux";
-import { assertDeepStrictEqual } from "src/test-utils";
 
 class TestDriver {
   private readonly actions: DatabasesPageActions;
@@ -53,14 +52,14 @@ class TestDriver {
   }
 
   assertProperties(expected: DatabasesPageData) {
-    assertDeepStrictEqual(expected, this.properties());
+    expect(this.properties()).toEqual(expected);
   }
 
   assertDatabaseProperties(
     database: string,
     expected: DatabasesPageDataDatabase,
   ) {
-    assertDeepStrictEqual(expected, this.findDatabase(database));
+    expect(this.findDatabase(database)).toEqual(expected);
   }
 
   assertMissingTableProperties(
@@ -68,9 +67,8 @@ class TestDriver {
     table: string,
     expected: DatabasesPageDataMissingTable,
   ) {
-    assertDeepStrictEqual(
+    expect(this.findMissingTable(this.findDatabase(database), table)).toEqual(
       expected,
-      this.findMissingTable(this.findDatabase(database), table),
     );
   }
 
