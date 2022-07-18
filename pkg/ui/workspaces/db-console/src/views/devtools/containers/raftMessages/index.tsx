@@ -39,11 +39,8 @@ import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvi
 import messagesDashboard from "./messages";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
-import {
-  TimeWindow,
-  TimeScale,
-  setMetricsFixedWindow,
-} from "src/redux/timeScale";
+import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
+import { TimeScale } from "@cockroachlabs/cluster-ui";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;

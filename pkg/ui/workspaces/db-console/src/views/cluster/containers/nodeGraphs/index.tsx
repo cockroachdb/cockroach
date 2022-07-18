@@ -66,11 +66,14 @@ import { PayloadAction } from "src/interfaces/action";
 import {
   setMetricsFixedWindow,
   TimeWindow,
-  TimeScale,
   adjustTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import { Anchor, TimeScaleDropdown } from "@cockroachlabs/cluster-ui";
+import {
+  Anchor,
+  TimeScaleDropdown,
+  TimeScale,
+} from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment";
 import {

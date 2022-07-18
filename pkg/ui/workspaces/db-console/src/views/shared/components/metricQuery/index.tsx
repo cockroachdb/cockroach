@@ -37,9 +37,9 @@ import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggre
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 import Long from "long";
 import { History } from "history";
-import { TimeWindow, TimeScale } from "src/redux/timeScale";
+import { TimeWindow } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
+import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 
 /**
  * AxisProps represents the properties of an Axis being specified as part of a

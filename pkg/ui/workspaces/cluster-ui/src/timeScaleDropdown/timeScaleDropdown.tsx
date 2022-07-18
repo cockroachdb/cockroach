@@ -163,7 +163,10 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     let selected = {};
     let key = currentScale.key;
     let endTime = moment.utc(currentWindow.end);
+    // Dynamic moving window should be off unless the window extends to the current time.
+    let isMoving = false;
 
+    const now = moment.utc();
     switch (direction) {
       case ArrowDirection.RIGHT:
         endTime = endTime.add(seconds, "seconds");
@@ -173,7 +176,8 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
         break;
       case ArrowDirection.CENTER:
         // CENTER is used to set the time window to the current time.
-        endTime = moment.utc();
+        endTime = now;
+        isMoving = true;
         break;
       default:
         console.error("Unknown direction: ", direction);
@@ -181,9 +185,8 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    // The first `!endTime` part of the if clause seems unnecessary since endTime is always a specific time.
     // If endTime + windowValid > now. Unclear why this uses windowValid instead of windowSize.
-    if (!endTime || endTime > moment.utc().subtract(currentScale.windowValid)) {
+    if (endTime.isSameOrAfter(now.subtract(currentScale.windowValid))) {
       const foundTimeScale = Object.entries(options).find(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         ([_, value]) => value.windowSize.asSeconds() === windowSize.asSeconds(),
@@ -197,6 +200,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
          *    not disabled, but the clause doesn't seem to be true.
          */
         selected = { key: foundTimeScale[0], ...foundTimeScale[1] };
+        isMoving = true;
       } else {
         // This code might not be possible to hit, due to the right arrow being disabled
         key = "Custom";
@@ -207,7 +211,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
     let timeScale: TimeScale = {
       ...currentScale,
-      fixedWindowEnd: endTime,
+      fixedWindowEnd: isMoving ? false : endTime,
       windowSize,
       key,
       ...selected,

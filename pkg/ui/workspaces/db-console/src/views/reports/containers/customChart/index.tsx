@@ -22,7 +22,11 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { AxisUnits, TimeScaleDropdown } from "@cockroachlabs/cluster-ui";
+import {
+  AxisUnits,
+  TimeScale,
+  TimeScaleDropdown,
+} from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
@@ -37,11 +41,7 @@ import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
-import {
-  TimeWindow,
-  TimeScale,
-  setMetricsFixedWindow,
-} from "src/redux/timeScale";
+import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 
