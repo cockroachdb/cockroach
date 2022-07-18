@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -183,4 +185,83 @@ func TestRulesV2(t *testing.T) {
 	ruleGroups := make(map[string]metric.PrometheusRuleGroup)
 	require.NoError(t, yaml.NewDecoder(resp.Body).Decode(&ruleGroups))
 	require.NoError(t, resp.Body.Close())
+}
+
+func TestAuthV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts := testCluster.Server(0)
+	client, err := ts.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	session, err := ts.GetAuthSession(true)
+	require.NoError(t, err)
+	sessionBytes, err := protoutil.Marshal(session)
+	require.NoError(t, err)
+	sessionEncoded := base64.StdEncoding.EncodeToString(sessionBytes)
+
+	for _, tc := range []struct {
+		name           string
+		header         string
+		cookie         string
+		expectedStatus int
+	}{
+		{
+			name:           "no auth",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "session in header",
+			header:         sessionEncoded,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "cookie auth with correct magic header",
+			cookie:         sessionEncoded,
+			header:         apiV2UseCookieBasedAuth,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "cookie auth but missing header",
+			cookie:         sessionEncoded,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:   "cookie auth but wrong magic header",
+			cookie: sessionEncoded,
+			header: "yes",
+			// Bad Request and not Unauthorized because the session cannot be decoded.
+			expectedStatus: http.StatusBadRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"sessions/", nil)
+			require.NoError(t, err)
+			if tc.header != "" {
+				req.Header.Set(apiV2AuthHeader, tc.header)
+			}
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{
+					Name:  SessionCookieName,
+					Value: tc.cookie,
+				})
+			}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			defer resp.Body.Close()
+
+			if tc.expectedStatus != resp.StatusCode {
+				body, err := ioutil.ReadAll(resp.Body)
+				require.NoError(t, err)
+				t.Fatalf("expected status: %d but got: %d with body: %s", tc.expectedStatus, resp.StatusCode, string(body))
+			}
+		})
+	}
+
 }
