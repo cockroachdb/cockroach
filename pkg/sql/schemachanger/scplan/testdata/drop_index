@@ -305,6 +305,10 @@ DROP INDEX idx2 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
+  kind: Precedence
+  rule: indexes containing columns reach absent before column
 - from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT]
   kind: Precedence
@@ -520,6 +524,10 @@ DROP INDEX idx3 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
+  kind: Precedence
+  rule: indexes containing columns reach absent before column
 - from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
   kind: Precedence

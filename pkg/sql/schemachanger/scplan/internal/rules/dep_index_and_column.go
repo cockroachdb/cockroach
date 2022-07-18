@@ -497,6 +497,32 @@ func init() {
 		},
 	)
 
+	// Without this rule, we might have an index which exists and contains
+	// a column which does not exist. This would lead to panics inside the
+	// optimizer and an invalid table descriptor.
+	registerDepRule("indexes containing columns reach absent before column",
+		scgraph.Precedence,
+		"index", "column",
+		func(from, to nodeVars) rel.Clauses {
+			ct := rel.Var("column-type")
+			return rel.Clauses{
+				from.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.el.Type((*scpb.Column)(nil)),
+				indexContainsColumn(
+					from.el, to.el, "index-column", "table-id", "column-id", "index-id",
+				),
+				ct.Type((*scpb.ColumnType)(nil)),
+				joinOnColumnID(to.el, ct, "table-id", "column-id"),
+				targetStatusEq(from.target, to.target, scpb.ToAbsent),
+				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
+				rel.Filter("columnTypeIsNotBeingDropped", ct)(func(
+					ct *scpb.ColumnType,
+				) bool {
+					return !ct.IsRelationBeingDropped
+				}),
+			}
+		})
+
 	registerDepRule(
 		"partial predicate removed right before secondary index when not dropping relation",
 		scgraph.SameStagePrecedence,
@@ -518,22 +544,24 @@ func init() {
 	)
 }
 
+var indexContainsColumn = screl.Schema.Def6(
+	"indexContainsColumn",
+	"index", "column", "index-column", "table-id", "column-id", "index-id", func(
+		index, column, indexColumn, tableID, columnID, indexID rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			index.AttrEqVar(screl.IndexID, indexID),
+			indexColumn.Type((*scpb.IndexColumn)(nil)),
+			indexColumn.AttrEqVar(screl.DescID, rel.Blank),
+			joinOnColumnID(column, indexColumn, tableID, columnID),
+			joinOnIndexID(index, indexColumn, tableID, indexID),
+		}
+	})
+
 // These rules ensure that columns and indexes containing these columns
 // appear into existence in the correct order.
 func init() {
-	indexContainsColumn := screl.Schema.Def6(
-		"indexContainsColumn",
-		"index", "column", "index-column", "table-id", "column-id", "index-id", func(
-			index, column, indexColumn, tableID, columnID, indexID rel.Var,
-		) rel.Clauses {
-			return rel.Clauses{
-				index.AttrEqVar(screl.IndexID, indexID),
-				indexColumn.Type((*scpb.IndexColumn)(nil)),
-				indexColumn.AttrEqVar(screl.DescID, rel.Blank),
-				joinOnColumnID(column, indexColumn, tableID, columnID),
-				joinOnIndexID(index, indexColumn, tableID, indexID),
-			}
-		})
+
 	sourceIndexNotSet := screl.Schema.Def1("sourceIndexNotSet", "index", func(
 		index rel.Var,
 	) rel.Clauses {
@@ -554,7 +582,7 @@ func init() {
 			}
 		})
 	registerDepRule(
-		"column depends on primary index",
+		"adding column depends on primary index",
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
@@ -566,7 +594,7 @@ func init() {
 					from.el, to.el, "index-column", "table-id", "column-id", "index-id",
 				),
 				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				status.In(scpb.Status_WRITE_ONLY, scpb.Status_PUBLIC),
+				status.In(scpb.Status_PUBLIC),
 				status.Entities(screl.CurrentStatus, from.node, to.node),
 			}
 		},
@@ -784,6 +812,29 @@ func init() {
 				}),
 			}
 		})
+
+	// We need to ensure that the temporary index has all the relevant writes
+	// to any columns it contains. We ensure elsewhere that any index which
+	// will later be merged with the temporary index is not backfilled until
+	// that temporary index is receiving writes. This rule ensures that those
+	// write operations contain data for all columns.
+	registerDepRule(
+		"column is WRITE_ONLY before temporary index is WRITE_ONLY",
+		scgraph.Precedence,
+		"column", "index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.Column)(nil)),
+				to.el.Type((*scpb.TemporaryIndex)(nil)),
+				indexContainsColumn(to.el, from.el, "index-column", "table-id", "column-id", "index-id"),
+				targetStatus(from.target, scpb.ToPublic),
+				targetStatus(to.target, scpb.Transient),
+				currentStatus(from.node, scpb.Status_WRITE_ONLY),
+				currentStatus(to.node, scpb.Status_WRITE_ONLY),
+			}
+		},
+	)
+
 }
 
 // This rule ensures that columns depend on each other in increasing order.
