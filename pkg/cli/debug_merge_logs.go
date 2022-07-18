@@ -337,6 +337,7 @@ func findLogFiles(
 	if programGroup == 0 || programFilter == nil {
 		programGroup = 0
 	}
+	//lint:ignore SA4006
 	to = to.Truncate(time.Second) // log files only have second resolution
 	var files []fileInfo
 	for _, p := range paths {
