@@ -463,6 +463,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			for _, rkv := range iter.RangeKeys() {
 				rangeKVs++
+				if b == nil {
+					b = kvSS.newBatch()
+				}
 				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 				if err != nil {
 					return 0, err
@@ -1184,7 +1187,7 @@ func SendEmptySnapshot(
 		// up behind a long running snapshot. We want this to go through
 		// quickly.
 		kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE,
-		eng.NewSnapshot(), // needs consistent iterators
+		engSnapshot,
 		desc.RangeID,
 		raftentry.NewCache(1), // cache is not used
 		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
