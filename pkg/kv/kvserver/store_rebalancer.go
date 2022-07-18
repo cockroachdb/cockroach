@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"math"
 	"math/rand"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -317,7 +315,6 @@ func (sr *StoreRebalancer) rebalanceStore(
 			descBeforeRebalance.Replicas().NonVoters(),
 			nonVoterTargets,
 		)
-
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 			return sr.rq.store.DB().AdminRelocateRange(
@@ -325,7 +322,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 				descBeforeRebalance.StartKey.AsRawKey(),
 				voterTargets,
 				nonVoterTargets,
-				true, /* transferLeaseToFirstVoter */
+				false, /* transferLeaseToFirstVoter */
 			)
 		}); err != nil {
 			log.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
@@ -346,15 +343,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 				storeDesc.Capacity.RangeCount--
 			}
 		}
-		localDesc.Capacity.LeaseCount--
-		localDesc.Capacity.QueriesPerSecond -= replWithStats.qps
 		for i := range voterTargets {
 			if storeDesc := storeMap[voterTargets[i].StoreID]; storeDesc != nil {
 				storeDesc.Capacity.RangeCount++
-				if i == 0 {
-					storeDesc.Capacity.LeaseCount++
-					storeDesc.Capacity.QueriesPerSecond += replWithStats.qps
-				}
 			}
 		}
 	}
@@ -631,36 +622,6 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			log.VEventf(ctx, 3, "could not find rebalance opportunities for r%d", replWithStats.repl.RangeID)
 			continue
 		}
-
-		storeDescMap := allStoresList.ToMap()
-
-		// Pick the voter with the least QPS to be leaseholder;
-		// RelocateRange transfers the lease to the first provided target.
-		//
-		// TODO(aayush): Does this logic need to exist? This logic does not take
-		// lease preferences into account. So it is already broken in a way.
-		newLeaseIdx := 0
-		newLeaseQPS := math.MaxFloat64
-		var raftStatus *raft.Status
-		for i := 0; i < len(targetVoterRepls); i++ {
-			// Ensure we don't transfer the lease to an existing replica that is behind
-			// in processing its raft log.
-			if replica, ok := rangeDesc.GetReplicaDescriptor(targetVoterRepls[i].StoreID); ok {
-				if raftStatus == nil {
-					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
-				}
-				if raftutil.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
-					continue
-				}
-			}
-
-			storeDesc, ok := storeDescMap[targetVoterRepls[i].StoreID]
-			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
-				newLeaseIdx = i
-				newLeaseQPS = storeDesc.Capacity.QueriesPerSecond
-			}
-		}
-		targetVoterRepls[0], targetVoterRepls[newLeaseIdx] = targetVoterRepls[newLeaseIdx], targetVoterRepls[0]
 		return replWithStats,
 			roachpb.MakeReplicaSet(targetVoterRepls).ReplicationTargets(),
 			roachpb.MakeReplicaSet(targetNonVoterRepls).ReplicationTargets()

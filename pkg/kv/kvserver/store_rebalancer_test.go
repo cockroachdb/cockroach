@@ -1102,10 +1102,6 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			)
 
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
-			if len(voterTargets) > 0 && voterTargets[0].StoreID != tc.expRebalancedVoters[0] {
-				t.Errorf("chooseRangeToRebalance(existing=%v, qps=%f) chose s%d as leaseholder; want s%v",
-					tc.voters, testingQPS, voterTargets[0], tc.expRebalancedVoters[0])
-			}
 
 			voterStoreIDs := make([]roachpb.StoreID, len(voterTargets))
 			for i, target := range voterTargets {
