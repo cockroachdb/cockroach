@@ -7,7 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/staticcheck",
     visibility = ["//visibility:public"],
     deps = [
-        "@co_honnef_go_tools//analysis/facts",
+        "@co_honnef_go_tools//analysis/facts/directives",
         "@co_honnef_go_tools//analysis/lint",
         "@co_honnef_go_tools//analysis/report",
         "@org_golang_x_tools//go/analysis",

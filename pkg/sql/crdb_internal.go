@@ -3574,9 +3574,8 @@ CREATE TABLE crdb_internal.zones (
 				// In this case, just don't show the zoneSpecifier in the
 				// output of the table.
 				continue
-			} else {
-				zoneSpecifier = &zs
 			}
+			zoneSpecifier = &zs
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
 			var configProto zonepb.ZoneConfig
@@ -3660,12 +3659,11 @@ CREATE TABLE crdb_internal.zones (
 						// dropped and in the MVCC GC queue.
 						continue
 					}
-					if zoneSpecifier != nil {
-						zs := zs
-						zs.TableOrIndex.Index = tree.UnrestrictedName(index.GetName())
-						zs.Partition = tree.Name(s.PartitionName)
-						zoneSpecifier = &zs
-					}
+
+					zs := zs
+					zs.TableOrIndex.Index = tree.UnrestrictedName(index.GetName())
+					zs.Partition = tree.Name(s.PartitionName)
+					zoneSpecifier = &zs
 
 					// Generate information about full / inherited constraints.
 					// There are two cases -- the subzone we are looking at refers

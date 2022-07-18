@@ -214,11 +214,8 @@ func (c *Columnarizer) Next() coldata.Batch {
 	if reallocated {
 		oldRows := c.buffered
 		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
+		copy(newRows, oldRows)
 		_ = newRows[len(oldRows)]
-		for i := 0; i < len(oldRows); i++ {
-			//gcassert:bce
-			newRows[i] = oldRows[i]
-		}
 		for i := len(oldRows); i < len(newRows); i++ {
 			//gcassert:bce
 			newRows[i] = make(rowenc.EncDatumRow, len(c.typs))

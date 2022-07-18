@@ -38,6 +38,8 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
     ],
 )
 

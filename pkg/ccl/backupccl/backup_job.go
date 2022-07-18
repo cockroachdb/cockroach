@@ -420,7 +420,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		details = backupDetails
 		// Reset backupDetails so nobody accidentally uses it.
-		backupDetails = jobspb.BackupDetails{}
+		backupDetails = jobspb.BackupDetails{} //lint:ignore SA4006 intentionally clearing so no one uses this.
 		backupManifest = &m
 
 		// Now that we have resolved the details, and manifest, write a protected

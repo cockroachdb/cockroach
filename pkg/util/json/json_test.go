@@ -2147,10 +2147,10 @@ func TestPositiveRandomJSONContains(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !c {
-			t.Fatal(fmt.Sprintf("%s should contain %s", j, subdoc))
+			t.Fatalf("%s should contain %s", j, subdoc)
 		}
 		if !slowContains(j, subdoc) {
-			t.Fatal(fmt.Sprintf("%s should slowContains %s", j, subdoc))
+			t.Fatalf("%s should slowContains %s", j, subdoc)
 		}
 	}
 }

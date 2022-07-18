@@ -94,6 +94,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -1924,7 +1926,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"initcap": makeBuiltin(defProps(),
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
-				return tree.NewDString(strings.Title(strings.ToLower(s))), nil
+				return tree.NewDString(cases.Title(language.English, cases.NoLower).String(strings.ToLower(s))), nil
 			},
 			types.String,
 			"Capitalizes the first letter of `val`.",

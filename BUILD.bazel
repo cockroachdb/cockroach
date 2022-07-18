@@ -185,6 +185,7 @@ nogo(
             "//pkg/testutils/lint/passes/errcmp",
             "//pkg/testutils/lint/passes/errwrap",
             "//pkg/testutils/lint/passes/fmtsafe",
+            "//pkg/testutils/lint/passes/generics",
             "//pkg/testutils/lint/passes/grpcclientconnclose",
             "//pkg/testutils/lint/passes/grpcstatuswithdetails",
             "//pkg/testutils/lint/passes/hash",

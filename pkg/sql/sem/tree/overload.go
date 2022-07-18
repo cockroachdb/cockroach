@@ -447,9 +447,7 @@ func (v VariadicType) Length() int {
 // Types is part of the TypeList interface.
 func (v VariadicType) Types() []*types.T {
 	result := make([]*types.T, len(v.FixedTypes)+1)
-	for i := range v.FixedTypes {
-		result[i] = v.FixedTypes[i]
-	}
+	copy(result, v.FixedTypes)
 	result[len(result)-1] = v.VarType
 	return result
 }

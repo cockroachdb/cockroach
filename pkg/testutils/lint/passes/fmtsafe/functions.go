@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // requireConstMsg records functions for which the last string
@@ -135,9 +137,13 @@ var requireConstFmt = map[string]bool{
 	// Error things are populated in the init() message.
 }
 
+func title(s string) string {
+	return cases.Title(language.English, cases.NoLower).String(s)
+}
+
 func init() {
 	for _, sev := range logpb.Severity_name {
-		capsev := strings.Title(strings.ToLower(sev))
+		capsev := title(strings.ToLower(sev))
 		// log.Infof, log.Warningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"f"] = true
 		// log.VInfof, log.VWarningf etc.
@@ -148,7 +154,7 @@ func init() {
 		requireConstMsg["github.com/cockroachdb/cockroach/pkg/util/log."+capsev] = true
 
 		for _, ch := range logpb.Channel_name {
-			capch := strings.ReplaceAll(strings.Title(strings.ReplaceAll(strings.ToLower(ch), "_", " ")), " ", "")
+			capch := strings.ReplaceAll(title(strings.ReplaceAll(strings.ToLower(ch), "_", " ")), " ", "")
 			// log.Ops.Infof, log.Ops.Warningf, etc.
 			requireConstFmt["(github.com/cockroachdb/cockroach/pkg/util/log.logger"+capch+")."+capsev+"f"] = true
 			// log.Ops.VInfof, log.Ops.VWarningf, etc.
@@ -160,7 +166,7 @@ func init() {
 		}
 	}
 	for _, ch := range logpb.Channel_name {
-		capch := strings.ReplaceAll(strings.Title(strings.ReplaceAll(strings.ToLower(ch), "_", " ")), " ", "")
+		capch := strings.ReplaceAll(title(strings.ReplaceAll(strings.ToLower(ch), "_", " ")), " ", "")
 		// log.Ops.Shoutf, log.Dev.Shoutf, etc.
 		requireConstFmt["(github.com/cockroachdb/cockroach/pkg/util/log.logger"+capch+").Shoutf"] = true
 		// log.Ops.Shout, log.Dev.Shout, etc.
