@@ -975,7 +975,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
 				err = jobs.MarkAsRetryJobError(err)
-				lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable flow error: %s", err)
+				lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable flow error: %s", err)  //lint:ignore SA4006
 			}
 
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)

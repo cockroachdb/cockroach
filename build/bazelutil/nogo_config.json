@@ -77,6 +77,11 @@
             "cockroach/pkg/.*$": "first-party code"
         }
     },
+    "generics": {
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
     "grpcconnclose": {
         "exclude_files": {
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
@@ -1189,6 +1194,50 @@
             "cockroach/pkg/.*$": "first-party code"
         }
     },
+    "SA4028": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
+    "SA4029": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
+    "SA4030": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
+    "SA4031": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
     "SA5000": {
         "exclude_files": {
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
@@ -1433,6 +1482,28 @@
         }
     },
     "SA9006": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
+    "SA9007": {
+        "exclude_files": {
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
+    "SA9008": {
         "exclude_files": {
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",

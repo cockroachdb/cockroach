@@ -53,9 +53,9 @@ EOF
 tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
-curl -fsSL https://dl.google.com/go/go1.17.11.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.18.4.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-d69a4fe2694f795d8e525c72b497ededc209cb7185f4c3b62d7a98dd6227b3fe  /tmp/go.tgz
+c9b099b68d93f5c5c8a8844a89f8db07eaa58270e3a1e01804f17f4cf8df02f5  /tmp/go.tgz
 EOF
 tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
