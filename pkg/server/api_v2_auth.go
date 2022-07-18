@@ -312,7 +312,7 @@ func (a *authenticationV2Mux) getSession(
 	if rawSession == apiV2UseCookieBasedAuth {
 		cookies := req.Cookies()
 		for _, c := range cookies {
-			if c.Name != SessionCookieName {
+			if c.Name != SessionCookieName && c.Name != MultitenantSessionCookieName {
 				continue
 			}
 			possibleSessions = append(possibleSessions, c.Value)
@@ -325,7 +325,16 @@ func (a *authenticationV2Mux) getSession(
 	var decoded []byte
 	var err error
 	for i := range possibleSessions {
-		decoded, err = base64.StdEncoding.DecodeString(possibleSessions[i])
+		var session string
+		// This case is if the multitenant session cookie is set.
+		session, err = findSessionCookieValue(req.Cookies())
+		if err != nil {
+			return "", nil, http.StatusBadRequest, err
+		}
+		if session == "" {
+			session = possibleSessions[i]
+		}
+		decoded, err = base64.StdEncoding.DecodeString(session)
 		if err != nil {
 			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
 			continue

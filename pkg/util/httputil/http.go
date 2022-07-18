@@ -113,6 +113,7 @@ func PostJSONWithRequest(
 func doJSONRequest(
 	httpClient http.Client, req *http.Request, response protoutil.Message,
 ) (*http.Response, error) {
+	req.Header.Set("X-Cockroach-Tenant", "system")
 	if timeout := httpClient.Timeout; timeout > 0 {
 		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
 	}

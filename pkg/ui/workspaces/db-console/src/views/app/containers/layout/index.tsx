@@ -40,6 +40,7 @@ import { Badge } from "@cockroachlabs/cluster-ui";
 import "./layout.styl";
 import "./layoutPanel.styl";
 import { getDataFromServer } from "src/util/dataFromServer";
+import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
 
 export interface LayoutProps {
   clusterName: string;
@@ -99,6 +100,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
                 {clusterName || `Cluster id: ${clusterId || ""}`}
               </Text>
               <Badge text={clusterVersion} />
+              <TenantDropdown />
             </PageHeader>
           </div>
           <div className="layout-panel__body">
