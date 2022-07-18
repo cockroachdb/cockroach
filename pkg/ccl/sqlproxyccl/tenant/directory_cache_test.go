@@ -433,7 +433,7 @@ func startTenant(
 		})
 	if err != nil {
 		// Remap tenant "not found" error to GRPC NotFound error.
-		if err.Error() == "not found" {
+		if testutils.IsError(err, `tenant \d+ not found`) {
 			return nil, status.Errorf(codes.NotFound, "tenant %d not found", id)
 		}
 		return nil, err

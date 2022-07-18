@@ -215,6 +215,15 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
+	// SecondaryTenantPortOffset is the increment to add to the various
+	// addresses to generate the network configuration for the in-memory
+	// secondary tenant. If set to zero (the default), ports are
+	// auto-allocated randomly.
+	// TODO(knz): Remove this mechanism altogether in favor of a single
+	// network interface with protocol routing.
+	// See: https://github.com/cockroachdb/cockroach/issues/84585
+	SecondaryTenantPortOffset int
+
 	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
 	// connections to determine connection health and update the local view
 	// of remote clocks.
@@ -271,6 +280,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
+	cfg.SecondaryTenantPortOffset = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

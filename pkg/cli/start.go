@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -41,10 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -516,7 +515,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
+			clientConnOptions, serverParams := server.MakeServerOptionsForURL(serverCfg.Config)
 			pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
@@ -659,6 +658,15 @@ If problems persist, please see %s.`
 			// Now let SQL clients in.
 			if err := s.AcceptClients(ctx); err != nil {
 				return err
+			}
+
+			if !startCtx.disableInMemoryTenant {
+				// Also start the SQL services for tenants, when defined.
+				// TODO(knz): Do this dynamically upon first use instead.
+				// See: https://github.com/cockroachdb/cockroach/issues/84604
+				if err := s.StartInMemoryAppTenant(ctx); err != nil {
+					return err
+				}
 			}
 
 			// Now inform the user that the server is running and tell the
@@ -908,24 +916,6 @@ func waitForShutdown(
 	return returnErr
 }
 
-// makeServerOptionsForURL creates the input for MakeURLForServer().
-// Beware of not calling this too early; the server address
-// is finalized late in the network initialization sequence.
-func makeServerOptionsForURL(
-	serverCfg *server.Config,
-) (clientsecopts.ClientSecurityOptions, clientsecopts.ServerParameters) {
-	clientConnOptions := clientsecopts.ClientSecurityOptions{
-		Insecure: serverCfg.Config.Insecure,
-		CertsDir: serverCfg.Config.SSLCertsDir,
-	}
-	serverParams := clientsecopts.ServerParameters{
-		ServerAddr:      serverCfg.Config.SQLAdvertiseAddr,
-		DefaultPort:     base.DefaultPort,
-		DefaultDatabase: catalogkeys.DefaultDatabaseName,
-	}
-	return clientConnOptions, serverParams
-}
-
 // reportServerInfo prints out the server version and network details
 // in a standardized format.
 func reportServerInfo(
@@ -951,7 +941,7 @@ func reportServerInfo(
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
 	// at this time the address and port have not been resolved yet.
-	clientConnOptions, serverParams := makeServerOptionsForURL(serverCfg)
+	clientConnOptions, serverParams := server.MakeServerOptionsForURL(serverCfg.Config)
 	pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 	if err != nil {
 		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
@@ -1036,7 +1026,7 @@ func reportServerInfo(
 	}
 
 	// Collect the formatted string and show it to the user.
-	msg, err := expandTabsInRedactableBytes(buf.RedactableBytes())
+	msg, err := util.ExpandTabsInRedactableBytes(buf.RedactableBytes())
 	if err != nil {
 		return err
 	}
@@ -1047,22 +1037,6 @@ func reportServerInfo(
 	}
 
 	return nil
-}
-
-// expandTabsInRedactableBytes expands tabs in the redactable byte
-// slice, so that columns are aligned. The correctness of this
-// function depends on the assumption that the `tabwriter` does not
-// replace characters.
-func expandTabsInRedactableBytes(s redact.RedactableBytes) (redact.RedactableBytes, error) {
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-	if _, err := tw.Write([]byte(s)); err != nil {
-		return nil, err
-	}
-	if err := tw.Flush(); err != nil {
-		return nil, err
-	}
-	return redact.RedactableBytes(buf.Bytes()), nil
 }
 
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {

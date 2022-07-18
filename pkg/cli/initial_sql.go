@@ -15,9 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -52,6 +54,29 @@ func runInitialSQL(
 
 	if adminUser != "" && !s.Insecure() {
 		if err := createAdminUser(ctx, s, adminUser, adminPassword); err != nil {
+			return err
+		}
+	}
+
+	if !startCtx.disableInMemoryTenant {
+		// Create a secondary tenant.
+		// TODO(knz): move this to a long-running migration.
+		if err := s.RunLocalSQL(ctx,
+			func(ctx context.Context, ie *sql.InternalExecutor) error {
+				_, err := ie.ExecEx(
+					ctx, "create-app-tenant", nil, /* txn */
+					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					// This query picks up the first available ID automatically.
+					`
+WITH tid AS (
+  SELECT id+1 AS newid
+    FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
+   WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.id=u.id+1)
+   LIMIT 1
+) SELECT "".crdb_internal.create_tenant(newid, true) FROM tid
+`)
+				return err
+			}); err != nil {
 			return err
 		}
 	}

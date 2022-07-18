@@ -95,7 +95,7 @@ func CreateTenantRecord(
 		}
 		return errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
-		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+		return errors.AssertionFailedf("unexpected number of rows affected: %d", num)
 	}
 
 	if u := info.Usage; u != nil {
@@ -222,7 +222,7 @@ func updateTenantRecord(
 }
 
 // CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
+func (p *planner) CreateTenant(ctx context.Context, tenID uint64, autostart bool) error {
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return err
 	}
@@ -232,7 +232,8 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 			ID: tenID,
 			// We synchronously initialize the tenant's keyspace below, so
 			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
+			State:     descpb.TenantInfo_ACTIVE,
+			Autostart: autostart,
 		},
 	}
 	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info); err != nil {

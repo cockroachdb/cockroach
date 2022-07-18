@@ -4862,21 +4862,39 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := requireNonNull(args[0]); err != nil {
-					return nil, err
-				}
 				sTenID, err := mustBeDIntInTenantRange(args[0])
 				if err != nil {
 					return nil, err
 				}
-				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID)); err != nil {
+				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID), false); err != nil {
 					return nil, err
 				}
 				return args[0], nil
 			},
-			Info:         "Creates a new tenant with the provided ID. Must be run by the System tenant.",
-			Volatility:   volatility.Volatile,
-			NullableArgs: true,
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"autostart", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
+				if err := ctx.Tenant.CreateTenant(ctx.Context,
+					uint64(sTenID),
+					bool(tree.MustBeDBool(args[1])),
+				); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
 		},
 	),
 
