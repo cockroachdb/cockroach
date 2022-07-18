@@ -185,7 +185,7 @@ query idx=2 wait-until-follower-read
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
 ----
 1
-events (15 found):
+events (17 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
@@ -200,13 +200,15 @@ events (15 found):
  * event 12: transaction retry on node_idx: 2
  * event 13: colbatchscan trace on node_idx 2: local read
  * event 14: transaction retry on node_idx: 2
- * event 15: colbatchscan trace on node_idx 2: local follower read
+ * event 15: colbatchscan trace on node_idx 2: local read
+ * event 16: transaction retry on node_idx: 2
+ * event 17: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
 ----
 1
-events (15 found):
+events (17 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
@@ -221,7 +223,9 @@ events (15 found):
  * event 12: transaction retry on node_idx: 2
  * event 13: colbatchscan trace on node_idx 2: local read
  * event 14: transaction retry on node_idx: 2
- * event 15: colbatchscan trace on node_idx 2: local follower read
+ * event 15: colbatchscan trace on node_idx 2: local read
+ * event 16: transaction retry on node_idx: 2
+ * event 17: colbatchscan trace on node_idx 2: local follower read
 
 # When creating a new table, ensure when nearest_only=True, we correctly error
 # with the schema not existing if none of the followers have caught up.

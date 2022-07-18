@@ -102,7 +102,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │                 DescriptorIDs:
 │                 - 106
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 6 with 1 MutationType op pending
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
 │                   redactedstatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v›
@@ -111,7 +111,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │
 ├── • PostCommitPhase
 │   │
-│   ├── • Stage 1 of 6 in PostCommitPhase
+│   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │   │   │   │
@@ -135,9 +135,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 2 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 2 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 2 of 6 in PostCommitPhase
+│   ├── • Stage 2 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -160,7 +160,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │             SourceIndexID: 1
 │   │             TableID: 106
 │   │
-│   ├── • Stage 3 of 6 in PostCommitPhase
+│   ├── • Stage 3 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -178,9 +178,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 4 of 6 with 1 MutationType op pending
+│   │             RunningStatus: PostCommitPhase stage 4 of 7 with 1 MutationType op pending
 │   │
-│   ├── • Stage 4 of 6 in PostCommitPhase
+│   ├── • Stage 4 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -189,7 +189,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeBackfilledIndexMerging
 │   │       │     IndexID: 2
 │   │       │     TableID: 106
 │   │       │
@@ -198,9 +198,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 5 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 5 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 5 of 6 in PostCommitPhase
+│   ├── • Stage 5 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -214,12 +214,32 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │             TableID: 106
 │   │             TemporaryIndexID: 3
 │   │
-│   └── • Stage 6 of 6 in PostCommitPhase
+│   ├── • Stage 6 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │         MERGED → WRITE_ONLY
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeMergedIndexWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 1 ValidationType op pending
+│   │
+│   └── • Stage 7 of 7 in PostCommitPhase
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
 │       │   └── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │         MERGED → VALIDATED
+│       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
 │           │

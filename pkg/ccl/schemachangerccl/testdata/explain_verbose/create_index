@@ -172,7 +172,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │                 DescriptorIDs:
 │                 - 104
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 6 with 1 MutationType op pending
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
 │                     BY LIST (id) (PARTITION p1 VALUES IN (1))
@@ -182,7 +182,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │
 ├── • PostCommitPhase
 │   │
-│   ├── • Stage 1 of 6 in PostCommitPhase
+│   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │   │   │   │
@@ -209,9 +209,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 2 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 2 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 2 of 6 in PostCommitPhase
+│   ├── • Stage 2 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -237,7 +237,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │             SourceIndexID: 1
 │   │             TableID: 104
 │   │
-│   ├── • Stage 3 of 6 in PostCommitPhase
+│   ├── • Stage 3 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -255,9 +255,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 4 of 6 with 1 MutationType op pending
+│   │             RunningStatus: PostCommitPhase stage 4 of 7 with 1 MutationType op pending
 │   │
-│   ├── • Stage 4 of 6 in PostCommitPhase
+│   ├── • Stage 4 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -266,7 +266,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeBackfilledIndexMerging
 │   │       │     IndexID: 2
 │   │       │     TableID: 104
 │   │       │
@@ -275,9 +275,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 5 of 6 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 5 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 5 of 6 in PostCommitPhase
+│   ├── • Stage 5 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
@@ -291,12 +291,32 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │             TableID: 104
 │   │             TemporaryIndexID: 3
 │   │
-│   └── • Stage 6 of 6 in PostCommitPhase
+│   ├── • Stage 6 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │         MERGED → WRITE_ONLY
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeMergedIndexWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 104
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 104
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 1 ValidationType op pending
+│   │
+│   └── • Stage 7 of 7 in PostCommitPhase
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
 │       │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │         MERGED → VALIDATED
+│       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
 │           │
