@@ -194,7 +194,9 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 		&ingestedHighWatermark); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
 	}
-	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false, /* useReadLock */
+	// TODO(casper): currently if this update is without read lock, read may see nil high watermark
+	// when getting a stream ingestion stats. We need to keep investigating why this happens.
+	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, true, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju); err != nil {
 				return err
