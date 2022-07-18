@@ -146,6 +146,9 @@ type InternalExecutor interface {
 
 	// WithSyntheticDescriptors sets synthetic descriptors. See implementation.
 	WithSyntheticDescriptors(descs []catalog.Descriptor, run func() error) error
+
+	// Close closes the InternalExecutor.
+	Close(context.Context)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

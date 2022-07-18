@@ -2327,6 +2327,7 @@ func (*importResumer) checkVirtualConstraints(
 
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData(execCfg.SV()))
+			defer ie.Close(ctx)
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
 				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, ie, desc)
 			})

@@ -797,6 +797,8 @@ func (ie *wrappedInternalExecutor) WithSyntheticDescriptors(
 	panic("not implemented")
 }
 
+func (ie *wrappedInternalExecutor) Close(context.Context) {}
+
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
 	ie.mu.RLock()
 	defer ie.mu.RUnlock()

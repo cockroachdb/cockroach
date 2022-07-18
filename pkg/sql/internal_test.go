@@ -155,6 +155,7 @@ func TestInternalFullTableScan(t *testing.T) {
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
+	defer ie.Close(context.Background())
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
@@ -195,6 +196,7 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
+	defer ie.Close(context.Background())
 
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
@@ -328,6 +330,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
+	defer ie.Close(context.Background())
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
@@ -396,6 +399,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 			sql.MemoryMetrics{},
 			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 		)
+		defer ie.Close(context.Background())
 		ie.SetSessionData(
 			&sessiondata.SessionData{
 				SessionData: sessiondatapb.SessionData{
@@ -421,6 +425,7 @@ type testInternalExecutor interface {
 	Exec(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (int, error)
+	Close(context.Context)
 }
 
 func testInternalExecutorAppNameInitialization(
