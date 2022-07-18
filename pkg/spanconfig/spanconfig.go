@@ -88,7 +88,8 @@ type KVAccessor interface {
 //      where t0 <= t1. If the StoreReader or ProtectedTSReader is read from at
 //      t2 where t2 > t1, it's guaranteed to observe a view of the global state
 //      at t >= t0.
-// [2]: For the canonical KVSubscriber implementation, this is typically lagging
+// [2]: For the canonical KVSubscriber implementation,
+//this *is typically lagging
 //      by the closed timestamp target duration.
 // [3]: The canonical KVSubscriber implementation is bounced whenever errors
 //      occur, which may result in the re-transmission of earlier updates

@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -963,6 +966,8 @@ type Store struct {
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
+
+	spanStatsCollector	keyvisualizer.SpanStatsCollector
 }
 
 var _ kv.Sender = &Store{}
@@ -1089,6 +1094,9 @@ type StoreConfig struct {
 	//
 	// TODO(ajwerner): Remove in 22.2.
 	SystemConfigProvider config.SystemConfigProvider
+
+	// TODO(zachlite): comment
+	SpanStatsBoundarySubscriber keyvisualizer.BoundarySubscriber
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1374,6 +1382,10 @@ func NewStore(
 	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
 	}
+
+	// TODO(zachlite) log this error if a stat collector fails to start
+	collector, _ := spanstatscollector.New(ctx, s.stopper)
+	s.spanStatsCollector = collector
 
 	return s
 }
@@ -2035,6 +2047,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		})
 	}
+
+	// TODO(zachlite) check for enabled key visualizer
+	s.cfg.SpanStatsBoundarySubscriber.Subscribe(
+		func (ctx context.Context, update keyvisualizer.BoundaryUpdate) {
+			// do update
+			_ = s.spanStatsCollector.SaveBoundaries(keyvispb.Boundaries(update))
+		},
+	)
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
@@ -3601,6 +3621,10 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) GetSpanStatsCollector() keyvisualizer.SpanStatsCollector {
+	return s.spanStatsCollector
 }
 
 // Implementation of the storeForTruncator interface.

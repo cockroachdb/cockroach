@@ -1,0 +1,30 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanstatscollector",
+    srcs = ["span_stats_collector.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keyvisualizer/keyvispb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/interval",
+        "//pkg/util/stop",
+    ],
+)
+
+go_test(
+    name = "spanstatscollector_test",
+    srcs = ["span_stats_collector_test.go"],
+    embed = [":spanstatscollector"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

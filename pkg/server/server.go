@@ -658,6 +658,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SystemConfigProvider:     systemConfigWatcher,
 		SpanConfigSubscriber:     spanConfig.subscriber,
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
+		// TODO(zachlite): add boundary subscriber to store config
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1112,6 +1113,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
 
+	spanStatsServer := &spanStatsServer{server: s}
+	spanStatsServer.RegisterService(s.grpc.Server)
+
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -1502,6 +1506,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 			}
 		}
 	}
+
+	// TODO(zachlite) start boundary subscriber
+
 	// Start garbage collecting system events.
 	//
 	// NB: As written, this falls awkwardly between SQL and KV. KV is used only

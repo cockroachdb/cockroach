@@ -1,0 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "spanstatsconsumer",
+    srcs = ["span_stats_consumer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatsconsumer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
+    ],
+)
+
+get_x_data(name = "get_x_data")
