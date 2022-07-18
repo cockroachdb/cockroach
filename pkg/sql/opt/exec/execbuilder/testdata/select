@@ -189,8 +189,18 @@ vectorized: true
   table: num_ref@bc
   spans: FULL SCAN
 
+let $num_ref_bc
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $t_id AND index_name = 'bc';
+
+let $num_ref_pkey
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $t_id AND index_name = 'num_ref_pkey';
+
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -202,7 +212,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
@@ -214,7 +224,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -226,7 +236,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
@@ -238,7 +248,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -250,7 +260,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
