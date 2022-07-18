@@ -273,10 +273,7 @@ describe("Routing to", () => {
   describe("'/database/:${databaseNameAttr}' path", () => {
     test("routes to <DatabaseDetailsPage> component", () => {
       navigateToPath("/database/some-db-name");
-      const result = document.querySelector(
-        "[data-componentname=DatabaseDetailsPage]",
-      );
-      expect(result).not.toBeNull();
+      screen.getByTestId("DatabaseDetailsPage");
     });
   });
 
@@ -290,10 +287,7 @@ describe("Routing to", () => {
   describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
     test("routes to <DatabaseTablePage> component", () => {
       navigateToPath("/database/some-db-name/table/some-table-name");
-      const result = document.querySelector(
-        "[data-componentname=DatabaseTablePage]",
-      );
-      expect(result).not.toBeNull();
+      screen.getByTestId("DatabaseTablePage");
     });
   });
 
@@ -303,10 +297,7 @@ describe("Routing to", () => {
   describe("'/data-distribution' path", () => {
     test("routes to <DataDistributionPage> component", () => {
       navigateToPath("/data-distribution");
-      const result = document.querySelector(
-        "[data-componentname=dataDistribution]",
-      );
-      expect(result).not.toBeNull();
+      screen.getByTestId("dataDistribution");
     });
   });
 

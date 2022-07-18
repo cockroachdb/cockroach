@@ -41,7 +41,7 @@ export function stubComponentInModule(
       if (typeof candidate === "function") {
         const componentName = name === "default" ? path.split("/").pop() : name;
         mocks[name] = (props: Record<string, unknown>) =>
-          (<div data-componentname={componentName} {...props} />) as any;
+          (<div data-testid={componentName} {...props} />) as any;
       } else {
         throw new Error(
           `Unable to mock '${path}' property '${name}', which has type '${typeof candidate}'`,
