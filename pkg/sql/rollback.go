@@ -13,12 +13,15 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -99,5 +102,79 @@ func RevertTables(
 		}
 	}
 
+	return nil
+}
+
+// DeleteTableWithPredicate issues a series of point and range tombstones over a subset of keys in a
+// table that match the passed-in predicate.
+//
+// This function will error, without a resume span, if it encounters an intent
+// in the span. The caller should resolve these intents by retrying the
+// function. To prevent errors, the caller should only pass a table that will
+// not see new writes during this bulk delete operation (e.g. on a span that's
+// part of an import rollback).
+//
+// NOTE: this function will issue tombstones on keys with versions that match
+// the predicate, in contrast to RevertRange, which rolls back a table to a
+// certain timestamp. For example, if a key gets a single update after the
+// predicate.startTime, DeleteTableWithPredicate would delete that key, while
+// RevertRange would revert that key to its state before the update.
+func DeleteTableWithPredicate(
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	predicates roachpb.DeleteRangePredicates,
+	batchSize int64,
+) error {
+
+	log.Infof(ctx, "deleting data for table %d with predicate %s", table.GetID(), predicates.String())
+	tableKey := codec.TablePrefix(uint32(table.GetID()))
+	spans := []roachpb.Span{{Key: tableKey, EndKey: tableKey.PrefixEnd()}}
+
+	// TODO(msbutler): Currently, the distsender will split the predicate based
+	// delete range request into a requests for each range, and process them
+	// sequentially. Pre-split requests up using a rangedesc cache and run batches
+	// in parallel (since we're passing a key limit, distsender won't do its usual
+	// splitting/parallel sending to separate ranges).
+	for len(spans) != 0 {
+
+		span := spans[0]
+		admissionHeader := roachpb.AdmissionHeader{
+			Priority:                 int32(admissionpb.BulkNormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   roachpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		}
+		delRangeRequest := &roachpb.DeleteRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    span.Key,
+				EndKey: span.EndKey,
+			},
+			UseRangeTombstone: true,
+			Predicates:        predicates,
+		}
+		log.VEventf(ctx, 2, "deleting range %s - %s", span.Key, span.EndKey)
+		rawResp, err := kv.SendWrappedWithAdmission(
+			ctx,
+			db.NonTransactionalSender(),
+			roachpb.Header{MaxSpanRequestKeys: batchSize},
+			admissionHeader,
+			delRangeRequest)
+
+		spans = spans[:0]
+
+		if err != nil {
+			return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
+		}
+
+		resp := rawResp.(*roachpb.DeleteRangeResponse)
+		if resp.ResumeSpan != nil {
+			if !resp.ResumeSpan.Valid() {
+				return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
+			}
+			spans = append(spans, *resp.ResumeSpan)
+		}
+	}
 	return nil
 }
