@@ -551,3 +551,42 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
 }
+
+func TestTenantStreamingDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): now this has the same race issue with
+	// TestPartitionedStreamReplicationClient, please fix them together in the future.
+	skip.UnderRace(t, "disabled under race")
+
+	ctx := context.Background()
+	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	// initial scan
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Introduce a DeleteRange on t1.
+	srcCodec := keys.MakeSQLCodec(c.args.srcTenantID)
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		c.srcSysServer.DB(), srcCodec, "d", "t1")
+	t1Span := desc.PrimaryIndexSpan(srcCodec)
+	require.NoError(t, c.srcSysServer.DB().DelRangeUsingTombstone(ctx, t1Span.Key, t1Span.EndKey))
+
+	srcTimeAfterDelRange := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTimeAfterDelRange, jobspb.JobID(ingestionJobID))
+	c.compareResult("SELECT * FROM d.t1")
+
+	// Check if the DeleteRange is MVCC-compatible.
+	c.compareResult(fmt.Sprintf("SELECT * FROM d.t1 AS OF SYSTEM TIME %d", srcTime.WallTime))
+}

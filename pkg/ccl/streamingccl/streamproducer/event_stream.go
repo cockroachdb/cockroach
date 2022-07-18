@@ -98,6 +98,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		rangefeed.WithMemoryMonitor(s.mon),
 
 		rangefeed.WithOnSSTable(s.onSSTable),
+
+		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 	}
 
 	frontier, err := span.MakeFrontier(s.spec.Spans...)
@@ -258,6 +260,14 @@ func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTab
 	}
 }
 
+func (s *eventStream) onDeleteRange(ctx context.Context, delRange *roachpb.RangeFeedDeleteRange) {
+	select {
+	case <-ctx.Done():
+	case s.eventsCh <- roachpb.RangeFeedEvent{DeleteRange: delRange}:
+		log.VInfof(ctx, 1, "onDeleteRange: %s@%s", delRange.Span, delRange.Timestamp)
+	}
+}
+
 // makeCheckpoint generates checkpoint based on the frontier.
 func makeCheckpoint(f *span.Frontier) (checkpoint streampb.StreamEvent_StreamCheckpoint) {
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
@@ -332,42 +342,58 @@ func (p *checkpointPacer) shouldCheckpoint(
 	return false
 }
 
-// Trim the received SST to only contain data within the boundaries of spans in the partition
-// spec, and execute the specified operation on each roachpb.KeyValue in the trimmed SSTable.
-func (s *eventStream) trimSST(
-	sst *roachpb.RangeFeedSSTable, op func(keyVal roachpb.KeyValue),
+// Extract the received SST to only contain data within the boundaries of spans in the partition
+// spec, execute the specified operation on each MVCC key value in the trimmed SSTable. and
+// execute the specified operation on each MVCCRangeKey value in the trimmed SSTable.
+func (s *eventStream) extractSST(
+	sst *roachpb.RangeFeedSSTable,
+	mvccKeyValOp func(key storage.MVCCKey, val []byte),
+	mvccRangeKeyOp func(rangeKeyVal storage.MVCCRangeKey),
 ) error {
-	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+	iter, err := storage.NewPebbleMemSSTIterator(sst.Data, true,
+		storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: sst.Span.Key,
+			UpperBound: sst.Span.EndKey,
+		})
 	if err != nil {
 		return err
 	}
 	defer iter.Close()
 
-	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
-		keyCopy := make([]byte, len(mvccKey.Key))
-		copy(keyCopy, mvccKey.Key)
-		valueCopy := make([]byte, len(value))
-		copy(valueCopy, value)
-		return roachpb.KeyValue{
-			Key:   keyCopy,
-			Value: roachpb.Value{RawBytes: valueCopy, Timestamp: mvccKey.Timestamp},
+	for iter.SeekGE(storage.MVCCKey{Key: sst.RegisteredSpan.Key}); ; iter.Next() {
+		if valid, err := iter.Valid(); err != nil {
+			return err
+		} else if !valid {
+			break
+		}
+		if !iter.UnsafeKey().Less(storage.MVCCKey{Key: sst.RegisteredSpan.EndKey}) { // passed the span boundary
+			break
+		}
+		if hasPoint, hasRange := iter.HasPointAndRange(); hasPoint {
+			mvccKeyValOp(iter.Key(), iter.Value())
+		} else if hasRange {
+			// We only consider ranges at non-point position as otherwise
+			// we will produce duplicate ranges. See tech note:
+			// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
+			for _, rangeKeyVal := range iter.RangeKeys() {
+				mvccVal, err := storage.DecodeMVCCValue(rangeKeyVal.Value)
+				if err != nil {
+					return err
+				}
+				if !mvccVal.IsTombstone() {
+					return errors.Errorf("only expect range tombstone from MVCC range key: %s", rangeKeyVal)
+				}
+				intersectedSpan := sst.RegisteredSpan.Intersect(
+					roachpb.Span{Key: rangeKeyVal.RangeKey.StartKey, EndKey: rangeKeyVal.RangeKey.EndKey})
+				mvccRangeKeyOp(storage.MVCCRangeKey{
+					StartKey:  intersectedSpan.Key.Clone(),
+					EndKey:    intersectedSpan.EndKey.Clone(),
+					Timestamp: rangeKeyVal.RangeKey.Timestamp})
+			}
 		}
 	}
-
-	return s.subscribedSpans.ForEach(func(span roachpb.Span) error {
-		iter.SeekGE(storage.MVCCKey{Key: span.Key})
-		endKey := storage.MVCCKey{Key: span.EndKey}
-		for ; ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil || !ok {
-				return err
-			}
-			if !iter.UnsafeKey().Less(endKey) { // passed the span boundary
-				break
-			}
-			op(copyKV(iter.UnsafeKey(), iter.UnsafeValue()))
-		}
-		return nil
-	})
+	return nil
 }
 
 // Add a RangeFeedSSTable into current batch and return number of bytes added.
@@ -376,7 +402,12 @@ func (s *eventStream) addSST(
 ) (int, error) {
 	// We send over the whole SSTable if the sst span is within
 	// the subscribed spans boundary.
-	if s.subscribedSpans.Encloses(sst.Span) {
+	if !s.subscribedSpans.Encloses(sst.RegisteredSpan) {
+		return 0, errors.Errorf("registered span not enclosed in subscribed spans")
+	}
+
+	if sst.RegisteredSpan.Contains(sst.Span) {
+		fmt.Println("1")
 		batch.Ssts = append(batch.Ssts, *sst)
 		return sst.Size(), nil
 	}
@@ -385,10 +416,45 @@ func (s *eventStream) addSST(
 	// TODO(casper): add metrics to track number of SSTs, and number of ssts
 	// that are not inside the boundaries (and possible count+size of kvs in such ssts).
 	size := 0
-	if err := s.trimSST(sst, func(keyVal roachpb.KeyValue) {
-		batch.KeyValues = append(batch.KeyValues, keyVal)
-		size += keyVal.Size()
-	}); err != nil {
+	timestampToDelRanges := make(map[hlc.Timestamp][]*roachpb.RangeFeedDeleteRange)
+	// Iterator may release fragmented ranges, we try to de-fragment them
+	// before we release roachpb.RangeFeedDeleteRange events.
+	mergeDelRange := func(unsafeRangeKey storage.MVCCRangeKey) {
+		delRanges, ok := timestampToDelRanges[unsafeRangeKey.Timestamp]
+		if ok {
+			for _, delRange := range delRanges {
+				if delRange.Span.EndKey.Equal(unsafeRangeKey.StartKey) {
+					delRange.Span.EndKey = unsafeRangeKey.EndKey.Clone()
+					return
+				} else if delRange.Span.Key.Equal(unsafeRangeKey.EndKey) {
+					delRange.Span.Key = unsafeRangeKey.StartKey.Clone()
+					return
+				}
+			}
+		}
+		batch.DelRanges = append(batch.DelRanges, roachpb.RangeFeedDeleteRange{
+			Span: roachpb.Span{
+				Key:    unsafeRangeKey.StartKey.Clone(),
+				EndKey: unsafeRangeKey.EndKey.Clone(),
+			},
+			Timestamp: unsafeRangeKey.Timestamp,
+		})
+		size += batch.DelRanges[len(batch.DelRanges)-1].Size()
+		timestampToDelRanges[unsafeRangeKey.Timestamp] =
+			append(delRanges, &batch.DelRanges[len(batch.DelRanges)-1])
+	}
+
+	if err := s.extractSST(sst,
+		func(mvccKey storage.MVCCKey, val []byte) {
+			batch.KeyValues = append(batch.KeyValues, roachpb.KeyValue{
+				Key: mvccKey.Key,
+				Value: roachpb.Value{
+					RawBytes:  val,
+					Timestamp: mvccKey.Timestamp,
+				},
+			})
+			size += batch.KeyValues[len(batch.KeyValues)-1].Size()
+		}, mergeDelRange); err != nil {
 		return 0, err
 	}
 	return size, nil
@@ -410,12 +476,26 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		batchSize += keyValue.Size()
 	}
 
+	addDelRange := func(delRange *roachpb.RangeFeedDeleteRange) error {
+		if !delRange.RegisteredSpan.Overlaps(delRange.Span) {
+			return errors.New("DeleteRange span should overlap with the matching registered span")
+		}
+		subDelRange := roachpb.RangeFeedDeleteRange{
+			Span:      delRange.RegisteredSpan.Intersect(delRange.Span),
+			Timestamp: delRange.Timestamp,
+		}
+		batch.DelRanges = append(batch.DelRanges, subDelRange)
+		batchSize += subDelRange.Size()
+		return nil
+	}
+
 	maybeFlushBatch := func(force bool) error {
 		if (force && batchSize > 0) || batchSize > int(s.spec.Config.BatchByteSize) {
 			defer func() {
 				batchSize = 0
 				batch.KeyValues = batch.KeyValues[:0]
 				batch.Ssts = batch.Ssts[:0]
+				batch.DelRanges = batch.DelRanges[:0]
 			}()
 			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch})
 		}
@@ -464,8 +544,14 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}
+			case ev.DeleteRange != nil:
+				if err := addDelRange(ev.DeleteRange); err != nil {
+					return err
+				}
+				if err := maybeFlushBatch(flushIfNeeded); err != nil {
+					return err
+				}
 			default:
-				// TODO(erikgrinaker): Handle DeleteRange events (MVCC range tombstones).
 				return errors.AssertionFailedf("unexpected event")
 			}
 		}
