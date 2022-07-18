@@ -327,6 +327,9 @@ const (
 	AlterSystemSQLInstancesAddLocality
 	// SystemExternalConnectionsTable adds system.external_connections table.
 	SystemExternalConnectionsTable
+	// AlterSystemStatementStatisticsAddIndexRecommendations adds an
+	// index_recommendations column to the system.statement_statistics table.
+	AlterSystemStatementStatisticsAddIndexRecommendations
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -563,6 +566,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
+	},
+	{
+		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
 
 	// *************************************************

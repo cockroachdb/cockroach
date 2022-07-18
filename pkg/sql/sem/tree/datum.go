@@ -4322,6 +4322,16 @@ func MustBeDArray(e Expr) *DArray {
 	return i
 }
 
+// MustBeDArrayOrDNull attempts to retrieve a *DArray or DNull from an Expr, panicking if the
+// assertion fails.
+func MustBeDArrayOrDNull(e Expr) *DArray {
+	i, ok := AsDArray(e)
+	if !ok && e != DNull {
+		panic(errors.AssertionFailedf("expected *DArray or DNull, found %T", e))
+	}
+	return i
+}
+
 // MaybeSetCustomOid checks whether t has a special oid that we want to set into
 // d. Must be kept in sync with DArray.ResolvedType. Returns an error if t is
 // not an array type.
