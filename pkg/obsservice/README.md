@@ -14,16 +14,23 @@ the future).
 Build with
 
 ```shell
-go build ./pkg/obsservice/cmd/obsservice
+./dev build obsservice
 ```
 
-or
+which will include the DB Console UI served on the HTTP port. This adds the
+`"--config=with_ui"` bazel flag that embeds the UI.
+
+You can also build without the UI using:
 
 ```shell
 ./dev build pkg/obsservice/cmd/obsservice
 ```
 
+which will produce a binary in `./bin/obsservice`.
+
 ## Running
+
+Assuming you're already running a local CRDB instance:
 
 ```shell
 obsservice --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui-cert=certs/cert.pem --ui-cert-key=certs/key.pem --ca-cert=certs/ca.crt
