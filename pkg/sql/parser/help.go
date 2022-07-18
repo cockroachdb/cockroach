@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // HelpMessage describes a contextual help message.
@@ -233,7 +235,7 @@ var AllHelp = func(h map[string]HelpMessageBody) string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 1, ' ', 0)
 	for _, cat := range categories {
-		fmt.Fprintf(w, "%s:\n", strings.Title(cat))
+		fmt.Fprintf(w, "%s:\n", cases.Title(language.English, cases.NoLower).String(cat))
 		for _, item := range cmds[cat] {
 			fmt.Fprintf(w, "\t\t%s\t%s\n", item, h[item].ShortDescription)
 		}

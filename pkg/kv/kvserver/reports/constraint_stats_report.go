@@ -75,7 +75,7 @@ const (
 
 // Less compares two ConstraintTypes.
 func (t ConstraintType) Less(other ConstraintType) bool {
-	return -1 == strings.Compare(string(t), string(other))
+	return strings.Compare(string(t), string(other)) == -1
 }
 
 // ConstraintRepr is a string representation of a constraint.
@@ -83,7 +83,7 @@ type ConstraintRepr string
 
 // Less compares two ConstraintReprs.
 func (c ConstraintRepr) Less(other ConstraintRepr) bool {
-	return -1 == strings.Compare(string(c), string(other))
+	return strings.Compare(string(c), string(other)) == -1
 }
 
 // ConstraintStatusKey represents the key in the ConstraintReport.
