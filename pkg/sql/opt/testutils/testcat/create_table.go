@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type indexType int
@@ -705,17 +704,14 @@ func (tt *Table) addIndexWithVersion(
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
 	}
 
-	if def.NotVisible {
-		panic(unimplemented.Newf("Not Visible Index", "creating a not visible index is not supported yet"))
-	}
-
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
-		Unique:   typ != nonUniqueIndex,
-		Inverted: def.Inverted,
-		IdxZone:  cat.EmptyZone(),
-		table:    tt,
-		version:  version,
+		IdxName:    tt.makeIndexName(def.Name, def.Columns, typ),
+		Unique:     typ != nonUniqueIndex,
+		Inverted:   def.Inverted,
+		IdxZone:    cat.EmptyZone(),
+		table:      tt,
+		version:    version,
+		NotVisible: def.NotVisible,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.

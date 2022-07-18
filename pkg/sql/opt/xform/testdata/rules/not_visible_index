@@ -1,0 +1,28 @@
+exec-ddl
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE)
+----
+
+exec-ddl
+CREATE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
+----
+
+exec-ddl
+SHOW CREATE t1
+----
+TABLE t1
+ ├── k int not null
+ ├── v int
+ ├── i int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t1_pkey
+ │    └── k int not null
+ ├── INDEX idx_v_visible
+ │    ├── v int
+ │    └── k int not null
+ ├── INDEX idx_i_invisible NOT VISIBLE
+ │    ├── i int
+ │    └── k int not null
+ └── INDEX idx_v_invisible NOT VISIBLE
+      ├── v int
+      └── k int not null

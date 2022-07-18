@@ -200,6 +200,9 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		} else {
 			defs = append(defs, &indexDef)
 		}
+		// TODO(wenyihu6): check if we should support not visible index here
+		// Creating a not visible unique index in table def here might cause error
+		// in parseCreateStatement.
 	}
 
 	ret := &tree.CreateTable{
