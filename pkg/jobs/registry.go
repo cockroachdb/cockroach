@@ -973,15 +973,22 @@ func (r *Registry) cleanupOldJobsPage(
 	if len(toDelete.Array) > 0 {
 		log.VEventf(ctx, 2, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
-		var nDeleted int
+		const infoStmt = `DELETE FROM system.job_info WHERE job_id = ANY($1)`
+		var nDeleted, nDeletedInfos int
 		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
 			log.Warningf(ctx, "error cleaning up %d jobs: %v", len(toDelete.Array), err)
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
+		nDeletedInfos, err = r.ex.Exec(
+			ctx, "gc-jobs", nil /* txn */, infoStmt, toDelete,
+		)
+		if err != nil {
+			return false, 0, errors.Wrap(err, "deleting old jobs")
+		}
 		if nDeleted > 0 {
-			log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
+			log.Infof(ctx, "cleaned up %d expired job records and %d expired info records", nDeleted, nDeletedInfos)
 		}
 	}
 	// If we got as many rows as we asked for, there might be more.
