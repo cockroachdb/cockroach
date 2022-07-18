@@ -70,7 +70,6 @@
     "@reduxjs/toolkit": "1.6.0",
     "@storybook/react": "^6.1.21",
     "@testing-library/dom": "^8.11.1",
-    "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^12.1.0",
     "@testing-library/user-event": "^13.5.0",
     "@types/analytics-node": "^0.0.32",
