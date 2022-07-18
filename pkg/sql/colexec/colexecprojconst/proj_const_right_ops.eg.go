@@ -68,10 +68,6 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -100,11 +96,6 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -126,11 +117,6 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -156,10 +142,6 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -188,11 +170,6 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -214,11 +191,6 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -244,10 +216,6 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -276,11 +244,6 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -302,11 +265,6 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -332,10 +290,6 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -364,11 +318,6 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -390,11 +339,6 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -420,10 +364,6 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -452,11 +392,6 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -478,11 +413,6 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -508,10 +438,6 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -540,11 +466,6 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -566,11 +487,6 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -596,10 +512,6 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -628,11 +540,6 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -654,11 +561,6 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -684,10 +586,6 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -716,11 +614,6 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -742,11 +635,6 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -772,10 +660,6 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -804,11 +688,6 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -830,11 +709,6 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -862,10 +736,6 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -907,11 +777,6 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -946,11 +811,6 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -976,10 +836,6 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1008,11 +864,6 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1034,11 +885,6 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1064,10 +910,6 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1096,11 +938,6 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1122,11 +959,6 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1152,10 +984,6 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1184,11 +1012,6 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1210,11 +1033,6 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1240,10 +1058,6 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1272,11 +1086,6 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1298,11 +1107,6 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1328,10 +1132,6 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1360,11 +1160,6 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1386,11 +1181,6 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1416,10 +1206,6 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1448,11 +1234,6 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1474,11 +1255,6 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1504,10 +1280,6 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1536,11 +1308,6 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1562,11 +1329,6 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1592,10 +1354,6 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1624,11 +1382,6 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1650,11 +1403,6 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1680,10 +1428,6 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1712,11 +1456,6 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1738,11 +1477,6 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1770,10 +1504,6 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1815,11 +1545,6 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1854,11 +1579,6 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1884,10 +1604,6 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -1916,11 +1632,6 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -1942,11 +1653,6 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -1972,10 +1678,6 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2004,11 +1706,6 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2030,11 +1727,6 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2060,10 +1752,6 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2092,11 +1780,6 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2118,11 +1801,6 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2148,10 +1826,6 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2180,11 +1854,6 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2206,11 +1875,6 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2236,10 +1900,6 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2268,11 +1928,6 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2294,11 +1949,6 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2324,10 +1974,6 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2356,11 +2002,6 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2382,11 +2023,6 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2412,10 +2048,6 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2444,11 +2076,6 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2470,11 +2097,6 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2500,10 +2122,6 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2532,11 +2150,6 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2558,11 +2171,6 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2588,10 +2196,6 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2620,11 +2224,6 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2646,11 +2245,6 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2678,10 +2272,6 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2723,11 +2313,6 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2762,11 +2347,6 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2792,10 +2372,6 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2838,11 +2414,6 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2878,11 +2449,6 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -2908,10 +2474,6 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -2954,11 +2516,6 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -2994,11 +2551,6 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3024,10 +2576,6 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3070,11 +2618,6 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3110,11 +2653,6 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3140,10 +2678,6 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3184,11 +2718,6 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3222,11 +2751,6 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3252,10 +2776,6 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3296,11 +2816,6 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3334,11 +2849,6 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3364,10 +2874,6 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3408,11 +2914,6 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3446,11 +2947,6 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3476,10 +2972,6 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3520,11 +3012,6 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3558,11 +3045,6 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3588,10 +3070,6 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3636,11 +3114,6 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3678,11 +3151,6 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3710,10 +3178,6 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3763,11 +3227,6 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3810,11 +3269,6 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3840,10 +3294,6 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3884,11 +3334,6 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -3922,11 +3367,6 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -3952,10 +3392,6 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -3996,11 +3432,6 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4034,11 +3465,6 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4064,10 +3490,6 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4108,11 +3530,6 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4146,11 +3563,6 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4176,10 +3588,6 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4224,11 +3632,6 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4266,11 +3669,6 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4298,10 +3696,6 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4351,11 +3745,6 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4398,11 +3787,6 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4428,10 +3812,6 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4472,11 +3852,6 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4510,11 +3885,6 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4540,10 +3910,6 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4584,11 +3950,6 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4622,11 +3983,6 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4652,10 +4008,6 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4696,11 +4048,6 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4734,11 +4081,6 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4764,10 +4106,6 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4812,11 +4150,6 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4854,11 +4187,6 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -4886,10 +4214,6 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -4939,11 +4263,6 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -4986,11 +4305,6 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5016,10 +4330,6 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5054,11 +4364,6 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5086,11 +4391,6 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5116,10 +4416,6 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Timestamp()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5154,11 +4450,6 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5186,11 +4477,6 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5216,10 +4502,6 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Timestamp()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5254,11 +4536,6 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5286,11 +4563,6 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5316,10 +4588,6 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5344,11 +4612,6 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5366,11 +4629,6 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Add(p.constArg)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5398,10 +4656,6 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5451,11 +4705,6 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5498,11 +4747,6 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5530,10 +4774,6 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5584,11 +4824,6 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5632,11 +4867,6 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5664,10 +4894,6 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5718,11 +4944,6 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5766,11 +4987,6 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5798,10 +5014,6 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5852,11 +5064,6 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -5900,11 +5107,6 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -5932,10 +5134,6 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -5986,11 +5184,6 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6034,11 +5227,6 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6064,10 +5252,6 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6110,11 +5294,6 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6150,11 +5329,6 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6180,10 +5354,6 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6226,11 +5396,6 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6266,11 +5431,6 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6296,10 +5456,6 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6342,11 +5498,6 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6382,11 +5533,6 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6412,10 +5558,6 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6456,11 +5598,6 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6494,11 +5631,6 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6524,10 +5656,6 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6568,11 +5696,6 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6606,11 +5729,6 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6636,10 +5754,6 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6680,11 +5794,6 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6718,11 +5827,6 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6748,10 +5852,6 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6792,11 +5892,6 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6830,11 +5925,6 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6860,10 +5950,6 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -6908,11 +5994,6 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -6950,11 +6031,6 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -6982,10 +6058,6 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7035,11 +6107,6 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7082,11 +6149,6 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7112,10 +6174,6 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7156,11 +6214,6 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7194,11 +6247,6 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7224,10 +6272,6 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7268,11 +6312,6 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7306,11 +6345,6 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7336,10 +6370,6 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7380,11 +6410,6 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7418,11 +6443,6 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7448,10 +6468,6 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7496,11 +6512,6 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7538,11 +6549,6 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7570,10 +6576,6 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7623,11 +6625,6 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7670,11 +6667,6 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7700,10 +6692,6 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7744,11 +6732,6 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7782,11 +6765,6 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7812,10 +6790,6 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7856,11 +6830,6 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -7894,11 +6863,6 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -7924,10 +6888,6 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -7968,11 +6928,6 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8006,11 +6961,6 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8036,10 +6986,6 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8084,11 +7030,6 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8126,11 +7067,6 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8158,10 +7094,6 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8211,11 +7143,6 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8258,11 +7185,6 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8288,10 +7210,6 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8326,11 +7244,6 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8358,11 +7271,6 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8388,10 +7296,6 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8422,11 +7326,6 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8450,11 +7349,6 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8480,10 +7374,6 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Timestamp()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8518,11 +7408,6 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8550,11 +7435,6 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 					projCol[i] = t_res
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8580,10 +7460,6 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8608,11 +7484,6 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8630,11 +7501,6 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Sub(p.constArg)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8662,10 +7528,6 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8715,11 +7577,6 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8762,11 +7619,6 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8792,10 +7644,6 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8837,11 +7685,6 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8876,11 +7719,6 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -8906,10 +7744,6 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -8944,11 +7778,6 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -8976,11 +7805,6 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9006,10 +7830,6 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9044,11 +7864,6 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9076,11 +7891,6 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9106,10 +7916,6 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9144,11 +7950,6 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9176,11 +7977,6 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9208,10 +8004,6 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9253,11 +8045,6 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9292,11 +8079,6 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9324,10 +8106,6 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9378,11 +8156,6 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9426,11 +8199,6 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9458,10 +8226,6 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9511,11 +8275,6 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9558,11 +8317,6 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9590,10 +8344,6 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9644,11 +8394,6 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9692,11 +8437,6 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9724,10 +8464,6 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9778,11 +8514,6 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9826,11 +8557,6 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9858,10 +8584,6 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -9912,11 +8634,6 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -9960,11 +8677,6 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -9990,10 +8702,6 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10036,11 +8744,6 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10076,11 +8779,6 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10106,10 +8804,6 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10152,11 +8846,6 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10192,11 +8881,6 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10222,10 +8906,6 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10268,11 +8948,6 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10308,11 +8983,6 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10338,10 +9008,6 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10382,11 +9048,6 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10420,11 +9081,6 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10450,10 +9106,6 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10488,11 +9140,6 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10520,11 +9167,6 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.MulFloat(f)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10550,10 +9192,6 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10610,11 +9248,6 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10664,11 +9297,6 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10694,10 +9322,6 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10754,11 +9378,6 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10808,11 +9427,6 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10838,10 +9452,6 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -10898,11 +9508,6 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -10952,11 +9557,6 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -10982,10 +9582,6 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11030,11 +9626,6 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11072,11 +9663,6 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11102,10 +9688,6 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11130,11 +9712,6 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11152,11 +9729,6 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11182,10 +9754,6 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11242,11 +9810,6 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11296,11 +9859,6 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11326,10 +9884,6 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11386,11 +9940,6 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11440,11 +9989,6 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11470,10 +10014,6 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11530,11 +10070,6 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11584,11 +10119,6 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11614,10 +10144,6 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11662,11 +10188,6 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11704,11 +10225,6 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11734,10 +10250,6 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11762,11 +10274,6 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11784,11 +10291,6 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11814,10 +10316,6 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -11874,11 +10372,6 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -11928,11 +10421,6 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -11958,10 +10446,6 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12018,11 +10502,6 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12072,11 +10551,6 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12102,10 +10576,6 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12162,11 +10632,6 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12216,11 +10681,6 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12246,10 +10706,6 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12294,11 +10750,6 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12336,11 +10787,6 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12366,10 +10812,6 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12394,11 +10836,6 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12416,11 +10853,6 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12446,10 +10878,6 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12484,11 +10912,6 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12516,11 +10939,6 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12546,10 +10964,6 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12574,11 +10988,6 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12596,11 +11005,6 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12626,10 +11030,6 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12654,11 +11054,6 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12676,11 +11071,6 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12706,10 +11096,6 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12734,11 +11120,6 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12756,11 +11137,6 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12786,10 +11162,6 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12814,11 +11186,6 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12836,11 +11203,6 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12866,10 +11228,6 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12894,11 +11252,6 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -12916,11 +11269,6 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -12946,10 +11294,6 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -12984,11 +11328,6 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13016,11 +11355,6 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 					projCol[i] = arg.MulFloat(f)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13046,10 +11380,6 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13100,11 +11430,6 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13148,11 +11473,6 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13178,10 +11498,6 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13232,11 +11548,6 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13280,11 +11591,6 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13310,10 +11616,6 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13364,11 +11666,6 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13412,11 +11709,6 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13442,10 +11734,6 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13494,11 +11782,6 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13540,11 +11823,6 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13570,10 +11848,6 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13622,11 +11896,6 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13668,11 +11937,6 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13698,10 +11962,6 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13750,11 +12010,6 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13796,11 +12051,6 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13826,10 +12076,6 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -13878,11 +12124,6 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -13924,11 +12165,6 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -13954,10 +12190,6 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14010,11 +12242,6 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14060,11 +12287,6 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14090,10 +12312,6 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14142,11 +12360,6 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14188,11 +12401,6 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14218,10 +12426,6 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14270,11 +12474,6 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14316,11 +12515,6 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14346,10 +12540,6 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14398,11 +12588,6 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14444,11 +12629,6 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14474,10 +12654,6 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14530,11 +12706,6 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14580,11 +12751,6 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14610,10 +12776,6 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14662,11 +12824,6 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14708,11 +12865,6 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14738,10 +12890,6 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14790,11 +12938,6 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14836,11 +12979,6 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14866,10 +13004,6 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -14918,11 +13052,6 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -14964,11 +13093,6 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -14994,10 +13118,6 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15050,11 +13170,6 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15100,11 +13215,6 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15130,10 +13240,6 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15176,11 +13282,6 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15216,11 +13317,6 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15246,10 +13342,6 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15282,11 +13374,6 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15312,11 +13399,6 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Div(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15342,10 +13424,6 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15378,11 +13456,6 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15408,11 +13481,6 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Div(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15438,10 +13506,6 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15474,11 +13538,6 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15504,11 +13563,6 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.Div(int64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15534,10 +13588,6 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Interval()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15570,11 +13620,6 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15600,11 +13645,6 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 					projCol[i] = arg.DivFloat(float64(p.constArg))
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15630,10 +13670,6 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15684,11 +13720,6 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15732,11 +13763,6 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15762,10 +13788,6 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15816,11 +13838,6 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15864,11 +13881,6 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -15894,10 +13906,6 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -15948,11 +13956,6 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -15996,11 +13999,6 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16026,10 +14024,6 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16078,11 +14072,6 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16124,11 +14113,6 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16154,10 +14138,6 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16196,11 +14176,6 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16232,11 +14207,6 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16262,10 +14232,6 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16304,11 +14270,6 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16340,11 +14301,6 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16370,10 +14326,6 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16412,11 +14364,6 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16448,11 +14395,6 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16478,10 +14420,6 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16534,11 +14472,6 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16584,11 +14517,6 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16614,10 +14542,6 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16656,11 +14580,6 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16692,11 +14611,6 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16722,10 +14636,6 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16764,11 +14674,6 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16800,11 +14705,6 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16830,10 +14730,6 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16872,11 +14768,6 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -16908,11 +14799,6 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -16938,10 +14824,6 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -16994,11 +14876,6 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17044,11 +14921,6 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17074,10 +14946,6 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17116,11 +14984,6 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17152,11 +15015,6 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17182,10 +15040,6 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17224,11 +15078,6 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17260,11 +15109,6 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17290,10 +15134,6 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17332,11 +15172,6 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17368,11 +15203,6 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17398,10 +15228,6 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17454,11 +15280,6 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17504,11 +15325,6 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17534,10 +15350,6 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17580,11 +15392,6 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17620,11 +15427,6 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17650,10 +15452,6 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17704,11 +15502,6 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17752,11 +15545,6 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17782,10 +15570,6 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17836,11 +15620,6 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -17884,11 +15663,6 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -17914,10 +15688,6 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -17968,11 +15738,6 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18016,11 +15781,6 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18046,10 +15806,6 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18098,11 +15854,6 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18144,11 +15895,6 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18174,10 +15920,6 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18216,11 +15958,6 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18252,11 +15989,6 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18282,10 +16014,6 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18324,11 +16052,6 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18360,11 +16083,6 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18390,10 +16108,6 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18432,11 +16146,6 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18468,11 +16177,6 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18498,10 +16202,6 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18554,11 +16254,6 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18604,11 +16299,6 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18634,10 +16324,6 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18676,11 +16362,6 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18712,11 +16393,6 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18742,10 +16418,6 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18784,11 +16456,6 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18820,11 +16487,6 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18850,10 +16512,6 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -18892,11 +16550,6 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -18928,11 +16581,6 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -18958,10 +16606,6 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19014,11 +16658,6 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19064,11 +16703,6 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19094,10 +16728,6 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19136,11 +16766,6 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19172,11 +16797,6 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19202,10 +16822,6 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19244,11 +16860,6 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19280,11 +16891,6 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19310,10 +16916,6 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19352,11 +16954,6 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19388,11 +16985,6 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19418,10 +17010,6 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19474,11 +17062,6 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19524,11 +17107,6 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19554,10 +17132,6 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19600,11 +17174,6 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19640,11 +17209,6 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19670,10 +17234,6 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19716,11 +17276,6 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19756,11 +17311,6 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19786,10 +17336,6 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19832,11 +17378,6 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19872,11 +17413,6 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -19902,10 +17438,6 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -19948,11 +17480,6 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -19988,11 +17515,6 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20018,10 +17540,6 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20062,11 +17580,6 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20100,11 +17613,6 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20130,10 +17638,6 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20186,11 +17690,6 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20236,11 +17735,6 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20266,10 +17760,6 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20322,11 +17812,6 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20372,11 +17857,6 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20402,10 +17882,6 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20458,11 +17934,6 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20508,11 +17979,6 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20538,10 +18004,6 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20586,11 +18048,6 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20628,11 +18085,6 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20658,10 +18110,6 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20714,11 +18162,6 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20764,11 +18207,6 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20794,10 +18232,6 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20850,11 +18284,6 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -20900,11 +18329,6 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -20930,10 +18354,6 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -20986,11 +18406,6 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21036,11 +18451,6 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21066,10 +18476,6 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21114,11 +18520,6 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21156,11 +18557,6 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21186,10 +18582,6 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21242,11 +18634,6 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21292,11 +18679,6 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21322,10 +18704,6 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21378,11 +18756,6 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21428,11 +18801,6 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21458,10 +18826,6 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21514,11 +18878,6 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21564,11 +18923,6 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21594,10 +18948,6 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Decimal()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21642,11 +18992,6 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21684,11 +19029,6 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21714,10 +19054,6 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Float64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21752,11 +19088,6 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21784,11 +19115,6 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21814,10 +19140,6 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21855,11 +19177,6 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21890,11 +19207,6 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -21920,10 +19232,6 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -21959,11 +19267,6 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -21992,11 +19295,6 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 					projCol.Set(i, _j)
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22024,10 +19322,6 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22069,11 +19363,6 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22108,11 +19397,6 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22138,10 +19422,6 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22182,11 +19462,6 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22220,11 +19495,6 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22250,10 +19520,6 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22294,11 +19560,6 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22332,11 +19593,6 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22362,10 +19618,6 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22406,11 +19658,6 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22444,11 +19691,6 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22474,10 +19716,6 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22518,11 +19756,6 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22556,11 +19789,6 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22586,10 +19814,6 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22630,11 +19854,6 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22668,11 +19887,6 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22698,10 +19912,6 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22742,11 +19952,6 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22780,11 +19985,6 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22810,10 +20010,6 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22854,11 +20050,6 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -22892,11 +20083,6 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -22922,10 +20108,6 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -22966,11 +20148,6 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23004,11 +20181,6 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23034,10 +20206,6 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23078,11 +20246,6 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23116,11 +20279,6 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23148,10 +20306,6 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23202,11 +20356,6 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23250,11 +20399,6 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23282,10 +20426,6 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23336,11 +20476,6 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23384,11 +20519,6 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23416,10 +20546,6 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23470,11 +20596,6 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23518,11 +20639,6 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23548,10 +20664,6 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23592,11 +20704,6 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23630,11 +20737,6 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23660,10 +20762,6 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23704,11 +20802,6 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23742,11 +20835,6 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23772,10 +20860,6 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23816,11 +20900,6 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23854,11 +20933,6 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23884,10 +20958,6 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -23928,11 +20998,6 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -23966,11 +21031,6 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -23996,10 +21056,6 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24040,11 +21096,6 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24078,11 +21129,6 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24108,10 +21154,6 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24152,11 +21194,6 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24190,11 +21227,6 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24220,10 +21252,6 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24264,11 +21292,6 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24302,11 +21325,6 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24332,10 +21350,6 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24376,11 +21390,6 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24414,11 +21423,6 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24444,10 +21448,6 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Int64()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24488,11 +21488,6 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24526,11 +21521,6 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24558,10 +21548,6 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24612,11 +21598,6 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24660,11 +21641,6 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24692,10 +21668,6 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24746,11 +21718,6 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24794,11 +21761,6 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24826,10 +21788,6 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -24880,11 +21838,6 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -24928,11 +21881,6 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -24958,10 +21906,6 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25009,11 +21953,6 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25054,11 +21993,6 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25084,10 +22018,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25130,11 +22060,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25170,11 +22095,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25200,10 +22120,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25246,11 +22162,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25286,11 +22197,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25316,10 +22222,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25362,11 +22264,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25402,11 +22299,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25432,10 +22324,6 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25501,11 +22389,6 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25564,11 +22447,6 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25594,10 +22472,6 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25658,11 +22532,6 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25716,11 +22585,6 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25746,10 +22610,6 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25810,11 +22670,6 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -25868,11 +22723,6 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -25898,10 +22748,6 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -25962,11 +22808,6 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26020,11 +22861,6 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26050,10 +22886,6 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.JSON()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26095,11 +22927,6 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26134,11 +22961,6 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26164,10 +22986,6 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bytes()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26229,11 +23047,6 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26288,11 +23101,6 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26318,10 +23126,6 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26374,11 +23178,6 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26424,11 +23223,6 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26454,10 +23248,6 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26493,11 +23283,6 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26526,11 +23311,6 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26556,10 +23336,6 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26608,11 +23384,6 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26654,11 +23425,6 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26684,10 +23450,6 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26736,11 +23498,6 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26782,11 +23539,6 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26812,10 +23564,6 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26864,11 +23612,6 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -26910,11 +23653,6 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -26940,10 +23678,6 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -26996,11 +23730,6 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27046,11 +23775,6 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27076,10 +23800,6 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27116,11 +23836,6 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27150,11 +23865,6 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27180,10 +23890,6 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27242,11 +23948,6 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27298,11 +23999,6 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27328,10 +24024,6 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27390,11 +24082,6 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27446,11 +24133,6 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27476,10 +24158,6 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27538,11 +24216,6 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27594,11 +24267,6 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27624,10 +24292,6 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27702,11 +24366,6 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27774,11 +24433,6 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27804,10 +24458,6 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27856,11 +24506,6 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -27902,11 +24547,6 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -27932,10 +24572,6 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -27994,11 +24630,6 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28050,11 +24681,6 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28080,10 +24706,6 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28142,11 +24764,6 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28198,11 +24815,6 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28228,10 +24840,6 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28290,11 +24898,6 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28346,11 +24949,6 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28376,10 +24974,6 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28454,11 +25048,6 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28526,11 +25115,6 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28556,10 +25140,6 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28608,11 +25188,6 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28654,11 +25229,6 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28684,10 +25254,6 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28746,11 +25312,6 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28802,11 +25363,6 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28832,10 +25388,6 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -28894,11 +25446,6 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -28950,11 +25497,6 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -28980,10 +25522,6 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29042,11 +25580,6 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29098,11 +25631,6 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29128,10 +25656,6 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29206,11 +25730,6 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29278,11 +25797,6 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29308,10 +25822,6 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29360,11 +25870,6 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29406,11 +25911,6 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29436,10 +25936,6 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29514,11 +26010,6 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29586,11 +26077,6 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29616,10 +26102,6 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29694,11 +26176,6 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29766,11 +26243,6 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29796,10 +26268,6 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -29874,11 +26342,6 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -29946,11 +26409,6 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -29976,10 +26434,6 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30054,11 +26508,6 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30126,11 +26575,6 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30156,10 +26600,6 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30212,11 +26652,6 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30262,11 +26697,6 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30292,10 +26722,6 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30346,11 +26772,6 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30394,11 +26815,6 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30424,10 +26840,6 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30464,11 +26876,6 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30498,11 +26905,6 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30528,10 +26930,6 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30579,11 +26977,6 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30624,11 +27017,6 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30654,10 +27042,6 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30697,11 +27081,6 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30734,11 +27113,6 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30764,10 +27138,6 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30820,11 +27190,6 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30870,11 +27235,6 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -30900,10 +27260,6 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -30939,11 +27295,6 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -30972,11 +27323,6 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31002,10 +27348,6 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31054,11 +27396,6 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31100,11 +27437,6 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31130,10 +27462,6 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31182,11 +27510,6 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31228,11 +27551,6 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31258,10 +27576,6 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31310,11 +27624,6 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31356,11 +27665,6 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31386,10 +27690,6 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31442,11 +27742,6 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31492,11 +27787,6 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31522,10 +27812,6 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31562,11 +27848,6 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31596,11 +27877,6 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31626,10 +27902,6 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31688,11 +27960,6 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31744,11 +28011,6 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31774,10 +28036,6 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31836,11 +28094,6 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -31892,11 +28145,6 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -31922,10 +28170,6 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -31984,11 +28228,6 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32040,11 +28279,6 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32070,10 +28304,6 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32148,11 +28378,6 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32220,11 +28445,6 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32250,10 +28470,6 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32302,11 +28518,6 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32348,11 +28559,6 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32378,10 +28584,6 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32440,11 +28642,6 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32496,11 +28693,6 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32526,10 +28718,6 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32588,11 +28776,6 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32644,11 +28827,6 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32674,10 +28852,6 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32736,11 +28910,6 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32792,11 +28961,6 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -32822,10 +28986,6 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -32900,11 +29060,6 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -32972,11 +29127,6 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33002,10 +29152,6 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33054,11 +29200,6 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33100,11 +29241,6 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33130,10 +29266,6 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33192,11 +29324,6 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33248,11 +29375,6 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33278,10 +29400,6 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33340,11 +29458,6 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33396,11 +29509,6 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33426,10 +29534,6 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33488,11 +29592,6 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33544,11 +29643,6 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33574,10 +29668,6 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33652,11 +29742,6 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33724,11 +29809,6 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33754,10 +29834,6 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33806,11 +29882,6 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -33852,11 +29923,6 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -33882,10 +29948,6 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -33960,11 +30022,6 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34032,11 +30089,6 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34062,10 +30114,6 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34140,11 +30188,6 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34212,11 +30255,6 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34242,10 +30280,6 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34320,11 +30354,6 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34392,11 +30421,6 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34422,10 +30446,6 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34500,11 +30520,6 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34572,11 +30587,6 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34602,10 +30612,6 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34658,11 +30664,6 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34708,11 +30709,6 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34738,10 +30734,6 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34792,11 +30784,6 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34840,11 +30827,6 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34870,10 +30852,6 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -34910,11 +30888,6 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -34944,11 +30917,6 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -34974,10 +30942,6 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35025,11 +30989,6 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35070,11 +31029,6 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35100,10 +31054,6 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35143,11 +31093,6 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35180,11 +31125,6 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35210,10 +31150,6 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35266,11 +31202,6 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35316,11 +31247,6 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35346,10 +31272,6 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35385,11 +31307,6 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35418,11 +31335,6 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35448,10 +31360,6 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35500,11 +31408,6 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35546,11 +31449,6 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35576,10 +31474,6 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35628,11 +31522,6 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35674,11 +31563,6 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35704,10 +31588,6 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35756,11 +31636,6 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35802,11 +31677,6 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35832,10 +31702,6 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -35888,11 +31754,6 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -35938,11 +31799,6 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -35968,10 +31824,6 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36008,11 +31860,6 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36042,11 +31889,6 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36072,10 +31914,6 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36134,11 +31972,6 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36190,11 +32023,6 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36220,10 +32048,6 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36282,11 +32106,6 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36338,11 +32157,6 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36368,10 +32182,6 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36430,11 +32240,6 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36486,11 +32291,6 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36516,10 +32316,6 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36594,11 +32390,6 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36666,11 +32457,6 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36696,10 +32482,6 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36748,11 +32530,6 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36794,11 +32571,6 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36824,10 +32596,6 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -36886,11 +32654,6 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -36942,11 +32705,6 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -36972,10 +32730,6 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37034,11 +32788,6 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37090,11 +32839,6 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37120,10 +32864,6 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37182,11 +32922,6 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37238,11 +32973,6 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37268,10 +32998,6 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37346,11 +33072,6 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37418,11 +33139,6 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37448,10 +33164,6 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37500,11 +33212,6 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37546,11 +33253,6 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37576,10 +33278,6 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37638,11 +33336,6 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37694,11 +33387,6 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37724,10 +33412,6 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37786,11 +33470,6 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37842,11 +33521,6 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -37872,10 +33546,6 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -37934,11 +33604,6 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -37990,11 +33655,6 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38020,10 +33680,6 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38098,11 +33754,6 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -38170,11 +33821,6 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38200,10 +33846,6 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38252,11 +33894,6 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -38298,11 +33935,6 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38328,10 +33960,6 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38406,11 +34034,6 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -38478,11 +34101,6 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38508,10 +34126,6 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38586,11 +34200,6 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -38658,11 +34267,6 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38688,10 +34292,6 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38766,11 +34366,6 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -38838,11 +34433,6 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -38868,10 +34458,6 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -38946,11 +34532,6 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39018,11 +34599,6 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39048,10 +34624,6 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39104,11 +34676,6 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39154,11 +34721,6 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39184,10 +34746,6 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39238,11 +34796,6 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39286,11 +34839,6 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39316,10 +34864,6 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39356,11 +34900,6 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39390,11 +34929,6 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39420,10 +34954,6 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39471,11 +35001,6 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39516,11 +35041,6 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39546,10 +35066,6 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39589,11 +35105,6 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39626,11 +35137,6 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39656,10 +35162,6 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39712,11 +35214,6 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39762,11 +35259,6 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39792,10 +35284,6 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39831,11 +35319,6 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39864,11 +35347,6 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -39894,10 +35372,6 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -39946,11 +35420,6 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -39992,11 +35461,6 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40022,10 +35486,6 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40074,11 +35534,6 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40120,11 +35575,6 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40150,10 +35600,6 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40202,11 +35648,6 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40248,11 +35689,6 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40278,10 +35714,6 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40334,11 +35766,6 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40384,11 +35811,6 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40414,10 +35836,6 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40454,11 +35872,6 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40488,11 +35901,6 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40518,10 +35926,6 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40580,11 +35984,6 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40636,11 +36035,6 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40666,10 +36060,6 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40728,11 +36118,6 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40784,11 +36169,6 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40814,10 +36194,6 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -40876,11 +36252,6 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -40932,11 +36303,6 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -40962,10 +36328,6 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41040,11 +36402,6 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41112,11 +36469,6 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41142,10 +36494,6 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41194,11 +36542,6 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41240,11 +36583,6 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41270,10 +36608,6 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41332,11 +36666,6 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41388,11 +36717,6 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41418,10 +36742,6 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41480,11 +36800,6 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41536,11 +36851,6 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41566,10 +36876,6 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41628,11 +36934,6 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41684,11 +36985,6 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41714,10 +37010,6 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41792,11 +37084,6 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41864,11 +37151,6 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -41894,10 +37176,6 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -41946,11 +37224,6 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -41992,11 +37265,6 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42022,10 +37290,6 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42084,11 +37348,6 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42140,11 +37399,6 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42170,10 +37424,6 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42232,11 +37482,6 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42288,11 +37533,6 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42318,10 +37558,6 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42380,11 +37616,6 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42436,11 +37667,6 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42466,10 +37692,6 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42544,11 +37766,6 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42616,11 +37833,6 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42646,10 +37858,6 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42698,11 +37906,6 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42744,11 +37947,6 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42774,10 +37972,6 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -42852,11 +38046,6 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -42924,11 +38113,6 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -42954,10 +38138,6 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43032,11 +38212,6 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43104,11 +38279,6 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43134,10 +38304,6 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43212,11 +38378,6 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43284,11 +38445,6 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43314,10 +38470,6 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43392,11 +38544,6 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43464,11 +38611,6 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43494,10 +38636,6 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43550,11 +38688,6 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43600,11 +38733,6 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43630,10 +38758,6 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43684,11 +38808,6 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43732,11 +38851,6 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43762,10 +38876,6 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43802,11 +38912,6 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43836,11 +38941,6 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43866,10 +38966,6 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -43917,11 +39013,6 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -43962,11 +39053,6 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -43992,10 +39078,6 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44035,11 +39117,6 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44072,11 +39149,6 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44102,10 +39174,6 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44158,11 +39226,6 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44208,11 +39271,6 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44238,10 +39296,6 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44277,11 +39331,6 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44310,11 +39359,6 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44340,10 +39384,6 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44392,11 +39432,6 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44438,11 +39473,6 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44468,10 +39498,6 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44520,11 +39546,6 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44566,11 +39587,6 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44596,10 +39612,6 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44648,11 +39660,6 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44694,11 +39701,6 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44724,10 +39726,6 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44780,11 +39778,6 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44830,11 +39823,6 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44860,10 +39848,6 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -44900,11 +39884,6 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -44934,11 +39913,6 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -44964,10 +39938,6 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45026,11 +39996,6 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45082,11 +40047,6 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45112,10 +40072,6 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45174,11 +40130,6 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45230,11 +40181,6 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45260,10 +40206,6 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45322,11 +40264,6 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45378,11 +40315,6 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45408,10 +40340,6 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45486,11 +40414,6 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45558,11 +40481,6 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45588,10 +40506,6 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45640,11 +40554,6 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45686,11 +40595,6 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45716,10 +40620,6 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45778,11 +40678,6 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45834,11 +40729,6 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -45864,10 +40754,6 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -45926,11 +40812,6 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -45982,11 +40863,6 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46012,10 +40888,6 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46074,11 +40946,6 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46130,11 +40997,6 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46160,10 +41022,6 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46238,11 +41096,6 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46310,11 +41163,6 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46340,10 +41188,6 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46392,11 +41236,6 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46438,11 +41277,6 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46468,10 +41302,6 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46530,11 +41360,6 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46586,11 +41411,6 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46616,10 +41436,6 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46678,11 +41494,6 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46734,11 +41545,6 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46764,10 +41570,6 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46826,11 +41628,6 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -46882,11 +41679,6 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -46912,10 +41704,6 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -46990,11 +41778,6 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47062,11 +41845,6 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47092,10 +41870,6 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47144,11 +41918,6 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47190,11 +41959,6 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47220,10 +41984,6 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47298,11 +42058,6 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47370,11 +42125,6 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47400,10 +42150,6 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47478,11 +42224,6 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47550,11 +42291,6 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47580,10 +42316,6 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47658,11 +42390,6 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47730,11 +42457,6 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47760,10 +42482,6 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47838,11 +42556,6 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -47910,11 +42623,6 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -47940,10 +42648,6 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -47996,11 +42700,6 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48046,11 +42745,6 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48076,10 +42770,6 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48130,11 +42820,6 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48178,11 +42863,6 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48208,10 +42888,6 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48248,11 +42924,6 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48282,11 +42953,6 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48312,10 +42978,6 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48363,11 +43025,6 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48408,11 +43065,6 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48438,10 +43090,6 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48481,11 +43129,6 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48518,11 +43161,6 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48548,10 +43186,6 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48604,11 +43238,6 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48654,11 +43283,6 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48684,10 +43308,6 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48723,11 +43343,6 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48756,11 +43371,6 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48786,10 +43396,6 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48838,11 +43444,6 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -48884,11 +43485,6 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -48914,10 +43510,6 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -48966,11 +43558,6 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49012,11 +43599,6 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49042,10 +43624,6 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49094,11 +43672,6 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49140,11 +43713,6 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49170,10 +43738,6 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49226,11 +43790,6 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49276,11 +43835,6 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49306,10 +43860,6 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49346,11 +43896,6 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49380,11 +43925,6 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49410,10 +43950,6 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49472,11 +44008,6 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49528,11 +44059,6 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49558,10 +44084,6 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49620,11 +44142,6 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49676,11 +44193,6 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49706,10 +44218,6 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49768,11 +44276,6 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -49824,11 +44327,6 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -49854,10 +44352,6 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -49932,11 +44426,6 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50004,11 +44493,6 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50034,10 +44518,6 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50086,11 +44566,6 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50132,11 +44607,6 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50162,10 +44632,6 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50224,11 +44690,6 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50280,11 +44741,6 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50310,10 +44766,6 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50372,11 +44824,6 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50428,11 +44875,6 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50458,10 +44900,6 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50520,11 +44958,6 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50576,11 +45009,6 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50606,10 +45034,6 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50684,11 +45108,6 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50756,11 +45175,6 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50786,10 +45200,6 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50838,11 +45248,6 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -50884,11 +45289,6 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -50914,10 +45314,6 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -50976,11 +45372,6 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51032,11 +45423,6 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51062,10 +45448,6 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51124,11 +45506,6 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51180,11 +45557,6 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51210,10 +45582,6 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51272,11 +45640,6 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51328,11 +45691,6 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51358,10 +45716,6 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51436,11 +45790,6 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51508,11 +45857,6 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51538,10 +45882,6 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51590,11 +45930,6 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51636,11 +45971,6 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51666,10 +45996,6 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51744,11 +46070,6 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51816,11 +46137,6 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -51846,10 +46162,6 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -51924,11 +46236,6 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -51996,11 +46303,6 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52026,10 +46328,6 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52104,11 +46402,6 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52176,11 +46469,6 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52206,10 +46494,6 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52284,11 +46568,6 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52356,11 +46635,6 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52386,10 +46660,6 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52442,11 +46712,6 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52492,11 +46757,6 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52522,10 +46782,6 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52576,11 +46832,6 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52624,11 +46875,6 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52654,10 +46900,6 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52694,11 +46936,6 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52728,11 +46965,6 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52758,10 +46990,6 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52809,11 +47037,6 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52854,11 +47077,6 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
@@ -52884,10 +47102,6 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 		// https://github.com/golang/go/issues/39756
 		col := col
 		projCol := projVec.Bool()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
 		_outNulls := projVec.Nulls()
 		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
@@ -52927,11 +47141,6 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 					}
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
@@ -52964,11 +47173,6 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 
 				}
 			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
 	})
 	return batch
