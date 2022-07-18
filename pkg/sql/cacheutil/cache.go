@@ -37,9 +37,11 @@ type Cache struct {
 }
 
 // NewCache initializes a new Cache.
-func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
+func NewCache(
+	account mon.BoundAccount, stopper *stop.Stopper, tableVersions []descpb.DescriptorVersion,
+) *Cache {
 	return &Cache{
-		tableVersions: []descpb.DescriptorVersion{0},
+		tableVersions: tableVersions,
 		boundAccount:  account,
 		stopper:       stopper,
 	}

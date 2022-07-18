@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cacheutil",
@@ -15,6 +15,19 @@ go_library(
         "//pkg/util/syncutil/singleflight",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "cacheutil_test",
+    srcs = ["cache_test.go"],
+    embed = [":cacheutil"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

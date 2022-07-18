@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -784,7 +785,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
 		KVStoresIterator:        cfg.kvStoresIterator,
-		SyntheticPrivilegeCache: cacheutil.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		SyntheticPrivilegeCache: cacheutil.NewCache(
+			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
+			[]descpb.DescriptorVersion{0},
+		),
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
