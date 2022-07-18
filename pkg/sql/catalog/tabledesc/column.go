@@ -249,14 +249,13 @@ func (w column) GetGeneratedAsIdentitySequenceOptionStr() string {
 // If the column is not an identity column, return nil for both sequence option
 // and the error.
 // Note it doesn't return the sequence owner info.
-func (w column) GetGeneratedAsIdentitySequenceOption() (
-	*descpb.TableDescriptor_SequenceOpts,
-	error,
-) {
+func (w column) GetGeneratedAsIdentitySequenceOption(
+	defaultIntSize int32,
+) (*descpb.TableDescriptor_SequenceOpts, error) {
 	if !w.HasGeneratedAsIdentitySequenceOption() {
 		return nil, nil
 	}
-	seqOpts, err := schemaexpr.ParseSequenceOpts(*w.desc.GeneratedAsIdentitySequenceOption)
+	seqOpts, err := schemaexpr.ParseSequenceOpts(*w.desc.GeneratedAsIdentitySequenceOption, defaultIntSize)
 	if err != nil {
 		return nil, err
 	}
