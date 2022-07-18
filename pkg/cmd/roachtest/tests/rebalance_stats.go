@@ -83,9 +83,19 @@ func applyToSeries(timeseries [][]float64, aggFn func(vals []float64) float64) [
 	return ret
 }
 
+// coefficientOfVariation returns the standard deviation over the mean. No mean
+// or standard deviation can be computed when there are no samples, in which
+// case we return 0. When the sample mean is 0, the coefficient of variation
+// cannot be calculated, we return 0.
 func coefficientOfVariation(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
 	stdev, _ := stats.StandardDeviationSample(vals)
 	mean, _ := stats.Mean(vals)
+	if mean == 0 {
+		return 0
+	}
 	return stdev / mean
 }
 

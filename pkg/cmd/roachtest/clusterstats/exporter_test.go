@@ -18,10 +18,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/golang/mock/gomock"
+	"github.com/montanaflynn/stats"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 )
+
+// testingComplexAggFn returns the coefficient of variation of tagged values at
+// the same index.
+func testingComplexAggFn(query string, matSeries [][]float64) (string, []float64) {
+	agg := make([]float64, 0, 1)
+	for _, series := range matSeries {
+		stdev, _ := stats.StandardDeviationSample(series)
+		mean, _ := stats.Mean(series)
+		cv := 0.0
+		if mean != 0 {
+			cv = stdev / mean
+		}
+		agg = append(agg, cv)
+	}
+	return "cv(foo)", agg
+}
 
 // testingAggFn returns the sum of tagged values at the same index.
 func testingAggFn(query string, matSeries [][]float64) (string, []float64) {
@@ -51,6 +68,10 @@ var (
 		Stat:  barStat,
 		AggFn: testingAggFn,
 	}
+	fooComplexAggQuery = AggQuery{
+		Stat:  fooStat,
+		AggFn: testingComplexAggFn,
+	}
 
 	fooTS = promTimeSeries{
 		metric:    "foo_count",
@@ -60,6 +81,27 @@ var (
 			"1": {1, 2, 3, 4, 5, 6, 7, 8, 9},
 			"2": {11, 22, 33, 44, 55, 66, 77, 88, 99},
 			"3": {111, 222, 333, 444, 555, 666, 777, 888, 999},
+		},
+	}
+	emptyFooTS = promTimeSeries{
+		metric:    "foo_count",
+		startTime: statsTestingStartTime,
+		interval:  statsTestingDuration,
+		values: map[string][]float64{
+			"1": {},
+			"2": {},
+			"3": {},
+		},
+	}
+
+	zeroFooTS = promTimeSeries{
+		metric:    "foo_count",
+		startTime: statsTestingStartTime,
+		interval:  statsTestingDuration,
+		values: map[string][]float64{
+			"1": {0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"2": {0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"3": {0, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 	}
 
@@ -85,15 +127,18 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 		ret      model.Matrix
 	}
 
-	makePromQueryRange := func(q string, tags []string, ticks int, ts promTimeSeries) expectPromRangeQuery {
+	makePromQueryRange := func(q string, tags []string, ticks int, ts promTimeSeries, empty bool) expectPromRangeQuery {
 		ret := make([]*model.SampleStream, len(tags))
 		for i, tg := range tags {
-			rawValues := ts.values[tg][:ticks]
-			values := make([]model.SamplePair, ticks)
-			for j := range rawValues {
-				values[j] = model.SamplePair{
-					Timestamp: model.TimeFromUnix(ts.startTime.Add(ts.interval * time.Duration(j)).Unix()),
-					Value:     model.SampleValue(rawValues[j]),
+			var values []model.SamplePair
+			if !empty {
+				values = make([]model.SamplePair, ticks)
+				rawValues := ts.values[tg][:ticks]
+				for j := range rawValues {
+					values[j] = model.SamplePair{
+						Timestamp: model.TimeFromUnix(ts.startTime.Add(ts.interval * time.Duration(j)).Unix()),
+						Value:     model.SampleValue(rawValues[j]),
+					}
 				}
 			}
 			ss := &model.SampleStream{
@@ -154,8 +199,8 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 			ticks:          8,
 			summaryQueries: []AggQuery{fooAggQuery, barAggQuery},
 			mockedPromResults: []expectPromRangeQuery{
-				makePromQueryRange(fooStat.Query, []string{"1"}, 8, fooTS),
-				makePromQueryRange(barStat.Query, []string{"1"}, 8, barTS),
+				makePromQueryRange(fooStat.Query, []string{"1"}, 8, fooTS, false),
+				makePromQueryRange(barStat.Query, []string{"1"}, 8, barTS, false),
 			},
 			expected: map[string]StatSummary{
 				fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 8, "1"),
@@ -163,10 +208,30 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 			},
 		},
 		{
+			desc:           "mutli tag, single stat, 8 ticks, no return values",
+			ticks:          8,
+			summaryQueries: []AggQuery{fooComplexAggQuery},
+			mockedPromResults: []expectPromRangeQuery{
+				makePromQueryRange(fooStat.Query, []string{"1", "2", "3"}, 8, emptyFooTS, true),
+			},
+			expected: map[string]StatSummary{},
+		},
+		{
+			desc:           "mutli tag, single stat, 8 ticks, return values all zero",
+			ticks:          8,
+			summaryQueries: []AggQuery{fooComplexAggQuery},
+			mockedPromResults: []expectPromRangeQuery{
+				makePromQueryRange(fooStat.Query, []string{"1", "2", "3"}, 8, zeroFooTS, false),
+			},
+			expected: map[string]StatSummary{
+				fooStat.Query: makeExpectedTs(zeroFooTS, fooComplexAggQuery, 8, "1", "2", "3"),
+			},
+		},
+		{
 			desc:              "multi tag, single stat, 7 ticks",
 			ticks:             7,
 			summaryQueries:    []AggQuery{fooAggQuery},
-			mockedPromResults: []expectPromRangeQuery{makePromQueryRange(fooStat.Query, []string{"1", "2"}, 7, fooTS)},
+			mockedPromResults: []expectPromRangeQuery{makePromQueryRange(fooStat.Query, []string{"1", "2"}, 7, fooTS, false)},
 			expected: map[string]StatSummary{
 				fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 7, "1", "2"),
 			},
@@ -176,8 +241,8 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 			ticks:          5,
 			summaryQueries: []AggQuery{fooAggQuery, barAggQuery},
 			mockedPromResults: []expectPromRangeQuery{
-				makePromQueryRange(fooStat.Query, []string{"1", "2", "3"}, 5, fooTS),
-				makePromQueryRange(barStat.Query, []string{"1", "2", "3"}, 5, barTS),
+				makePromQueryRange(fooStat.Query, []string{"1", "2", "3"}, 5, fooTS, false),
+				makePromQueryRange(barStat.Query, []string{"1", "2", "3"}, 5, barTS, false),
 			},
 			expected: map[string]StatSummary{
 				fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 5, "1", "2", "3"),
