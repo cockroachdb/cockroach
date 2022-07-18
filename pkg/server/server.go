@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -153,7 +155,12 @@ type Server struct {
 
 	spanConfigSubscriber spanconfig.KVSubscriber
 
+	// TODO(knz): pull this down under the serverController.
 	sqlServer *SQLServer
+
+	// serverController is responsible for on-demand instantiation
+	// of services.
+	serverController *serverController
 
 	// Created in NewServer but initialized (made usable) in `(*Server).PreStart`.
 	externalStorageBuilder *externalStorageBuilder
@@ -918,12 +925,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
+	// Create a server controller.
+	sc := newServerController(ctx, stopper,
+		lateBoundServer.newServerForTenant, &systemServerWrapper{s: lateBoundServer})
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		cfg.BaseConfig.AmbientCtx,
 		st,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
+		// TODO(knz): Remove this once
+		// https://github.com/cockroachdb/cockroach/issues/84585 is
+		// implemented.
+		func(ctx context.Context, name string) error {
+			d, err := sc.get(ctx, name)
+			if err != nil {
+				return err
+			}
+			return errors.Newf("server found with type %T", d)
+		},
 	)
 
 	// Create a drain server.
@@ -972,6 +993,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
+		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
@@ -1846,4 +1868,22 @@ func (s *Server) Drain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	return s.drain.runDrain(ctx, verbose)
+}
+
+// MakeServerOptionsForURL creates the input for MakeURLForServer().
+// Beware of not calling this too early; the server address
+// is finalized late in the network initialization sequence.
+func MakeServerOptionsForURL(
+	baseCfg *base.Config,
+) (clientsecopts.ClientSecurityOptions, clientsecopts.ServerParameters) {
+	clientConnOptions := clientsecopts.ClientSecurityOptions{
+		Insecure: baseCfg.Insecure,
+		CertsDir: baseCfg.SSLCertsDir,
+	}
+	serverParams := clientsecopts.ServerParameters{
+		ServerAddr:      baseCfg.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+	return clientConnOptions, serverParams
 }

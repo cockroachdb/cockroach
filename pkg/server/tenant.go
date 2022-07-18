@@ -268,6 +268,7 @@ func NewTenantServer(
 		args.Settings,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
+		nil, /* serverTickleFn */
 	)
 
 	// Create a drain server.
