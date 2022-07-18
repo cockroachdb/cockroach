@@ -51,9 +51,9 @@ func TestAtomicReplicationChange(t *testing.T) {
 	// Create a range and put it on n1, n2, n3. Intentionally do this one at a
 	// time so we're not using atomic replication changes yet.
 	k := tc.ScratchRange(t)
-	desc, err := tc.AddVoters(k, tc.Target(1))
+	_, err := tc.AddVoters(k, tc.Target(1))
 	require.NoError(t, err)
-	desc, err = tc.AddVoters(k, tc.Target(2))
+	desc, err := tc.AddVoters(k, tc.Target(2))
 	require.NoError(t, err)
 
 	runChange := func(expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange) roachpb.RangeDescriptor {

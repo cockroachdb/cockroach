@@ -269,7 +269,7 @@ func TestAllSpooler(t *testing.T) {
 			allSpooler.init(context.Background())
 			allSpooler.spool()
 			if len(tc.tuples) != allSpooler.getNumTuples() {
-				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
+				t.Fatalf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples())
 			}
 			if allSpooler.getPartitionsCol() != nil {
 				t.Fatal("allSpooler returned non-nil partitionsCol")
@@ -278,8 +278,8 @@ func TestAllSpooler(t *testing.T) {
 				colVec := allSpooler.getValues(col).Int64()
 				for i := 0; i < allSpooler.getNumTuples(); i++ {
 					if colVec[i] != int64(tc.tuples[i][col].(int)) {
-						t.Fatal(fmt.Sprintf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
-							col, i, tc.tuples[i][col].(int), colVec[i]))
+						t.Fatalf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
+							col, i, tc.tuples[i][col].(int), colVec[i])
 					}
 				}
 			}

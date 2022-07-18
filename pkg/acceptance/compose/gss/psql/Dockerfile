@@ -1,5 +1,5 @@
 # Build the test binary in a multistage build.
-FROM golang:1.17 AS builder
+FROM golang:1.18 AS builder
 WORKDIR /workspace
 COPY . .
 # go 1.16 requires go.mod to be present unless GO111MODULE is set to off

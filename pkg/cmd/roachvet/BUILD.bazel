@@ -11,6 +11,7 @@ go_library(
         "//pkg/testutils/lint/passes/errwrap",
         "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/lint/passes/forbiddenmethod",
+        "//pkg/testutils/lint/passes/generics",
         "//pkg/testutils/lint/passes/hash",
         "//pkg/testutils/lint/passes/leaktestcall",
         "//pkg/testutils/lint/passes/loopvarcapture",

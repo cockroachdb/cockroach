@@ -2085,12 +2085,8 @@ func (j jsonObject) RemoveString(s string) (JSON, bool, error) {
 	}
 
 	newVal := make([]jsonKeyValuePair, len(j)-1)
-	for i, elem := range j[:idx] {
-		newVal[i] = elem
-	}
-	for i, elem := range j[idx+1:] {
-		newVal[idx+i] = elem
-	}
+	copy(newVal, j[:idx])
+	copy(newVal[idx:], j[idx+1:])
 	return jsonObject(newVal), true, nil
 }
 

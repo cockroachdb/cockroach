@@ -21,7 +21,11 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",  # keep
     visibility = ["//pkg/sql/opt/optgen/cmd/langgen:__pkg__"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
+    ],
 )
 
 get_x_data(name = "get_x_data")
