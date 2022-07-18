@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/generics"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/leaktestcall"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/loopvarcapture"
@@ -68,6 +69,7 @@ func main() {
 		nilness.Analyzer,
 		errwrap.Analyzer,
 		loopvarcapture.Analyzer,
+		generics.Analyzer,
 	)
 
 	// Standard go vet analyzers:
