@@ -128,6 +128,16 @@ type joinReader struct {
 	streamerInfo struct {
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
+		// maintainOrdering indicates whether the ordering of the input stream
+		// needs to be maintained AND that we rely on the streamer for that.
+		//
+		// Currently this is only the case when joinReader.maintainOrdering is
+		// true and we are performing an index join. Due to implementation
+		// details, we don't rely on the streamer for maintaining the ordering
+		// for lookup joins at the moment (since we still buffer all looked up
+		// rows and restore the ordering explicitly via the
+		// joinReaderOrderingStrategy).
+		maintainOrdering    bool
 		diskMonitor         *mon.BytesMonitor
 		txnKVStreamerMemAcc mon.BoundAccount
 	}
@@ -467,9 +477,10 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
+		jr.streamerInfo.maintainOrdering = jr.maintainOrdering && readerType == indexJoinReaderType
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
-		if jr.maintainOrdering {
+		if jr.streamerInfo.maintainOrdering {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
 				flowCtx.EvalCtx.Ctx(), jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
@@ -487,7 +498,7 @@ func newJoinReader(
 			spec.LockingStrength,
 			streamerBudgetLimit,
 			&jr.streamerInfo.budgetAcc,
-			spec.MaintainOrdering,
+			jr.streamerInfo.maintainOrdering,
 			singleRowLookup,
 			int(spec.FetchSpec.MaxKeysPerRow),
 			diskBuffer,
@@ -938,7 +949,7 @@ func (jr *joinReader) readInput() (
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 	} else {
-		if !jr.usesStreamer || jr.maintainOrdering {
+		if !jr.usesStreamer || jr.streamerInfo.maintainOrdering {
 			// We don't want to sort the spans here if we're using the Streamer,
 			// and it will perform the sort on its own - currently, this is the
 			// case with OutOfOrder mode.
@@ -1010,7 +1021,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		if len(spans) != 0 {
-			if !jr.usesStreamer || jr.maintainOrdering {
+			if !jr.usesStreamer || jr.streamerInfo.maintainOrdering {
 				// Sort the spans so that we can rely upon the fetcher to limit
 				// the number of results per batch. It's safe to reorder the
 				// spans here because we already restore the original order of
