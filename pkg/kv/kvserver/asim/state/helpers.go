@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,7 @@ func NewTestState(
 	replicas map[Key][]StoreID,
 	leaseholders map[Key]StoreID,
 ) State {
-	state := newState()
+	state := newState(config.DefaultSimulationSettings())
 	for i := 0; i < nodes; i++ {
 		node := state.AddNode()
 		for j := 0; j < storesPerNode; j++ {

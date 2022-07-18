@@ -24,6 +24,14 @@ type ReplicaLoad interface {
 	// Load translates the recorded load events into usage information of the
 	// replica.
 	Load() allocator.RangeUsageInfo
+	// Split halves the load of the ReplicaLoad this method is called on and
+	// assigns the other half to a new ReplicaLoad that is returned i.e. 50/50.
+	Split() ReplicaLoad
+}
+
+// LoadEventQPS returns the QPS for a given workload event.
+func LoadEventQPS(le workload.LoadEvent) float64 {
+	return float64(le.Reads) + float64(le.Writes)
 }
 
 // ReplicaLoadCounter is the sum of all key accesses and size of bytes, both written
@@ -37,6 +45,7 @@ type ReplicaLoadCounter struct {
 	WriteBytes int64
 	ReadKeys   int64
 	ReadBytes  int64
+	QPS        float64
 }
 
 // ApplyLoad applies a load event onto a replica load counter.
@@ -45,6 +54,7 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.ReadKeys += le.Reads
 	rl.WriteBytes += le.WriteSize
 	rl.WriteKeys += le.Writes
+	rl.QPS += LoadEventQPS(le)
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -52,8 +62,26 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	return allocator.RangeUsageInfo{
 		LogicalBytes:     rl.WriteBytes,
-		QueriesPerSecond: float64(rl.WriteKeys + rl.ReadKeys),
+		QueriesPerSecond: rl.QPS,
 		WritesPerSecond:  float64(rl.WriteKeys),
+	}
+}
+
+// Split halves the load of the ReplicaLoad this method is called on and
+// assigns the other half to a new ReplicaLoad that is returned i.e. 50/50.
+func (rl *ReplicaLoadCounter) Split() ReplicaLoad {
+	rl.WriteKeys /= 2
+	rl.WriteBytes /= 2
+	rl.ReadKeys /= 2
+	rl.ReadBytes /= 2
+	rl.QPS /= 2
+
+	return &ReplicaLoadCounter{
+		WriteKeys:  rl.WriteKeys,
+		WriteBytes: rl.WriteBytes,
+		ReadKeys:   rl.ReadKeys,
+		ReadBytes:  rl.ReadBytes,
+		QPS:        rl.QPS,
 	}
 }
 

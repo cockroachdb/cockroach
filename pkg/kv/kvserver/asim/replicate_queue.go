@@ -170,7 +170,7 @@ func (rq *replicateQueue) MaybeAdd(
 	return true
 }
 
-// Tick proceses updates in the ReplicateQueue. Only one replica is
+// Tick processes updates in the ReplicateQueue. Only one replica is
 // processed at a time and the duration taken to process a replica depends
 // on the action taken. Replicas in the queue are processed in order of
 // priority, then in FIFO order on ties. The Tick function currently only
@@ -273,7 +273,7 @@ func NewSplitQueue(
 // MaybeAdd proposes a range for being split. If it meets the criteria it is
 // enqueued.
 func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state state.State) bool {
-	priority := sq.shouldSplit(replica.Range(), state)
+	priority := sq.shouldSplit(sq.lastTick, replica.Range(), state)
 	if priority < 1 {
 		return false
 	}
@@ -288,7 +288,7 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 	return true
 }
 
-// Tick proceses updates in the split queue. Only one range is processed at a
+// Tick processes updates in the split queue. Only one range is processed at a
 // time and the duration taken to process a replica depends on the action
 // taken. Replicas in the queue are processed in order of priority, then in
 // FIFO order on ties. The tick currently only considers size based range
@@ -309,13 +309,13 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			return
 		}
 
-		// Check whether the range satifies the split criteria, since it may have
+		// Check whether the range satisfies the split criteria, since it may have
 		// changed since it was enqueued.
-		if sq.shouldSplit(rng.RangeID(), s) < 1 {
+		if sq.shouldSplit(tick, rng.RangeID(), s) < 1 {
 			return
 		}
 
-		splitKey, ok := findKeySpanSplit(s, rng.RangeID())
+		splitKey, ok := sq.findKeySpanSplit(tick, s, rng.RangeID())
 		if !ok {
 			return
 		}
@@ -338,19 +338,35 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 // shouldSplit returns whether a range should be split into two. When the
 // floating point number returned is greater than or equal to 1, it should be
 // split with that priority, else it shouldn't.
-func (sq *splitQueue) shouldSplit(rangeID state.RangeID, s state.State) float64 {
+func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state.State) float64 {
 	rng, ok := s.Range(rangeID)
 	if !ok {
 		return 0
 	}
 
-	return float64(rng.Size()) / float64(sq.splitThreshold)
+	// Check whether we should split this range based on load.
+	if _, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick, rangeID); ok {
+		return 2.0
+	}
+
+	// Check whether we should split this range based on size.
+	overfullBytesThreshold := float64(rng.Size()) / float64(sq.splitThreshold)
+
+	return overfullBytesThreshold
 }
 
 // findKeySpanSplit returns a key that may be used for splitting a range into
 // two. It will return the key that divides the range into an equal number of
 // keys on the lhs and rhs.
-func findKeySpanSplit(s state.State, rangeID state.RangeID) (state.Key, bool) {
+func (sq *splitQueue) findKeySpanSplit(
+	tick time.Time, s state.State, rangeID state.RangeID,
+) (state.Key, bool) {
+	// Try and use the split key suggested by the load based splitter, if one
+	// exists.
+	if loadSplitKey, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick, rangeID); ok {
+		return loadSplitKey, true
+	}
+
 	start, end, ok := s.RangeSpan(rangeID)
 	if !ok {
 		return start, false
