@@ -77,6 +77,7 @@ func main() {
 							Inverted: def.Inverted,
 							Columns:  def.Columns,
 							Storing:  def.Storing,
+							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
 					case *tree.UniqueConstraintTableDef:
 						if def.PrimaryKey {
@@ -103,6 +104,7 @@ func main() {
 							Inverted: def.Inverted,
 							Columns:  def.Columns,
 							Storing:  def.Storing,
+							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
 					default:
 						newdefs = append(newdefs, def)
