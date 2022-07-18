@@ -93,7 +93,7 @@ func main() {
 	RootCmd.PersistentFlags().StringVar(
 		&sinkPGURL,
 		"sink-pgurl",
-		"postgresql://root@andrei-desktop:26257/defaultdb?sslmode=disable",
+		"postgresql://root@localhost:26257/defaultdb?sslmode=disable",
 		"PGURL for the sink cluster.")
 
 	if err := RootCmd.Execute(); err != nil {
