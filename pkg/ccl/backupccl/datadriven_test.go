@@ -20,10 +20,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -689,6 +695,27 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 
+			case "create-dummy-system-table":
+				db := ds.servers[lastCreatedServer].DB()
+				codec := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).Codec
+				dummyTable := systemschema.SettingsTable
+				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					id, err := descidgen.GenerateUniqueDescID(ctx, db, codec)
+					if err != nil {
+						return err
+					}
+					mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+					mut.ID = id
+					mut.Name = fmt.Sprintf("%s_%d",
+						catprivilege.RestoreCopySystemTablePrefix, id)
+					tKey := catalogkeys.EncodeNameKey(codec, mut)
+					b := txn.NewBatch()
+					b.CPut(tKey, mut.GetID(), nil)
+					b.CPut(catalogkeys.MakeDescMetadataKey(codec, mut.GetID()), mut.DescriptorProto(), nil)
+					return txn.Run(ctx, b)
+				})
+				require.NoError(t, err)
+				return ""
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

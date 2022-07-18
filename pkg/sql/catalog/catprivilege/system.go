@@ -66,6 +66,14 @@ var (
 		catconstants.SpanCountTableName,
 	}
 
+	// RestoreCopySystemTablePrefix is the prefix of the table name that we give
+	// to the copy of the system table we are moving to a higher ID during
+	// restore.
+	//
+	// TODO(adityamaru,dt): Remove once we fix the handling of dynamic system
+	// table IDs during restore.
+	RestoreCopySystemTablePrefix = "crdb_internal_copy"
+
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {
 		m := make(map[descpb.NameInfo]privilege.List)
 		tableKey := descpb.NameInfo{
