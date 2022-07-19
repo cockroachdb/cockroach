@@ -572,6 +572,12 @@ func (u *sqlSymUnion) alterBackupCmd() tree.AlterBackupCmd {
 func (u *sqlSymUnion) alterBackupCmds() tree.AlterBackupCmds {
     return u.val.(tree.AlterBackupCmds)
 }
+func (u *sqlSymUnion) alterBackupScheduleCmd() tree.AlterBackupScheduleCmd {
+    return u.val.(tree.AlterBackupScheduleCmd)
+}
+func (u *sqlSymUnion) alterBackupScheduleCmds() tree.AlterBackupScheduleCmds {
+    return u.val.(tree.AlterBackupScheduleCmds)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -883,7 +889,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 %token <str> KEY KEYS KMS KV
 
-%token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
+%token <str> LABEL LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
@@ -1093,6 +1099,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
+%type <tree.Statement> alter_backup_schedule
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
@@ -1259,6 +1266,8 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 %type <tree.AlterChangefeedCmd> alter_changefeed_cmd
 %type <tree.AlterChangefeedCmds> alter_changefeed_cmds
+%type <tree.AlterBackupScheduleCmd> alter_backup_schedule_cmd
+%type <tree.AlterBackupScheduleCmds> alter_backup_schedule_cmds
 
 %type <tree.BackupKMS> backup_kms
 %type <tree.AlterBackupCmd> alter_backup_cmd
@@ -1699,6 +1708,7 @@ alter_ddl_stmt:
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt
+| alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -3198,6 +3208,87 @@ create_schedule_for_backup_stmt:
       }
   }
  | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
+
+// %Help: ALTER BACKUP SCHEDULE - alter an existing backup schedule
+// %Category: CCL
+// %Text:
+// ALTER BACKUP SCHEDULE <id> <command> [, ...]
+//
+// Commands:
+//   ALTER BACKUP SCHEDULE ... SET LABEL <label>
+//   ALTER BACKUP SCHEDULE ... SET INTO <destination>
+//   ALTER BACKUP SCHEDULE ... SET WITH <option>
+//   ALTER BACKUP SCHEDULE ... SET RECURRING <crontab>
+//   ALTER BACKUP SCHEDULE ... SET FULL BACKUP <crontab|ALWAYS>
+//   ALTER BACKUP SCHEDULE ... SET SCHEDULE OPTION <option>
+//
+// See CREATE SCHEDULE FOR BACKUP for detailed option descriptions.
+// %SeeAlso: CREATE SCHEDULE FOR BACKUP
+alter_backup_schedule:
+  ALTER BACKUP SCHEDULE iconst64 alter_backup_schedule_cmds
+  {
+    $$.val = &tree.AlterBackupSchedule{
+			ScheduleID: uint64($4.int64()),
+			Cmds:       $5.alterBackupScheduleCmds(),
+    }
+  }
+  | ALTER BACKUP SCHEDULE error  // SHOW HELP: ALTER BACKUP SCHEDULE
+
+
+alter_backup_schedule_cmds:
+  alter_backup_schedule_cmd
+  {
+    $$.val = tree.AlterBackupScheduleCmds{$1.alterBackupScheduleCmd()}
+  }
+| alter_backup_schedule_cmds ',' alter_backup_schedule_cmd
+  {
+    $$.val = append($1.alterBackupScheduleCmds(), $3.alterBackupScheduleCmd())
+  }
+
+
+alter_backup_schedule_cmd:
+  SET LABEL string_or_placeholder
+	{
+		$$.val = &tree.AlterBackupScheduleSetLabel{
+		  Label: $3.expr(),
+		}
+	}
+|	SET INTO string_or_placeholder_opt_list
+  {
+		$$.val = &tree.AlterBackupScheduleSetInto{
+		  Into: $3.stringOrPlaceholderOptList(),
+		}
+  }
+| SET WITH backup_options
+	{
+		$$.val = &tree.AlterBackupScheduleSetWith{
+		  With: $3.backupOptions(),
+		}
+	}
+| SET cron_expr
+  {
+		$$.val = &tree.AlterBackupScheduleSetRecurring{
+		  Recurrence: $2.expr(),
+		}
+  }
+| SET FULL BACKUP ALWAYS
+  {
+		$$.val = &tree.AlterBackupScheduleSetFullBackup{
+		  FullBackup: tree.FullBackupClause{AlwaysFull: true},
+		}
+  }
+| SET FULL BACKUP sconst_or_placeholder
+  {
+    $$.val = &tree.AlterBackupScheduleSetFullBackup{
+		  FullBackup: tree.FullBackupClause{Recurrence: $4.expr()},
+		}
+  }
+| SET SCHEDULE OPTION kv_option
+  {
+		$$.val = &tree.AlterBackupScheduleSetScheduleOption{
+		  Option:  $4.kvOption(),
+		}
+  }
 
 // sconst_or_placeholder matches a simple string, or a placeholder.
 sconst_or_placeholder:
@@ -14956,6 +15047,7 @@ unreserved_keyword:
 | KEYS
 | KMS
 | KV
+| LABEL
 | LANGUAGE
 | LAST
 | LATEST

@@ -6,6 +6,7 @@ FILES = [
     "add_constraint",
     "alter_changefeed",
     "alter_backup",
+    "alter_backup_schedule",
     "alter_column",
     "alter_database_add_region_stmt",
     "alter_database_add_super_region",

@@ -87,6 +87,7 @@ type datadrivenTestState struct {
 	clusterTimestamps        map[string]string
 	noticeBuffer             []string
 	cleanupFns               []func()
+	vars                     map[string]string
 }
 
 func newDatadrivenTestState() datadrivenTestState {
@@ -97,6 +98,7 @@ func newDatadrivenTestState() datadrivenTestState {
 		sqlDBs:                   make(map[sqlDBKey]*gosql.DB),
 		jobTags:                  make(map[string]jobspb.JobID),
 		clusterTimestamps:        make(map[string]string),
+		vars:                     make(map[string]string),
 	}
 }
 
@@ -289,6 +291,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + cancel=<tag>: cancels the job referenced by the tag and waits for it to
 //   reach a CANCELED state.
 //
+// - "let" [args]
+//   Assigns the returned value of the SQL query to the provided args as variables.
+//
 // - "save-cluster-ts" tag=<tag>
 //   Saves the `SELECT cluster_logical_timestamp()` with the tag. Can be used
 //   in the future with intstructions such as `aost`.
@@ -355,6 +360,10 @@ func TestDataDriven(t *testing.T) {
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
+			for v := range ds.vars {
+				d.Input = strings.Replace(d.Input, v, ds.vars[v], -1)
+				d.Expected = strings.Replace(d.Expected, v, ds.vars[v], -1)
+			}
 			switch d.Cmd {
 			case "reset":
 				ds.cleanup(ctx)
@@ -494,6 +503,33 @@ func TestDataDriven(t *testing.T) {
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
 				return output
+
+			case "let":
+				server := lastCreatedServer
+				user := "root"
+				if len(d.CmdArgs) == 0 {
+					t.Fatalf("Must specify at least one variable name.")
+				}
+				rows, err := ds.getSQLDB(t, server, user).Query(d.Input)
+				if err != nil {
+					return err.Error()
+				}
+				output, err := sqlutils.RowsToDataDrivenOutput(rows)
+				output = strings.TrimSpace(output)
+				values := strings.Split(output, "\n")
+				if len(values) != len(d.CmdArgs) {
+					t.Fatalf("Expecting %d vars, found %d", len(d.CmdArgs), len(values))
+				}
+				for i := range values {
+					key := d.CmdArgs[i].Key
+					if !strings.HasPrefix(key, "$") {
+						t.Fatalf("Vars must start with `$`.")
+					}
+					ds.vars[key] = values[i]
+				}
+				require.NoError(t, err)
+
+				return ""
 
 			case "backup":
 				server := lastCreatedServer

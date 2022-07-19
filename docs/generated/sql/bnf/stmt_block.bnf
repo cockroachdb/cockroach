@@ -481,6 +481,7 @@ alter_ddl_stmt ::=
 	| alter_changefeed_stmt
 	| alter_backup_stmt
 	| alter_func_stmt
+	| alter_backup_schedule
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1113,6 +1114,7 @@ unreserved_keyword ::=
 	| 'KEYS'
 	| 'KMS'
 	| 'KV'
+	| 'LABEL'
 	| 'LANGUAGE'
 	| 'LAST'
 	| 'LATEST'
@@ -1573,6 +1575,9 @@ alter_func_stmt ::=
 	| alter_func_owner_stmt
 	| alter_func_set_schema_stmt
 	| alter_func_dep_extension_stmt
+
+alter_backup_schedule ::=
+	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -2172,6 +2177,9 @@ alter_func_set_schema_stmt ::=
 alter_func_dep_extension_stmt ::=
 	'ALTER' 'FUNCTION' function_with_argtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
 
+alter_backup_schedule_cmds ::=
+	( alter_backup_schedule_cmd ) ( ( ',' alter_backup_schedule_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2753,6 +2761,15 @@ opt_restrict ::=
 opt_no ::=
 	'NO'
 	| 
+
+alter_backup_schedule_cmd ::=
+	'SET' 'LABEL' string_or_placeholder
+	| 'SET' 'INTO' string_or_placeholder_opt_list
+	| 'SET' 'WITH' backup_options
+	| 'SET' cron_expr
+	| 'SET' 'FULL' 'BACKUP' 'ALWAYS'
+	| 'SET' 'FULL' 'BACKUP' sconst_or_placeholder
+	| 'SET' 'SCHEDULE' 'OPTION' kv_option
 
 role_option ::=
 	'CREATEROLE'
