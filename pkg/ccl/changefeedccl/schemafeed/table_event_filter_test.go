@@ -254,15 +254,18 @@ func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
 		Before: mkTableDesc(42, 1, ts(2), 2, 1),
 		After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
 	}
-	_, err := incompleteFilter.shouldFilter(context.Background(), dropColEvent)
+	changefeedTargets := CreateChangefeedTargets(42)
+
+	_, err := incompleteFilter.shouldFilter(context.Background(), dropColEvent, changefeedTargets)
 	require.Error(t, err)
 
 	unknownEvent := TableEvent{
 		Before: mkTableDesc(42, 1, ts(2), 2, 1),
 		After:  mkTableDesc(42, 1, ts(2), 2, 1),
 	}
-	_, err = incompleteFilter.shouldFilter(context.Background(), unknownEvent)
+	_, err = incompleteFilter.shouldFilter(context.Background(), unknownEvent, changefeedTargets)
 	require.Error(t, err)
+
 }
 
 func TestTableEventFilter(t *testing.T) {
@@ -388,7 +391,7 @@ func TestTableEventFilter(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			shouldFilter, err := c.p.shouldFilter(context.Background(), c.e)
+			shouldFilter, err := c.p.shouldFilter(context.Background(), c.e, CreateChangefeedTargets(42))
 			require.NoError(t, err)
 			require.Equalf(t, c.exp, shouldFilter, "event %v", c.e)
 		})

@@ -26,7 +26,11 @@ type Target struct {
 type StatementTimeName string
 
 type targetsByTable struct {
-	wholeTable   *Target
+	// wholeTable is a single target set when the target has no specified column
+	// families
+	wholeTable *Target
+	// byFamilyName is populated only if there are multiple column family targets
+	// for the table
 	byFamilyName map[string]Target
 }
 
@@ -81,6 +85,21 @@ func (ts *Targets) EachTarget(f func(Target) error) error {
 		}
 	}
 	return nil
+}
+
+// GetSpecifiedColumnFamilies returns a set of watched families
+// belonging to the table.
+func (ts *Targets) GetSpecifiedColumnFamilies(tableID descpb.ID) map[string]struct{} {
+	target, exists := ts.m[tableID]
+	if !exists {
+		return make(map[string]struct{})
+	}
+
+	families := make(map[string]struct{}, len(target.byFamilyName))
+	for family := range target.byFamilyName {
+		families[family] = struct{}{}
+	}
+	return families
 }
 
 // EachTableID iterates over unique TableIDs referenced in Targets.
