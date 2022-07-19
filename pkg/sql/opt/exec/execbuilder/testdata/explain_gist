@@ -134,3 +134,17 @@ SELECT crdb_internal.decode_plan_gist('$lookup_join_gist')
 └── • scan
       table: s83537@s83537_pkey
       spans: FULL SCAN
+
+# Ensure that we can decode a gist even if we do not have the schema info.
+query T
+SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
+----
+• limit
+│
+└── • index join
+    │ table: ?@?
+    │
+    └── • scan
+          table: ?@?
+          spans: 32 spans
+          limit: 10200
