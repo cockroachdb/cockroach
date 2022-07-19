@@ -83,6 +83,22 @@ func (ts *Targets) EachTarget(f func(Target) error) error {
 	return nil
 }
 
+// HasNonDefaultColumnFamily returns true if the Targets include least
+// one watched column family which is not the default column family.
+func (ts *Targets) HasNonDefaultColumnFamily() (bool, error) {
+	hasNonDefaultFamilies := false
+	err := ts.EachTarget(func(target Target) error {
+		if target.FamilyName != "" {
+			hasNonDefaultFamilies = true
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return hasNonDefaultFamilies, nil
+}
+
 // EachTableID iterates over unique TableIDs referenced in Targets.
 func (ts *Targets) EachTableID(f func(descpb.ID) error) error {
 	for id := range ts.m {
