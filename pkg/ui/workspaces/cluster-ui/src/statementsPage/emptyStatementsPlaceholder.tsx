@@ -27,15 +27,13 @@ export const EmptyStatementsPlaceholder: React.FC<{
   const emptyPlaceholderProps: EmptyTableProps = isEmptySearchResults
     ? {
         title:
-          "No SQL statements match your search since this page was last cleared",
+          "No SQL statements match your search in the selected time interval",
         icon: magnifyingGlassImg,
         footer,
       }
     : {
-        title: "No SQL statements since this page was last cleared",
+        title: "No SQL statements in the selected time interval",
         icon: emptyTableResultsImg,
-        message:
-          "Statements are cleared every hour by default, or according to your configuration.",
         footer,
       };
   return <EmptyTable {...emptyPlaceholderProps} />;
