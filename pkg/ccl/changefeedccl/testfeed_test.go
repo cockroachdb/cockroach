@@ -1429,7 +1429,9 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 
 		if createStmt.SinkURI == nil {
 			createStmt.SinkURI = tree.NewStrVal(
-				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s", sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM), base64.StdEncoding.EncodeToString(clientKeyPEM)))
+				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s",
+					sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM),
+					base64.StdEncoding.EncodeToString(clientKeyPEM)))
 		}
 	} else {
 		sinkDest, err = cdctest.StartMockWebhookSink(cert)
@@ -1582,6 +1584,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		case <-time.After(timeout()):
 			return nil, &contextutil.TimeoutError{}
 		case <-f.ss.eventReady():
+		case <-f.mockSink.NotifyMessage():
 		case <-f.shutdown:
 			return nil, f.terminalJobError()
 		}

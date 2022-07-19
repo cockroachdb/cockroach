@@ -40,7 +40,6 @@ const (
 	applicationTypeJSON = `application/json`
 	applicationTypeCSV  = `text/csv`
 	authorizationHeader = `Authorization`
-	defaultConnTimeout  = 3 * time.Second
 )
 
 func isWebhookSink(u *url.URL) bool {
@@ -303,10 +302,9 @@ func makeWebhookSink(
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptTopicInValue)
 	}
 
-	connTimeout := opts.ClientTimeout
-	if connTimeout == nil {
-		t := defaultConnTimeout
-		connTimeout = &t
+	var connTimeout time.Duration
+	if opts.ClientTimeout != nil {
+		connTimeout = *opts.ClientTimeout
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -328,7 +326,7 @@ func makeWebhookSink(
 	}
 
 	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = makeWebhookClient(u, *connTimeout)
+	sink.client, err = makeWebhookClient(u, connTimeout)
 	if err != nil {
 		return nil, err
 	}
