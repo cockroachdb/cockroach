@@ -11,7 +11,6 @@
 import React from "react";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
-import sinon from "sinon";
 import Long from "long";
 import { MemoryRouter } from "react-router-dom";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -23,8 +22,6 @@ import { TestStoreProvider } from "src/test-utils";
 
 type IStatementDiagnosticsReport =
   cockroach.server.serverpb.IStatementDiagnosticsReport;
-
-const sandbox = sinon.createSandbox();
 
 const activateDiagnosticsRef = { current: { showModalFor: jest.fn() } };
 
@@ -46,10 +43,6 @@ function generateDiagnosticsRequest(
 describe("DiagnosticsView", () => {
   let wrapper: ReactWrapper;
   const statementFingerprint = "some-id";
-
-  beforeEach(() => {
-    sandbox.reset();
-  });
 
   describe("With Empty state", () => {
     beforeEach(() => {

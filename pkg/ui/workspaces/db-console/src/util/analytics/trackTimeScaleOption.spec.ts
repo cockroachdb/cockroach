@@ -9,42 +9,35 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { createSandbox } from "sinon";
 import { track } from "./trackTimeScaleSelected";
-
-const sandbox = createSandbox();
 
 describe("trackTimeScaleSelected", () => {
   const scale = "Last 2 weeks";
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(scale);
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Time Scale Selected";
 
     track(spy)(scale);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(scale);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const timeScale = get(sent, "properties.timeScale");
 
     expect(timeScale === scale).toBe(true);

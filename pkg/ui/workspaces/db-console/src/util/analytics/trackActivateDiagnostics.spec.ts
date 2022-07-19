@@ -9,29 +9,22 @@
 // licenses/APL.txt.
 
 import { get, isString } from "lodash";
-import { createSandbox } from "sinon";
 import { track } from "./trackActivateDiagnostics";
 
-const sandbox = createSandbox();
-
 describe("trackActivateDiagnostics", () => {
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)("some statement");
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Diagnostics Activation";
 
     track(spy)("whatever");
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(isString(event)).toBe(true);
@@ -39,12 +32,12 @@ describe("trackActivateDiagnostics", () => {
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const statement = "SELECT blah from blah-blah";
 
     track(spy)(statement);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const fingerprint = get(sent, "properties.fingerprint");
 
     expect(isString(fingerprint)).toBe(true);
