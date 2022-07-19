@@ -12,7 +12,6 @@ package upgrades
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -39,7 +38,7 @@ import (
 // definition and the migration end up with the same table state.
 const addUserIDColumn = `
 ALTER TABLE system.users
-ADD COLUMN IF NOT EXISTS "user_id" OID CREATE FAMILY "fam_4_user_id" 
+ADD COLUMN IF NOT EXISTS "user_id" OID CREATE FAMILY "fam_4_user_id"
 `
 
 const updateUserIDColumnDefaultExpr = `
@@ -86,22 +85,22 @@ func alterSystemUsersAddUserIDColumn(
 		}
 	}
 
-	var upsertRootStmt = fmt.Sprintf(`
-		       UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ('%s', '', false, %d)
-		       `, username.RootUser, username.RootUserID)
+	var upsertRootStmt = `
+		       UPSERT INTO system.users (username, "isRole", "user_id") VALUES ($1, false, $2)
+		       `
 
-	var upsertAdminStmt = fmt.Sprintf(`
-		       UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ('%s', '', true,  %d)
-		       `, username.AdminRole, username.AdminRoleID)
+	var upsertAdminStmt = `
+		       UPSERT INTO system.users (username, "isRole", "user_id") VALUES ($1, true, $2)
+		       `
 
 	_, err := d.InternalExecutor.ExecEx(ctx, "upsert-root-user-in-role-id-migration", nil,
-		sessiondata.NodeUserSessionDataOverride, upsertRootStmt)
+		sessiondata.NodeUserSessionDataOverride, upsertRootStmt, username.RootUser, username.RootUserID)
 	if err != nil {
 		return err
 	}
 
 	_, err = d.InternalExecutor.ExecEx(ctx, "upsert-admin-role-in-role-id-migration", nil,
-		sessiondata.NodeUserSessionDataOverride, upsertAdminStmt)
+		sessiondata.NodeUserSessionDataOverride, upsertAdminStmt, username.AdminRole, username.AdminRoleID)
 	if err != nil {
 		return err
 	}
@@ -130,8 +129,7 @@ func alterSystemUsersAddUserIDColumn(
 			if !ok {
 				break
 			}
-			username := fmt.Sprintf("'%s'", string(tree.MustBeDString(it.Cur()[0])))
-			usernames = append(usernames, username)
+			usernames = append(usernames, string(tree.MustBeDString(it.Cur()[0])))
 		}
 
 		if len(usernames) == 0 {
@@ -144,12 +142,12 @@ func alterSystemUsersAddUserIDColumn(
 			if i+batchSize > len(usernames) {
 				end = len(usernames)
 			}
-			updateSequenceValues := fmt.Sprintf(`
-UPDATE system.users SET user_id = oid(nextval('system.public.role_id_seq'::REGCLASS)) WHERE
- username IN (%s)`, strings.Join(usernames[i:end], ","))
 
+			updateSequenceValues := `
+			UPDATE system.users SET user_id = oid(nextval('system.public.role_id_seq'::REGCLASS)) WHERE
+			username = ANY $1`
 			_, err = d.InternalExecutor.ExecEx(ctx, "update user ids", nil,
-				sessiondata.NodeUserSessionDataOverride, updateSequenceValues)
+				sessiondata.NodeUserSessionDataOverride, updateSequenceValues, usernames[i:end])
 			if err != nil {
 				return err
 			}

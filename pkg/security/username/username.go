@@ -65,6 +65,9 @@ type SQLUsername struct {
 // NodeUser is used by nodes for intra-cluster traffic.
 const NodeUser = "node"
 
+// NodeUserID is the ID for NodeUser.
+const NodeUserID = 3
+
 // NodeUserName is the SQLUsername for NodeUser.
 func NodeUserName() SQLUsername { return SQLUsername{NodeUser} }
 
@@ -100,6 +103,21 @@ func (s SQLUsername) IsAdminRole() bool { return s.u == AdminRole }
 // dropped, assigned to another role, and is generally not listed.
 // It can be granted privileges, implicitly granting them to all users (current and future).
 const PublicRole = "public"
+
+// PublicRoleID is the ID for public role.
+const PublicRoleID = 4
+
+// RoleNameToIDMap is a map of role names to ids.
+// This map is immutable and should always hold.
+// Right now this should always hold as we cannot rename any of the
+// roles defined in this map.
+// TODO(richardjcai): Add checks to ensure that this mapping always holds.
+var RoleNameToIDMap = map[SQLUsername]int{
+	RootUserName():   RootUserID,
+	AdminRoleName():  AdminRoleID,
+	NodeUserName():   NodeUserID,
+	PublicRoleName(): PublicRoleID,
+}
 
 // NoneRole is a special role.
 // It is primarily used in SET ROLE, where "none" symbolizes a reset.
