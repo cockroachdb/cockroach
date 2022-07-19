@@ -479,6 +479,7 @@ alter_ddl_stmt ::=
 	| alter_default_privileges_stmt
 	| alter_changefeed_stmt
 	| alter_backup_stmt
+	| alter_backup_schedule
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1109,6 +1110,7 @@ unreserved_keyword ::=
 	| 'KEYS'
 	| 'KMS'
 	| 'KV'
+	| 'LABEL'
 	| 'LANGUAGE'
 	| 'LAST'
 	| 'LATEST'
@@ -1558,6 +1560,9 @@ alter_changefeed_stmt ::=
 alter_backup_stmt ::=
 	'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds
 	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder alter_backup_cmds
+
+alter_backup_schedule ::=
+	'ALTER' 'BACKUP' 'SCHEDULE' iconst64_or_placeholder alter_backup_schedule_cmds
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -2133,6 +2138,13 @@ alter_changefeed_cmds ::=
 alter_backup_cmds ::=
 	( alter_backup_cmd ) ( ( alter_backup_cmd ) )*
 
+iconst64_or_placeholder ::=
+	iconst64
+	| 'PLACEHOLDER'
+
+alter_backup_schedule_cmds ::=
+	( alter_backup_schedule_cmd ) ( ( ',' alter_backup_schedule_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2695,6 +2707,15 @@ alter_changefeed_cmd ::=
 
 alter_backup_cmd ::=
 	'ADD' backup_kms
+
+alter_backup_schedule_cmd ::=
+	'SET' 'LABEL' string_or_placeholder
+	| 'SET' 'INTO' string_or_placeholder_opt_list
+	| 'SET' 'WITH' backup_options
+	| 'SET' cron_expr
+	| 'SET' 'FULL' 'BACKUP' 'ALWAYS'
+	| 'SET' 'FULL' 'BACKUP' sconst_or_placeholder
+	| 'SET' 'SCHEDULE' 'OPTION' kv_option
 
 role_option ::=
 	'CREATEROLE'

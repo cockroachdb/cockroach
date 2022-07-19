@@ -7,6 +7,7 @@ go_library(
     name = "tree",
     srcs = [
         "alter_backup.go",
+        "alter_backup_schedule.go",
         "alter_changefeed.go",
         "alter_database.go",
         "alter_default_privileges.go",

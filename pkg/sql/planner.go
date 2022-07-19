@@ -654,7 +654,7 @@ func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, 
 }
 
 // TypeAsBool enforces (not hints) that the given expression typechecks as a
-// string and returns a function that can be called to get the string value
+// bool and returns a function that can be called to get the bool value
 // during (planNode).Start.
 func (p *planner) TypeAsBool(
 	ctx context.Context, e tree.Expr, op string,
@@ -690,6 +690,46 @@ func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func() (bool, bool, erro
 			return false, false, errors.Errorf("failed to cast %T to bool", d)
 		}
 		return false, bool(*b), nil
+	}
+}
+
+// TypeAsInt64 enforces (not hints) that the given expression typechecks as a
+// int64 and returns a function that can be called to get the int64 value
+// during (planNode).Start.
+func (p *planner) TypeAsInt64(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (int64, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.Int, op)
+	if err != nil {
+		return nil, err
+	}
+	evalFn := p.makeInt64EvalFn(typedE)
+	return func() (int64, error) {
+		isNull, i, err := evalFn()
+		if err != nil {
+			return 0, err
+		}
+		if isNull {
+			return 0, errors.Errorf("expected string, got NULL")
+		}
+		return i, nil
+	}, nil
+}
+
+func (p *planner) makeInt64EvalFn(typedE tree.TypedExpr) func() (bool, int64, error) {
+	return func() (bool, int64, error) {
+		d, err := eval.Expr(p.EvalContext(), typedE)
+		if err != nil {
+			return false, 0, err
+		}
+		if d == tree.DNull {
+			return true, 0, nil
+		}
+		b, ok := d.(*tree.DInt)
+		if !ok {
+			return false, 0, errors.Errorf("failed to cast %T to bool", d)
+		}
+		return false, int64(*b), nil
 	}
 }
 
