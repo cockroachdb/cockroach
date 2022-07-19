@@ -15,6 +15,7 @@ go_library(
         "encoder_avro.go",
         "encoder_csv.go",
         "encoder_json.go",
+        "error_wrapper_sink.go",
         "event_processing.go",
         "metrics.go",
         "name.go",
