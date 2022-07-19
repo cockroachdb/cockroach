@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -101,7 +102,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
-		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
+		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy, cfg.Targets,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
@@ -175,6 +176,7 @@ type kvFeed struct {
 	onBackfillCallback func() func()
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
+	targets            changefeedbase.Targets
 
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
@@ -192,6 +194,7 @@ func newKVFeed(
 	checkpointTimestamp hlc.Timestamp,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
+	targets changefeedbase.Targets,
 	withInitialBackfill, withDiff bool,
 	initialHighWater hlc.Timestamp,
 	endTime hlc.Timestamp,
@@ -213,6 +216,7 @@ func newKVFeed(
 		endTime:             endTime,
 		schemaChangeEvents:  schemaChangeEvents,
 		schemaChangePolicy:  schemaChangePolicy,
+		targets:             targets,
 		codec:               codec,
 		tableFeed:           tf,
 		scanner:             sc,
@@ -287,23 +291,58 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		// Detect whether the event corresponds to a primary index change. Also
-		// detect whether that primary index change corresponds to any change in
-		// the primary key or in the set of visible columns. If it corresponds to
-		// no such change, than it may be a column being dropped physically and
-		// should not trigger a failure in the `stop` policy.
+
+		// Detect whether the event corresponds txo a primary index change. Also
+		// detect whether the change corresponds to any change in the set of visible
+		// primary key columns.
+		//
+		// If a primary key is being changed, but there are no changes in the
+		// primary key's columns, this may be due to a column which was dropped
+		// logically before and is presently being physically dropped.
+		//
+		// If is no change in the primary key columns, then a primary key change
+		// should not trigger a failure in the `stop` policy because this change is
+		// effectively invisible to consumers.
 		primaryIndexChange, noColumnChanges := isPrimaryKeyChange(events)
-		if primaryIndexChange && (noColumnChanges ||
-			f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyStop) {
+		if primaryIndexChange {
 			boundaryType = jobspb.ResolvedSpan_RESTART
-		} else if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
-			boundaryType = jobspb.ResolvedSpan_EXIT
+			if !noColumnChanges && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
+				boundaryType = jobspb.ResolvedSpan_EXIT
+			}
 		}
+
+		// Handle the 'stop' policy in case there are schema changes such as column drops to consider.
+		if boundaryType != jobspb.ResolvedSpan_EXIT && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop && !isOnlyPrimaryIndexChange(events) {
+			hasFams, err := f.targets.HasNonDefaultColumnFamily()
+			if err != nil {
+				return err
+			}
+
+			// If there are column families being watched by the changefeed and a column, excluded from these families, is being dropped, then
+			// the changefeed should stay unaffected.
+			if hasFams {
+				if isDropColumnChange(events) {
+					droppedWatchedColumn, err := droppedColumnIsWatched(events, &f.targets)
+					if err != nil {
+						return err
+					}
+					if droppedWatchedColumn {
+						boundaryType = jobspb.ResolvedSpan_EXIT
+					}
+				} else {
+					boundaryType = jobspb.ResolvedSpan_EXIT
+				}
+
+			} else {
+				boundaryType = jobspb.ResolvedSpan_EXIT
+			}
+		}
+
 		// Resolve all of the spans as a boundary if the policy indicates that
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
-			if err := emitResolved(highWater, boundaryType); err != nil {
+			if err := emitResolved(highWater, boundaryType); err != nil { // emit boundary event
 				return err
 			}
 		}
@@ -313,6 +352,68 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return schemaChangeDetectedError{highWater.Next()}
 		}
 	}
+}
+
+func droppedColumnIsWatched(
+	events []schemafeed.TableEvent, targets *changefeedbase.Targets,
+) (bool, error) {
+	targetFamilyNames := map[string]bool{}
+	if err := targets.EachTarget(func(target changefeedbase.Target) error {
+		targetFamilyNames[target.FamilyName] = true
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	for _, ev := range events {
+		beforeFams := ev.Before.GetFamilies()
+		afterFams := ev.Before.GetFamilies()
+
+		for watchedFamily := range targetFamilyNames {
+			var beforeDesc *descpb.ColumnFamilyDescriptor
+			var afterDesc *descpb.ColumnFamilyDescriptor
+
+			for _, desc := range beforeFams {
+				if desc.Name == watchedFamily {
+					beforeDesc = &desc
+				}
+			}
+
+			for _, desc := range afterFams {
+				if desc.Name == watchedFamily {
+					afterDesc = &desc
+				}
+			}
+
+			if afterDesc == nil { // column family was dropped
+				return true, nil
+			} else if beforeDesc != nil {
+				if len(beforeDesc.ColumnIDs) > len(afterDesc.ColumnIDs) {
+					return true, nil
+				}
+			} else {
+				return false, errors.New("a column family was added")
+			}
+		}
+	}
+	return false, nil
+}
+
+func isDropColumnChange(events []schemafeed.TableEvent) bool {
+	for _, ev := range events {
+		if schemafeed.IsDropColumnChange(ev) {
+			return true
+		}
+	}
+	return false
+}
+
+func isOnlyPrimaryIndexChange(events []schemafeed.TableEvent) bool {
+	result := true
+	for _, ev := range events {
+		result = result && schemafeed.IsOnlyPrimaryIndexChange(ev)
+	}
+	return result
 }
 
 func isPrimaryKeyChange(

@@ -23,6 +23,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/covering",
         "//pkg/storage/enginepb",
         "//pkg/util/ctxgroup",

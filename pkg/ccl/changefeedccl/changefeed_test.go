@@ -996,6 +996,35 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+// When we drop columns which are not monitored by the changefeed, it should not
+// stop.
+func TestChangefeedContinuesAfter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		disableDeclarativeSchemaChangesForTest(t, sqlDB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, FAMILY id_a (id, a), FAMILY onlyb (b))`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY onlyb WITH schema_change_policy='stop'`)
+		defer closeFeed(t, cf)
+
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (0, 'b_value')`)
+
+		assertPayloads(t, cf, []string{
+			`hasfams.onlyb: [0]->{"after": {"b": "b_value"}}`,
+			//`tt: [1]->{"after": {"x": 1, "y": "howdy", "z": "bye"}}`,
+			//`tt: [2]->{"after": {"x": 2, "y": "hi", "z": "bye"}}`,
+			//`tt: [3]->{"after": {"x": 3, "y": "hiya", "z": "bye"}}`,
+			//`tt: [4]->{"after": {"x": 4, "y": "hello", "z": "cya"}}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedExternalIODisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

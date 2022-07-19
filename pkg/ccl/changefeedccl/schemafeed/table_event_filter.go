@@ -279,3 +279,9 @@ func IsOnlyPrimaryIndexChange(e TableEvent) bool {
 func IsRegionalByRowChange(e TableEvent) bool {
 	return classifyTableEvent(e).Contains(tableEventLocalityRegionalByRowChange)
 }
+
+// IsDropColumnChange returns true if the corresponding event
+// corresponds to a column being dropped.
+func IsDropColumnChange(e TableEvent) bool {
+	return classifyTableEvent(e).Contains(tableEventDropColumn)
+}

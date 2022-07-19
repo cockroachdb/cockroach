@@ -85,6 +85,7 @@ func TestKVFeed(t *testing.T) {
 		withDiff           bool
 		schemaChangeEvents changefeedbase.SchemaChangeEventClass
 		schemaChangePolicy changefeedbase.SchemaChangePolicy
+		targets            changefeedbase.Targets
 		initialHighWater   hlc.Timestamp
 		endTime            hlc.Timestamp
 		spans              []roachpb.Span
@@ -121,7 +122,7 @@ func TestKVFeed(t *testing.T) {
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
-			tc.schemaChangeEvents, tc.schemaChangePolicy,
+			tc.schemaChangeEvents, tc.schemaChangePolicy, tc.targets,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater, tc.endTime,
 			keys.SystemSQLCodec,
