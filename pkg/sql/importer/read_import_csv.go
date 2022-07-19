@@ -221,11 +221,18 @@ func (c *csvRowConsumer) FillDatums(
 			var err error
 			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
 			if err != nil {
-				col := conv.VisibleCols[i]
-				return newImportRowError(
-					errors.Wrapf(err, "parse %q as %s", col.GetName(), col.GetType().SQLString()),
-					strRecord(record, c.opts.Comma),
-					rowNum)
+				// Fallback to parsing as a string literal. This allows us to support
+				// both array expressions (like `ARRAY[1, 2, 3]`) and literals (like
+				// `{1, 2, 3}`).
+				var err2 error
+				conv.Datums[datumIdx], _, err2 = tree.ParseAndRequireString(conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
+				if err2 != nil {
+					col := conv.VisibleCols[i]
+					return newImportRowError(
+						errors.Wrapf(errors.CombineErrors(err, err2), "parse %q as %s", col.GetName(), col.GetType().SQLString()),
+						strRecord(record, c.opts.Comma),
+						rowNum)
+				}
 			}
 		}
 		datumIdx++
