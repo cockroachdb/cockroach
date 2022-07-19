@@ -769,6 +769,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 
 	var fooTableId uint32
 	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
 	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
 	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
 
@@ -792,8 +793,14 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		return nil
 	})
 
-	testDB.Exec(t, "SELECT 1; BEGIN; INSERT INTO foo VALUES(1); COMMIT;")
+	testDB.Exec(t, "INSERT INTO bar VALUES(2); BEGIN; INSERT INTO foo VALUES(1); COMMIT;")
 	require.Equal(t, numToRetry+1, int(retryCount))
+
+	var x int
+	testDB.QueryRow(t, "select * from foo").Scan(&x)
+	require.Equal(t, 1, x)
+	testDB.QueryRow(t, "select * from bar").Scan(&x)
+	require.Equal(t, 2, x)
 }
 
 // This test ensures that when in an explicit transaction and statement

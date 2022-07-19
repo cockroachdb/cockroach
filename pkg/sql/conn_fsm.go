@@ -48,7 +48,11 @@ func (stateNoTxn) String() string {
 }
 
 type stateOpen struct {
+	// ImplicitTxn is false if the txn included a BEGIN command.
 	ImplicitTxn fsm.Bool
+	// WasUpgraded is true if the txn started as implicit, but a BEGIN made it
+	// become explicit.
+	WasUpgraded fsm.Bool
 }
 
 var _ fsm.State = &stateOpen{}
@@ -59,7 +63,12 @@ func (stateOpen) String() string {
 
 // stateAborted is entered on errors (retriable and non-retriable). A ROLLBACK
 // TO SAVEPOINT can move the transaction back to stateOpen.
-type stateAborted struct{}
+type stateAborted struct {
+	// WasUpgraded is true if the txn started as implicit, but a BEGIN made it
+	// become explicit. This is needed so that when ROLLBACK TO SAVEPOINT moves
+	// to stateOpen, we keep tracking WasUpgraded correctly.
+	WasUpgraded fsm.Bool
+}
 
 var _ fsm.State = &stateAborted{}
 
@@ -230,7 +239,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateNoTxn{}: {
 		eventTxnStart{fsm.Var("implicitTxn")}: {
 			Description: "BEGIN, or before a statement running as an implicit txn",
-			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
+			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), WasUpgraded: fsm.False},
 			Action:      noTxnToOpen,
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -247,7 +256,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	},
 
 	/// Open
-	stateOpen{ImplicitTxn: fsm.Any}: {
+	stateOpen{ImplicitTxn: fsm.Any, WasUpgraded: fsm.Any}: {
 		eventTxnFinishCommitted{}: {
 			Description: "COMMIT, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
@@ -278,17 +287,15 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: cleanupAndFinishOnError,
 		},
 	},
-	stateOpen{ImplicitTxn: fsm.Var("implicitTxn")}: {
+	stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False}: {
 		// This is the case where we auto-retry.
 		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {
-			// Rewind and auto-retry - the transaction should stay in the Open state.
+			// Rewind and auto-retry - the transaction should stay in the Open state
 			Description: "Retriable err; will auto-retry",
-			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
+			Next:        stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			Action:      prepareTxnForRetryWithRewind,
 		},
-	},
-	// Handle the errors in implicit txns. They move us to NoTxn.
-	stateOpen{ImplicitTxn: fsm.True}: {
+		// Handle the errors in implicit txns. They move us to NoTxn.
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
 			Action: cleanupAndFinishOnError,
@@ -297,8 +304,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next:   stateNoTxn{},
 			Action: cleanupAndFinishOnError,
 		},
+		// Handle a txn getting upgraded to an explicit txn.
 		eventTxnUpgradeToExplicit{}: {
-			Next: stateOpen{ImplicitTxn: fsm.False},
+			Next: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.True},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(
 					advanceOne,
@@ -309,10 +317,10 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 	},
-	// Handle the errors in explicit txns. They move us to Aborted.
-	stateOpen{ImplicitTxn: fsm.False}: {
+	stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.Var("wasUpgraded")}: {
+		// Handle the errors in explicit txns.
 		eventNonRetriableErr{IsCommit: fsm.False}: {
-			Next: stateAborted{},
+			Next: stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.setAdvanceInfo(skipBatch, noRewind, txnEvent{eventType: noEvent})
@@ -321,13 +329,15 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 		// ROLLBACK TO SAVEPOINT cockroach. There's not much to do other than generating a
 		// txnRestart output event.
+		// The next state must be an explicit txn, since the SAVEPOINT
+		// creation can only happen in an explicit txn.
 		eventTxnRestart{}: {
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False},
+			Next:        stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.Var("wasUpgraded")},
 			Action:      prepareTxnForRetry,
 		},
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
-			Next: stateAborted{},
+			Next: stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(
 					skipBatch,
@@ -336,6 +346,16 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				)
 				return nil
 			},
+		},
+		// This is the case where we auto-retry explicit transactions.
+		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {
+			// Rewind and auto-retry - the transaction should stay in the Open state.
+			// Retrying can cause the transaction to become implicit if we see that
+			// the transaction was previously upgraded. During the retry, BEGIN
+			// will be executed again and upgrade the transaction back to explicit.
+			Description: "Retriable err; will auto-retry",
+			Next:        stateOpen{ImplicitTxn: fsm.Var("wasUpgraded"), WasUpgraded: fsm.False},
+			Action:      prepareTxnForRetryWithRewind,
 		},
 		eventTxnReleased{}: {
 			Description: "RELEASE SAVEPOINT cockroach_restart",
@@ -359,7 +379,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	//
 	// Note that we don't handle any error events here. Any statement but a
 	// ROLLBACK (TO SAVEPOINT) is expected to not be passed to the state machine.
-	stateAborted{}: {
+	stateAborted{WasUpgraded: fsm.Var("wasUpgraded")}: {
 		eventTxnFinishAborted{}: {
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
@@ -375,7 +395,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventNonRetriableErr{IsCommit: fsm.False}: {
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "any other statement",
-			Next:        stateAborted{},
+			Next:        stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(
 					skipBatch,
@@ -389,13 +409,15 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventNonRetriableErr{IsCommit: fsm.True}: {
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "ConnExecutor closing",
-			Next:        stateAborted{},
+			Next:        stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action:      cleanupAndFinishOnError,
 		},
 		// ROLLBACK TO SAVEPOINT <not cockroach_restart> success.
+		// The next state must be an explicit txn, since the SAVEPOINT
+		// creation can only happen in an explicit txn.
 		eventSavepointRollback{}: {
 			Description: "ROLLBACK TO SAVEPOINT (not cockroach_restart) success",
-			Next:        stateOpen{ImplicitTxn: fsm.False},
+			Next:        stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(
 					advanceOne,
@@ -409,7 +431,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventRetriableErr{CanAutoRetry: fsm.Any, IsCommit: fsm.Any}: {
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart",
-			Next:        stateAborted{},
+			Next:        stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(
 					skipBatch,
@@ -420,9 +442,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 		// ROLLBACK TO SAVEPOINT cockroach_restart.
+		// The next state must be an explicit txn, since the SAVEPOINT
+		// creation can only happen in an explicit txn.
 		eventTxnRestart{}: {
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False},
+			Next:        stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.Var("wasUpgraded")},
 			Action:      prepareTxnForRetry,
 		},
 	},
@@ -547,7 +571,7 @@ func prepareTxnForRetryWithRewind(args fsm.Args) error {
 // when running SQL inside a higher-level txn. It's a very limited state
 // machine: it doesn't allow starting or finishing txns, auto-retries, etc.
 var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
-	stateOpen{ImplicitTxn: fsm.False}: {
+	stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False}: {
 		// We accept eventNonRetriableErr with both IsCommit={True, fsm.False}, even
 		// though this state machine does not support COMMIT statements because
 		// connExecutor.close() sends an eventNonRetriableErr{IsCommit: fsm.True} event.

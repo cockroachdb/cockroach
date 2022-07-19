@@ -995,7 +995,7 @@ func (s *Server) newConnExecutorWithTxn(
 	// initialize the state.
 	ex.machine = fsm.MakeMachine(
 		BoundTxnStateTransitions,
-		stateOpen{ImplicitTxn: fsm.False},
+		stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 		&ex.state,
 	)
 	ex.state.resetForNewSQLTxn(
@@ -2183,8 +2183,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		return nil
 	}
 	if advInfo.txnEvent.eventType == txnStart ||
-		advInfo.txnEvent.eventType == txnRestart ||
-		advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+		advInfo.txnEvent.eventType == txnRestart {
 		var nextPos CmdPos
 		switch advInfo.code {
 		case stayInPlace:
