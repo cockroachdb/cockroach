@@ -702,6 +702,25 @@ ORDER BY table_name
 				},
 			},
 		},
+		{
+			name:   "array",
+			create: `a string, b string[]`,
+			typ:    "CSV",
+			data:   `cat,"{somevalue,anothervalue,anothervalue123}"`,
+			query: map[string][][]string{
+				`SELECT * from t`: {
+					{"cat", "{somevalue,anothervalue,anothervalue123}"},
+				},
+			},
+		},
+		{
+			name:     "array",
+			create:   `a string, b string[]`,
+			typ:      "CSV",
+			data:     `dog,{some,thing}`,
+			err:      "error parsing row 1: expected 2 fields, got 3",
+			rejected: "dog,{some,thing}\n",
+		},
 
 		// PG COPY
 		{
