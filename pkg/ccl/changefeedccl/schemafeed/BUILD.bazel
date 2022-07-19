@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
         "//pkg/storage",
+        "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
