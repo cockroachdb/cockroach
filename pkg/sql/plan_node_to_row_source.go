@@ -89,10 +89,14 @@ func newPlanNodeToRowSource(
 
 // MustBeStreaming implements the execinfra.Processor interface.
 func (p *planNodeToRowSource) MustBeStreaming() bool {
-	// hookFnNode is special because it might be blocked forever if we decide to
-	// buffer its output.
-	_, isHookFnNode := p.node.(*hookFnNode)
-	return isHookFnNode
+	switch p.node.(type) {
+	case *hookFnNode, *cdcValuesNode:
+		// hookFnNode is special because it might be blocked forever if we decide to
+		// buffer its output.
+		return true
+	default:
+		return false
+	}
 }
 
 // InitWithOutput implements the LocalProcessor interface.
