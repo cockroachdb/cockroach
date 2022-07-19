@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -2333,6 +2334,27 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		return nil, err
 	}
 
+	// If any of the ordering columns originate from the lookup table, this is a
+	// case where we are ordering on a prefix of input columns followed by the
+	// lookup columns. We need to maintain the index ordering on each lookup.
+	var maintainLookupOrdering bool
+	for i := range n.reqOrdering {
+		if n.reqOrdering[i].ColIdx >= len(plan.ResultColumns) {
+			maintainLookupOrdering = true
+			break
+		}
+	}
+	if maintainLookupOrdering {
+		// Validate that an ordering on lookup columns is not planned when the index
+		// has descending columns.
+		idx := n.table.index
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			if idx.GetKeyColumnDirection(i) == catpb.IndexColumn_DESC {
+				panic(errors.AssertionFailedf("ordering on a lookup index with descending columns"))
+			}
+		}
+	}
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              n.joinType,
 		LockingStrength:   n.table.lockingStrength,
@@ -2341,6 +2363,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
 		MaintainOrdering:                  len(n.reqOrdering) > 0 || n.isFirstJoinInPairedJoiner,
+		MaintainLookupOrdering:            maintainLookupOrdering,
 		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,

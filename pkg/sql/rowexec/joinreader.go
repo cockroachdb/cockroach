@@ -312,6 +312,14 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
+	if spec.MaintainLookupOrdering {
+		// MaintainLookupOrdering indicates the output of the lookup joiner should
+		// be sorted by <inputCols>, <lookupCols>. It doesn't make sense for
+		// MaintainLookupOrdering to be true when MaintainOrdering is not.
+		// Additionally, we need to disable parallelism for the traditional fetcher
+		// in order to ensure the lookups are ordered, so set shouldLimitBatches.
+		spec.MaintainOrdering, shouldLimitBatches = true, true
+	}
 	useStreamer, txn, err := flowCtx.UseStreamer()
 	if err != nil {
 		return nil, err
@@ -477,7 +485,13 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
-		jr.streamerInfo.maintainOrdering = jr.maintainOrdering && readerType == indexJoinReaderType
+		// The index joiner can rely on the streamer to maintain the input ordering,
+		// but the lookup joiner currently handles this logic itself, so the
+		// streamer can operator in OutOfOrder mode. The exception is when the
+		// results of each lookup need to be returned in index order - in this case,
+		// InOrder mode must be used for the streamer.
+		jr.streamerInfo.maintainOrdering = (jr.maintainOrdering && readerType == indexJoinReaderType) ||
+			spec.MaintainLookupOrdering
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
