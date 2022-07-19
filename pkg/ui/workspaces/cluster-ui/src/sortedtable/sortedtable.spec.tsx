@@ -12,7 +12,6 @@ import React from "react";
 import _ from "lodash";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
-import * as sinon from "sinon";
 import classNames from "classnames/bind";
 import {
   SortedTable,
@@ -25,7 +24,7 @@ import styles from "src/sortabletable/sortabletable.module.scss";
 const cx = classNames.bind(styles);
 
 class TestRow {
-  constructor(public name: string, public value: number) {}
+  constructor(public name: string, public value: number) { }
 }
 
 const columns: ColumnDescriptor<TestRow>[] = [
@@ -44,7 +43,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
   },
 ];
 
-class TestSortedTable extends SortedTable<TestRow> {}
+class TestSortedTable extends SortedTable<TestRow> { }
 
 function makeTable(
   data: TestRow[],
@@ -99,17 +98,17 @@ describe("<SortedTable>", function () {
   });
 
   it("correctly uses onChangeSortSetting", function () {
-    const spy = sinon.spy();
+    const spy = jest.fn();
     const wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
     wrapper
       .find(`th.${cx("head-wrapper__cell")}`)
       .first()
       .simulate("click");
-    assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.getCall(0).args[0], {
+    expect(spy).toHaveBeenCalled()
+    expect(spy).toHaveBeenCalledWith({
       ascending: false,
       columnTitle: "first",
-    } as SortSetting);
+    })
   });
 
   it("correctly sorts data based on sortSetting", function () {
