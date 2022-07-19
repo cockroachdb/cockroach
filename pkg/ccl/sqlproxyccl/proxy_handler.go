@@ -43,10 +43,14 @@ var (
 	// See "options" in https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS.
 	clusterIdentifierLongOptionRE = regexp.MustCompile(`(?:-c\s*|--)cluster=([\S]*)`)
 
-	// clusterNameRegex restricts cluster names to have between 6 and 20
-	// alphanumeric characters, with dashes allowed within the name (but not as a
-	// starting or ending character).
-	clusterNameRegex = regexp.MustCompile("^[a-z0-9][a-z0-9-]{4,18}[a-z0-9]$")
+	// clusterNameRegex restricts cluster names to have between 6 and 100
+	// alphanumeric characters, with dashes allowed within the name (but not as
+	// a starting or ending character).
+	//
+	// Note that the limit for cluster names within CockroachCloud is likely
+	// smaller than 100 characters. We don't perform an exact match here for
+	// more flexibility.
+	clusterNameRegex = regexp.MustCompile("^[a-z0-9][a-z0-9-]{4,98}[a-z0-9]$")
 )
 
 const (
