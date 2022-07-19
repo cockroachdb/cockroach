@@ -75,7 +75,7 @@ describe("StatementDetails page", () => {
       .last()
       .simulate("click");
 
-    expect(onTabChangeSpy).toHaveBeenCalledWith("execution-stats");
+    expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
   });
 
   describe("Diagnostics tab", () => {
