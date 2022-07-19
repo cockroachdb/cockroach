@@ -140,12 +140,12 @@ func init() {
 		buildProvidedOrdering: setOpBuildProvided,
 	}
 	funcMap[opt.IndexJoinOp] = funcs{
-		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
+		canProvideOrdering:    indexJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
 		buildProvidedOrdering: indexJoinBuildProvided,
 	}
 	funcMap[opt.LookupJoinOp] = funcs{
-		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
+		canProvideOrdering:    lookupJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
 		buildProvidedOrdering: lookupJoinBuildProvided,
 	}
