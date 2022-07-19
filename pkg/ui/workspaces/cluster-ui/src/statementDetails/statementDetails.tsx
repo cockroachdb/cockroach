@@ -83,7 +83,7 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
   RouteComponentProps<{ implicitTxn: string; statement: string }>;
 
 export interface StatementDetailsState {
-  sortSetting: SortSetting;
+  plansSortSetting: SortSetting;
   currentTab?: string;
 }
 
@@ -209,10 +209,9 @@ export class StatementDetails extends React.Component<
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
-      sortSetting: {
-        // Latency
+      plansSortSetting: {
         ascending: false,
-        columnTitle: "statementTime",
+        columnTitle: "lastExecTime",
       },
       currentTab: searchParams.get("tab") || "overview",
     };
@@ -344,6 +343,12 @@ export class StatementDetails extends React.Component<
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
+  };
+
+  onChangePlansSortSetting = (ss: SortSetting): void => {
+    this.setState({
+      plansSortSetting: ss,
+    });
   };
 
   render(): React.ReactElement {
@@ -738,7 +743,11 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
-          <PlanDetails plans={statement_statistics_per_plan_hash} />
+          <PlanDetails
+            plans={statement_statistics_per_plan_hash}
+            sortSetting={this.state.plansSortSetting}
+            onChangeSortSetting={this.onChangePlansSortSetting}
+          />
         </section>
       </>
     );
