@@ -226,6 +226,45 @@ func randBounds(evalCtx *eval.Context, colType *types.T, rng *rand.Rand, num int
 	return datums
 }
 
+// randQuantile makes a random quantile function with [2, 32] points. The first
+// point will have p=0 and the last will have p=1. There is some chance of
+// repeated p's and some chance of repeated v's. The quantile will always be
+// non-decreasing in p, but might be decreasing in v in places (malformed).
+func randQuantile(rng *rand.Rand) quantile {
+	// Use [2, 32] points.
+	numPoints := rng.Intn(31) + 2
+	// Use [2, numPoints] distinct p's. The rest will be repeated.
+	numPs := rng.Intn(numPoints-1) + 2
+	// Use [1, numPoints] distinct v's The rest will be repeated.
+	numVs := rng.Intn(numPoints) + 1
+	q := make(quantile, numPoints)
+	ps := make([]float64, numPs, numPoints)
+	vs := make([]float64, numVs, numPoints)
+	ps[0], ps[1] = 0, 1
+	for i := 2; i < len(ps); i++ {
+		ps[i] = rng.Float64()
+	}
+	for i := range vs {
+		vs[i] = rng.NormFloat64() * 1e4
+	}
+	// Now fill in the rest of the p's and v's with repeats.
+	for i := numPs; i < numPoints; i++ {
+		ps = append(ps, ps[rng.Intn(numPs)])
+	}
+	for i := numVs; i < numPoints; i++ {
+		vs = append(vs, vs[rng.Intn(numVs)])
+	}
+	sort.Float64s(ps)
+	// Give ourselves a (roughly) 50% chance of a malformed quantile.
+	if rng.Float64() < .5 {
+		sort.Float64s(vs)
+	}
+	for i := range q {
+		q[i] = quantilePoint{p: ps[i], v: vs[i]}
+	}
+	return q
+}
+
 // Test basic conversions from histogram to quantile.
 func TestMakeQuantile(t *testing.T) {
 	// We use all floats here. TestToQuantileValue and TestFromQuantileValue test
@@ -1109,6 +1148,268 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 			if res != tc.res {
 				t.Errorf("test case %d (%v) incorrect val %v expected %v", i, tc.typ.Name(), res, tc.res)
 				return
+			}
+		})
+	}
+}
+
+// TestQuantileOps tests basic operations on quantile functions.
+func TestQuantileOps(t *testing.T) {
+	var r = quantile{{0, 2}, {0.5, 3}, {1, 4}}
+	var s = quantile{{0, 11}, {0.125, 11}, {0.125, 13}, {0.25, 13}, {0.25, 15}, {1, 21}}
+	testCases := []struct {
+		q     quantile
+		addR  quantile
+		addS  quantile
+		subR  quantile
+		subS  quantile
+		mult  quantile
+		intSq float64
+		fixed quantile
+	}{
+		// The zero quantile.
+		{
+			q:     zeroQuantile,
+			addR:  r,
+			addS:  s,
+			subR:  r.mult(-1),
+			subS:  s.mult(-1),
+			intSq: 0,
+			fixed: zeroQuantile,
+		},
+		// Quantiles with only positive slope.
+		{
+			q:     quantile{{0, 100}, {1, 200}},
+			addR:  quantile{{0, 102}, {0.5, 153}, {1, 204}},
+			addS:  quantile{{0, 111}, {0.125, 123.5}, {0.125, 125.5}, {0.25, 138}, {0.25, 140}, {1, 221}},
+			subR:  quantile{{0, 98}, {0.5, 147}, {1, 196}},
+			subS:  quantile{{0, 89}, {0.125, 101.5}, {0.125, 99.5}, {0.25, 112}, {0.25, 110}, {1, 179}},
+			intSq: 23333.333333333332,
+			fixed: quantile{{0, 100}, {1, 200}},
+		},
+		{
+			q:     quantile{{0, 100}, {0.5, 200}, {1, 300}},
+			addR:  quantile{{0, 102}, {0.5, 203}, {1, 304}},
+			addS:  quantile{{0, 111}, {0.125, 136}, {0.125, 138}, {0.25, 163}, {0.25, 165}, {0.5, 217}, {1, 321}},
+			subR:  quantile{{0, 98}, {0.5, 197}, {1, 296}},
+			subS:  quantile{{0, 89}, {0.125, 114}, {0.125, 112}, {0.25, 137}, {0.25, 135}, {0.5, 183}, {1, 279}},
+			intSq: 43333.333333333336,
+			fixed: quantile{{0, 100}, {0.5, 200}, {1, 300}},
+		},
+		{
+			q:     quantile{{0, -100}, {0.5, -50}, {0.625, -40}, {0.75, -30}, {1, 60}},
+			addR:  quantile{{0, -98}, {0.5, -47}, {0.625, -36.75}, {0.75, -26.5}, {1, 64}},
+			addS:  quantile{{0, -89}, {0.125, -76.5}, {0.125, -74.5}, {0.25, -62}, {0.25, -60}, {0.5, -33}, {0.625, -22}, {0.75, -11}, {1, 81}},
+			subR:  quantile{{0, -102}, {0.5, -53}, {0.625, -43.25}, {0.75, -33.5}, {1, 56}},
+			subS:  quantile{{0, -111}, {0.125, -98.5}, {0.125, -100.5}, {0.25, -88}, {0.25, -90}, {0.5, -67}, {0.625, -58}, {0.75, -49}, {1, 39}},
+			intSq: 3549.9999999999995,
+			fixed: quantile{{0, -100}, {0.5, -50}, {0.625, -40}, {0.75, -30}, {1, 60}},
+		},
+		// Quantiles with vertical and horizontal pieces.
+		{
+			q:     quantile{{0, 50}, {0, 60}, {1, 60}},
+			addR:  quantile{{0, 52}, {0, 62}, {0.5, 63}, {1, 64}},
+			addS:  quantile{{0, 61}, {0, 71}, {0.125, 71}, {0.125, 73}, {0.25, 73}, {0.25, 75}, {1, 81}},
+			subR:  quantile{{0, 48}, {0, 58}, {0.5, 57}, {1, 56}},
+			subS:  quantile{{0, 39}, {0, 49}, {0.125, 49}, {0.125, 47}, {0.25, 47}, {0.25, 45}, {1, 39}},
+			intSq: 3600,
+			fixed: quantile{{0, 50}, {0, 60}, {1, 60}},
+		},
+		{
+			q:     quantile{{0, -800}, {1, -800}, {1, -700}},
+			addR:  quantile{{0, -798}, {0.5, -797}, {1, -796}, {1, -696}},
+			addS:  quantile{{0, -789}, {0.125, -789}, {0.125, -787}, {0.25, -787}, {0.25, -785}, {1, -779}, {1, -679}},
+			subR:  quantile{{0, -802}, {0.5, -803}, {1, -804}, {1, -704}},
+			subS:  quantile{{0, -811}, {0.125, -811}, {0.125, -813}, {0.25, -813}, {0.25, -815}, {1, -821}, {1, -721}},
+			intSq: 640000,
+			fixed: quantile{{0, -800}, {1, -800}, {1, -700}},
+		},
+		{
+			q:     quantile{{0, 0}, {0.125, 0}, {0.375, 100}, {0.5, 100}, {0.5, 200}, {0.625, 200}, {0.75, 300}, {0.875, 300}, {0.875, 400}, {0.875, 500}, {1, 600}},
+			addR:  quantile{{0, 2}, {0.125, 2.25}, {0.375, 102.75}, {0.5, 103}, {0.5, 203}, {0.625, 203.25}, {0.75, 303.5}, {0.875, 303.75}, {0.875, 403.75}, {0.875, 503.75}, {1, 604}},
+			addS:  quantile{{0, 11}, {0.125, 11}, {0.125, 13}, {0.25, 63}, {0.25, 65}, {0.375, 116}, {0.5, 117}, {0.5, 217}, {0.625, 218}, {0.75, 319}, {0.875, 320}, {0.875, 420}, {0.875, 520}, {1, 621}},
+			subR:  quantile{{0, -2}, {0.125, -2.25}, {0.375, 97.25}, {0.5, 97}, {0.5, 197}, {0.625, 196.75}, {0.75, 296.5}, {0.875, 296.25}, {0.875, 396.25}, {0.875, 496.25}, {1, 596}},
+			subS:  quantile{{0, -11}, {0.125, -11}, {0.125, -13}, {0.25, 37}, {0.25, 35}, {0.375, 84}, {0.5, 83}, {0.5, 183}, {0.625, 182}, {0.75, 281}, {0.875, 280}, {0.875, 380}, {0.875, 480}, {1, 579}},
+			intSq: 64166.66666666667,
+			fixed: quantile{{0, 0}, {0.125, 0}, {0.375, 100}, {0.5, 100}, {0.5, 200}, {0.625, 200}, {0.75, 300}, {0.875, 300}, {0.875, 400}, {0.875, 500}, {1, 600}},
+		},
+		// Quantiles with repeated points.
+		{
+			q:     quantile{{0, 20}, {0, 20}, {1, 30}, {1, 30}},
+			addR:  quantile{{0, 22}, {0, 22}, {0.5, 28}, {1, 34}, {1, 34}},
+			addS:  quantile{{0, 31}, {0, 31}, {0.125, 32.25}, {0.125, 34.25}, {0.25, 35.5}, {0.25, 37.5}, {1, 51}, {1, 51}},
+			subR:  quantile{{0, 18}, {0, 18}, {0.5, 22}, {1, 26}, {1, 26}},
+			subS:  quantile{{0, 9}, {0, 9}, {0.125, 10.25}, {0.125, 8.25}, {0.25, 9.5}, {0.25, 7.5}, {1, 9}, {1, 9}},
+			intSq: 633.3333333333334,
+			fixed: quantile{{0, 20}, {0, 20}, {1, 30}, {1, 30}},
+		},
+		{
+			q:     quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, 400}},
+			addR:  quantile{{0, 102}, {0, 202}, {0, 202}, {0.5, 303}, {0.5, 303}, {0.5, 403}, {1, 404}},
+			addS:  quantile{{0, 111}, {0, 211}, {0, 211}, {0.125, 236}, {0.125, 238}, {0.25, 263}, {0.25, 265}, {0.5, 317}, {0.5, 317}, {0.5, 417}, {1, 421}},
+			subR:  quantile{{0, 98}, {0, 198}, {0, 198}, {0.5, 297}, {0.5, 297}, {0.5, 397}, {1, 396}},
+			subS:  quantile{{0, 89}, {0, 189}, {0, 189}, {0.125, 214}, {0.125, 212}, {0.25, 237}, {0.25, 235}, {0.5, 283}, {0.5, 283}, {0.5, 383}, {1, 379}},
+			intSq: 111666.66666666667,
+			fixed: quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, 400}},
+		},
+		// Malformed quantiles that need to be fixed.
+		{
+			q:     quantile{{0, 1}, {1, 0}},
+			addR:  quantile{{0, 3}, {0.5, 3.5}, {1, 4}},
+			addS:  quantile{{0, 12}, {0.125, 11.875}, {0.125, 13.875}, {0.25, 13.75}, {0.25, 15.75}, {1, 21}},
+			subR:  quantile{{0, -1}, {0.5, -2.5}, {1, -4}},
+			subS:  quantile{{0, -10}, {0.125, -10.125}, {0.125, -12.125}, {0.25, -12.25}, {0.25, -14.25}, {1, -21}},
+			intSq: 0.3333333333333333,
+			fixed: quantile{{0, 0}, {1, 1}},
+		},
+		{
+			q:     quantile{{0, 0}, {0.25, 1}, {0.5, 0}, {0.75, -1}, {1, 0}},
+			addR:  quantile{{0, 2}, {0.25, 3.5}, {0.5, 3}, {0.75, 2.5}, {1, 4}},
+			addS:  quantile{{0, 11}, {0.125, 11.5}, {0.125, 13.5}, {0.25, 14}, {0.25, 16}, {0.5, 17}, {0.75, 18}, {1, 21}},
+			subR:  quantile{{0, -2}, {0.25, -1.5}, {0.5, -3}, {0.75, -4.5}, {1, -4}},
+			subS:  quantile{{0, -11}, {0.125, -10.5}, {0.125, -12.5}, {0.25, -12}, {0.25, -14}, {0.5, -17}, {0.75, -20}, {1, -21}},
+			intSq: 0.3333333333333333,
+			fixed: quantile{{0, -1}, {0.5, 0}, {1, 1}},
+		},
+		{
+			q:     quantile{{0, 1}, {0.25, 0}, {0.5, 0}, {0.5, -1}, {0.75, -1}, {0.75, 0}, {1, 1}},
+			addR:  quantile{{0, 3}, {0.25, 2.5}, {0.5, 3}, {0.5, 2}, {0.75, 2.5}, {0.75, 3.5}, {1, 5}},
+			addS:  quantile{{0, 12}, {0.125, 11.5}, {0.125, 13.5}, {0.25, 13}, {0.25, 15}, {0.5, 17}, {0.5, 16}, {0.75, 18}, {0.75, 19}, {1, 22}},
+			subR:  quantile{{0, -1}, {0.25, -2.5}, {0.5, -3}, {0.5, -4}, {0.75, -4.5}, {0.75, -3.5}, {1, -3}},
+			subS:  quantile{{0, -10}, {0.125, -10.5}, {0.125, -12.5}, {0.25, -13}, {0.25, -15}, {0.5, -17}, {0.5, -18}, {0.75, -20}, {0.75, -19}, {1, -20}},
+			intSq: 0.41666666666666663,
+			fixed: quantile{{0, -1}, {0.25, -1}, {0.25, 0}, {0.5, 0}, {1, 1}},
+		},
+		{
+			q:     quantile{{0, 100}, {0.125, 100}, {0.25, 200}, {0.375, 300}, {0.375, 200}, {0.5, 100}, {0.625, 100}, {0.75, 0}, {0.875, 0}, {0.875, 100}, {0.875, 400}, {1, 100}},
+			addR:  quantile{{0, 102}, {0.125, 102.25}, {0.25, 202.5}, {0.375, 302.75}, {0.375, 202.75}, {0.5, 103}, {0.625, 103.25}, {0.75, 3.5}, {0.875, 3.75}, {0.875, 103.75}, {0.875, 403.75}, {1, 104}},
+			addS:  quantile{{0, 111}, {0.125, 111}, {0.125, 113}, {0.25, 213}, {0.25, 215}, {0.375, 316}, {0.375, 216}, {0.5, 117}, {0.625, 118}, {0.75, 19}, {0.875, 20}, {0.875, 120}, {0.875, 420}, {1, 121}},
+			subR:  quantile{{0, 98}, {0.125, 97.75}, {0.25, 197.5}, {0.375, 297.25}, {0.375, 197.25}, {0.5, 97}, {0.625, 96.75}, {0.75, -3.5}, {0.875, -3.75}, {0.875, 96.25}, {0.875, 396.25}, {1, 96}},
+			subS:  quantile{{0, 89}, {0.125, 89}, {0.125, 87}, {0.25, 187}, {0.25, 185}, {0.375, 284}, {0.375, 184}, {0.5, 83}, {0.625, 82}, {0.75, -19}, {0.875, -20}, {0.875, 80}, {0.875, 380}, {1, 79}},
+			intSq: 25416.666666666664,
+			fixed: quantile{{0, 0}, {0.125, 0}, {0.25, 100}, {0.5, 100}, {0.7916666666666666, 200}, {0.9583333333333334, 300}, {1, 400}},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			addQ := tc.q.add(tc.q)
+			addR := tc.q.add(r)
+			if !reflect.DeepEqual(addR, tc.addR) {
+				t.Errorf("test case %d incorrect addR %v expected %v", i, addR, tc.addR)
+			}
+			addS := tc.q.add(s)
+			if !reflect.DeepEqual(addS, tc.addS) {
+				t.Errorf("test case %d incorrect addS %v expected %v", i, addS, tc.addS)
+			}
+			addZ := tc.q.add(zeroQuantile)
+			if !reflect.DeepEqual(addZ, tc.q) {
+				t.Errorf("test case %d incorrect addZ %v expected %v", i, addZ, tc.q)
+			}
+			subQ := tc.q.sub(tc.q)
+			subR := tc.q.sub(r)
+			if !reflect.DeepEqual(subR, tc.subR) {
+				t.Errorf("test case %d incorrect subR %v expected %v", i, subR, tc.subR)
+			}
+			subS := tc.q.sub(s)
+			if !reflect.DeepEqual(subS, tc.subS) {
+				t.Errorf("test case %d incorrect subS %v expected %v", i, subS, tc.subS)
+			}
+			subZ := tc.q.sub(zeroQuantile)
+			if !reflect.DeepEqual(subZ, tc.q) {
+				t.Errorf("test case %d incorrect subZ %v expected %v", i, subZ, tc.q)
+			}
+			zSub := zeroQuantile.sub(tc.q)
+			multNeg1 := tc.q.mult(-1)
+			if !reflect.DeepEqual(multNeg1, zSub) {
+				t.Errorf("test case %d incorrect multNeg1 %v expected %v", i, multNeg1, zSub)
+			}
+			mult0 := tc.q.mult(0)
+			if !reflect.DeepEqual(mult0, subQ) {
+				t.Errorf("test case %d incorrect mult0 %v expected %v", i, mult0, subQ)
+			}
+			mult1 := tc.q.mult(1)
+			if !reflect.DeepEqual(mult1, tc.q) {
+				t.Errorf("test case %d incorrect mult1 %v expected %v", i, mult1, tc.q)
+			}
+			mult2 := tc.q.mult(2)
+			if !reflect.DeepEqual(mult2, addQ) {
+				t.Errorf("test case %d incorrect mult2 %v expected %v", i, mult2, addQ)
+			}
+			intSq := tc.q.integrateSquared()
+			if intSq != tc.intSq {
+				t.Errorf("test case %d incorrect intSq %v expected %v", i, intSq, tc.intSq)
+			}
+			intSqNeg := multNeg1.integrateSquared()
+			if intSqNeg != intSq {
+				t.Errorf("test case %d incorrect intSqNeg %v expected %v", i, intSqNeg, intSq)
+			}
+			intSqMult0 := mult0.integrateSquared()
+			if intSqMult0 != 0 {
+				t.Errorf("test case %d incorrect intSqMult0 %v expected 0", i, intSqMult0)
+			}
+			fixed := tc.q.fixMalformed()
+			if !reflect.DeepEqual(fixed, tc.fixed) {
+				t.Errorf("test case %d incorrect fixed %v expected %v", i, fixed, tc.fixed)
+			}
+			intSqFixed := fixed.integrateSquared()
+			// This seems like it should run into floating point errors, but it hasn't
+			// yet, so yay?
+			if intSqFixed != intSq {
+				t.Errorf("test case %d incorrect intSqFixed %v expected %v", i, intSqFixed, intSq)
+			}
+		})
+	}
+}
+
+// TestQuantileOpsRandom tests basic operations on random quantile functions.
+func TestQuantileOpsRandom(t *testing.T) {
+	const delta = 1e-3
+	rng, seed := randutil.NewTestRand()
+	for i := 0; i < 5; i++ {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			q := randQuantile(rng)
+			addQ := q.add(q)
+			addZ := q.add(zeroQuantile)
+			if !reflect.DeepEqual(addZ, q) {
+				t.Errorf("seed %v quantile %v incorrect addZ %v expected %v", seed, q, addZ, q)
+			}
+			subQ := q.sub(q)
+			subZ := q.sub(zeroQuantile)
+			if !reflect.DeepEqual(subZ, q) {
+				t.Errorf("seed %v quantile %v incorrect subZ %v expected %v", seed, q, subZ, q)
+			}
+			zSub := zeroQuantile.sub(q)
+			multNeg1 := q.mult(-1)
+			if !reflect.DeepEqual(multNeg1, zSub) {
+				t.Errorf("seed %v quantile %v incorrect multNeg1 %v expected %v", seed, q, multNeg1, zSub)
+			}
+			mult0 := q.mult(0)
+			if !reflect.DeepEqual(mult0, subQ) {
+				t.Errorf("seed %v quantile %v incorrect mult0 %v expected %v", seed, q, mult0, subQ)
+			}
+			mult1 := q.mult(1)
+			if !reflect.DeepEqual(mult1, q) {
+				t.Errorf("seed %v quantile %v incorrect mult1 %v expected %v", seed, q, mult1, q)
+			}
+			mult2 := q.mult(2)
+			if !reflect.DeepEqual(mult2, addQ) {
+				t.Errorf("seed %v quantile %v incorrect mult2 %v expected %v", seed, q, mult2, addQ)
+			}
+			intSq := q.integrateSquared()
+			intSqNeg := multNeg1.integrateSquared()
+			if intSqNeg != intSq {
+				t.Errorf("seed %v quantile %v incorrect intSqNeg %v expected %v", seed, q, intSqNeg, intSq)
+			}
+			intSqMult0 := mult0.integrateSquared()
+			if intSqMult0 != 0 {
+				t.Errorf("seed %v quantile %v incorrect intSqMult0 %v expected 0", seed, q, intSqMult0)
+			}
+			fixed := q.fixMalformed()
+			intSqFixed := fixed.integrateSquared()
+			// This seems like it should run into floating point errors, but it hasn't
+			// yet, so yay?
+			if math.Abs(intSqFixed-intSq) > delta {
+				t.Errorf("seed %v quantile %v incorrect intSqFixed %v expected %v", seed, q, intSqFixed, intSq)
 			}
 		})
 	}
