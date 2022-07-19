@@ -256,7 +256,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		cfg.PrometheusNode,
 		yamlCfg,
 		"/tmp/prometheus/prometheus.yml",
-		0644,
+		0777,
 	); err != nil {
 		return nil, err
 	}
@@ -294,7 +294,8 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 		if err := c.RepeatRun(ctx, l,
 			os.Stdout,
 			os.Stderr, cfg.PrometheusNode, "permissions",
-			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
+			`sudo chmod 777 /etc/grafana/provisioning/dashboards/cockroach.yaml /etc/grafana/provisioning/datasources/prometheus.yaml 
+/etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
 		); err != nil {
 			return nil, err
 		}
@@ -307,7 +308,7 @@ datasources:
     type: prometheus
     uid: localprom
     url: http://localhost:9090
-`, "/etc/grafana/provisioning/datasources/prometheus.yaml", 0644); err != nil {
+`, "/etc/grafana/provisioning/datasources/prometheus.yaml", 0777); err != nil {
 			return nil, err
 		}
 
@@ -321,7 +322,7 @@ providers:
    type: file
    options:
      path: /var/lib/grafana/dashboards
-`, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0644); err != nil {
+`, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0777); err != nil {
 			return nil, err
 		}
 		for idx, u := range cfg.Grafana.DashboardURLs {
