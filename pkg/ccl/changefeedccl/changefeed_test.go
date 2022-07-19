@@ -3238,6 +3238,41 @@ func TestChangefeedRetryableError(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+
+		knobs := f.(*kafkaFeedFactory).knobs
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		t.Run(`succeed eventually if batches are rejected by the server for being too large`, func(t *testing.T) {
+			knobs.batchesAreTooBig = true
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				`foo: [1]->{"after": {"a": 1}}`,
+				`foo: [2]->{"after": {"a": 2}}`,
+			})
+		})
+
+		t.Run(`fail permanently if individual messages are rejected by the server for being too large`, func(t *testing.T) {
+			knobs.allMessagesAreTooBig = true
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, foo)
+			requireErrorSoon(context.Background(), t, foo, regexp.MustCompile(`too large`))
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+}
+
 func TestChangefeedJobRetryOnNoInboundStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

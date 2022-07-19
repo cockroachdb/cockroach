@@ -85,6 +85,7 @@ type kafkaSink struct {
 	client         kafkaClient
 	producer       sarama.AsyncProducer
 	topics         *TopicNamer
+	asapSink       *kafkaSink
 
 	lastMetadataRefresh time.Time
 
@@ -167,6 +168,18 @@ func defaultSaramaConfig() *saramaConfig {
 	return config
 }
 
+// disableBatching copies a saramaConfig and overwrites
+// its flush config to completely disable batching,
+// including the batching the client usually does by default.
+func disableBatching(c *saramaConfig) *saramaConfig {
+	newConfig := *c
+	newConfig.Flush.Messages = 0
+	newConfig.Flush.MaxMessages = 1
+	newConfig.Flush.Frequency = jsonDuration(0)
+	newConfig.Flush.Bytes = 0
+	return &newConfig
+}
+
 func (s *kafkaSink) start() {
 	s.stopWorkerCh = make(chan struct{})
 	s.worker.Add(1)
@@ -174,7 +187,12 @@ func (s *kafkaSink) start() {
 }
 
 // Dial implements the Sink interface.
-func (s *kafkaSink) Dial() error {
+func (s *kafkaSink) Dial() (err error) {
+	if s.asapSink != nil {
+		defer func() {
+			err = errors.CombineErrors(err, s.asapSink.Dial())
+		}()
+	}
 	client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), s.kafkaCfg)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
@@ -187,11 +205,17 @@ func (s *kafkaSink) Dial() error {
 	}
 	s.client = client
 	s.start()
-	return nil
+	return
 }
 
 // Close implements the Sink interface.
-func (s *kafkaSink) Close() error {
+func (s *kafkaSink) Close() (err error) {
+	if s.asapSink != nil {
+		asapError := s.asapSink.Close()
+		defer func() {
+			err = errors.CombineErrors(err, asapError)
+		}()
+	}
 	close(s.stopWorkerCh)
 	s.worker.Wait()
 	// If we're shutting down, we don't care what happens to the outstanding
@@ -199,9 +223,9 @@ func (s *kafkaSink) Close() error {
 	_ = s.producer.Close()
 	// s.client is only nil in tests.
 	if s.client != nil {
-		return s.client.Close()
+		err = s.client.Close()
 	}
-	return nil
+	return err
 }
 
 type messageMetadata struct {
@@ -218,6 +242,9 @@ func (s *kafkaSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
+	if s.asapSink != nil {
+		return s.asapSink.EmitRow(ctx, topicDescr, key, value, updated, mvcc, alloc)
+	}
 
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
@@ -231,13 +258,21 @@ func (s *kafkaSink) EmitRow(
 		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
-	return s.emitMessage(ctx, msg)
+	return s.maybeMarkFatal(s.emitMessage(ctx, msg))
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *kafkaSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	// TODO: This effectively turns off batching permanently for emitting resolved timestamps,
+	// as a sink that emits resolved timestamps never flushes emitted rows, which is what
+	// triggers the state change that enables batching.
+	// Tentatively, this seems like sensible behavior--if you're batching resolved timestamps,
+	// why not just send them less often? But we should discuss this.
+	if s.asapSink != nil {
+		return s.asapSink.EmitResolvedTimestamp(ctx, encoder, resolved)
+	}
 	defer s.metrics.recordResolvedCallback()()
 
 	// Periodically ping sarama to refresh its metadata. This means talking to
@@ -255,7 +290,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		s.lastMetadataRefresh = timeutil.Now()
 	}
 
-	return s.topics.Each(func(topic string) error {
+	return s.maybeMarkFatal(s.topics.Each(func(topic string) error {
 		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
@@ -282,11 +317,23 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 			}
 		}
 		return nil
-	})
+	}))
 }
 
 // Flush implements the Sink interface.
-func (s *kafkaSink) Flush(ctx context.Context) error {
+func (s *kafkaSink) Flush(ctx context.Context) (e error) {
+	if s.asapSink != nil {
+		err := s.asapSink.Flush(ctx)
+		if err == nil {
+			// After the first successful flush,
+			// permanently switch to the primary sink.
+			_ = s.asapSink.Close()
+			s.asapSink = nil
+		}
+		return err
+	}
+	defer func() { e = s.maybeMarkFatal(e) }()
+
 	defer s.metrics.recordFlushRequestCallback()()
 
 	flushCh := make(chan struct{}, 1)
@@ -295,6 +342,9 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	inflight := s.mu.inflight
 	flushErr := s.mu.flushErr
 	s.mu.flushErr = nil
+	defer func() {
+
+	}()
 	immediateFlush := inflight == 0 || flushErr != nil
 	if !immediateFlush {
 		s.mu.flushCh = flushCh
@@ -333,12 +383,12 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
 	if err := s.startInflightMessage(ctx); err != nil {
-		return err
+		return s.maybeMarkFatal(err)
 	}
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return s.maybeMarkFatal(ctx.Err())
 	case s.producer.Input() <- msg:
 	}
 
@@ -653,12 +703,14 @@ func makeKafkaSink(
 	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
-
-	config, err := buildKafkaConfig(u, jsonStr)
+	baseSaramaCfg, err := getSaramaConfig(jsonStr)
 	if err != nil {
 		return nil, err
 	}
-
+	baseCfg, err := buildKafkaConfig(u, ``)
+	if err != nil {
+		return nil, err
+	}
 	topics, err := MakeTopicNamer(
 		targets,
 		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
@@ -667,20 +719,72 @@ func makeKafkaSink(
 		return nil, err
 	}
 
-	sink := &kafkaSink{
-		ctx:            ctx,
-		kafkaCfg:       config,
-		bootstrapAddrs: u.Host,
-		metrics:        mb(requiresResourceAccounting),
-		topics:         topics,
-	}
-
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	return sink, nil
+	metrics := mb(requiresResourceAccounting)
+
+	makeSink := func(c *saramaConfig) (*kafkaSink, error) {
+		config := *baseCfg
+		err = c.Apply(&config)
+		return &kafkaSink{
+			ctx:            ctx,
+			kafkaCfg:       &config,
+			bootstrapAddrs: u.Host,
+			metrics:        metrics,
+			topics:         topics,
+		}, err
+	}
+
+	primarySink, err := makeSink(baseSaramaCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if primarySink.kafkaCfg.Producer.Flush.MaxMessages != 1 {
+		// Start with a sink that never batches. This allows us to
+		// fail or see success fast, and lets us make progress if
+		// some messages are too large to be part of a batch, as
+		// during a job retry we will eventually send them alone.
+		// After a successful flush we'll switch to the primary sink.
+		asapSink, err := makeSink(disableBatching(baseSaramaCfg))
+		if err != nil {
+			return nil, err
+		}
+		primarySink.asapSink = asapSink
+	}
+
+	return primarySink, nil
+}
+
+func (s *kafkaSink) maybeMarkFatal(err error) error {
+	if err == nil {
+		return nil
+	}
+	var kError sarama.KError
+	if errors.As(err, &kError) {
+		switch kError {
+		// TODO: Handle more errors here. Not everything
+		// in https://kafka.apache.org/protocol#protocol_error_codes marked
+		// non-retriable should be considered non-retriable in our case,
+		// as tearing down the feed and restarting it may fix some client issues.
+		// Theoretically.
+		case sarama.ErrMessageSizeTooLarge:
+			// If batching is enabled, a changefeed-level retry
+			// may succeed because it will disable batching for
+			// when it retries the last few events.
+			if s.batchingDisabled() {
+				return fatalSinkError{err}
+			}
+		}
+	}
+	return err
+}
+
+func (s *kafkaSink) batchingDisabled() bool {
+	return s.kafkaCfg.Producer.Flush.MaxMessages == 1
 }
 
 type kafkaStats struct {
