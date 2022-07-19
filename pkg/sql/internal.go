@@ -738,28 +738,64 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	return o
 }
 
-// SetExtraTxnState sets the descriptor collections, schema change job records
-// and job collection for the internal executor before running the SQL
-// statement.
+// SetExtraTxnState sets the descriptor collections and schema change job
+// records before running the SQL statement with internal executor.
+// It looks at the information passed via extraTxnStateArgs, and let the
+// internal executor inherit them. If certain field (such as descriptor
+// collection) is not set in extraTxnStateArgs, a new
+// one will be created and will be only used within the scope of the internal
+// executor.
+// This function should only be used when the internal executor is used
+// with a not nil txn.
 func (ie *InternalExecutor) SetExtraTxnState(
-	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData, run func() error,
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	extraTxnStateArgs *sqlutil.ExtraTxnStateArgs,
+	run func() error,
 ) error {
-	sds := sessiondata.NewStack(sessionData)
-	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
-	descsCollection := ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
-	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
+	var descsCollection *descs.Collection
+	var schemaChangeJobRecords map[descpb.ID]*jobs.Record
+	var jobCollections jobsCollection
+
+	if extraTxnStateArgs != nil {
+		if extraTxnStateArgs.DescCollection != nil {
+			descsCollection = extraTxnStateArgs.DescCollection.(*descs.Collection)
+		} else {
+			sds := sessiondata.NewStack(sessionData)
+			sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+			descsCollection = ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
+			defer func() {
+				descsCollection.ReleaseAll(ctx)
+			}()
+		}
+
+		if extraTxnStateArgs.SchemaChangeJobRecords != nil {
+			// Convert SchemaChangeJobRecords passed by the caller to the desired
+			// type.
+			schemaChangeJobRecords = interface{}(extraTxnStateArgs.SchemaChangeJobRecords).(map[descpb.ID]*jobs.Record)
+		} else {
+			schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
+			defer func() {
+				descsCollection.ReleaseAll(ctx)
+				for k := range schemaChangeJobRecords {
+					delete(schemaChangeJobRecords, k)
+				}
+			}()
+		}
+
+		if extraTxnStateArgs.Jobs != nil {
+			jobCollections = extraTxnStateArgs.Jobs.(jobsCollection)
+		}
+	}
+
 	ie.extraTxnState = &extraTxnState{
 		txn:                    txn,
 		descCollection:         descsCollection,
 		schemaChangeJobRecords: schemaChangeJobRecords,
+		jobs:                   &jobCollections,
 	}
 
-	defer func() {
-		descsCollection.ReleaseAll(ctx)
-		for k := range schemaChangeJobRecords {
-			delete(schemaChangeJobRecords, k)
-		}
-	}()
 	return run()
 }
 

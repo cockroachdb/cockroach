@@ -753,23 +753,35 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
+
+				extraTxnState := sqlutil.ExtraTxnStateArgs{
+					DescCollection:         collection,
+					SchemaChangeJobRecords: evalCtx.SchemaChangeJobRecords,
+					Jobs:                   evalCtx.Jobs,
+				}
 				if c.IsCheck() {
 					if err := sc.validateCheckInTxn(
-						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx,
+						&semaCtx,
+						evalCtx.SessionData(),
+						desc,
+						&extraTxnState,
+						txn,
+						c.Check().Expr,
 					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := sc.validateFkInTxn(ctx, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
+					if err := sc.validateFkInTxn(ctx, evalCtx.SessionData(), desc, txn, &extraTxnState, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := sc.validateUniqueWithoutIndexConstraintInTxn(ctx, evalCtx.SessionData(), desc, txn, evalCtx.SessionData().User(), c.GetName()); err != nil {
+					if err := sc.validateUniqueWithoutIndexConstraintInTxn(ctx, evalCtx.SessionData(), desc, &extraTxnState, txn, evalCtx.SessionData().User(), c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := sc.validateCheckInTxn(
-						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, evalCtx.SessionData(), desc, &extraTxnState, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2492,6 +2504,7 @@ func (sc *SchemaChanger) validateCheckInTxn(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
+	extraTxnState *sqlutil.ExtraTxnStateArgs,
 	txn *kv.Txn,
 	checkExpr string,
 ) error {
@@ -2499,15 +2512,20 @@ func (sc *SchemaChanger) validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	return sc.ieFactory.WithTxn(ctx, txn, sessionData, func(
-		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
-	) error {
-		return ie.WithSyntheticDescriptors(
-			syntheticDescs,
-			func() error {
-				return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
-			})
-	})
+	return sc.ieFactory.WithTxn(
+		ctx,
+		txn,
+		sessionData,
+		extraTxnState,
+		func(
+			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		) error {
+			return ie.WithSyntheticDescriptors(
+				syntheticDescs,
+				func() error {
+					return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
+				})
+		})
 }
 
 func getTargetTablesAndFk(
@@ -2566,23 +2584,32 @@ func (sc *SchemaChanger) validateFkInTxn(
 	sd *sessiondata.SessionData,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,
-	descsCol *descs.Collection,
+	extraTxnState *sqlutil.ExtraTxnStateArgs,
 	fkName string,
 ) error {
+	descsCol, ok := extraTxnState.DescCollection.(*descs.Collection)
+	if !ok {
+		return errors.New("wrong descriptor collection type")
+	}
 	syntheticDescs, fk, targetTable, err := getTargetTablesAndFk(ctx, srcTable, txn, descsCol, fkName)
 	if err != nil {
 		return err
 	}
 
-	return sc.ieFactory.WithTxn(ctx, txn, sd, func(
-		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
-	) error {
-		return ie.WithSyntheticDescriptors(
-			syntheticDescs,
-			func() error {
-				return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
-			})
-	})
+	return sc.ieFactory.WithTxn(
+		ctx,
+		txn,
+		sd,
+		extraTxnState,
+		func(
+			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		) error {
+			return ie.WithSyntheticDescriptors(
+				syntheticDescs,
+				func() error {
+					return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
+				})
+		})
 }
 
 // validateUniqueWithoutIndexConstraintInTxn validates a unique constraint
@@ -2601,6 +2628,7 @@ func (sc *SchemaChanger) validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
+	extraTxnState *sqlutil.ExtraTxnStateArgs,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	constraintName string,
@@ -2621,25 +2649,30 @@ func (sc *SchemaChanger) validateUniqueWithoutIndexConstraintInTxn(
 		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
 	}
 
-	return sc.ieFactory.WithTxn(ctx, txn, sd, func(
-		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
-	) error {
-		return ie.WithSyntheticDescriptors(
-			syntheticDescs,
-			func() error {
-				return validateUniqueConstraint(
-					ctx,
-					tableDesc,
-					uc.Name,
-					uc.ColumnIDs,
-					uc.Predicate,
-					ie,
-					txn,
-					user,
-					false, /* preExisting */
-				)
-			})
-	})
+	return sc.ieFactory.WithTxn(
+		ctx,
+		txn,
+		sd,
+		extraTxnState,
+		func(
+			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		) error {
+			return ie.WithSyntheticDescriptors(
+				syntheticDescs,
+				func() error {
+					return validateUniqueConstraint(
+						ctx,
+						tableDesc,
+						uc.Name,
+						uc.ColumnIDs,
+						uc.Predicate,
+						ie,
+						txn,
+						user,
+						false, /* preExisting */
+					)
+				})
+		})
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in

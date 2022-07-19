@@ -170,13 +170,13 @@ type InternalExecutor interface {
 		descs []catalog.Descriptor, run func() error,
 	) error
 
-	// SetExtraTxnState sets the descriptor collections, schema change job records
-	// and job collection for the internal executor before running the SQL
-	// statement.
+	// SetExtraTxnState sets the descriptor collections and schema change job
+	// records before running the SQL statement with internal executor.
 	SetExtraTxnState(
 		ctx context.Context,
 		txn *kv.Txn,
 		sessionData *sessiondata.SessionData,
+		extraTxnStateArgs *ExtraTxnStateArgs,
 		run func() error,
 	) error
 }
@@ -231,6 +231,7 @@ func (f InternalExecutorFactory) WithTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
+	extraTxnStateArgs *ExtraTxnStateArgs,
 	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
 ) error {
 	ie := f(ctx, sessionData)
@@ -238,6 +239,7 @@ func (f InternalExecutorFactory) WithTxn(
 		ctx,
 		txn,
 		sessionData,
+		extraTxnStateArgs,
 		func() error { return run(ctx, txn, ie) })
 }
 
@@ -259,3 +261,40 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// TODO(janexing):We declared the following interfaces for descs.Collection,
+// jobs.Collection and map[descpb.ID]*jobs.Record only to avoid cyclic
+// dependency. We're never going to use the methods declared here.
+// It may be confusing to the user of internal executor though.
+// Any better solutions?
+
+// descsCollection is an interface for descs.Collection. It is created to
+// avoid cyclic dependency.
+type descsCollection interface {
+	MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error)
+	ResetMaxTimestampBound()
+	SkipValidationOnWrite()
+	ReleaseLeases(ctx context.Context)
+	ReleaseAll(ctx context.Context)
+	ResetSyntheticDescriptors()
+	HasUncommittedTables() bool
+	HasUncommittedTypes() bool
+}
+
+// jobsCollection is an interface for jobs.Collection. It is created to
+// avoid cyclic dependency.
+type jobsCollection interface {
+}
+
+// schemaChangeJobRecords is an interface for map[descpb.ID]*jobs.Record.
+// It is created to avoid cyclic dependency.
+type schemaChangeJobRecords interface {
+}
+
+// ExtraTxnStateArgs is to pass txn related information from the caller of
+// internal executor to the children conn executors.
+type ExtraTxnStateArgs struct {
+	DescCollection         descsCollection
+	Jobs                   jobsCollection
+	SchemaChangeJobRecords schemaChangeJobRecords
+}
