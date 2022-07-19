@@ -1430,7 +1430,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		{
 			name: "invalid cluster identifier in database param",
 			params: map[string]string{
-				// Cluster names need to be between 6 to 20 alphanumeric characters.
+				// Cluster names need to be between 6 to 100 alphanumeric characters.
 				"database": "short-0.defaultdb",
 			},
 			expectedError: "invalid cluster identifier 'short-0'",
@@ -1439,11 +1439,18 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		{
 			name: "invalid cluster identifier in options param",
 			params: map[string]string{
-				// Cluster names need to be between 6 to 20 alphanumeric characters.
-				"options": "--cluster=cockroachlabsdotcomfoobarbaz-0",
+				// Cluster names need to be between 6 to 100 alphanumeric characters.
+				"options": fmt.Sprintf("--cluster=%s-0", strings.Repeat("a", 101)),
 			},
-			expectedError: "invalid cluster identifier 'cockroachlabsdotcomfoobarbaz-0'",
-			expectedHint:  "Is 'cockroachlabsdotcomfoobarbaz' a valid cluster name?\n--\n" + clusterNameFormHint,
+			expectedError: fmt.Sprintf(
+				"invalid cluster identifier '%s-0'",
+				strings.Repeat("a", 101),
+			),
+			expectedHint: fmt.Sprintf(
+				"Is '%s' a valid cluster name?\n--\n%s",
+				strings.Repeat("a", 101),
+				clusterNameFormHint,
+			),
 		},
 		{
 			name:          "invalid database param (1)",
@@ -1524,10 +1531,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		{
 			name: "cluster identifier in database param",
 			params: map[string]string{
-				"database": "happy-koala-7.defaultdb",
+				"database": fmt.Sprintf("%s-7.defaultdb", strings.Repeat("a", 100)),
 				"foo":      "bar",
 			},
-			expectedClusterName: "happy-koala",
+			expectedClusterName: strings.Repeat("a", 100),
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
 		},
