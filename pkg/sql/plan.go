@@ -304,7 +304,7 @@ type planTop struct {
 	// mem/catalog retains the memo and catalog that were used to create the
 	// plan. Only set if needed by instrumentation (see ShouldSaveMemo).
 	mem     *memo.Memo
-	catalog *optCatalog
+	catalog optPlanningCatalog
 
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
