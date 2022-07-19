@@ -12,6 +12,7 @@ package stats
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -40,11 +41,13 @@ import (
 //   p=1. We use this when performing linear regression over quantiles.
 //
 // Type quantile represents a piecewise quantile function with float64 values as
-// a series of quantilePoints from p=0 (exclusive) to p=1 (inclusive). A
-// well-formed quantile is non-decreasing in both p and v. A quantile must have
-// at least two points. The first point must have p=0, and the last point must
-// have p=1. The pieces of the quantile function are line segments between
-// subsequent points (exclusive and inclusive, respectively).
+// a series of quantilePoints. The pieces of the quantile function are line
+// segments between subsequent points (exclusive and inclusive, respectively).
+// A quantile must have at least two points. The first point must have p=0, and
+// the last point must have p=1. All points must be non-decreasing in p. A
+// "well-formed" quantile is also non-decreasing in v. A "malformed" quantile
+// has decreasing v in one or more pieces. A malformed quantile can be turned
+// into a well-formed quantile by calling fixMalformed().
 //
 // Subsequent points may have the same p (a vertical line, or discontinuity),
 // meaning the probability of finding a value > v₁ and <= v₂ is zero. Subsequent
@@ -477,4 +480,323 @@ func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 	default:
 		return nil, errors.Errorf("cannot convert quantile value to type %s", colType.Name())
 	}
+}
+
+// quantilePiece finds the slope (m) and intercept (b) of the line segment
+// between two points, defined by the equation: v = mp + b. This must not be
+// called on a discontinuity (vertical line where p₁ = p₂).
+func quantilePiece(c, d quantilePoint) (m, b float64) {
+	m = (d.v - c.v) / (d.p - c.p)
+	b = c.v - m*c.p
+	return
+}
+
+// add creates a new quantile function which represents the sum of q and r. The
+// new quantile function will usually have more points than either q or r,
+// depending on how their points align. The new quantile function might be
+// malformed if either q or r were malformed.
+func (q quantile) add(r quantile) quantile {
+	sum := make(quantile, 0, len(q)+len(r))
+	sum = append(sum, quantilePoint{p: 0, v: q[0].v + r[0].v})
+
+	// Walk both quantile functions in p order, creating a point in the sum for
+	// each distinct p.
+	var i, j quantileIndex
+	for i, j = 1, 1; i < len(q) && j < len(r); {
+		if q[i].p < r[j].p {
+			// Find the value of r within the line segment at q[i].p.
+			m, b := quantilePiece(r[j-1], r[j])
+			rv := m*q[i].p + b
+			sum = append(sum, quantilePoint{p: q[i].p, v: q[i].v + rv})
+			i++
+		} else if r[j].p < q[i].p {
+			// Find the value of q within the line segment at r[j].p.
+			m, b := quantilePiece(q[i-1], q[i])
+			qv := m*r[j].p + b
+			sum = append(sum, quantilePoint{p: r[j].p, v: qv + r[j].v})
+			j++
+		} else {
+			sum = append(sum, quantilePoint{p: q[i].p, v: q[i].v + r[j].v})
+			i++
+			j++
+		}
+	}
+
+	// Handle any trailing p=1 points.
+	for ; i < len(q); i++ {
+		sum = append(sum, quantilePoint{p: q[i].p, v: q[i].v + r[j-1].v})
+	}
+	for ; j < len(r); j++ {
+		sum = append(sum, quantilePoint{p: r[j].p, v: q[i-1].v + r[j].v})
+	}
+
+	return sum
+}
+
+// sub creates a new quantile function which represents q minus r. The new
+// quantile function will usually have more points than either q or r, depending
+// on how their points align. The new quantile function might be malformed, even
+// if both q and r were well-formed.
+func (q quantile) sub(r quantile) quantile {
+	diff := make(quantile, 0, len(q)+len(r))
+	diff = append(diff, quantilePoint{p: 0, v: q[0].v - r[0].v})
+
+	// Walk both quantile functions in p order, creating a point in the diff for
+	// each distinct p.
+	var i, j quantileIndex
+	for i, j = 1, 1; i < len(q) && j < len(r); {
+		if q[i].p < r[j].p {
+			// Find the value of r within the line segment at q[i].p.
+			m, b := quantilePiece(r[j-1], r[j])
+			rv := m*q[i].p + b
+			diff = append(diff, quantilePoint{p: q[i].p, v: q[i].v - rv})
+			i++
+		} else if r[j].p < q[i].p {
+			// Find the value of q within the line segment at r[j].p.
+			m, b := quantilePiece(q[i-1], q[i])
+			qv := m*r[j].p + b
+			diff = append(diff, quantilePoint{p: r[j].p, v: qv - r[j].v})
+			j++
+		} else {
+			diff = append(diff, quantilePoint{p: q[i].p, v: q[i].v - r[j].v})
+			i++
+			j++
+		}
+	}
+
+	// Handle any trailing p=1 points.
+	for ; i < len(q); i++ {
+		diff = append(diff, quantilePoint{p: q[i].p, v: q[i].v - r[j-1].v})
+	}
+	for ; j < len(r); j++ {
+		diff = append(diff, quantilePoint{p: r[j].p, v: q[i-1].v - r[j].v})
+	}
+
+	return diff
+}
+
+// mult creates a new quantile function which represents q multiplied by a
+// scalar c. The new quantile function could be malformed if c is negative or
+// q is malformed.
+func (q quantile) mult(c float64) quantile {
+	prod := make(quantile, len(q))
+	for i := range q {
+		prod[i] = quantilePoint{p: q[i].p, v: q[i].v * c}
+	}
+	return prod
+}
+
+// integrateSquared calculates the definite integral w.r.t. p of the quantile
+// function squared.
+func (q quantile) integrateSquared() float64 {
+	var area float64
+	for i := 1; i < len(q); i++ {
+		if q[i].p == q[i-1].p {
+			// Skip over the discontinuity.
+			continue
+		}
+		// Each continuous piece of the quantile function is a line segment
+		// described by:
+		//
+		//   v = mp + b
+		//
+		// We're trying to integrate the square of this from p₁ to p₂:
+		//
+		//   p₂
+		//    ∫ (mp + b)² dp
+		//   p₁
+		//
+		// which is equivalent to solving this at both p₁ and p₂:
+		//
+		//    1            |p₂
+		//   --- (mp + b)³ |
+		//   3m            |p₁
+		//
+		// For some pieces, m will be 0. In that case we're solving:
+		//
+		//   p₂
+		//    ∫ b² dp
+		//   p₁
+		//
+		// which is equivalent to solving this at both p₁ and p₂:
+		//
+		//       |p₂
+		//   b²p |
+		//       |p₁
+		//
+		m, b := quantilePiece(q[i-1], q[i])
+		if m == 0 {
+			a2 := math.Pow(b, 2) * q[i].p
+			a1 := math.Pow(b, 2) * q[i-1].p
+			area += a2 - a1
+		} else {
+			a2 := math.Pow(m*q[i].p+b, 3) / 3 / m
+			a1 := math.Pow(m*q[i-1].p+b, 3) / 3 / m
+			area += a2 - a1
+		}
+	}
+	return area
+}
+
+// fixMalformed transforms a malformed quantile function into a well-formed
+// quantile function.
+//
+// A malformed quantile function has pieces with negative slope (i.e. subsequent
+// points with decreasing v). These pieces represent the quantile function
+// "folding backward" over parts of the distribution it has already described. A
+// well-formed quantile function has zero or positive slope everywhere (i.e. is
+// nondecreasing in v).
+//
+// This function fixes the negative slope pieces by "moving" p from the
+// overlapping places to where it should be. No p is lost in the making of these
+// calculations.
+func (q quantile) fixMalformed() quantile {
+	// To fix a malformed quantile function, we recalculate p for each distinct
+	// value by summing the total p wherever v <= that value. We do this by
+	// drawing a horizontal line across the malformed quantile function at
+	// v = that value, finding all of the intersections, and adding the distances
+	// between intersections.
+	//
+	// (This resembles the even-odd algorithm used to solve the point-in-polygon
+	// problem, see https://en.wikipedia.org/wiki/Even%E2%80%93odd_rule for more
+	// information.)
+	//
+	// For example, for this malformed quantile function:
+	//
+	//   {{0, 100}, {0.25, 200}, {0.5, 100}, {0.75, 0}, {1, 100}}
+	//
+	// to recalculate p for value = 100, we add together the length of these
+	// intervals between intersections (the first interval has a length of zero).
+	//
+	// Intervals with v <= 100:           +       +-------+
+	//
+	// Malformed quantile function:   200 |   *
+	//                                    | /   \
+	//                                100 o       *       *
+	//                                    |         \   /
+	//                                  0 + - - - - - * - -
+	//                                    0  .25 .5  .75  1
+	//
+	// After recalculating p for each distinct value, the well-formed quantile
+	// function is:
+	//
+	//   {{0, 0}, {0.5, 100}, {1, 200}}
+	//
+	// Which notably has the same (distinct) values and the same definite integral
+	// as the original malformed quantile function.
+
+	fixed := make(quantile, 0, len(q))
+
+	// We'll visit points in (v, p) order.
+	pointsByValue := make([]quantileIndex, len(q))
+	for i := range pointsByValue {
+		pointsByValue[i] = i
+	}
+	sort.SliceStable(pointsByValue, func(i, j int) bool {
+		return q[pointsByValue[i]].v < q[pointsByValue[j]].v
+	})
+
+	var prevCrossingPieces []quantileIndex
+
+	// For each distinct value "val" in the quantile function, from low to high,
+	// calculate intersections with an imaginary line v = val from p=0 to p=1.
+	for i := 0; i < len(pointsByValue); {
+		val := q[pointsByValue[i]].v
+
+		var (
+			// Right point of pieces which have one endpoint <= val and one endpoint >
+			// val.
+			crossingPieces []quantileIndex
+			// Right point of flat pieces which have both endpoints = val.
+			eqPieces []quantileIndex
+		)
+
+		// As an optimization, we do not need to check every piece to find
+		// intersections with v = val. We only need to check (a) pieces that crossed
+		// the previous val (prevCrossingPieces), and (b) pieces that have the
+		// current val as an endpoint. A short proof: every piece that crosses the
+		// current val will have one endpoint <= val and one endpoint > val. All
+		// pieces with one endpoint < val and one endpoint > val also crossed the
+		// previous val and are in (a). All pieces with one endpoint = val and one
+		// endpoint > val have the current val as an endpoint.
+
+		// Check (a) pieces that crossed the previous val.
+		for _, a := range prevCrossingPieces {
+			// We already know one endpoint <= prev val < current val, so we just need
+			// to check whether one endpoint > val.
+			if q[a-1].v > val || q[a].v > val {
+				crossingPieces = append(crossingPieces, a)
+			}
+		}
+
+		// Check (b) all pieces that have the current val as an endpoint. Note that this
+		// also moves i past all points with the current val.
+		for ; i < len(pointsByValue) && q[pointsByValue[i]].v == val; i++ {
+			b := pointsByValue[i]
+			// We know q[b].v = val, so we just need to check whether the points to
+			// the left and right have v > val.
+			if b > 0 && q[b-1].v > val {
+				crossingPieces = append(crossingPieces, b)
+			}
+			if b+1 < len(q) && q[b+1].v > val {
+				crossingPieces = append(crossingPieces, b+1)
+			}
+			// Also look for flat pieces = val. We only need to check to the left.
+			if b+1 < len(q) && q[b+1].v == val {
+				eqPieces = append(eqPieces, b+1)
+			}
+		}
+
+		sort.Ints(crossingPieces)
+		prevCrossingPieces = crossingPieces
+
+		// Find exact p of the intersections with all crossing pieces.
+		intersectionPs := make([]float64, 0, len(crossingPieces)+2)
+
+		// If the first point in the quantile function is > val, we need to add a
+		// starting intersection at p=0.
+		if q[0].v > val {
+			intersectionPs = append(intersectionPs, q[0].p)
+		}
+
+		// Add one intersection point for each crossing piece. (We do not need to
+		// add intersections for eq pieces, as we count them as fully "below" the v
+		// = val line.)
+		for _, c := range crossingPieces {
+			if q[c-1].p == q[c].p || q[c-1].v == val {
+				// At a discontinuity we simply use the p shared by both points.
+				intersectionPs = append(intersectionPs, q[c-1].p)
+			} else if q[c].v == val {
+				intersectionPs = append(intersectionPs, q[c].p)
+			} else {
+				// Crossing pieces will never have m = 0 (flat lines) because they have
+				// one point <= val and one point > val.
+				m, b := quantilePiece(q[c-1], q[c])
+				intersectionPs = append(intersectionPs, (val-b)/m)
+			}
+		}
+
+		// If the last point in the quantile function is <= val, we need to add an
+		// ending intersection at p=1.
+		if q[len(q)-1].v <= val {
+			intersectionPs = append(intersectionPs, q[len(q)-1].p)
+		}
+
+		// Now add the interval widths to get the new p for val.
+		lessEqP := intersectionPs[0]
+		for j := 1; j < len(intersectionPs); j += 2 {
+			lessEqP += intersectionPs[j+1] - intersectionPs[j]
+		}
+		var eqP float64
+		for _, d := range eqPieces {
+			eqP += q[d].p - q[d-1].p
+		}
+		lessP := lessEqP - eqP
+
+		fixed = append(fixed, quantilePoint{p: lessP, v: val})
+		if eqP != 0 {
+			fixed = append(fixed, quantilePoint{p: lessEqP, v: val})
+		}
+	}
+	return fixed
 }
