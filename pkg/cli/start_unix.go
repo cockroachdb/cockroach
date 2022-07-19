@@ -28,9 +28,12 @@ import (
 
 // drainSignals are the signals that will cause the server to drain and exit.
 //
-// If two drain signals are seen, the second drain signal will be reraised
-// without a signal handler. The default action of any signal listed here thus
-// must terminate the process.
+// The signals will initiate a graceful shutdown. If received a second time,
+// SIGINT will be reraised without a signal handler and the default action
+// terminate the process abruptly.
+//
+// Receiving SIGTERM a second time does not do a brutal shutdown, as SIGTERM is
+// named termSignal below.
 var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 // termSignal is the signal that causes an idempotent graceful
