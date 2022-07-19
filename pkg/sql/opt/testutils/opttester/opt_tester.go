@@ -274,6 +274,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	ot.semaCtx.FunctionResolver = ot.catalog
 	// To allow opttester tests to use now(), we hardcode a preset transaction
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
 	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
