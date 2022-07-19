@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -276,6 +277,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
+	var cancelQuery context.CancelFunc
+	ctx, cancelQuery = contextutil.WithCancel(ctx)
+
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
@@ -319,7 +323,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.planner.EvalContext().Placeholders = pinfo
 	}
 
-	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
+	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, cancelQuery)
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 	}
@@ -2008,7 +2012,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
-	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
+	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelQuery context.CancelFunc,
 ) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
@@ -2017,7 +2021,7 @@ func (ex *connExecutor) addActiveQuery(
 		rawStmt:       rawStmt,
 		phase:         preparing,
 		isDistributed: false,
-		ctxCancel:     cancelFun,
+		cancelQuery:   cancelQuery,
 		hidden:        hidden,
 	}
 	ex.mu.Lock()

@@ -84,7 +84,6 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	sp := tc.tracer.StartSpan("createOpenState")
 	ctx := tracing.ContextWithSpan(tc.ctx, sp)
-	ctx, cancel := context.WithCancel(ctx)
 
 	txnStateMon := mon.NewMonitor("test mon",
 		mon.MemoryResource,
@@ -99,7 +98,6 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	ts := txnState{
 		Ctx:           ctx,
 		connCtx:       tc.ctx,
-		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
 		priority:      roachpb.NormalUserPriority,
 		mon:           txnStateMon,
