@@ -6,6 +6,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:add_constraint.html",
   "//docs/generated/sql/bnf:alter.html",
   "//docs/generated/sql/bnf:alter_backup.html",
+  "//docs/generated/sql/bnf:alter_backup_schedule.html",
   "//docs/generated/sql/bnf:alter_changefeed.html",
   "//docs/generated/sql/bnf:alter_column.html",
   "//docs/generated/sql/bnf:alter_database.html",

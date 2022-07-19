@@ -1,0 +1,47 @@
+parse
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily'
+----
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily'
+ALTER BACKUP SCHEDULE 123 SET RECURRING ('@daily') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET RECURRING '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily' -- identifiers removed
+
+parse
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP ALWAYS
+----
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP ALWAYS
+ALTER BACKUP SCHEDULE 123 SET RECURRING ('@daily'), SET FULL BACKUP ALWAYS -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET RECURRING '_', SET FULL BACKUP ALWAYS -- literals removed
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP ALWAYS -- identifiers removed
+
+parse
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP '@weekly'
+----
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP '@weekly'
+ALTER BACKUP SCHEDULE 123 SET RECURRING ('@daily'), SET FULL BACKUP ('@weekly') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET RECURRING '_', SET FULL BACKUP '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily', SET FULL BACKUP '@weekly' -- identifiers removed
+
+parse
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history, SET RECURRING '@daily', SET FULL BACKUP '@weekly'
+----
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly' -- normalized!
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = (true), SET RECURRING ('@daily'), SET FULL BACKUP ('@weekly') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = _, SET RECURRING '_', SET FULL BACKUP '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly' -- identifiers removed
+
+parse
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION foo = 'bar'
+----
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION foo = 'bar' -- normalized!
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = (true), SET RECURRING ('@daily'), SET FULL BACKUP ('@weekly'), SET SCHEDULE OPTION foo = ('bar') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = _, SET RECURRING '_', SET FULL BACKUP '_', SET SCHEDULE OPTION foo = '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION _ = 'bar' -- identifiers removed
+
+parse
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION first_run = 'now'
+----
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION first_run = 'now' -- normalized!
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = (true), SET RECURRING ('@daily'), SET FULL BACKUP ('@weekly'), SET SCHEDULE OPTION first_run = ('now') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = _, SET RECURRING '_', SET FULL BACKUP '_', SET SCHEDULE OPTION first_run = '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET WITH revision_history = true, SET RECURRING '@daily', SET FULL BACKUP '@weekly', SET SCHEDULE OPTION _ = 'now' -- identifiers removed

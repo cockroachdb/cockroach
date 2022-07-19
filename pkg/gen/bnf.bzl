@@ -5,6 +5,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:add_column.bnf",
   "//docs/generated/sql/bnf:add_constraint.bnf",
   "//docs/generated/sql/bnf:alter_backup.bnf",
+  "//docs/generated/sql/bnf:alter_backup_schedule.bnf",
   "//docs/generated/sql/bnf:alter_changefeed.bnf",
   "//docs/generated/sql/bnf:alter_column.bnf",
   "//docs/generated/sql/bnf:alter_database_add_region_stmt.bnf",
