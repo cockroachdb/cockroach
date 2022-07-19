@@ -24,7 +24,7 @@ import styles from "src/sortabletable/sortabletable.module.scss";
 const cx = classNames.bind(styles);
 
 class TestRow {
-  constructor(public name: string, public value: number) { }
+  constructor(public name: string, public value: number) {}
 }
 
 const columns: ColumnDescriptor<TestRow>[] = [
@@ -43,7 +43,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
   },
 ];
 
-class TestSortedTable extends SortedTable<TestRow> { }
+class TestSortedTable extends SortedTable<TestRow> {}
 
 function makeTable(
   data: TestRow[],
@@ -104,11 +104,11 @@ describe("<SortedTable>", function () {
       .find(`th.${cx("head-wrapper__cell")}`)
       .first()
       .simulate("click");
-    expect(spy).toHaveBeenCalled()
+    expect(spy).toHaveBeenCalled();
     expect(spy).toHaveBeenCalledWith({
       ascending: false,
       columnTitle: "first",
-    })
+    });
   });
 
   it("correctly sorts data based on sortSetting", function () {
