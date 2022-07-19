@@ -10,7 +10,7 @@ CREATE TABLE a
 ----
 
 exec-ddl
-CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c), INDEX abc_desc(a, b, c DESC))
 ----
 
 exec-ddl
@@ -2599,7 +2599,7 @@ project
  ├── immutable
  ├── key: (7)
  ├── fd: (7)-->(9,11)
- ├── ordering: +9,+7 [actual: +9]
+ ├── ordering: +9,+7
  └── limit
       ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
       ├── internal-ordering: +(3|9),+(1|7)
@@ -2607,7 +2607,7 @@ project
       ├── immutable
       ├── key: (7)
       ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
-      ├── ordering: +(3|9),+(1|7) [actual: +3]
+      ├── ordering: +(3|9),+(1|7) [actual: +3,+7]
       ├── inner-join (lookup t73968)
       │    ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
       │    ├── key columns: [7] = [7]
@@ -2615,7 +2615,7 @@ project
       │    ├── immutable
       │    ├── key: (7)
       │    ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
-      │    ├── ordering: +(3|9),+(1|7) [actual: +3]
+      │    ├── ordering: +(3|9),+(1|7) [actual: +3,+7]
       │    ├── limit hint: 56.00
       │    ├── inner-join (lookup t73968@t73968_x_key)
       │    │    ├── columns: k:1!null name:2 x:3!null k:7!null x:9!null
@@ -2662,3 +2662,186 @@ project
       │         ├── name:2 = name:8 [outer=(2,8), fd=(2)==(8), (8)==(2)]
       │         └── k:7::STRING = lower(name:8) [outer=(7,8), immutable]
       └── 56
+
+# Preserving lookup ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, a, b, c
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,+8 [actual: +1,+2,+3,+7,+8]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Preserving lookup ordering (no sort should be added). The 'u' and 'v' columns
+# are equivalent to input ordering columns and can be considered optional.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a AND y = b ORDER BY a, x, b, y, z, c
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1 2] = [6 7]
+ ├── key: (3,6-8)
+ ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+ ├── ordering: +(1|6),+(2|7),+3,+8 [actual: +1,+2,+3,+8]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Preserving lookup ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, b
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7 [actual: +1,+2,+3,+7]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Can supply the requested ordering because the descending column from the
+# index does not take part in the ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc@abc_desc ON x = a ORDER BY x, y, z, a, b
+----
+inner-join (lookup abc@abc_desc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7 [actual: +1,+2,+3,+7]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Cannot supply requested ordering because input and lookup ordering columns
+# are interleaved.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, b, y, z, a, c
+----
+sort
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+7,+2,+3,+8 [actual: +1,+7,+2,+3,+8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    └── key: (1-3)
+      └── filters (true)
+
+# Cannot supply requested ordering because input ordering columns do not form
+# a key.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, a, b, c
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+7,+8 [actual: +1,+2,+7,+8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2
+      └── filters (true)
+
+# Cannot supply requested ordering because lookup ordering columns are not in index
+# order.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, a, c, b
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+8,+7 [actual: +1,+2,+3,+8,+7]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
+
+# Cannot supply the requested ordering because the direction of the 'c' column
+# is not the same as in the index.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, b, c DESC
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,-8 [actual: +1,+2,+3,+7,-8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
+
+# Cannot supply the requested ordering because the descending column from the
+# index shows up in the ordering.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc@abc_desc ON x = a ORDER BY x, y, z, a, b, c DESC
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,-8 [actual: +1,+2,+3,+7,-8]
+ └── inner-join (lookup abc@abc_desc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
