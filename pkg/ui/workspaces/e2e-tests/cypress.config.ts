@@ -1,6 +1,7 @@
 import { defineConfig } from "cypress";
+import { mkdirSync } from "fs";
 
-const TEAMCITY_OVERRIDES: Partial<Cypress.UserConfigOptions> = {
+const DOCKER_OVERRIDES: Partial<Cypress.UserConfigOptions> = {
   // Don't remove other artifacts, in case other job phases included some already.
   trashAssetsBeforeRuns: false,
   downloadsFolder: "/artifacts/cypress/downloads",
@@ -16,8 +17,8 @@ export default defineConfig({
     },
     // Override some settings when running in TeamCity
     ...(
-      process.env["TEAMCITY_VERSION"] && process.env["IS_DOCKER"]
-        ? TEAMCITY_OVERRIDES
+      process.env.IS_DOCKER
+        ? DOCKER_OVERRIDES
         : {}
     ),
   },

@@ -3,12 +3,12 @@ set -euo pipefail
 
 print_usage() {
   cat<< EOF
-USAGE: $0 COMMAND
+USAGE: $0 COMMAND [ARGS...]
 
-Starts a CockroachDB 'movr' demo, executing COMMAND when the database serves
-HTTP traffic on port 8080. The path to a file containing the connection URL
-(from which a username and password can be extracted with standard URL parsing)
-is provided to COMMAND via the \$CONN_URL_FILE environment variable.
+Starts a CockroachDB 'movr' demo, executing COMMAND with ARGS when the database
+serves HTTP traffic on port 8080. The path to a file containing the connection
+URL (from which a username and password can be extracted with standard URL
+parsing) is provided to COMMAND via the \$CONN_URL_FILE environment variable.
 
 When COMMAND exits, the database is stopped.
 
@@ -83,7 +83,7 @@ done
 # Use eval() to execute the provided command so that environment variables are
 # expanded properly (e.g. `$0 'cat $CONN_URL_FILE'`, where $CONN_URL_FILE must
 # be evaluated after this file is executed, not before).
-eval $1
+eval $@
 
 # Stash COMMAND's exit code so we can return it in the cleanup hook.
 EXIT_CODE=$?

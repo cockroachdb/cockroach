@@ -6,8 +6,8 @@
   "private": true,
   "scripts": {
     "movr": "../../../../cockroach demo movr --multitenant=false",
-    "test": "./build/start-crdb-movr.sh 'yarn cy:run'",
-    "test:debug": "./build/start-crdb-movr.sh 'yarn cy:run'",
+    "test": "./build/start-crdb-movr.sh yarn cy:run",
+    "test:debug": "./build/start-crdb-movr.sh yarn cy:run",
     "cy:run": "cypress run --e2e",
     "cy:debug": "cypress open --e2e --browser=chrome"
   },
