@@ -388,6 +388,17 @@ message JoinReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 21 [(gogoproto.nullable) = false];
+
+  // Indicates that for each input row, the join reader should return looked-up
+  // rows in sorted order. This is only applicable to lookup joins for which
+  // more than one lookup row may be associated with a given input row. It can
+  // only be set to true if maintain_ordering is also true.
+  // maintain_lookup_ordering can be used if the output needs to be ordered by
+  // a prefix of input columns followed by index (lookup) columns without
+  // requiring a (buffered) sort. As an additional restriction due to
+  // implementation details, maintain_lookup_ordering can only be used when the
+  // index columns that participate in the output ordering are all ASC.
+  optional bool maintain_lookup_ordering = 22 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
