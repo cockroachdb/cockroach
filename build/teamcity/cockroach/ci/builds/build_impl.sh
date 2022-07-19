@@ -10,8 +10,9 @@ fi
 
 CONFIG="$1"
 
-# Extra targets to build on Linux x86_64 only.
 EXTRA_TARGETS=
+
+# Extra targets to build on Linux x86_64 only.
 if [ "$CONFIG" == "crosslinux" ]
 then
     DOC_TARGETS=$(grep '^//' docs/generated/bazel_targets.txt)
@@ -20,10 +21,15 @@ then
     EXTRA_TARGETS="$DOC_TARGETS $GO_TARGETS $BINARY_TARGETS"
 fi
 
+# Extra targets to build on Unix only.
+if [ "$CONFIG" != "crosswindows" ]
+then
+    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod"
+fi
+
 bazel build //pkg/cmd/bazci --config=ci
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci --compilation_mode opt \
 		       --config "$CONFIG" --config ci --config with_ui \
 		       build //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
-		       //pkg/cmd/roachprod \
 		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
