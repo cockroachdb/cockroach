@@ -153,12 +153,12 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 	}
 
 	var (
-		// qfTrimLo and qfTrimHi are indexes to slice the quantile to when trimming
+		// qTrimLo and qTrimHi are indexes to slice the quantile to when trimming
 		// zero-row buckets from the beginning and end of the histogram.
-		qfTrimLo, qfTrimHi quantileIndex
-		qf                 = make(quantile, 0, len(hist.buckets)*2)
-		prevV              = math.Inf(-1)
-		p                  float64
+		qTrimLo, qTrimHi quantileIndex
+		q                = make(quantile, 0, len(hist.buckets)*2)
+		prevV            = math.Inf(-1)
+		p                float64
 	)
 
 	// Add a point counting num rows with value <= v.
@@ -173,12 +173,12 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 		if p > 1 {
 			p = 1
 		}
-		qf = append(qf, quantilePoint{p: p, v: v})
+		q = append(q, quantilePoint{p: p, v: v})
 		if p == 0 {
-			qfTrimLo = len(qf) - 1
+			qTrimLo = len(q) - 1
 		}
 		if num > 0 {
-			qfTrimHi = len(qf)
+			qTrimHi = len(q)
 		}
 		return nil
 	}
@@ -211,27 +211,27 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 		}
 	}
 
-	if qfTrimHi <= qfTrimLo {
+	if qTrimHi <= qTrimLo {
 		// In the unlikely case that every bucket had zero rows we simply return the
 		// zeroQuantile.
-		qf = zeroQuantile
+		q = zeroQuantile
 	} else {
 		// Trim any zero-row buckets from the beginning and end.
-		qf = qf[qfTrimLo:qfTrimHi]
+		q = q[qTrimLo:qTrimHi]
 		// Fix any floating point errors or histogram errors (e.g. sum of bucket row
 		// counts < total row count) causing p to be below 1 at the end.
-		qf[len(qf)-1].p = 1
+		q[len(q)-1].p = 1
 	}
-	return qf, nil
+	return q, nil
 }
 
 // toHistogram converts a quantile into a histogram, using the provided type and
 // row count. It returns an error if the conversion fails.
-func (qf quantile) toHistogram(
+func (q quantile) toHistogram(
 	evalCtx *eval.Context, colType *types.T, rowCount float64,
 ) (histogram, error) {
-	if len(qf) < 2 || qf[0].p != 0 || qf[len(qf)-1].p != 1 {
-		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", qf)
+	if len(q) < 2 || q[0].p != 0 || q[len(q)-1].p != 1 {
+		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", q)
 	}
 
 	// Empty table case.
@@ -239,18 +239,18 @@ func (qf quantile) toHistogram(
 		return histogram{}, nil
 	}
 
-	hist := histogram{buckets: make([]cat.HistogramBucket, 0, len(qf)-1)}
+	hist := histogram{buckets: make([]cat.HistogramBucket, 0, len(q)-1)}
 
 	var i quantileIndex
 	// Skip any leading p=0 points instead of emitting zero-row buckets.
-	for qf[i].p == 0 {
+	for q[i].p == 0 {
 		i++
 	}
 
 	// Create the first bucket of the histogram. The first bucket must always have
 	// NumRange == 0. Sometimes we will emit a zero-row bucket to make this true.
 	var currentLowerBound tree.Datum
-	currentUpperBound, err := fromQuantileValue(colType, qf[i-1].v)
+	currentUpperBound, err := fromQuantileValue(colType, q[i-1].v)
 	if err != nil {
 		return histogram{}, err
 	}
@@ -295,8 +295,8 @@ func (qf quantile) toHistogram(
 	// For each point in the quantile, if its value is equal to the current
 	// upperBound then add to NumEq of the current bucket. Otherwise close the
 	// current bucket and add to NumRange of a new current bucket.
-	for ; i < len(qf); i++ {
-		upperBound, err := fromQuantileValue(colType, qf[i].v)
+	for ; i < len(q); i++ {
+		upperBound, err := fromQuantileValue(colType, q[i].v)
 		if err != nil {
 			return histogram{}, err
 		}
@@ -308,14 +308,14 @@ func (qf quantile) toHistogram(
 			return histogram{}, errors.AssertionFailedf("decreasing histogram values")
 		}
 		if cmp == 0 {
-			pEq += qf[i].p - qf[i-1].p
+			pEq += q[i].p - q[i-1].p
 		} else {
 			if err := closeCurrentBucket(); err != nil {
 				return histogram{}, err
 			}
 
 			// Start a new current bucket.
-			pRange := qf[i].p - qf[i-1].p
+			pRange := q[i].p - q[i-1].p
 			numRange := pRange * rowCount
 			if !isValidCount(numRange) {
 				return histogram{}, errors.AssertionFailedf("invalid histogram NumRange: %v", numRange)
@@ -330,7 +330,7 @@ func (qf quantile) toHistogram(
 			}
 		}
 		// Skip any trailing p=1 points instead of emitting zero-row buckets.
-		if qf[i].p == 1 {
+		if q[i].p == 1 {
 			break
 		}
 	}
