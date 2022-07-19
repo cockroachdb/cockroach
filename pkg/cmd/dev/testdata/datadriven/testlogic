@@ -50,12 +50,12 @@ bazel test --test_env=GOTRACEBACK=all --test_arg -test.count=5 --test_arg -show-
 exec
 dev testlogic base --files=auto_span_config_reconciliation --stress
 ----
-bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
 
 exec
 dev testlogic base --files=auto_span_config_reconciliation --stress --timeout 1m --cpus 8
 ----
-bazel test --test_env=GOTRACEBACK=all --local_cpu_resources=8 --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=120 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=1m0s -p=8' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+bazel test --test_env=GOTRACEBACK=all --local_cpu_resources=8 --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=120 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=1m0s -p=8' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
 
 exec
 dev testlogic ccl --rewrite --show-logs  -v --files distsql_automatic_stats --config 3node-tenant
@@ -66,14 +66,14 @@ bazel test --test_env=GOTRACEBACK=all --nocache_test_results --test_arg -test.v 
 exec
 dev testlogic base --files=auto_span_config_reconciliation --stress --stream-output
 ----
-bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
 
 exec
 dev testlogic base --files=auto_span_config_reconciliation --stress --stream-output
 ----
-bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
 
 exec
 dev testlogic base --files=auto_span_config_reconciliation --stress --stream-output
 ----
-bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed

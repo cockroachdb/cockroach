@@ -343,6 +343,7 @@ func (d *dev) getStressArgs(stressCmdArg string, timeout time.Duration) []string
 	if stressCmdArg != "" {
 		stressCmdArgs = append(stressCmdArgs, stressCmdArg)
 	}
+	stressArgs = append(stressArgs, "--test_env=COCKROACH_STRESS=true")
 	stressArgs = append(stressArgs, "--run_under",
 		// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
 		// and -shardable-artifacts set such that we can merge the XML output

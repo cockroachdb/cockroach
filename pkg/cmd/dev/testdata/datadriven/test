@@ -26,7 +26,7 @@ bazel test pkg/util/tracing:all --nocache_test_results --test_env=GOTRACEBACK=al
 exec
 dev test --stress pkg/util/tracing --filter TestStartChild* --cpus=12 --timeout=25s
 ----
-bazel test --local_cpu_resources=12 pkg/util/tracing:all --test_env=GOTRACEBACK=all --test_timeout=85 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=25s -p=12' '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_output streamed
+bazel test --local_cpu_resources=12 pkg/util/tracing:all --test_env=GOTRACEBACK=all --test_timeout=85 --test_env=COCKROACH_STRESS=true --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=25s -p=12' '--test_filter=TestStartChild*' --test_sharding_strategy=disabled --test_output streamed
 
 exec
 dev test //pkg/testutils --timeout=10s

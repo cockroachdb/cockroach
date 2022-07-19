@@ -1154,10 +1154,10 @@ check test testshort testrace testdeadlock bench benchshort:
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
 	$(info $(yellow)[WARNING] Use `dev test --stress $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 stressrace: ## Run tests under stress with the race detector enabled.
 	$(info $(yellow)[WARNING] Use `dev test --stress --race $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 .PHONY: roachprod-stress roachprod-stressrace
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
