@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/errors"
 )
@@ -34,12 +35,25 @@ func NoPrecondition(context.Context, clusterversion.ClusterVersion, migration.Te
 	return nil
 }
 
+// NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
+func NoTenantUpgradeFunc(
+	context.Context, clusterversion.ClusterVersion, migration.TenantDeps, *jobs.Job,
+) error {
+	return nil
+}
+
 // registry defines the global mapping between a cluster version and the
 // associated migration. The migration is only executed after a cluster-wide
 // bump of the corresponding version gate.
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
+	migration.NewTenantMigration(
+		"ensure preconditions are met before starting upgrading to v22.1",
+		toCV(clusterversion.Start22_1),
+		preconditionBeforeStartingAnUpgrade,
+		NoTenantUpgradeFunc,
+	),
 	migration.NewTenantMigration(
 		"ensure that draining names are no longer in use",
 		toCV(clusterversion.DrainingNamesMigration),
