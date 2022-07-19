@@ -686,6 +686,8 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, err
 		}
 		return shouldDistribute, nil
+	case *cdcValuesNode:
+		return cannotDistribute, nil
 
 	default:
 		return cannotDistribute, planNodeNotSupportedErr
