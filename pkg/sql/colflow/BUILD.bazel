@@ -20,6 +20,7 @@ go_library(
         "//pkg/col/coldataext",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
+        "//pkg/settings",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec",
