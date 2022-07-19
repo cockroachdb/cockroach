@@ -312,6 +312,14 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
+	if spec.MaintainLookupOrdering {
+		// MaintainLookupOrdering indicates the output of the lookup joiner should
+		// be sorted by <inputCols>, <lookupCols>. It doesn't make sense for
+		// MaintainLookupOrdering to be true when MaintainOrdering is not.
+		// Additionally, we need to disable parallelism for the traditional fetcher
+		// in order to ensure the lookups are ordered, so set shouldLimitBatches.
+		spec.MaintainOrdering, shouldLimitBatches = true, true
+	}
 	useStreamer, txn, err := flowCtx.UseStreamer()
 	if err != nil {
 		return nil, err

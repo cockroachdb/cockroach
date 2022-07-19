@@ -2333,6 +2333,17 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		return nil, err
 	}
 
+	// If any of the ordering columns originate from the lookup table, this is a
+	// case where we are ordering on a prefix of input columns followed by the
+	// lookup columns. We need to maintain the index ordering on each lookup.
+	var maintainLookupOrdering bool
+	for i := range n.reqOrdering {
+		if n.reqOrdering[i].ColIdx >= len(plan.ResultColumns) {
+			maintainLookupOrdering = true
+			break
+		}
+	}
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              n.joinType,
 		LockingStrength:   n.table.lockingStrength,
@@ -2341,6 +2352,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
 		MaintainOrdering:                  len(n.reqOrdering) > 0 || n.isFirstJoinInPairedJoiner,
+		MaintainLookupOrdering:            maintainLookupOrdering,
 		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
