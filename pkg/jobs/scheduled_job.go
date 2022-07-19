@@ -433,6 +433,21 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	return nil
 }
 
+// Delete removes this schedule.
+// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
+func (j *ScheduledJob) Delete(ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn) error {
+	if j.rec.ScheduleID == 0 {
+		return errors.New("cannot delete schedule: missing schedule id")
+	}
+	_, err := ex.ExecEx(ctx, "sched-delete", txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
+			j.env.ScheduledJobsTableName(), j.ScheduleID()),
+	)
+
+	return err
+}
+
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.
 // If no error is returned, the job is not considered to be modified anymore.
