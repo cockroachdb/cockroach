@@ -6358,7 +6358,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
@@ -6386,7 +6389,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		),
 	),
 	builtinconstants.RehomeRowBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -6422,7 +6428,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	"crdb_internal.validate_multi_region_zone_configs": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6442,7 +6451,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_table": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6464,7 +6476,10 @@ table.`,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_database": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6486,7 +6501,10 @@ enabled.`,
 		},
 	),
 	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryMultiRegion,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				stmt, err := parser.ParseOne(s)
