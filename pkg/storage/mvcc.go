@@ -853,7 +853,7 @@ func mvccGet(
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.stats())
+	//recordIteratorStats(ctx, mvccScanner.stats())
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -3169,7 +3169,7 @@ func mvccScanToBytes(
 	res.NumBytes = mvccScanner.results.bytes
 
 	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.stats())
+	//recordIteratorStats(ctx, mvccScanner.stats())
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
