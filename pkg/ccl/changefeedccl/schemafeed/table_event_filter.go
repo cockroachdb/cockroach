@@ -14,7 +14,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -122,7 +124,9 @@ func classifyTableEvent(e TableEvent) tableEventTypeSet {
 // permitted by the filter.
 type tableEventFilter map[tableEventType]bool
 
-func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool, error) {
+func (filter tableEventFilter) shouldFilter(
+	ctx context.Context, e TableEvent, targets changefeedbase.Targets,
+) (bool, error) {
 	et := classifyTableEvent(e)
 
 	// Truncation events are not ignored and return an error.
@@ -141,7 +145,19 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 	shouldFilter := true
 	for filterEvent, filterPolicy := range filter {
 		if et.Contains(filterEvent) && !filterPolicy {
-			shouldFilter = false
+			// Apply changefeed target-specific filters.
+			// In some cases, a drop column event should be filtered out.
+			// For example, we may be dropping a column which is not
+			// monitored by the changefeed.
+			if filterEvent == tableEventDropColumn {
+				sf, err := shouldFilterDropColumnEvent(e, targets)
+				if err != nil {
+					return false, err
+				}
+				shouldFilter = sf
+			} else {
+				shouldFilter = false
+			}
 		}
 		et = et.Clear(filterEvent)
 	}
@@ -149,6 +165,48 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 		return false, errors.AssertionFailedf("policy does not specify how to handle event (unhandled event types: %v)", et)
 	}
 	return shouldFilter, nil
+}
+
+// shouldFilterDropColumnEvent decides if we should filter out a drop column event.
+func shouldFilterDropColumnEvent(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	if watched, err := droppedColumnIsWatched(e, targets); err != nil {
+		return false, err
+	} else if watched {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Returns true if the changefeed targets a column which has a drop mutation inside the table event.
+func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	// If no column families are specified, then all columns are targeted.
+	specifiedColumnFamiliesForTable := targets.GetSpecifiedColumnFamilies(e.Before.GetID())
+	if len(specifiedColumnFamiliesForTable) == 0 {
+		return true, nil
+	}
+
+	var watchedColumnIDs util.FastIntSet
+	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
+			for _, columnID := range family.ColumnIDs {
+				watchedColumnIDs.Add(int(columnID))
+			}
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	for _, m := range e.After.AllMutations() {
+		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
+			continue
+		}
+		if m.Dropped() && m.WriteAndDeleteOnly() && watchedColumnIDs.Contains(int(m.AsColumn().GetID())) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func hasNewVisibleColumnDropBackfillMutation(e TableEvent) (res bool) {

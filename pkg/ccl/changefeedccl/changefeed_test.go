@@ -996,6 +996,195 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+// If the schema_change_policy is 'stop' and we drop columns which are not
+// targeted by the changefeed, it should not stop.
+func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c WITH schema_change_policy='stop'`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'b1', 'c1')`)
+
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+		})
+
+		// Check that dropping a watched column still stops the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
+		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
+			t.Errorf(`expected "schema change occurred at ..." got: %+v`, err.Error())
+		}
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
+// If we drop columns which are not targeted by the changefeed, it should not backfill.
+func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'b1', 'c1')`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+		})
+
+		// Check that dropping a watched column still backfills.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN c`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b"}}`,
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
+func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `CREATE TABLE nofams (id int primary key, a string, b string, c string)`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+		sqlDB.Exec(t, `INSERT INTO nofams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE nofams`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+			`nofams: [0]->{"after": {"a": "a", "b": "b", "c": "c", "id": 0}}`,
+		})
+
+		// Dropping an unwatched column from hasfams does not affect the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'b1', 'c1')`)
+		sqlDB.Exec(t, `INSERT INTO nofams VALUES (1, 'a1', 'b1', 'c1')`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+			`nofams: [1]->{"after": {"a": "a1", "b": "b1", "c": "c1", "id": 1}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"c": "c"}}`,
+			`hasfams.b_and_c: [1]->{"after": {"c": "c1"}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE nofams DROP COLUMN b`)
+		assertPayloads(t, cf, []string{
+			`nofams: [0]->{"after": {"a": "a", "c": "c", "id": 0}}`,
+			`nofams: [1]->{"after": {"a": "a1", "c": "c1", "id": 1}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
+func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `CREATE TABLE alsohasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+		sqlDB.Exec(t, `INSERT INTO alsohasfams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+			`alsohasfams.id_a: [0]->{"after": {"a": "a", "id": 0}}`,
+		})
+
+		// Dropping an unwatched column from hasfams does not affect the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'b1', 'c1')`)
+		sqlDB.Exec(t, `INSERT INTO alsohasfams VALUES (1, 'a1', 'b1', 'c1')`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+			`alsohasfams.id_a: [1]->{"after": {"a": "a1", "id": 1}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE alsohasfams DROP COLUMN a`)
+		assertPayloads(t, cf, []string{
+			`alsohasfams.id_a: [0]->{"after": {"id": 0}}`,
+			`alsohasfams.id_a: [1]->{"after": {"id": 1}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"c": "c"}}`,
+			`hasfams.b_and_c: [1]->{"after": {"c": "c1"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
+func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY id_a, TABLE hasfams FAMILY b_and_c`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+			`hasfams.id_a: [0]->{"after": {"a": "a", "id": 0}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		assertPayloads(t, cf, []string{
+			`hasfams.id_a: [0]->{"after": {"id": 0}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"c": "c"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+}
+
 func TestChangefeedExternalIODisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
