@@ -45,8 +45,6 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 			// Set the testing knob so that the first operator to spill would
 			// use up the whole FD limit.
 			VecFDsToAcquire: vecFDsLimit,
-			// Allow just one retry to speed up the test.
-			VecFDsAcquireMaxRetriesCount: 1,
 		}},
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: serverArgs})
@@ -59,6 +57,9 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 	// Lower the workmem budget so that all buffering operators have to spill to
 	// disk.
 	_, err = conn.ExecContext(ctx, "SET distsql_workmem = '1KiB'")
+	require.NoError(t, err)
+	// Allow just one retry to speed up the test.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.distsql.acquire_vec_fds.max_retries = 1")
 	require.NoError(t, err)
 
 	queryCtx, queryCtxCancel := context.WithDeadline(ctx, timeutil.Now().Add(10*time.Second))
