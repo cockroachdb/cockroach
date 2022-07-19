@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -375,13 +376,13 @@ func makeCreateType(s *Smither) (tree.Statement, bool) {
 	return randgen.RandCreateType(s.rnd, string(name), letters), true
 }
 
-func rowsToRegionList(rows *gosql.Rows) []string {
+func rowsToRegionList(rows *gosql.Rows) ([]string, error) {
 	// Don't add duplicate regions to the slice.
 	regionsSet := make(map[string]struct{})
 	var region, zone string
 	for rows.Next() {
 		if err := rows.Scan(&region, &zone); err != nil {
-			panic(err)
+			return nil, err
 		}
 		regionsSet[region] = struct{}{}
 	}
@@ -390,7 +391,7 @@ func rowsToRegionList(rows *gosql.Rows) []string {
 	for region := range regionsSet {
 		regions = append(regions, region)
 	}
-	return regions
+	return regions, nil
 }
 
 func getClusterRegions(s *Smither) []string {
@@ -398,15 +399,23 @@ func getClusterRegions(s *Smither) []string {
 	if err != nil {
 		panic(err)
 	}
-	return rowsToRegionList(rows)
+	regions, err := rowsToRegionList(rows)
+	if err != nil {
+		panic(errors.Wrap(err, "Failed to scan SHOW REGIONS FROM CLUSTER into values"))
+	}
+	return regions
 }
 
 func getDatabaseRegions(s *Smither) []string {
-	rows, err := s.db.Query("SHOW REGIONS FROM DATABASE defaultdb")
+	rows, err := s.db.Query("SELECT region, zones FROM [SHOW REGIONS FROM DATABASE defaultdb]")
 	if err != nil {
 		panic(err)
 	}
-	return rowsToRegionList(rows)
+	regions, err := rowsToRegionList(rows)
+	if err != nil {
+		panic(errors.Wrap(err, "Failed to scan SHOW REGIONS FROM DATABASE defaultdb into values"))
+	}
+	return regions
 }
 
 func makeAlterLocality(s *Smither) (tree.Statement, bool) {
