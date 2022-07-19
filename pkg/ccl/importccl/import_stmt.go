@@ -2145,7 +2145,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job); err != nil {
+	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
 		return err
 	}
 
@@ -2311,7 +2311,7 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 // checkVirtualConstraints checks constraints that are enforced via runtime
 // checks, such as uniqueness checks that are not directly backed by an index.
 func (*importResumer) checkVirtualConstraints(
-	ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job,
+	ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job, user security.SQLUsername,
 ) error {
 	for _, tbl := range job.Details().(jobspb.ImportDetails).Tables {
 		desc := tabledesc.NewBuilder(tbl.Desc).BuildExistingMutableTable()
@@ -2329,7 +2329,7 @@ func (*importResumer) checkVirtualConstraints(
 			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData(execCfg.SV()))
 			defer ie.Close(ctx)
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, ie, desc)
+				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, user, ie, desc)
 			})
 		}); err != nil {
 			return err

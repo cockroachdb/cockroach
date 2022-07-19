@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -742,7 +743,9 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(
+						ctx, &evalCtx.EvalContext, desc, txn, evalCtx.SessionData().User(), c.GetName(),
+					); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
@@ -1838,6 +1841,7 @@ func ValidateForwardIndexes(
 							idx.GetPredicate(),
 							ie,
 							txn,
+							security.NodeUserName(),
 							false, /* preExisting */
 						); err != nil {
 							return err
@@ -2268,7 +2272,7 @@ func runSchemaChangesInTxn(
 			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.EvalContext(), tableDesc, planner.txn, c.GetName(),
+					ctx, planner.EvalContext(), tableDesc, planner.txn, planner.User(), c.GetName(),
 				); err != nil {
 					return err
 				}
@@ -2416,6 +2420,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
+	user security.SQLUsername,
 	constraintName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
@@ -2438,7 +2443,15 @@ func validateUniqueWithoutIndexConstraintInTxn(
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateUniqueConstraint(
-			ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn, false, /* preExisting */
+			ctx,
+			tableDesc,
+			uc.Name,
+			uc.ColumnIDs,
+			uc.Predicate,
+			ie,
+			txn,
+			user,
+			false, /* preExisting */
 		)
 	})
 }
