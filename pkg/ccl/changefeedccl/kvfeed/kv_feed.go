@@ -287,11 +287,18 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+
 		// Detect whether the event corresponds to a primary index change. Also
-		// detect whether that primary index change corresponds to any change in
-		// the primary key or in the set of visible columns. If it corresponds to
-		// no such change, than it may be a column being dropped physically and
-		// should not trigger a failure in the `stop` policy.
+		// detect whether the change corresponds to any change in the set of visible
+		// primary key columns.
+		//
+		// If a primary key is being changed and there are no changes in the
+		// primary key's columns, this may be due to a column which was dropped
+		// logically before and is presently being physically dropped.
+		//
+		// If is no change in the primary key columns, then a primary key change
+		// should not trigger a failure in the `stop` policy because this change is
+		// effectively invisible to consumers.
 		primaryIndexChange, noColumnChanges := isPrimaryKeyChange(events)
 		if primaryIndexChange && (noColumnChanges ||
 			f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyStop) {
