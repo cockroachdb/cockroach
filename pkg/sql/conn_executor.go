@@ -2109,7 +2109,19 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 // and writing up to the CommandComplete message.
 func (ex *connExecutor) execCopyIn(
 	ctx context.Context, cmd CopyIn,
-) (fsm.Event, fsm.EventPayload, error) {
+) (_ fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	logStatements := logStatementsExecuteEnabled.Get(ex.planner.execCfg.SV())
+
+	ex.incrementStartedStmtCounter(cmd.Stmt)
+	defer func() {
+		if retErr != nil {
+			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, retErr)
+		}
+	}()
+
+	if logStatements {
+		log.SqlExec.Infof(ctx, "executing %s", cmd)
+	}
 
 	// When we're done, unblock the network connection.
 	defer cmd.CopyDone.Done()
