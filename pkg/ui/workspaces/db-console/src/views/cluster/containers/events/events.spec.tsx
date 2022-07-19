@@ -12,7 +12,6 @@ import React from "react";
 import { mount, shallow } from "enzyme";
 import _ from "lodash";
 import Long from "long";
-import * as sinon from "sinon";
 
 import * as protos from "src/js/protos";
 import {
@@ -44,16 +43,12 @@ function makeEvent(event: Event) {
 }
 
 describe("<EventBox>", function () {
-  let spy: sinon.SinonSpy;
-
-  beforeEach(function () {
-    spy = sinon.spy();
-  });
+  const spy = jest.fn();
 
   describe("refresh", function () {
     it("refreshes events when mounted.", function () {
       makeEventBox([], spy);
-      expect(spy.called).toBe(true);
+      expect(spy).toHaveBeenCalled();
     });
   });
 

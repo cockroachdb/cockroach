@@ -12,7 +12,6 @@ import { shallow } from "enzyme";
 import _ from "lodash";
 import Long from "long";
 import React, { Fragment } from "react";
-import * as sinon from "sinon";
 import * as protos from "src/js/protos";
 import { MetricsQuery, requestMetrics } from "src/redux/metrics";
 import {
@@ -124,7 +123,7 @@ function makeMetricsQuery(
 }
 
 describe("<MetricsDataProvider>", function () {
-  let spy: sinon.SinonSpy;
+  const spy = jest.fn();
   const timespan1: QueryTimeInfo = {
     start: Long.fromNumber(0),
     end: Long.fromNumber(100),
@@ -138,14 +137,14 @@ describe("<MetricsDataProvider>", function () {
   const graphid = "testgraph";
 
   beforeEach(function () {
-    spy = sinon.spy();
+    spy.mockReset();
   });
 
   describe("refresh", function () {
     it("refreshes query data when mounted", function () {
       makeDataProvider(graphid, null, timespan1, spy);
-      expect(spy.called).toBe(true);
-      expect(spy.calledWith(graphid, makeMetricsRequest(timespan1))).toBe(true);
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
 
     it("does nothing when mounted if current request fulfilled", function () {
@@ -155,7 +154,7 @@ describe("<MetricsDataProvider>", function () {
         timespan1,
         spy,
       );
-      expect(spy.notCalled).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it("does nothing when mounted if current request is in flight", function () {
@@ -163,7 +162,7 @@ describe("<MetricsDataProvider>", function () {
       query.request = null;
       query.data = null;
       makeDataProvider(graphid, query, timespan1, spy);
-      expect(spy.notCalled).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it("refreshes query data when receiving props", function () {
@@ -173,12 +172,12 @@ describe("<MetricsDataProvider>", function () {
         timespan1,
         spy,
       );
-      expect(spy.notCalled).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
       provider.setProps({
         metrics: undefined,
       });
-      expect(spy.called).toBe(true);
-      expect(spy.calledWith(graphid, makeMetricsRequest(timespan1))).toBe(true);
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
 
     it("refreshes if timespan changes", function () {
@@ -188,12 +187,12 @@ describe("<MetricsDataProvider>", function () {
         timespan1,
         spy,
       );
-      expect(spy.notCalled).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
       provider.setProps({
         timeInfo: timespan2,
       });
-      expect(spy.called).toBe(true);
-      expect(spy.calledWith(graphid, makeMetricsRequest(timespan2))).toBe(true);
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan2));
     });
 
     it("refreshes if query changes", function () {
@@ -203,13 +202,13 @@ describe("<MetricsDataProvider>", function () {
         timespan1,
         spy,
       );
-      expect(spy.notCalled).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
       // Modify "sources" parameter.
       provider.setProps({
         metrics: makeMetricsQuery(graphid, timespan1, ["1"]),
       });
-      expect(spy.called).toBe(true);
-      expect(spy.calledWith(graphid, makeMetricsRequest(timespan1))).toBe(true);
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
   });
 

@@ -9,43 +9,36 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { createSandbox } from "sinon";
 import { track } from "./trackFilter";
-
-const sandbox = createSandbox();
 
 describe("trackFilter", () => {
   const filter = "Test";
   const filterValue = "test-value";
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(filter, filterValue);
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send a track call with the correct event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Test Filter";
 
     track(spy)(filter, filterValue);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(event === expected).toBe(true);
   });
 
   it("send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(filter, filterValue);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const selectedFilter = get(sent, "properties.selectedFilter");
 
     expect(selectedFilter === filterValue).toBe(true);

@@ -9,31 +9,24 @@
 // licenses/APL.txt.
 
 import { get, isString, isNumber } from "lodash";
-import { createSandbox } from "sinon";
 import { track } from "./trackSearch";
-
-const sandbox = createSandbox();
 
 describe("trackSearch", () => {
   const testSearchResults = 3;
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(testSearchResults);
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Search";
 
     track(spy)(testSearchResults);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(isString(event)).toBe(true);
@@ -41,11 +34,11 @@ describe("trackSearch", () => {
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(testSearchResults);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const numberOfResults = get(sent, "properties.numberOfResults");
 
     expect(isNumber(numberOfResults)).toBe(true);

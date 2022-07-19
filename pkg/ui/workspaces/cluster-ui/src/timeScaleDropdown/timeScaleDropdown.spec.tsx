@@ -25,7 +25,6 @@ import TimeFrameControls from "./timeFrameControls";
 import RangeSelect from "./rangeSelect";
 import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
 import { assert } from "chai";
-import sinon from "sinon";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -56,7 +55,7 @@ function TimeScaleDropdownWrapper({
 }
 
 describe("<TimeScaleDropdown> component", function () {
-  let clock: sinon.SinonFakeTimers;
+  jest.useFakeTimers("modern");
 
   // Returns a new moment every time, so that we don't accidentally mutate it.
   const getNow = () => {
@@ -87,11 +86,7 @@ describe("<TimeScaleDropdown> component", function () {
   };
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers(getNow().toDate());
-  });
-
-  afterEach(() => {
-    clock.restore();
+    jest.setSystemTime(getNow().toDate());
   });
 
   it("updates as different preset options are selected", () => {
@@ -249,8 +244,8 @@ const initialEntries = [
 ];
 
 describe("TimeScaleDropdown functions", function () {
+  jest.useFakeTimers("modern");
   let state: Omit<TimeScaleDropdownProps, "setTimeScale">;
-  let clock: sinon.SinonFakeTimers;
   let currentWindow: TimeWindow;
 
   const setCurrentWindowFromTimeScale = (timeScale: TimeScale): void => {
@@ -273,17 +268,13 @@ describe("TimeScaleDropdown functions", function () {
   };
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
+    jest.setSystemTime(new Date(2020, 5, 1, 9, 28, 30));
     const timeScaleState = new timescale.TimeScaleState();
     setCurrentWindowFromTimeScale(timeScaleState.scale);
     state = {
       currentScale: timeScaleState.scale,
       // setTimeScale: () => {},
     };
-  });
-
-  afterEach(() => {
-    clock.restore();
   });
 
   it("valid path should not redirect to 404", () => {

@@ -8,30 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { get, isString } from "lodash";
-import { createSandbox } from "sinon";
+import _, { get, isString } from "lodash";
 import { track } from "./trackTableSort";
 
-const sandbox = createSandbox();
-
 describe("trackTableSort", () => {
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)();
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Table Sort";
 
     track(spy)();
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(isString(event)).toBe(true);
@@ -39,13 +32,13 @@ describe("trackTableSort", () => {
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const tableName = "Test table";
     const title = "test";
 
     track(spy)(tableName, title, "asc");
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const table = get(sent, "properties.tableName");
     const columnName = get(sent, "properties.columnName");
     const direction = get(sent, "properties.sortDirection");
