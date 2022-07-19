@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/errors"
 )
@@ -122,7 +123,9 @@ func classifyTableEvent(e TableEvent) tableEventTypeSet {
 // permitted by the filter.
 type tableEventFilter map[tableEventType]bool
 
-func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool, error) {
+func (filter tableEventFilter) shouldFilter(
+	ctx context.Context, e TableEvent, targets changefeedbase.Targets,
+) (bool, error) {
 	et := classifyTableEvent(e)
 
 	// Truncation events are not ignored and return an error.
@@ -141,7 +144,18 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 	shouldFilter := true
 	for filterEvent, filterPolicy := range filter {
 		if et.Contains(filterEvent) && !filterPolicy {
-			shouldFilter = false
+
+			// In some cases, a drop column event should be filtered.
+			// For example, the changefeed may only watch a certain column family..
+			if filterEvent == tableEventDropColumn {
+				if sf, err := shouldFilterDropColumnEvent(e, targets); err != nil {
+					return false, err
+				} else {
+					shouldFilter = sf
+				}
+			} else {
+				shouldFilter = false
+			}
 		}
 		et = et.Clear(filterEvent)
 	}
@@ -149,6 +163,52 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 		return false, errors.AssertionFailedf("policy does not specify how to handle event (unhandled event types: %v)", et)
 	}
 	return shouldFilter, nil
+}
+
+// shouldFilterDropColumnEvent decides if we should filter out a drop column event.
+func shouldFilterDropColumnEvent(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	if hasFamilies, err := targets.HasNonDefaultColumnFamily(); err != nil {
+		return false, err
+	} else if hasFamilies {
+		if watched, err := droppedColumnIsWatched(e, targets); err != nil {
+		} else if watched {
+			return false, nil
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	targetFamilyNames := map[string]bool{}
+	if err := targets.EachTarget(func(target changefeedbase.Target) error {
+		targetFamilyNames[target.FamilyName] = true
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	families := e.Before.GetFamilies()
+
+	for watchedFamily := range targetFamilyNames {
+		var watchedCols []descpb.ColumnID
+
+		for _, desc := range families {
+			if desc.Name == watchedFamily {
+				watchedCols = desc.ColumnIDs
+			}
+		}
+
+		for _, watchedColID := range watchedCols {
+			// The condition below indicates that the column is dropped.
+			if column, err := e.After.FindColumnWithID(watchedColID); err != nil || column.IsInaccessible() || column.IsHidden() || !column.Public() {
+				//nolint:returnerrcheck
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func hasNewVisibleColumnDropBackfillMutation(e TableEvent) (res bool) {
