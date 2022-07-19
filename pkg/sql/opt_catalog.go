@@ -69,7 +69,18 @@ type optCatalog struct {
 	tn tree.TableName
 }
 
-var _ cat.Catalog = &optCatalog{}
+var _ cat.Catalog = (*optCatalog)(nil)
+
+// optPlanningCatalog is a thin wrapper over cat.Catalog
+// with few additional planner specific methods.
+type optPlanningCatalog interface {
+	cat.Catalog
+	init(planner *planner)
+	reset()
+	fullyQualifiedNameWithTxn(
+		ctx context.Context, ds cat.DataSource, txn *kv.Txn,
+	) (cat.DataSourceName, error)
+}
 
 // init initializes an optCatalog instance (which the caller can pre-allocate).
 // The instance can be used across multiple queries, but reset() should be
