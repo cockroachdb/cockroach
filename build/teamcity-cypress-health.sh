@@ -22,7 +22,6 @@ TESTTIMEOUT=${TESTTIMEOUT:-20m}
 tc_start_block "Run Cypress health checks"
 run_json_test docker run \
   --rm \
-  -it \
   -v $PWD/upstream_artifacts:/upstream_artifacts \
   -v $PWD/artifacts:/artifacts \
   cockroachdb/cockroach-ci-ui \
