@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1194,6 +1195,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
+	populateQueryLevelStats(ctx, planner)
+
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
 	stmtFingerprintID = ex.recordStatementSummary(
@@ -1209,6 +1212,34 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	return err
+}
+
+// populateQueryLevelStats collects query-level execution statistics and
+// populates it in the instrumentationHelper's queryLevelStatsWithErr field.
+// Query-level execution statistics are collected using the statement's trace
+// and the plan's flow metadata.
+func populateQueryLevelStats(ctx context.Context, p *planner) {
+	ih := &p.instrumentation
+	if _, ok := ih.Tracing(); !ok {
+		return
+	}
+	// Get the query-level stats.
+	var flowsMetadata []*execstats.FlowsMetadata
+	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
+		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
+	}
+	trace := ih.sp.GetRecording(tracingpb.RecordingStructured)
+	var err error
+	queryLevelStats, err := execstats.GetQueryLevelStats(
+		trace, p.execCfg.TestingKnobs.DeterministicExplain, flowsMetadata)
+	ih.queryLevelStatsWithErr = execstats.MakeQueryLevelStatsWithErr(queryLevelStats, err)
+	if err != nil {
+		const msg = "error getting query level stats for statement: %s: %+v"
+		if buildutil.CrdbTestBuild {
+			panic(fmt.Sprintf(msg, ih.fingerprint, err))
+		}
+		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+	}
 }
 
 type txnRowsWrittenLimitErr struct {
