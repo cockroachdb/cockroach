@@ -39,6 +39,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate docs          # generates documentation
         dev generate diagrams      # generates syntax diagrams
         dev generate bnf           # generates syntax bnf files
+        dev generate js            # generates JS protobuf client and seeds local tooling
         dev generate go            # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
         dev generate go_nocgo      # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf      # *.pb.go files (subset of 'dev generate go')
@@ -69,6 +70,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"cgo":           d.generateCgo,
 		"docs":          d.generateDocs,
 		"execgen":       d.generateExecgen,
+		"js":            d.generateJs,
 		"go":            d.generateGo,
 		"go_nocgo":      d.generateGoNoCgo,
 		"protobuf":      d.generateProtobuf,
@@ -322,4 +324,42 @@ import "C"
 	}
 
 	return nil
+}
+
+func (d *dev) generateJs(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+
+	args := []string{
+		"build",
+		"//pkg/ui/workspaces/eslint-plugin-crdb:eslint-plugin-crdb",
+		"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+		"//pkg/ui/workspaces/cluster-ui:ts_project",
+	}
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return fmt.Errorf("building JS development prerequisites: %w", err)
+	}
+
+	bazelBin, err := d.getBazelBin(ctx)
+	if err != nil {
+		return err
+	}
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+
+	eslintPluginDist := "./pkg/ui/workspaces/eslint-plugin-crdb/dist"
+	// Delete eslint-plugin output tree that was previously copied out of the
+	// sandbox.
+	if err := d.os.RemoveAll(filepath.Join(workspace, eslintPluginDist)); err != nil {
+		return err
+	}
+
+	// Copy the eslint-plugin output tree back out of the sandbox, since eslint
+	// plugins in editors default to only searching in ./node_modules for plugins.
+	return d.os.CopyAll(
+		filepath.Join(bazelBin, eslintPluginDist),
+		filepath.Join(workspace, eslintPluginDist),
+	)
 }
