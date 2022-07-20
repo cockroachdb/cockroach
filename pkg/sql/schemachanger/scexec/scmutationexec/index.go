@@ -79,6 +79,7 @@ func addNewIndexMutation(
 		ID:                          opIndex.IndexID,
 		Name:                        tabledesc.IndexNamePlaceholder(opIndex.IndexID),
 		Unique:                      opIndex.IsUnique,
+		NotVisible:                  opIndex.IsNotVisible,
 		Version:                     indexVersion,
 		Type:                        indexType,
 		CreatedExplicitly:           true,
