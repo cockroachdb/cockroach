@@ -6311,7 +6311,7 @@ func normalizeCDCExpression(t *testing.T, execCfgI interface{}, exprStr string) 
 	defer cleanup()
 
 	execCtx := p.(sql.JobExecContext)
-	_, err = cdceval.NormalizeAndValidateSelectForTarget(
+	_, _, err = cdceval.NormalizeAndValidateSelectForTarget(
 		context.Background(), execCtx, desc, target, sc, false,
 	)
 	require.NoError(t, err)
