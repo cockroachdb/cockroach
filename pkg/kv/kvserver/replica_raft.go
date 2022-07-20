@@ -174,7 +174,7 @@ func (r *Replica) evalAndPropose(
 		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
 	}
 	if proposal.command.ReplicatedEvalResult.AddSSTable != nil {
-		writeBytes.SSTableBytes = int64(len(proposal.command.ReplicatedEvalResult.AddSSTable.Data))
+		writeBytes.IngestedBytes = int64(len(proposal.command.ReplicatedEvalResult.AddSSTable.Data))
 	}
 	// If the request requested that Raft consensus be performed asynchronously,
 	// return a proposal result immediately on the proposal's done channel.
