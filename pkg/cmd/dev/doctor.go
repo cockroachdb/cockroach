@@ -197,23 +197,29 @@ You can install node with: `+"`pkg install node`")
 	}
 
 	d.log.Println("doctor: running githooks check")
-	if _, err = d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--is-inside-work-tree"); err != nil {
-		return err
-	}
-	const gitHooksDir = ".git/hooks"
-	if err := d.os.RemoveAll(gitHooksDir); err != nil {
-		return err
-	}
-	if err := d.os.MkdirAll(gitHooksDir); err != nil {
-		return err
-	}
-	hooks, err := d.os.ListFilesWithSuffix("githooks", "")
-	if err != nil {
-		return err
-	}
-	for _, hook := range hooks {
-		if err := d.os.Symlink(path.Join(workspace, hook), path.Join(gitHooksDir, path.Base(hook))); err != nil {
+	{
+		if _, err = d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--is-inside-work-tree"); err != nil {
 			return err
+		}
+		stdout, err := d.exec.CommandContextSilent(ctx, "git",  "rev-parse", "--git-path", "hooks")
+		if err != nil {
+			return err
+		}
+		gitHooksDir := strings.TrimSpace(string(stdout))
+		if err := d.os.RemoveAll(gitHooksDir); err != nil {
+			return err
+		}
+		if err := d.os.MkdirAll(gitHooksDir); err != nil {
+			return err
+		}
+		hooks, err := d.os.ListFilesWithSuffix("githooks", "")
+		if err != nil {
+			return err
+		}
+		for _, hook := range hooks {
+			if err := d.os.Symlink(path.Join(workspace, hook), path.Join(gitHooksDir, path.Base(hook))); err != nil {
+				return err
+			}
 		}
 	}
 
