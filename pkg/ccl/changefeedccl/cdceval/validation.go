@@ -41,23 +41,24 @@ func NormalizeAndValidateSelectForTarget(
 	target jobspb.ChangefeedTargetSpecification,
 	sc *tree.SelectClause,
 	includeVirtual bool,
-) (n NormalizedSelectClause, _ error) {
+	splitColFams bool,
+) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, _ error) {
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.EnablePredicateProjectionChangefeed) {
-		return n, errors.Newf(
+		return n, target, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
 			clusterversion.EnablePredicateProjectionChangefeed.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
 	if len(sc.From.Tables) != 1 {
-		return n, pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
+		return n, target, pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
 	}
 
 	// Sanity check target and descriptor refer to the same table.
 	if target.TableID != desc.GetID() {
-		return n, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
+		return n, target, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
 			target.TableID, desc.GetID())
 	}
 
@@ -66,19 +67,34 @@ func NormalizeAndValidateSelectForTarget(
 	// associated Txn() -- without which we cannot perform normalization.  Verify
 	// this assumption (txn is needed for type resolution).
 	if execCtx.Txn() == nil {
-		return n, errors.AssertionFailedf("expected non-nil transaction")
+		return n, target, errors.AssertionFailedf("expected non-nil transaction")
 	}
 
 	// Perform normalization.
 	var err error
 	normalized, err := normalizeSelectClause(ctx, *execCtx.SemaCtx(), sc, desc)
 	if err != nil {
-		return n, err
+		return n, target, err
+	}
+
+	columnVisitor := checkColumnsVisitor{
+		desc:         desc,
+		splitColFams: splitColFams,
+	}
+
+	err = columnVisitor.FindColumnFamilies(normalized)
+	if err != nil {
+		return n, target, err
+	}
+
+	target, err = setTargetType(desc, target, &columnVisitor)
+	if err != nil {
+		return n, target, err
 	}
 
 	ed, err := newEventDescriptorForTarget(desc, target, schemaTS(execCtx), includeVirtual)
 	if err != nil {
-		return n, err
+		return n, target, err
 	}
 
 	evalCtx := &execCtx.ExtendedEvalContext().Context
@@ -88,17 +104,81 @@ func NormalizeAndValidateSelectForTarget(
 	if _, _, err := constrainSpansBySelectClause(
 		ctx, execCtx, evalCtx, execCfg.Codec, sc, ed,
 	); err != nil {
-		return n, err
+		return n, target, err
 	}
 
 	// Construct and initialize evaluator.  This performs some static checks,
 	// and (importantly) type checks expressions.
 	evaluator, err := NewEvaluator(evalCtx, sc)
 	if err != nil {
-		return n, err
+		return n, target, err
 	}
 
-	return normalized, evaluator.initEval(ctx, ed)
+	return normalized, target, evaluator.initEval(ctx, ed)
+}
+
+func setTargetType(
+	desc catalog.TableDescriptor,
+	target jobspb.ChangefeedTargetSpecification,
+	cv *checkColumnsVisitor,
+) (jobspb.ChangefeedTargetSpecification, error) {
+	allFamilies := desc.GetFamilies()
+
+	if len(allFamilies) == 1 {
+		target.Type = jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+		return target, nil
+	}
+
+	var referencedFamilies []string
+
+	keyColSet := desc.GetPrimaryIndex().CollectKeyColumnIDs()
+	refColSet := catalog.MakeTableColSet(cv.columns...)
+	nonKeyColSet := refColSet.Difference(keyColSet)
+
+	if cv.seenStar {
+		if nonKeyColSet.Len() > 0 {
+			return target, pgerror.Newf(pgcode.InvalidParameterValue, "can't reference non-primary key columns as well as star on a multi column family table")
+		}
+		if cv.splitColFams {
+			target.Type = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			return target, pgerror.Newf(pgcode.FeatureNotSupported,
+				"split_column_families is not supported with changefeed expressions yet")
+		}
+		return target, pgerror.Newf(pgcode.InvalidParameterValue, "targeting a table with multiple column families requires WITH split_column_families and will emit multiple events per row.")
+	}
+
+	// If no non-primary key columns are being referenced, then we can assume that if
+	// code has reached this point, only key columns are being referenced in the
+	// SELECT statement. This may lead to weird behavior as primary keys are a part
+	// of every column family technically. To handle this, we will assign the target
+	// family to be the column family that the first primary key is in.
+	if nonKeyColSet.Len() == 0 {
+		target.Type = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+		for _, family := range allFamilies {
+			famColSet := catalog.MakeTableColSet(family.ColumnIDs...)
+			if famColSet.Contains(desc.GetPrimaryIndex().GetKeyColumnID(0)) {
+				target.FamilyName = family.Name
+				return target, nil
+			}
+		}
+	}
+
+	// If referenced families aren't being retrived properly try using rowenc.NeededFamilyIDs
+	for _, family := range allFamilies {
+		famColSet := catalog.MakeTableColSet(family.ColumnIDs...)
+		if nonKeyColSet.Intersects(famColSet) {
+			referencedFamilies = append(referencedFamilies, family.Name)
+		}
+	}
+
+	if len(referencedFamilies) > 1 {
+		target.Type = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+		return target, pgerror.Newf(pgcode.InvalidParameterValue,
+			"expressions can't reference columns from more than one column family")
+	}
+	target.Type = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+	target.FamilyName = referencedFamilies[0]
+	return target, nil
 }
 
 func newEventDescriptorForTarget(
@@ -136,8 +216,7 @@ func getTargetFamilyDescriptor(
 		// TODO(yevgeniy): Relax this restriction; some predicates/projectsion
 		// are entirely fine to use (e.g "*").
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-			"projections and filter cannot be used when running against multifamily table (table has %d families)",
-			desc.NumFamilies())
+			"expressions can't reference columns from more than one column family")
 	default:
 		return nil, errors.AssertionFailedf("invalid target type %v", target.Type)
 	}
@@ -221,6 +300,7 @@ func normalizeSelectClause(
 				return true, expr, nil
 			}
 			e.Type = typ
+
 		case *tree.CastExpr:
 			typ, udt, err := resolveType(e.Type)
 			if err != nil {
@@ -322,4 +402,45 @@ func SelectClauseRequiresPrev(semaCtx tree.SemaContext, sc NormalizedSelectClaus
 		return recurse, newExpr, nil
 	})
 	return c.foundPrev, err
+}
+
+type checkColumnsVisitor struct {
+	err          error
+	desc         catalog.TableDescriptor
+	columns      []descpb.ColumnID
+	seenStar     bool
+	splitColFams bool
+}
+
+func (c *checkColumnsVisitor) VisitCols(expr tree.Expr) (bool, tree.Expr) {
+	switch e := expr.(type) {
+	case *tree.UnresolvedName:
+		vn, err := e.NormalizeVarName()
+		if err != nil {
+			c.err = err
+			return false, expr
+		}
+		return c.VisitCols(vn)
+
+	case *tree.ColumnItem:
+		col, err := c.desc.FindColumnWithName(e.ColumnName)
+		if err != nil {
+			c.err = err
+			return false, expr
+		}
+		colID := col.GetID()
+		c.columns = append(c.columns, colID)
+
+	case tree.UnqualifiedStar:
+		c.seenStar = true
+	}
+	return true, expr
+}
+
+func (c *checkColumnsVisitor) FindColumnFamilies(sc NormalizedSelectClause) error {
+	_, err := tree.SimpleStmtVisit(sc.Clause(), func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		recurse, newExpr = c.VisitCols(expr)
+		return recurse, newExpr, nil
+	})
+	return err
 }
