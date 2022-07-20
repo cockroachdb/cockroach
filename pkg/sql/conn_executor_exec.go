@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -1169,7 +1168,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		const numTxnRetryErrors = 3
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
-			planner.Txn().Sender().TxnStatus() == roachpb.PENDING && ex.user() != username.NodeUserName() {
+			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
 			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
 				retryErr := planner.Txn().GenerateForcedRetryableError(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")

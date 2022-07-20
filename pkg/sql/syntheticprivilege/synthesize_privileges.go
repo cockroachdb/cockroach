@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// SystemPrivilegesTableName represents system.privileges.
+var SystemPrivilegesTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "privileges")
+
 func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	ctx context.Context, p eval.Planner, systemTablePrivilegeObject catalog.SyntheticPrivilegeObject,
 ) (privileges *catpb.PrivilegeDescriptor, retErr error) {
@@ -35,8 +38,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	found, privileges, retErr = func() (bool, *catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
-		systemPrivilegesTableName := tree.NewTableNameWithSchema("system", "public", "privileges")
-		version, err := p.GetDescriptorVersionByTableName(ctx, systemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
+		version, err := p.GetDescriptorVersionByTableName(ctx, SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			return false, nil, err
 		}
@@ -94,7 +96,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 			privileges.Grant(
 				username.MakeSQLUsernameFromPreNormalizedString(string(user)),
 				privs,
-				false,
+				false, /* withGrantOption */
 			)
 		}
 
@@ -106,7 +108,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		// TODO(richardjcai): Do a migration for this instead.
 		if systemTablePrivilegeObject.PrivilegeObjectType() == privilege.VirtualTable {
 			if _, found := privileges.FindUser(username.PublicRoleName()); !found {
-				privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
+				privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false /* withGrantOption */)
 			}
 		}
 

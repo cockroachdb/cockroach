@@ -40,10 +40,7 @@ type Cache struct {
 // numSystemTables is the number of system tables backing the cache.
 // We use it to initialize the tableVersions slice to 0 for each table.
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int) *Cache {
-	var tableVersions []descpb.DescriptorVersion
-	for i := 0; i < numSystemTables; i++ {
-		tableVersions = append(tableVersions, 0)
-	}
+	tableVersions := make([]descpb.DescriptorVersion, numSystemTables)
 	return &Cache{
 		tableVersions: tableVersions,
 		boundAccount:  account,

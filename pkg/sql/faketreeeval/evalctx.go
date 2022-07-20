@@ -431,6 +431,11 @@ func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bo
 	return true
 }
 
+// GetVirtualSchemaNameByID is part of the Planner interface.
+func (*DummyEvalPlanner) GetVirtualSchemaNameByID(id descpb.ID) (string, bool) {
+	return "", false
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

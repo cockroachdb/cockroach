@@ -1,18 +1,32 @@
-statement ok
-CREATE TABLE t()
+user testuser
 
-query B
-select has_table_privilege('testuser', 't', 'select');
-----
-false
+# Public should have SELECT on virtual tables by default.
+statement ok
+SELECT * FROM crdb_internal.tables
 
 statement ok
-GRANT SELECT ON TABLE t TO public
 
 query B
-select has_table_privilege('testuser', 't', 'select');
+SELECT has_table_privilege('testuser', 'crdb_internal.tables', 'select');
 ----
 true
+
+user root
+
+statement ok
+REVOKE SELECT ON crdb_internal.tables FROM public
+
+query TTTT
+SELECT * FROM system.privileges
+----
+public  /vtable/crdb_internal/tables  {}  {}
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO public
+
+query TTTT
+SELECT * FROM system.privileges
+----
 
 user testuser
 
@@ -25,15 +39,22 @@ statement ok
 REVOKE SELECT ON TABLE crdb_internal.tables FROM public
 
 query B
-select has_table_privilege('testuser', 'crdb_internal.tables', 'select');
+SELECT has_table_privilege('testuser', 'crdb_internal.tables', 'select');
 ----
 false
+
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation tables
+SHOW TABLES
+
+user root
 
 statement ok
 GRANT SELECT ON TABLE crdb_internal.tables TO public
 
 query B
-select has_table_privilege('testuser', 'crdb_internal.tables', 'select');
+SELECT has_table_privilege('testuser', 'crdb_internal.tables', 'select');
 ----
 true
 
@@ -55,12 +76,61 @@ user testuser
 statement ok
 SELECT * FROM crdb_internal.tables
 
-# Second select tests the cache. Rudimentary test to ensure the cache works.
+user root
+
+# Test that we can specify the database name.
 statement ok
-SELECT * FROM crdb_internal.tables
+CREATE DATABASE test2
+
+query T noticetrace
+GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
+----
+NOTICE: virtual table privileges are not database specific
+
+query TTTT
+SELECT * FROM system.privileges
+----
+testuser  /vtable/information_schema/columns  {SELECT}  {}
+
+user testuser
+
+statement ok
+SELECT * FROM test2.information_schema.columns
+
+# We're in database test, this is okay.
+statement ok
+SELECT * FROM crdb_internal.cluster_sessions
+
+user root
+
+statement ok
+use test2
+
+# virtual table privileges are not database specific so qualifying it should
+# do nothing.
+
+query B
+select has_table_privilege('testuser', 'test2.crdb_internal.tables', 'select');
+----
+true
+
+statement ok
+use test
+
+query B
+select has_table_privilege('testuser', 'test.crdb_internal.tables', 'select');
+----
+true
+
+# Test that dropping the database removes the corresponding privileges.
+
+user root
 
 statement error pq: invalid privilege type USAGE for virtual_table
 GRANT USAGE ON TABLE crdb_internal.tables TO testuser
 
 statement error pq: invalid privilege type ZONECONFIG for virtual_table
 GRANT ZONECONFIG ON TABLE crdb_internal.tables TO testuser
+
+statement error pq: invalid privilege type CREATE for virtual_table
+GRANT CREATE ON TABLE information_schema.tables TO testuser

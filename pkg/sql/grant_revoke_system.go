@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,6 +39,11 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 	if err := n.changePrivilegesNode.preChangePrivilegesValidation(params); err != nil {
 		return err
 	}
+
+	deleteStmt := fmt.Sprintf(
+		`DELETE FROM system.%s VALUES WHERE username = $1 AND path = $2`,
+		catconstants.SystemPrivilegeTableName,
+	)
 
 	// Get the privilege path for this grant.
 	systemPrivilegeObjects, err := n.makeSystemPrivilegeObject(params.ctx, params.p)
@@ -67,6 +73,26 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				if !found {
 					return errors.AssertionFailedf("user %s not found", user)
 				}
+				// If the row is only "public" with SELECT
+				// explicitly delete the row. Lack of row for
+				// public means public has SELECT which
+				// is the default case.
+				if user == username.PublicRoleName() && userPrivs.Privileges == privilege.SELECT.Mask() {
+					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+						params.ctx,
+						`delete-system-privilege`,
+						params.p.txn,
+						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+						deleteStmt,
+						user.Normalized(),
+						systemPrivilegeObject.ToString(),
+					)
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
 				insertStmt := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
 				_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 					params.ctx,
@@ -114,18 +140,14 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				// If there are no entries remaining on the PrivilegeDescriptor for the user
 				// we can remove the entire row for the user.
 				if !found {
-					deleteStmt := fmt.Sprintf(
-						`DELETE FROM system.%s VALUES WHERE path = $1 AND username = $2`,
-						catconstants.SystemPrivilegeTableName,
-					)
 					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 						params.ctx,
 						`delete-system-privilege`,
 						params.p.txn,
 						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 						deleteStmt,
-						systemPrivilegeObject.ToString(),
 						user.Normalized(),
+						systemPrivilegeObject.ToString(),
 					)
 					if err != nil {
 						return err
@@ -172,18 +194,22 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 			if err != nil {
 				return nil, err
 			}
-			_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+			tableNames, _, err := expandTableGlob(ctx, p, tableGlob)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(objectIDs) == 0 {
+			if len(tableNames) == 0 {
 				return nil, errors.AssertionFailedf("no tables found")
 			}
 
-			for _, id := range objectIDs {
+			for _, name := range tableNames {
+				if name.ExplicitCatalog {
+					p.BufferClientNotice(ctx, pgnotice.Newf("virtual table privileges are not database specific"))
+				}
 				ret = append(ret, &syntheticprivilege.VirtualTablePrivilege{
-					ID: id,
+					SchemaName: name.Schema(),
+					TableName:  name.Table(),
 				})
 			}
 		}

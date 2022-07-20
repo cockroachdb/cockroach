@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
@@ -25,7 +24,8 @@ import (
 // VirtualTablePrivilege represents privileges on virtual tables such as
 // crdb_internal or pg_catalog tables.
 type VirtualTablePrivilege struct {
-	ID descpb.ID `priv:"ID"`
+	SchemaName string `priv:"SchemaName"`
+	TableName  string `priv:"TableName"`
 }
 
 // VirtualTablePrivilegeType represents the object type for
@@ -34,7 +34,7 @@ const VirtualTablePrivilegeType = "VirtualTable"
 
 // ToString implements the SyntheticPrivilegeObject interface.
 func (p *VirtualTablePrivilege) ToString() string {
-	return fmt.Sprintf("/vtable/%d", p.ID)
+	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
 }
 
 // PrivilegeObjectType implements the SyntheticPrivilegeObject interface.
@@ -66,7 +66,5 @@ func (p *VirtualTablePrivilege) GetObjectType() privilege.ObjectType {
 
 // GetName implements the PrivilegeObject interface.
 func (p *VirtualTablePrivilege) GetName() string {
-	// TODO(richardjcai): Make this get the actual table name.
-	// This isn't super important since this is only used in error messages.
-	return fmt.Sprintf("virtual table %d", p.ID)
+	return fmt.Sprintf("%s.%s", p.SchemaName, p.TableName)
 }
