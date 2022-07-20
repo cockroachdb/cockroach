@@ -609,9 +609,13 @@ type kvStoreTokenGranter struct {
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
 	exhaustedStart                  time.Time
+
+	writeLM, ingestedLM tokensLinearModel
 }
 
 var _ granterWithLockedCalls = &kvStoreTokenGranter{}
+var _ granterWithIOTokens = &kvStoreTokenGranter{}
+var _ granterWithStoreWriteDone = &kvStoreTokenGranter{}
 
 func (sg *kvStoreTokenGranter) getPairedRequester() requester {
 	return sg.requester
@@ -686,6 +690,39 @@ func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensU
 	}
 	sg.startingIOTokens = tokens
 	return tokensUsed
+}
+
+func (sg *kvStoreTokenGranter) setAdmittedDoneModelsLocked(
+	writeLM tokensLinearModel, ingestedLM tokensLinearModel,
+) {
+	sg.writeLM = writeLM
+	sg.ingestedLM = ingestedLM
+}
+
+func (sg *kvStoreTokenGranter) storeWriteDone(
+	originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokens int64) {
+	// We don't bother with the *Locked dance through the GrantCoordinator here
+	// since the grant coordinator doesn't know when to call the tryGrant since
+	// it does not know whether tokens have become available.
+	sg.coord.mu.Lock()
+	exhaustedFunc := func() bool {
+		return sg.availableIOTokens <= 0
+	}
+	wasExhausted := exhaustedFunc()
+	actualTokens :=
+		int64(float64(doneInfo.WriteBytes)*sg.writeLM.multiplier) + sg.writeLM.constant +
+			int64(float64(doneInfo.IngestedBytes)*sg.ingestedLM.multiplier) + sg.ingestedLM.constant
+	additionalTokensNeeded := actualTokens - originalTokens
+	sg.subtractTokens(additionalTokensNeeded, false)
+	if additionalTokensNeeded < 0 {
+		isExhausted := exhaustedFunc()
+		if wasExhausted && !isExhausted {
+			sg.coord.tryGrant()
+		}
+	}
+	sg.coord.mu.Unlock()
+	return additionalTokensNeeded
 }
 
 // GrantCoordinator is the top-level object that coordinates grants across
@@ -812,7 +849,7 @@ type makeRequesterFunc func(
 	opts workQueueOptions) requester
 
 type makeStoreRequesterFunc func(
-	_ log.AmbientContext, granter granter, settings *cluster.Settings,
+	_ log.AmbientContext, granter granterWithStoreWriteDone, settings *cluster.Settings,
 	opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
@@ -1499,9 +1536,10 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	kvg.requester = storeReq
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
-		storeID:     storeID,
-		settings:    sgc.settings,
-		kvRequester: storeReq,
+		storeID:               storeID,
+		settings:              sgc.settings,
+		kvRequester:           storeReq,
+		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 	}
 	coord.ioLoadListener.mu.Mutex = &coord.mu
 	coord.ioLoadListener.mu.kvGranter = kvg
@@ -1781,6 +1819,8 @@ type StoreMetrics struct {
 }
 
 // granterWithIOTokens is used to abstract kvStoreTokenGranter for testing.
+// The interface is used by the entity that periodically looks at load and
+// computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
 	// setAvailableIOTokensLocked bounds the available tokens that can be
 	// granted to the value provided in the tokens parameter. This is not a
@@ -1792,6 +1832,20 @@ type granterWithIOTokens interface {
 	// that tokensUsed can be negative, though that will be rare, since it is
 	// possible for tokens to be returned.
 	setAvailableIOTokensLocked(tokens int64) (tokensUsed int64)
+	// setAdmittedDoneAdjustments supplies the adjustments to use when
+	// storeWriteDone is called. Note that this is not the adjustment to use at
+	// admission time -- that is handled by StoreWorkQueue and is not in scope
+	// of this granter. This asymmetry is due to the need to use all the
+	// functionality of WorkQueue at admission time.
+	setAdmittedDoneModelsLocked(writeLM tokensLinearModel, ingestedLM tokensLinearModel)
+}
+
+// granterWithStoreWriteDone is used to abstract kvStoreTokenGranter for
+// testing. The interface is used by StoreWorkQueue to pass on sizing
+// information provided when the work was completed.
+type granterWithStoreWriteDone interface {
+	granter
+	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
 }
 
 // storeAdmissionStats are stats maintained by a storeRequester. The non-test
@@ -1799,46 +1853,23 @@ type granterWithIOTokens interface {
 // all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these
 // cumulative values are mutually consistent.
 type storeAdmissionStats struct {
-	// Total admission requests.
+	// Total admission requests that called AdmittedWorkDone.
 	admittedCount uint64
-	// Total admission requests that provided their byte size. The remaining
-	// provided a byte size of 0.
-	// INVARIANT: admittedWithBytesCount <= admittedCount
-	admittedWithBytesCount uint64
-	// Bytes mentioned at admission request time for the requests in
-	// admittedWithBytesCount.
+	// Sum of StoreWorkDoneInfo.WriteBytes.
 	//
-	// TODO(sumeer): if these are a mix of regular Batch writes and ingestion
-	// requests, i.e., admittedAccountedBytes > ingestedAccountedBytes, then the two kinds of
-	// bytes are not actually comparable, since the Batch writes are
-	// uncompressed. We may need to fix this inaccuracy if it turns out to be an
-	// issue.
-	admittedAccountedBytes uint64
-	// Bytes mentioned at admission request time for the ingestion requests. Bytes
-	// in this field are also reflected in admittedAccountedBytes.
-	// INVARIANT: ingestedAccountedBytes <= admittedAccountedBytes
+	// TODO(sumeer): writeAccountedBytes and ingestedAccountedBytes are not
+	// actually comparable, since the former is uncompressed. We may need to fix
+	// this inaccuracy if it turns out to be an issue.
+	writeAccountedBytes uint64
+	// Sum of StoreWorkDoneInfo.IngestedBytes.
 	ingestedAccountedBytes uint64
-	// After execution of the ingestion requests, how many bytes were reported as
-	// ingested into L0. Bytes in this field are also reflected in admittedAccountedBytes.
-	//
-	// INVARIANT: ingestedAccountedL0Bytes <= ingestedAccountedBytes
-	ingestedAccountedL0Bytes uint64
 }
 
 // storeRequestEstimates are estimates that the storeRequester should use for
 // its future requests.
 type storeRequestEstimates struct {
-	// Fraction of ingested bytes (via admission control) that went into L0.
-	// Calculated using storeAdmissionStats.
-	fractionOfIngestIntoL0 float64
-	// This estimate is used to adjust work bytes, to compensate for any
-	// observed under-counting.
-	// - For requests that do not provide a byte size, this is the value of
-	//   tokens they will use.
-	// - For requests that do provide a byte size, this adjustment is added to
-	//   compensate for other requests that are unobserved by admission control.
-	// Must be > 0.
-	workByteAddition int64
+	// writeTokens is the tokens to request at admission time. Must be > 0.
+	writeTokens int64
 }
 
 // storeRequester is used to abstract *StoreWorkQueue for testing.
@@ -1850,8 +1881,6 @@ type storeRequester interface {
 
 type ioLoadListenerState struct {
 	// Cumulative.
-	cumAdmissionStats storeAdmissionStats
-	// Cumulative.
 	cumL0AddedBytes uint64
 	// Gauge.
 	curL0Bytes int64
@@ -1860,13 +1889,7 @@ type ioLoadListenerState struct {
 
 	// Exponentially smoothed per interval values.
 
-	smoothedIntL0CompactedBytes          int64   // bytes leaving L0
-	smoothedIntPerWorkUnaccountedL0Bytes float64 // smoothed unaccounted L0 bytes per req
-	// Used to guess how much of an incoming ingestion will likely go to L0
-	// to inform the number of tokens to request. The actual number of tokens
-	// is determined when the work is done, as then the L0 fraction is known
-	// precisely.
-	smoothedIntIngestedAccountedL0BytesFraction float64 // '1.0' means: all ingested bytes went to L0
+	smoothedIntL0CompactedBytes int64 // bytes leaving L0
 	// Smoothed history of byte tokens calculated based on compactions out of L0.
 	smoothedCompactionByteTokens float64
 
@@ -1907,6 +1930,7 @@ type ioLoadListener struct {
 	// Stats used to compute interval stats.
 	statsInitialized bool
 	adjustTokensResult
+	perWorkTokenEstimator storePerWorkTokenEstimator
 }
 
 const unlimitedTokens = math.MaxInt64
@@ -1971,19 +1995,17 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	m := metrics.Metrics
 	if !io.statsInitialized {
 		io.statsInitialized = true
+		sas := io.kvRequester.getStoreAdmissionStats()
+		io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], sas)
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
-				cumAdmissionStats:  io.kvRequester.getStoreAdmissionStats(),
 				cumL0AddedBytes:    m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
 				curL0Bytes:         m.Levels[0].Size,
 				cumWriteStallCount: metrics.WriteStallCount,
-				// Reasonable starting fraction until we see some ingests.
-				smoothedIntIngestedAccountedL0BytesFraction: 0.5,
 				// No initial limit, i.e, the first interval is unlimited.
 				totalNumByteTokens: unlimitedTokens,
 			},
-			requestEstimates: storeRequestEstimates{},
-			aux:              adjustTokensAuxComputations{},
+			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
 				L0NumSubLevels:          int64(m.Levels[0].Sublevels),
 				L0NumSubLevelsThreshold: math.MaxInt64,
@@ -1991,6 +2013,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				L0NumFilesThreshold:     math.MaxInt64,
 			},
 		}
+		io.copyAuxFromPerWorkEstimator()
 		return
 	}
 	io.adjustTokens(ctx, metrics)
@@ -2035,17 +2058,36 @@ func (io *ioLoadListener) allocateTokensTick() {
 // memtable counts, which we want to avoid as it can cause latency hiccups of
 // 100+ms for all write traffic.
 func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
-	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(),
+	sas := io.kvRequester.getStoreAdmissionStats()
+	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
 		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
-	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
+	io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], sas)
+	io.copyAuxFromPerWorkEstimator()
+	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
+	io.kvRequester.setStoreRequestEstimates(requestEstimates)
+	writeLM, ingestedLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
+	io.mu.Lock()
+	io.mu.kvGranter.setAdmittedDoneModelsLocked(writeLM, ingestedLM)
+	io.mu.Unlock()
 	if _, overloaded := res.ioThreshold.Score(); overloaded || res.aux.doLogFlush {
-		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
+		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s",
+			io.adjustTokensResult)
 	}
+}
+
+func (io *ioLoadListener) copyAuxFromPerWorkEstimator() {
+	// Copy the aux so that the printing story is simplified.
+	io.adjustTokensResult.aux.perWorkTokensAux = io.perWorkTokenEstimator.aux
+	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
+	io.adjustTokensResult.requestEstimates = requestEstimates
+	writeLM, ingestedLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
+	io.adjustTokensResult.writeLM = writeLM
+	io.adjustTokensResult.ingestedLM = ingestedLM
 }
 
 type tokenKind int8
@@ -2059,16 +2101,6 @@ type adjustTokensAuxComputations struct {
 	intL0AddedBytes     int64
 	intL0CompactedBytes int64
 
-	intAdmittedCount uint64
-
-	intAdmittedBytes, intIngestedBytes uint64
-	intIngestedAccountedL0Bytes        uint64
-	intAccountedL0Bytes                uint64
-	intUnaccountedL0Bytes              int64
-
-	intPerWorkUnaccountedL0Bytes float64
-	l0BytesIngestFraction        float64
-
 	intFlushTokens      float64
 	intFlushUtilization float64
 	intWriteStalls      int64
@@ -2076,13 +2108,13 @@ type adjustTokensAuxComputations struct {
 	prevTokensUsed int64
 	tokenKind      tokenKind
 
-	doLogFlush bool
+	perWorkTokensAux perWorkTokensAux
+	doLogFlush       bool
 }
 
 func (*ioLoadListener) adjustTokensInner(
 	ctx context.Context,
 	prev ioLoadListenerState,
-	cumAdmissionStats storeAdmissionStats,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
 	im *pebble.InternalIntervalMetrics,
@@ -2117,87 +2149,6 @@ func (*ioLoadListener) adjustTokensInner(
 	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 	// so smooth out what is being removed by compactions.
 	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
-	// Compute the deltas of the storeAdmissionStats.
-
-	// intAdmittedCount is the number of requests admitted since the last token adjustment.
-	intAdmittedCount := cumAdmissionStats.admittedCount - prev.cumAdmissionStats.admittedCount
-	if intAdmittedCount <= 0 {
-		intAdmittedCount = 1
-	}
-
-	// intAdmittedBytes are the bytes admitted since the last token adjustment. This
-	// also includes any ingestions, i.e. intAdmittedBytes >= intIngestedAccountedBytes.
-	intAdmittedBytes := cumAdmissionStats.admittedAccountedBytes - prev.cumAdmissionStats.admittedAccountedBytes
-	// intIngestedAccountedBytes are the bytes ingested since the last token adjustment. Bytes
-	// tracked here are also tracked in intAdmittedBytes.
-	intIngestedAccountedBytes := cumAdmissionStats.ingestedAccountedBytes - prev.cumAdmissionStats.ingestedAccountedBytes
-	// intIngestedAccountedL0Bytes are the bytes ingested since the last token
-	// adjustment that requests reported as having been ingested into L0. Bytes
-	// tracked here are also tracked in intIngestedAccountedBytes.
-	intIngestedAccountedL0Bytes :=
-		cumAdmissionStats.ingestedAccountedL0Bytes - prev.cumAdmissionStats.ingestedAccountedL0Bytes
-
-	// intAccountedL0Bytes are the bytes that we expect to have entered L0 based
-	// on the requests tracked over the interval: the bytes ingested into L0 and
-	// all non-ingestion bytes (since regular writes flush to L0 before getting
-	// compacted down).
-	intAccountedL0Bytes := intIngestedAccountedL0Bytes + (intAdmittedBytes - intIngestedAccountedBytes)
-	// Bytes that were added to L0 based on LSM stats, but we don't know where
-	// they came from. The sum of the accounted and unaccounted L0 bytes is
-	// exactly the actual L0 growth observed over the interval.
-	intUnaccountedL0Bytes := intL0AddedBytes - int64(intAccountedL0Bytes)
-	if intUnaccountedL0Bytes < 0 {
-		// This could happen because of the different points in time the two stats
-		// a, b are collected, for which we are computing a-b. The compensation we
-		// do below is limited to exponential smoothing, which hopefully is good
-		// enough.
-		intUnaccountedL0Bytes = 0
-	}
-
-	// intPerWorkUnaccountedL0Bytes is the average unaccounted L0 bytes each request added
-	// since the last token adjustment round.
-	// INVARIANT: intPerWorkUnaccountedL0Bytes >= 0
-	intPerWorkUnaccountedL0Bytes := float64(intUnaccountedL0Bytes) / float64(intAdmittedCount)
-	var smoothedIntPerWorkUnaccountedL0Bytes float64
-	if intAdmittedCount > 1 && intL0AddedBytes > 0 {
-		// Track an exponentially smoothed estimate of unaccounted bytes added per
-		// work when there was some work actually admitted. Note we treat having
-		// admitted one item as the same as having admitted zero both because we
-		// clamp admitted to 1 and if we only admitted one thing, do we really
-		// want to use that for our estimate? The conjunction includes intL0AddedBytes
-		// > 0 (and not just intAdmittedCount), since we have seen situation where no
-		// bytes were added and intAdmittedCount > 1. This can happen since the stats
-		// from Pebble and those from the requester are not synchronized, and in
-		// that case we don't want to include this sample in the smoothing.
-		if prev.smoothedIntPerWorkUnaccountedL0Bytes == 0 {
-			smoothedIntPerWorkUnaccountedL0Bytes = intPerWorkUnaccountedL0Bytes
-		} else {
-			smoothedIntPerWorkUnaccountedL0Bytes = alpha*intPerWorkUnaccountedL0Bytes +
-				(1-alpha)*prev.smoothedIntPerWorkUnaccountedL0Bytes
-		}
-	} else {
-		// We've not had work flow through admission control, so we don't have any
-		// reasonable interval data to update our previous estimates. Keep the old
-		// smoothed value around, as it is likely more useful for future admission
-		// control computations than smoothing down to zero over time.
-		smoothedIntPerWorkUnaccountedL0Bytes = prev.smoothedIntPerWorkUnaccountedL0Bytes
-	}
-
-	var intIngestedAccountedL0BytesFraction float64
-	var smoothedIntIngestedAccountedL0BytesFraction float64
-	if intIngestedAccountedBytes > 0 {
-		intIngestedAccountedL0BytesFraction = float64(intIngestedAccountedL0Bytes) / float64(intIngestedAccountedBytes)
-		smoothedIntIngestedAccountedL0BytesFraction = alpha*intIngestedAccountedL0BytesFraction +
-			(1-alpha)*prev.smoothedIntIngestedAccountedL0BytesFraction
-	} else {
-		// No ingestion happened in this time interval, so don't update the
-		// estimate. This makes the assumption that future ingestions will have
-		// around the same ratio (or at least that the same ratio is a decent
-		// starting point), which may be incorrect but is likely on average better
-		// than assuming zero as the future starting point, which would be the
-		// result of smoothing out with additional zeroes.
-		smoothedIntIngestedAccountedL0BytesFraction = prev.smoothedIntIngestedAccountedL0BytesFraction
-	}
 
 	// Flush tokens:
 	//
@@ -2424,41 +2375,26 @@ func (*ioLoadListener) adjustTokensInner(
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
 		ioLoadListenerState: ioLoadListenerState{
-			cumAdmissionStats:                           cumAdmissionStats,
-			cumL0AddedBytes:                             cumL0AddedBytes,
-			curL0Bytes:                                  curL0Bytes,
-			cumWriteStallCount:                          cumWriteStallCount,
-			smoothedIntL0CompactedBytes:                 smoothedIntL0CompactedBytes,
-			smoothedIntPerWorkUnaccountedL0Bytes:        smoothedIntPerWorkUnaccountedL0Bytes,
-			smoothedIntIngestedAccountedL0BytesFraction: smoothedIntIngestedAccountedL0BytesFraction,
-			smoothedCompactionByteTokens:                smoothedCompactionByteTokens,
-			smoothedNumFlushTokens:                      smoothedNumFlushTokens,
-			flushUtilTargetFraction:                     flushUtilTargetFraction,
-			totalNumByteTokens:                          totalNumByteTokens,
-			tokensAllocated:                             0,
-			tokensUsed:                                  0,
-		},
-		requestEstimates: storeRequestEstimates{
-			workByteAddition:       max(1, int64(smoothedIntPerWorkUnaccountedL0Bytes)),
-			fractionOfIngestIntoL0: smoothedIntIngestedAccountedL0BytesFraction,
+			cumL0AddedBytes:              cumL0AddedBytes,
+			curL0Bytes:                   curL0Bytes,
+			cumWriteStallCount:           cumWriteStallCount,
+			smoothedIntL0CompactedBytes:  smoothedIntL0CompactedBytes,
+			smoothedCompactionByteTokens: smoothedCompactionByteTokens,
+			smoothedNumFlushTokens:       smoothedNumFlushTokens,
+			flushUtilTargetFraction:      flushUtilTargetFraction,
+			totalNumByteTokens:           totalNumByteTokens,
+			tokensAllocated:              0,
+			tokensUsed:                   0,
 		},
 		aux: adjustTokensAuxComputations{
-			intL0AddedBytes:              intL0AddedBytes,
-			intL0CompactedBytes:          intL0CompactedBytes,
-			intAdmittedCount:             intAdmittedCount,
-			intAdmittedBytes:             intAdmittedBytes,
-			intIngestedBytes:             intIngestedAccountedBytes,
-			intIngestedAccountedL0Bytes:  intIngestedAccountedL0Bytes,
-			intAccountedL0Bytes:          intAccountedL0Bytes,
-			intUnaccountedL0Bytes:        intUnaccountedL0Bytes,
-			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
-			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
-			intFlushTokens:               intFlushTokens,
-			intFlushUtilization:          intFlushUtilization,
-			intWriteStalls:               intWriteStalls,
-			prevTokensUsed:               prev.tokensUsed,
-			tokenKind:                    tokenKind,
-			doLogFlush:                   doLogFlush,
+			intL0AddedBytes:     intL0AddedBytes,
+			intL0CompactedBytes: intL0CompactedBytes,
+			intFlushTokens:      intFlushTokens,
+			intFlushUtilization: intFlushUtilization,
+			intWriteStalls:      intWriteStalls,
+			prevTokensUsed:      prev.tokensUsed,
+			tokenKind:           tokenKind,
+			doLogFlush:          doLogFlush,
 		},
 		ioThreshold: ioThreshold,
 	}
@@ -2467,6 +2403,8 @@ func (*ioLoadListener) adjustTokensInner(
 type adjustTokensResult struct {
 	ioLoadListenerState
 	requestEstimates storeRequestEstimates
+	writeLM          tokensLinearModel
+	ingestedLM       tokensLinearModel
 	aux              adjustTokensAuxComputations
 	ioThreshold      *admissionpb.IOThreshold // never nil
 }
@@ -2482,18 +2420,26 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	// NB: "≈" indicates smoothed quantities.
 	p.Printf("compaction score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
-	p.Printf("L0 growth %s: ", ib(res.aux.intL0AddedBytes))
-	// Writes to L0 that we expected because requests asked admission control for them.
-	// This is the "happy path".
-	p.Printf("%s acc-write + ", ib(int64(res.aux.intAccountedL0Bytes-res.aux.intIngestedAccountedL0Bytes)))
-	// Ingestion bytes that we expected to go to L0 based on the ingestion fraction
-	// when the respective ingestions were admitted.
-	p.Printf("%s acc-ingest + ", ib(int64(res.aux.intIngestedAccountedL0Bytes)))
-	// The unhappy case - extra bytes that showed up in L0 but we didn't account
-	// for them with any request. If this is large, traffic patterns possibly changed
-	// recently.
-	p.Printf("%s unacc [≈%s/req, n=%d], ",
-		ib(res.aux.intUnaccountedL0Bytes), ib(int64(res.smoothedIntPerWorkUnaccountedL0Bytes)), res.aux.intAdmittedCount)
+	p.Printf("L0 growth %s (write %s ingest %s): ", ib(res.aux.intL0AddedBytes),
+		ib(res.aux.perWorkTokensAux.intL0WriteBytes), ib(res.aux.perWorkTokensAux.intL0IngestedBytes))
+	// Writes to L0 that we expected because requests told admission control.
+	// This is the "easy path", from an estimation perspective, if all regular
+	// writes accurately tell us what they write, and all ingests tell us what
+	// they ingest and all of ingests into L0.
+	p.Printf("requests %d with ", res.aux.perWorkTokensAux.intWorkCount)
+	p.Printf("%s acc-write + ", ib(res.aux.perWorkTokensAux.intL0WriteAccountedBytes))
+	// Ingestion bytes that we expected because requests told admission control.
+	p.Printf("%s acc-ingest + ", ib(res.aux.perWorkTokensAux.intL0IngestedAccountedBytes))
+	// The models we are fitting to compute tokens.
+	p.Printf("write-model %.2fx+%s (smoothed %.2fx+%s) + ",
+		res.aux.perWorkTokensAux.intWriteLinearModel.multiplier,
+		ib(res.aux.perWorkTokensAux.intWriteLinearModel.constant),
+		res.writeLM.multiplier, ib(res.writeLM.constant))
+	p.Printf("ingested-model %.2fx+%s (smoothed %.2fx+%s) + ",
+		res.aux.perWorkTokensAux.intIngestedLinearModel.multiplier,
+		ib(res.aux.perWorkTokensAux.intIngestedLinearModel.constant),
+		res.ingestedLM.multiplier, ib(res.ingestedLM.constant))
+	p.Printf("at-admission-tokens %s, ", ib(res.requestEstimates.writeTokens))
 	// How much got compacted out of L0 recently.
 	p.Printf("compacted %s [≈%s], ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
 	p.Printf("flushed %s [≈%s]; ", ib(int64(res.aux.intFlushTokens)),
@@ -2508,9 +2454,6 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
 		p.Printf(" (used %s)", ib(res.aux.prevTokensUsed))
-		p.Printf(" with L0 penalty: +%s/req, *%.2f/ingest",
-			ib(res.requestEstimates.workByteAddition), res.requestEstimates.fractionOfIngestIntoL0,
-		)
 	} else {
 		p.SafeString("all")
 	}

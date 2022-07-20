@@ -58,6 +58,7 @@ type testGranter struct {
 	buf                   *builderWithMu
 	r                     requester
 	returnValueFromTryGet bool
+	additionalTokens      int64
 }
 
 var _ granter = &testGranter{}
@@ -88,6 +89,13 @@ func (tg *testGranter) grant(grantChainID grantChainID) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	tg.buf.printf("granted: returned %d", rv)
+}
+func (tg *testGranter) storeWriteDone(
+	originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokens int64) {
+	tg.buf.printf("storeWriteDone: originalTokens %d, doneBytes(write %d,ingested %d) returning %d",
+		originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
+	return tg.additionalTokens
 }
 
 type testWork struct {
@@ -443,11 +451,10 @@ func TestPriorityStates(t *testing.T) {
 TestStoreWorkQueueBasic is a datadriven test with the following commands:
 init
 admit id=<int> tenant=<int> priority=<int> create-time-millis=<int> bypass=<bool>
-  [write-bytes=<int>] [ingest-request=<bool>]
 set-try-get-return-value v=<bool>
 granted
 cancel-work id=<int>
-work-done id=<int> [ingested-into-l0=<int>]
+work-done id=<int> [write-bytes=<int>] [ingested-bytes=<int>] [additional-tokens=<int>]
 print
 */
 func TestStoreWorkQueueBasic(t *testing.T) {
@@ -501,14 +508,6 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				d.ScanArgs(t, "create-time-millis", &createTime)
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
-				var writeBytes int
-				if d.HasArg("write-bytes") {
-					d.ScanArgs(t, "write-bytes", &writeBytes)
-				}
-				var ingestRequest bool
-				if d.HasArg("ingest-request") {
-					d.ScanArgs(t, "ingest-request", &ingestRequest)
-				}
 				ctx, cancel := context.WithCancel(context.Background())
 				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
 				workInfo := StoreWriteWorkInfo{
@@ -518,8 +517,6 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						CreateTime:      int64(createTime) * int64(time.Millisecond),
 						BypassAdmission: bypass,
 					},
-					WriteBytes:    int64(writeBytes),
-					IngestRequest: ingestRequest,
 				}
 				go func(ctx context.Context, info StoreWriteWorkInfo, id int) {
 					handle, err := q.Admit(ctx, workInfo)
@@ -544,12 +541,9 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 
 			case "set-store-request-estimates":
 				var estimates storeRequestEstimates
-				var percentIngestedIntoL0 int
-				d.ScanArgs(t, "percent-ingested-into-l0", &percentIngestedIntoL0)
-				estimates.fractionOfIngestIntoL0 = float64(percentIngestedIntoL0) / 100
-				var workBytesAddition int
-				d.ScanArgs(t, "work-bytes-addition", &workBytesAddition)
-				estimates.workByteAddition = int64(workBytesAddition)
+				var writeTokens int
+				d.ScanArgs(t, "write-tokens", &writeTokens)
+				estimates.writeTokens = int64(writeTokens)
 				q.setStoreRequestEstimates(estimates)
 				return printQueue()
 
@@ -576,9 +570,16 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			case "work-done":
 				var id int
 				d.ScanArgs(t, "id", &id)
-				var ingestedIntoL0Bytes int
-				if d.HasArg("ingested-into-l0") {
-					d.ScanArgs(t, "ingested-into-l0", &ingestedIntoL0Bytes)
+				var writeBytes, ingestedBytes int
+				if d.HasArg("write-bytes") {
+					d.ScanArgs(t, "write-bytes", &writeBytes)
+				}
+				if d.HasArg("ingested-bytes") {
+					d.ScanArgs(t, "ingested-bytes", &ingestedBytes)
+				}
+				var additionalTokens int
+				if d.HasArg("additional-tokens") {
+					d.ScanArgs(t, "additional-tokens", &additionalTokens)
 				}
 				work, ok := wrkMap.get(id)
 				if !ok {
@@ -587,7 +588,12 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				if !work.admitted {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
-				require.NoError(t, q.AdmittedWorkDone(work.handle, int64(ingestedIntoL0Bytes)))
+				tg.additionalTokens = int64(additionalTokens)
+				require.NoError(t, q.AdmittedWorkDone(work.handle,
+					StoreWorkDoneInfo{
+						WriteBytes:    int64(writeBytes),
+						IngestedBytes: int64(ingestedBytes),
+					}))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
