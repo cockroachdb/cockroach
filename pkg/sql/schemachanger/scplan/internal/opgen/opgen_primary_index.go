@@ -45,20 +45,33 @@ func init() {
 				}),
 			),
 			to(scpb.Status_MERGE_ONLY,
-				emit(func(this *scpb.PrimaryIndex) *scop.MakeAddedIndexDeleteAndWriteOnly {
-					return &scop.MakeAddedIndexDeleteAndWriteOnly{
+				emit(func(this *scpb.PrimaryIndex) *scop.MakeBackfilledIndexMerging {
+					return &scop.MakeBackfilledIndexMerging{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
 			),
-			equiv(scpb.Status_WRITE_ONLY),
 			to(scpb.Status_MERGED,
 				emit(func(this *scpb.PrimaryIndex) *scop.MergeIndex {
 					return &scop.MergeIndex{
 						TableID:           this.TableID,
 						TemporaryIndexID:  this.TemporaryIndexID,
 						BackfilledIndexID: this.IndexID,
+					}
+				}),
+			),
+			// The transition from MERGED to WRITE_ONLY must precede index validation.
+			// In MERGE_ONLY and MERGED, the index receives writes, but writes do not
+			// enforce uniqueness (they don't use CPut, see ForcePut). In WRITE_ONLY,
+			// the index receives normal writes. Only once writes are enforcing the
+			// uniqueness constraint for new can we validate that the index does
+			// indeed represent a valid uniqueness constraint over all rows.
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.PrimaryIndex) *scop.MakeMergedIndexWriteOnly {
+					return &scop.MakeMergedIndexWriteOnly{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
 					}
 				}),
 			),

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -65,9 +66,9 @@ import (
 // but due to the method name conflict doesn't.
 type fdCountingSemaphore struct {
 	semaphore.Semaphore
-	globalCount              *metric.Gauge
-	count                    int64
-	testingAcquireMaxRetries int
+	globalCount       *metric.Gauge
+	count             int64
+	acquireMaxRetries int
 }
 
 var fdCountingSemaphorePool = sync.Pool{
@@ -77,12 +78,12 @@ var fdCountingSemaphorePool = sync.Pool{
 }
 
 func newFDCountingSemaphore(
-	sem semaphore.Semaphore, globalCount *metric.Gauge, testingAcquireMaxRetries int,
+	sem semaphore.Semaphore, globalCount *metric.Gauge, sv *settings.Values,
 ) *fdCountingSemaphore {
 	s := fdCountingSemaphorePool.Get().(*fdCountingSemaphore)
 	s.Semaphore = sem
 	s.globalCount = globalCount
-	s.testingAcquireMaxRetries = testingAcquireMaxRetries
+	s.acquireMaxRetries = int(fdCountingSemaphoreMaxRetries.Get(sv))
 	return s
 }
 
@@ -90,6 +91,16 @@ var errAcquireTimeout = pgerror.New(
 	pgcode.ConfigurationLimitExceeded,
 	"acquiring of file descriptors timed out, consider increasing "+
 		"COCKROACH_VEC_MAX_OPEN_FDS environment variable",
+)
+
+var fdCountingSemaphoreMaxRetries = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.distsql.acquire_vec_fds.max_retries",
+	"determines the number of retries performed during the acquisition of "+
+		"file descriptors needed for disk-spilling operations, set to 0 for "+
+		"unlimited retries",
+	8,
+	settings.NonNegativeInt,
 )
 
 func (s *fdCountingSemaphore) Acquire(ctx context.Context, n int) error {
@@ -111,17 +122,13 @@ func (s *fdCountingSemaphore) Acquire(ctx context.Context, n int) error {
 	// so the initial backoff time of 100ms seems ok (we are spilling to disk
 	// after all, so the query is likely to experience significant latency). The
 	// current choice of options is such that we'll spend on the order of 25s
-	// in the retry loop before timing out.
-	maxRetries := s.testingAcquireMaxRetries
-	if maxRetries <= 0 {
-		// Make sure that the retry loop is finite.
-		maxRetries = 8
-	}
+	// in the retry loop before timing out with the default value of the
+	// 'sql.distsql.acquire_vec_fds.max_retries' cluster settings.
 	opts := retry.Options{
 		InitialBackoff:      100 * time.Millisecond,
 		Multiplier:          2.0,
 		RandomizationFactor: 0.25,
-		MaxRetries:          maxRetries,
+		MaxRetries:          s.acquireMaxRetries,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		if s.TryAcquire(n) {
@@ -248,8 +255,7 @@ func (f *vectorizedFlow) Setup(
 	}
 	flowCtx := f.GetFlowCtx()
 	f.countingSemaphore = newFDCountingSemaphore(
-		f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs,
-		flowCtx.TestingKnobs().VecFDsAcquireMaxRetriesCount,
+		f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs, &flowCtx.EvalCtx.Settings.SV,
 	)
 	f.creator = newVectorizedFlowCreator(
 		helper,

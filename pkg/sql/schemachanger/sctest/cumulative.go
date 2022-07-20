@@ -88,9 +88,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 		processPlanInPhase(
 			t, newCluster, setup, stmts, scop.PostCommitPhase,
 			func(p scplan.Plan) { n = len(p.StagesForCurrentPhase()) },
-			func(db *gosql.DB) {
-
-			},
+			func(db *gosql.DB) {},
 		)
 		return n
 	}
@@ -517,7 +515,7 @@ SELECT name
 func processPlanInPhase(
 	t *testing.T,
 	newCluster NewClusterFunc,
-	setup, stmt []parser.Statement,
+	setup, stmts []parser.Statement,
 	phaseToProcess scop.Phase,
 	processFunc func(p scplan.Plan),
 	after func(db *gosql.DB),
@@ -533,7 +531,7 @@ func processPlanInPhase(
 	})
 	defer cleanup()
 	require.NoError(t, executeSchemaChangeTxn(
-		context.Background(), t, setup, stmt, db, nil, nil, nil,
+		context.Background(), t, setup, stmts, db, nil, nil, nil,
 	))
 	if after != nil {
 		after(db)

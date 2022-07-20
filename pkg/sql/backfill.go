@@ -1800,7 +1800,7 @@ func populateExpectedCounts(
 		// in-memory copy of the descriptor and add it to the Collection's synthetic
 		// descriptors, so that we can use SQL below to perform the validation.
 		fakeDesc, err := tableDesc.MakeFirstMutationPublic(
-			catalog.IgnoreConstraints, catalog.IgnorePKSwaps,
+			catalog.IgnoreConstraints, catalog.IgnorePKSwaps, catalog.RetainDroppingColumns,
 		)
 		if err != nil {
 			return 0, err
@@ -1891,7 +1891,9 @@ func countIndexRowsAndMaybeCheckUniqueness(
 		// Make the mutations public in an in-memory copy of the descriptor and
 		// add it to the Collection's synthetic descriptors, so that we can use
 		// SQL below to perform the validation.
-		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(
+			catalog.IgnoreConstraints, catalog.RetainDroppingColumns,
+		)
 		if err != nil {
 			return 0, err
 		}

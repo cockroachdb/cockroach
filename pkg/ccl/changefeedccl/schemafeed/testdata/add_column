@@ -26,9 +26,10 @@ t 4->5: Unknown
 t 5->6: Unknown
 t 6->7: Unknown
 t 7->8: Unknown
-t 8->9: AddColumnWithBackfill|PrimaryKeyChange
-t 9->10: Unknown
+t 8->9: Unknown
+t 9->10: AddColumnWithBackfill|PrimaryKeyChange
 t 10->11: Unknown
+t 11->12: Unknown
 
 exec
 SET use_declarative_schema_changer=off;
@@ -37,6 +38,6 @@ ALTER TABLE t ADD COLUMN l INT NOT NULL DEFAULT 42;
 
 pop f=1
 ----
-t 11->12: Unknown
 t 12->13: Unknown
-t 13->14: AddColumnWithBackfill
+t 13->14: Unknown
+t 14->15: AddColumnWithBackfill

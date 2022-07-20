@@ -426,7 +426,7 @@ func (ru *Updater) UpdateRow(
 							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
 							v := newEntry.Value.PrettyPrint()
 							if expValue != nil {
-								log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+								log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, oldEntry.Value.PrettyPrint())
 							} else {
 								log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
 							}

@@ -878,6 +878,8 @@ func backupAndRestore(
 	ctx = logtags.AddTag(ctx, "backup-client", nil)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	storageConn := tc.StorageClusterConn()
+	storageSQLDB := sqlutils.MakeSQLRunner(storageConn)
 	{
 		sqlDB.Exec(t, `CREATE INDEX balance_idx ON data.bank (balance)`)
 		testutils.SucceedsSoon(t, func() error {
@@ -958,7 +960,7 @@ func backupAndRestore(
 		sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
 		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
-		verifyRestoreData(t, sqlDB, restoreQuery, restoreURIArgs, numAccounts)
+		verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, restoreURIArgs, numAccounts)
 	} else {
 		// Start a new cluster to restore into.
 		// If the backup is on nodelocal, we need to determine which node it's on.
@@ -978,13 +980,11 @@ func backupAndRestore(
 		}
 		args := base.TestServerArgs{
 			ExternalIODir: tc.Servers[backupNodeID].ClusterSettings().ExternalIODir,
-			// Test fails when run within a tenant. More investigation is
-			// required. Tracked with #76378.
-			DisableDefaultTestTenant: tc.Servers[backupNodeID].Cfg.DisableDefaultTestTenant,
 		}
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(ctx)
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		storageSQLDBRestore := sqlutils.MakeSQLRunner(tcRestore.StorageClusterConn())
 
 		// Create some other descriptors to change up IDs
 		sqlDBRestore.Exec(t, `CREATE DATABASE other`)
@@ -993,13 +993,14 @@ func backupAndRestore(
 
 		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
 		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
-		verifyRestoreData(t, sqlDBRestore, restoreQuery, restoreURIArgs, numAccounts)
+		verifyRestoreData(t, sqlDBRestore, storageSQLDBRestore, restoreQuery, restoreURIArgs, numAccounts)
 	}
 }
 
 func verifyRestoreData(
 	t *testing.T,
 	sqlDB *sqlutils.SQLRunner,
+	storageSQLDB *sqlutils.SQLRunner,
 	restoreQuery string,
 	restoreURIArgs []interface{},
 	numAccounts int,
@@ -1037,7 +1038,9 @@ func verifyRestoreData(
 	// Verify there's no /Table/51 - /Table/51/1 empty span.
 	{
 		var count int
-		sqlDB.QueryRow(t, `
+		// We're querying the crdb_internal.ranges view which only exists in the
+		// system tenant. As a result, we must use the storageSQLDB.
+		storageSQLDB.QueryRow(t, `
 			SELECT count(*) FROM crdb_internal.ranges
 			WHERE start_pretty = (
 				('/Table/' ||
@@ -5864,8 +5867,8 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	// This test hangs when run within a tenant. More investigation is
-	// required. Tracked with #76378.
+	// This test instantiates its own secondary tenants below. No need to run
+	// it probabilistically under a test tenant.
 	params.ServerArgs.DisableDefaultTestTenant = true
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
@@ -6329,8 +6332,10 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	// This test fails when run within a tenant. More investigation is
-	// required. Tracked with #76378.
+	// When this test runs under the default test tenant, the RESTORE command
+	// below which is expected to fail, doesn't. This may be a problem with the
+	// testing knobs being incorrectly applied to the cluster. More
+	// investigation is required. Tracked with #76378.
 	params.ServerArgs.DisableDefaultTestTenant = true
 	jobsTableKey := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.JobsTable.GetID()))
 	var shouldFail, failures int64
@@ -6381,9 +6386,6 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	// This test fails when run within a tenant. More investigation is
-	// required. Tracked with #76378.
-	params.ServerArgs.DisableDefaultTestTenant = true
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
@@ -6993,8 +6995,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant. Tracked with
-				// #76378.
+				// This test already exercises the tenant codepaths explicitly
+				// by creating a tenant. Furthermore, the test requires that
+				// it run from the system tenant because it restores tenants.
+				// Disable the default test tenant because it's not necessary.
 				DisableDefaultTestTenant: true,
 				Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			}},
@@ -7087,8 +7091,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant. Tracked with
-				// #76378.
+				// This test already exercises the tenant codepaths explicitly
+				// by creating a tenant. Furthermore, the test requires that
+				// it run from the system tenant because it restores tenants.
+				// Disable the default test tenant because it's not necessary.
 				DisableDefaultTestTenant: true,
 			}},
 		)
@@ -7116,8 +7122,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant. Tracked with
-				// #76378.
+				// This test already exercises the tenant codepaths explicitly
+				// by creating a tenant. Furthermore, the test requires that
+				// it run from the system tenant because it queries the
+				// system.tenants table. Disable the default test tenant because
+				// it's not necessary.
 				DisableDefaultTestTenant: true,
 			}},
 		)
@@ -7186,8 +7195,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant. Tracked with
-				// #76378.
+				// This test already exercises the tenant codepaths explicitly
+				// by creating a tenant. Furthermore, the test requires that
+				// it run from the system tenant because it restores tenants.
+				// Disable the default test tenant because it's not necessary.
 				DisableDefaultTestTenant: true,
 			}},
 		)
@@ -7209,8 +7220,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant. Tracked with
-				// #76378.
+				// This test already exercises the tenant codepaths explicitly
+				// by creating a tenant. Furthermore, the test requires that
+				// it run from the system tenant because it restores tenants.
+				// Disable the default test tenant because it's not necessary.
 				DisableDefaultTestTenant: true,
 			}},
 		)

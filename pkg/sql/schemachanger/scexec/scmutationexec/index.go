@@ -142,6 +142,38 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	)
 }
 
+func (m *visitor) MakeBackfilledIndexMerging(
+	ctx context.Context, op scop.MakeBackfilledIndexMerging,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return mutationStateChange(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_MERGING,
+		descpb.DescriptorMutation_ADD,
+	)
+}
+
+func (m *visitor) MakeMergedIndexWriteOnly(
+	ctx context.Context, op scop.MakeMergedIndexWriteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return mutationStateChange(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_MERGING,
+		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_ADD,
+	)
+}
+
 func (m *visitor) MakeAddedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
@@ -234,11 +266,19 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 	if err != nil {
 		return err
 	}
+	idx, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	// It's okay if the index is in MERGING.
+	exp := descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+	if idx.Merging() {
+		exp = descpb.DescriptorMutation_MERGING
+	}
 	return mutationStateChange(
 		tbl,
 		MakeIndexIDMutationSelector(op.IndexID),
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		descpb.DescriptorMutation_DELETE_ONLY,
+		exp, descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DROP,
 	)
 }

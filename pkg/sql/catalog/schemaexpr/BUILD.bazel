@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",

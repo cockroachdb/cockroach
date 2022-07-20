@@ -41,7 +41,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
- │    ├── Stage 1 of 6 in PostCommitPhase
+ │    ├── Stage 1 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
@@ -52,12 +52,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
- │    ├── Stage 2 of 6 in PostCommitPhase
+ │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
  │    │    └── 1 Backfill operation
  │    │         └── BackfillIndex {"IndexID":2,"SourceIndexID":1,"TableID":106}
- │    ├── Stage 3 of 6 in PostCommitPhase
+ │    ├── Stage 3 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
  │    │    └── 4 Mutation operations
@@ -65,22 +65,30 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
- │    ├── Stage 4 of 6 in PostCommitPhase
+ │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
  │    │    └── 4 Mutation operations
- │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":2,"TableID":106}
+ │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
- │    ├── Stage 5 of 6 in PostCommitPhase
+ │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
  │    │    └── 1 Backfill operation
  │    │         └── MergeIndex {"BackfilledIndexID":2,"TableID":106,"TemporaryIndexID":3}
- │    └── Stage 6 of 6 in PostCommitPhase
+ │    ├── Stage 6 of 7 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── MERGED → WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+ │    │    └── 4 Mutation operations
+ │    │         ├── MakeMergedIndexWriteOnly {"IndexID":2,"TableID":106}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── MERGED → VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
  │         └── 1 Validation operation
  │              └── ValidateUniqueIndex {"IndexID":2,"TableID":106}
  └── PostCommitNonRevertiblePhase
