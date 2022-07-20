@@ -11,7 +11,6 @@
 package kvstreamer
 
 import (
-	"fmt"
 	"sort"
 	"sync"
 
@@ -132,17 +131,6 @@ func (r singleRangeBatch) subPriority() int32 {
 		return 0
 	}
 	return r.subRequestIdx[0]
-}
-
-func reqsToString(reqs []singleRangeBatch) string {
-	result := "requests for positions "
-	for i, r := range reqs {
-		if i > 0 {
-			result += ", "
-		}
-		result += fmt.Sprintf("%v", r.positions)
-	}
-	return result
 }
 
 // requestsProvider encapsulates the logic of supplying the requests to serve in
@@ -397,9 +385,6 @@ func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
-	if debug {
-		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", request.positions, request.minTargetBytes)
-	}
 	p.heapPush(request)
 	p.hasWork.Signal()
 }
