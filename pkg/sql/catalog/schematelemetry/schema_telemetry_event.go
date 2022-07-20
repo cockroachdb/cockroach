@@ -110,7 +110,3 @@ func buildLogEvents(
 		return events, nil
 	}
 }
-
-// Keep the linter happy.
-// TODO(postamar): use this function
-var _ = buildLogEvents

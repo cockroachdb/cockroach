@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -263,6 +264,10 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// schemaTelemetryController is the control-plane interface for schema
+	// telemetry.
+	schemaTelemetryController *schematelemetrycontroller.Controller
+
 	// indexUsageStatsController is the control-plane interface for
 	// indexUsageStats.
 	indexUsageStatsController *idxusage.Controller
@@ -417,6 +422,12 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	schemaTelemetryIE := MakeInternalExecutor(s, MemoryMetrics{}, schemaTelemetryIEMonitor)
+	s.schemaTelemetryController = schematelemetrycontroller.NewController(
+		s.cfg.DB, &schemaTelemetryIE, schemaTelemetryIEMonitor, s.cfg.Settings, s.cfg.JobRegistry,
+	)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 	return s
 }
@@ -516,6 +527,12 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 // sql.Server's SQL Stats.
 func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
 	return s.sqlStatsController
+}
+
+// GetSchemaTelemetryController returns the schematelemetryschedule.Controller
+// for current sql.Server's schema telemetry.
+func (s *Server) GetSchemaTelemetryController() *schematelemetrycontroller.Controller {
+	return s.schemaTelemetryController
 }
 
 // GetIndexUsageStatsController returns the idxusage.Controller for current
@@ -2709,6 +2726,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			SQLStatsController:             ex.server.sqlStatsController,
+			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
 			RangeProber:                    p.execCfg.RangeProber,

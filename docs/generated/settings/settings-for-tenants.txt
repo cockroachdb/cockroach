@@ -248,6 +248,8 @@ sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow stateme
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
+sql.schema.telemetry.recurrence	string	@daily	cron-tab recurrence for SQL schema telemetry job
+sql.schema_telemetry.job.enabled	boolean	true	whether the schema telemetry job is enabled
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh

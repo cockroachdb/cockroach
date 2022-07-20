@@ -2301,6 +2301,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Schema Telemetry"}},
+		Charts: []chartDescription{
+			{
+				Title: "Scheduled Jobs Statistics",
+				Metrics: []string{
+					"schedules.scheduled-schema-telemetry-executor.succeeded",
+					"schedules.scheduled-schema-telemetry-executor.started",
+					"schedules.scheduled-schema-telemetry-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
 		Charts: []chartDescription{
 			{

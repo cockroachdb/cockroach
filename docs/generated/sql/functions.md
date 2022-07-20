@@ -3023,6 +3023,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.create_session_revival_token"></a><code>crdb_internal.create_session_revival_token() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate a token that can be used to create a new session for the current user.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.create_sql_schema_telemetry_job"></a><code>crdb_internal.create_sql_schema_telemetry_job() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to create a schema telemetry job instance.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.decode_cluster_setting"></a><code>crdb_internal.decode_cluster_setting(setting: <a href="string.html">string</a>, value: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decodes the given encoded value for a cluster setting.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.deserialize_session"></a><code>crdb_internal.deserialize_session(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function deserializes the serialized variables into the current session.</p>
@@ -3120,6 +3122,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="crdb_internal.schedule_sql_schema_telemetry"></a><code>crdb_internal.schedule_sql_schema_telemetry() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to create the schema telemetry job schedule.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.schedule_sql_stats_compaction"></a><code>crdb_internal.schedule_sql_stats_compaction() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to start a SQL stats compaction job.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.serialize_session"></a><code>crdb_internal.serialize_session() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function serializes the variables in the current session.</p>
