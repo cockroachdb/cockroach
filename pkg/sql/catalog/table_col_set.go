@@ -88,3 +88,6 @@ func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
 func (s TableColSet) String() string { return s.set.String() }
+
+// Equals returns whether or not s and other contain the same elements
+func (s TableColSet) Equals(other TableColSet) bool { return s.set.Equals(other.set) }

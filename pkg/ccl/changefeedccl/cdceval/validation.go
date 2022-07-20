@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -41,23 +42,23 @@ func NormalizeAndValidateSelectForTarget(
 	target jobspb.ChangefeedTargetSpecification,
 	sc *tree.SelectClause,
 	includeVirtual bool,
-) (n NormalizedSelectClause, _ error) {
+) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, _ error) {
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.EnablePredicateProjectionChangefeed) {
-		return n, errors.Newf(
+		return n, target, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
 			clusterversion.EnablePredicateProjectionChangefeed.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
 	if len(sc.From.Tables) != 1 {
-		return n, pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
+		return n, target, pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
 	}
 
 	// Sanity check target and descriptor refer to the same table.
 	if target.TableID != desc.GetID() {
-		return n, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
+		return n, target, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
 			target.TableID, desc.GetID())
 	}
 
@@ -66,19 +67,31 @@ func NormalizeAndValidateSelectForTarget(
 	// associated Txn() -- without which we cannot perform normalization.  Verify
 	// this assumption (txn is needed for type resolution).
 	if execCtx.Txn() == nil {
-		return n, errors.AssertionFailedf("expected non-nil transaction")
+		return n, target, errors.AssertionFailedf("expected non-nil transaction")
 	}
 
 	// Perform normalization.
 	var err error
 	normalized, err := normalizeSelectClause(ctx, *execCtx.SemaCtx(), sc, desc)
 	if err != nil {
-		return n, err
+		return n, target, err
 	}
+
+	columnVisitor := checkColumnsVisitor{
+		desc:    desc,
+		columns: make(map[catid.ColumnID]struct{}),
+	}
+
+	err = columnVisitor.FindColumnFamilies(normalized)
+	if err != nil {
+		return n, target, err
+	}
+
+	target = setTargetType(desc, target, &columnVisitor)
 
 	ed, err := newEventDescriptorForTarget(desc, target, schemaTS(execCtx), includeVirtual)
 	if err != nil {
-		return n, err
+		return n, target, err
 	}
 
 	evalCtx := &execCtx.ExtendedEvalContext().Context
@@ -88,17 +101,68 @@ func NormalizeAndValidateSelectForTarget(
 	if _, _, err := constrainSpansBySelectClause(
 		ctx, execCtx, evalCtx, execCfg.Codec, sc, ed,
 	); err != nil {
-		return n, err
+		return n, target, err
 	}
 
 	// Construct and initialize evaluator.  This performs some static checks,
 	// and (importantly) type checks expressions.
 	evaluator, err := NewEvaluator(evalCtx, sc)
 	if err != nil {
-		return n, err
+		return n, target, err
 	}
 
-	return normalized, evaluator.initEval(ctx, ed)
+	err = evaluator.initEval(ctx, ed)
+	if err != nil {
+		return n, target, err
+	}
+
+	return normalized, target, err
+}
+
+func setTargetType(
+	desc catalog.TableDescriptor,
+	target jobspb.ChangefeedTargetSpecification,
+	cv *checkColumnsVisitor,
+) jobspb.ChangefeedTargetSpecification {
+
+	var referencedFamilies []string
+
+	allFamilies := desc.GetFamilies()
+
+	if len(allFamilies) == 1 && allFamilies[0].Name == "primary" {
+		publicColSet := catalog.MakeTableColSet(desc.PublicColumnIDs()...)
+		colSet := catalog.MakeTableColSet(allFamilies[0].ColumnIDs...)
+		if colSet.Equals(publicColSet) {
+			target.Type = jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+			return target
+		}
+	}
+
+	if cv.seenStar {
+		if len(allFamilies) > 1 {
+			target.Type = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			return target
+		}
+	}
+
+	for _, family := range allFamilies {
+		colSet := catalog.MakeTableColSet(family.ColumnIDs...)
+		for colID := range cv.columns {
+			if colSet.Contains(colID) {
+				referencedFamilies = append(referencedFamilies, family.Name)
+				break
+			}
+		}
+	}
+
+	if len(referencedFamilies) > 1 {
+		target.Type = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+	} else {
+		target.Type = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+		target.FamilyName = referencedFamilies[0]
+	}
+
+	return target
 }
 
 func newEventDescriptorForTarget(
@@ -221,6 +285,7 @@ func normalizeSelectClause(
 				return true, expr, nil
 			}
 			e.Type = typ
+
 		case *tree.CastExpr:
 			typ, udt, err := resolveType(e.Type)
 			if err != nil {
@@ -322,4 +387,44 @@ func SelectClauseRequiresPrev(semaCtx tree.SemaContext, sc NormalizedSelectClaus
 		return recurse, newExpr, nil
 	})
 	return c.foundPrev, err
+}
+
+type checkColumnsVisitor struct {
+	err      error
+	desc     catalog.TableDescriptor
+	columns  map[catid.ColumnID]struct{}
+	seenStar bool
+}
+
+func (c *checkColumnsVisitor) VisitCols(expr tree.Expr) (bool, tree.Expr) {
+	switch e := expr.(type) {
+	case *tree.UnresolvedName:
+		vn, err := e.NormalizeVarName()
+		if err != nil {
+			c.err = err
+			return false, expr
+		}
+		return c.VisitCols(vn)
+
+	case *tree.ColumnItem:
+		col, err := c.desc.FindColumnWithName(e.ColumnName)
+		if err != nil {
+			c.err = err
+			return false, expr
+		}
+		colIdx := col.GetID()
+		c.columns[colIdx] = struct{}{}
+
+	case tree.UnqualifiedStar:
+		c.seenStar = true
+	}
+	return true, expr
+}
+
+func (c *checkColumnsVisitor) FindColumnFamilies(sc NormalizedSelectClause) error {
+	_, err := tree.SimpleStmtVisit(sc.Clause(), func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		recurse, newExpr = c.VisitCols(expr)
+		return recurse, newExpr, nil
+	})
+	return err
 }
