@@ -10,6 +10,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build:build_proto",
+        "//pkg/cloud/cloudpb:cloudpb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/stats:stats_proto",
@@ -26,6 +27,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/cloud/cloudpb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/stats",

@@ -106,6 +106,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",

@@ -11,7 +11,7 @@ package cockroach.ccl.backupccl.backuppb;
 option go_package = "backuppb";
 
 import "build/info.proto";
-import "roachpb/api.proto";
+import "cloud/cloudpb/external_storage.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "sql/stats/table_statistic.proto";
@@ -97,7 +97,7 @@ message BackupManifest {
   reserved 6;
   roachpb.RowCount entry_counts = 12 [(gogoproto.nullable) = false];
 
-  roachpb.ExternalStorage dir = 7 [(gogoproto.nullable) = false];
+  cloud.cloudpb.ExternalStorage dir = 7 [(gogoproto.nullable) = false];
 
   uint32 format_version = 8;
 

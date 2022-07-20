@@ -31,7 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,7 +80,7 @@ const (
 
 type s3Storage struct {
 	bucket   *string
-	conf     *roachpb.ExternalStorage_S3
+	conf     *cloudpb.ExternalStorage_S3
 	ioConf   base.ExternalIODirConfig
 	settings *cluster.Settings
 	prefix   string
@@ -147,7 +147,7 @@ type s3ClientConfig struct {
 	verbose bool
 }
 
-func clientConfig(conf *roachpb.ExternalStorage_S3) s3ClientConfig {
+func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 	return s3ClientConfig{
 		endpoint:         conf.Endpoint,
 		region:           conf.Region,
@@ -179,7 +179,7 @@ const (
 )
 
 // S3URI returns the string URI for a given bucket and path.
-func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
+func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	q := make(url.Values)
 	setIf := func(key, value string) {
 		if value != "" {
@@ -210,11 +210,11 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	return s3URL.String()
 }
 
-func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_s3
+func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_s3
 	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
-	conf.S3Config = &roachpb.ExternalStorage_S3{
+	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:           uri.Host,
 		Prefix:           uri.Path,
 		AccessKey:        uri.Query().Get(AWSAccessKeyParam),
@@ -244,7 +244,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 
 // MakeS3Storage returns an instance of S3 ExternalStorage.
 func MakeS3Storage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.s3")
 	conf := dest.S3Config
@@ -469,9 +469,9 @@ func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error
 	return client.uploader, nil
 }
 
-func (s *s3Storage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_s3,
+func (s *s3Storage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider: cloudpb.ExternalStorageProvider_s3,
 		S3Config: s.conf,
 	}
 }
@@ -694,6 +694,6 @@ func s3ErrDelay(err error) time.Duration {
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_s3,
 		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
 }

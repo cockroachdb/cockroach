@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -189,7 +190,7 @@ func restoreWithRetry(
 	return res, nil
 }
 
-type storeByLocalityKV map[string]roachpb.ExternalStorage
+type storeByLocalityKV map[string]cloudpb.ExternalStorage
 
 func makeBackupLocalityMap(
 	backupLocalityInfos []jobspb.RestoreDetails_BackupLocalityInfo, user username.SQLUsername,

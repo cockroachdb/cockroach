@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -46,7 +46,7 @@ type ExternalStorage interface {
 
 	// Conf should return the serializable configuration required to reconstruct
 	// this ExternalStorage implementation.
-	Conf() roachpb.ExternalStorage
+	Conf() cloudpb.ExternalStorage
 
 	// ExternalIOConf should return the configuration containing several server
 	// configured options pertaining to an ExternalStorage implementation.
@@ -100,7 +100,7 @@ type ExternalStorage interface {
 type ListingFn func(string) error
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
-type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage, opts ...ExternalStorageOption) (ExternalStorage, error)
+type ExternalStorageFactory func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...ExternalStorageOption) (ExternalStorage, error)
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
@@ -144,7 +144,7 @@ type ExternalStorageURIContext struct {
 
 // ExternalStorageURIParser functions parses a URL into a structured
 // ExternalStorage configuration.
-type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (roachpb.ExternalStorage, error)
+type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (cloudpb.ExternalStorage, error)
 
 // ExternalStorageContext contains the dependencies passed to external storage
 // implementations during creation.
@@ -166,5 +166,5 @@ type ExternalStorageOptions struct {
 // ExternalStorageConstructor is a function registered to create instances
 // of a given external storage implementation.
 type ExternalStorageConstructor func(
-	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
+	context.Context, ExternalStorageContext, cloudpb.ExternalStorage,
 ) (ExternalStorage, error)
