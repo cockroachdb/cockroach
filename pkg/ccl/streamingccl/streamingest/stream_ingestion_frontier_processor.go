@@ -165,7 +165,7 @@ type heartbeatSender struct {
 func newHeartbeatSender(
 	flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
 ) (*heartbeatSender, error) {
-	streamClient, err := streamclient.NewClientFromTopology(flowCtx.EvalCtx.Context, &spec.StreamTopology)
+	streamClient, err := streamclient.GetFirstActiveClient(flowCtx.EvalCtx.Context, spec.StreamAddresses)
 	if err != nil {
 		return nil, err
 	}

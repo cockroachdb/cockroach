@@ -98,7 +98,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/desctestutils",
