@@ -70,6 +70,9 @@ const (
 	// Constraint means that the entry refers to a constraint (i.e. a member of
 	// the constraints field in a zone config).
 	Constraint ConstraintType = "constraint"
+	// VoterConstraint means that the entry refers to a voter_constraint (i.e. a
+	// member of voter_constraint field in a zone config).
+	VoterConstraint ConstraintType = "voter_constraint"
 	// TODO(andrei): add leaseholder preference
 )
 
@@ -351,8 +354,9 @@ type constraintConformanceVisitor struct {
 	// prevZoneKey and prevConstraints maintain state from one range to the next.
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
-	prevZoneKey     ZoneKey
-	prevConstraints []zonepb.ConstraintsConjunction
+	prevZoneKey          ZoneKey
+	prevConstraints      []zonepb.ConstraintsConjunction
+	prevVoterConstraints []zonepb.ConstraintsConjunction
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -419,6 +423,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 
 	// Find the applicable constraints, which may be inherited.
 	var constraints []zonepb.ConstraintsConjunction
+	var voterConstraints []zonepb.ConstraintsConjunction
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
@@ -426,6 +431,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 				return false
 			}
 			constraints = zone.Constraints
+			voterConstraints = zone.VoterConstraints
 			zKey = key
 			return true
 		})
@@ -434,7 +440,9 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}
 	v.prevZoneKey = zKey
 	v.prevConstraints = constraints
-	v.countRange(ctx, r, zKey, constraints)
+	v.prevVoterConstraints = voterConstraints
+	v.countRange(ctx, r, zKey, Constraint, constraints, v.storeResolver, voterNonVoterPredicate)
+	v.countRange(ctx, r, zKey, VoterConstraint, voterConstraints, v.storeResolver, voterPredicate)
 	return nil
 }
 
@@ -442,19 +450,43 @@ func (v *constraintConformanceVisitor) visitNewZone(
 func (v *constraintConformanceVisitor) visitSameZone(
 	ctx context.Context, r *roachpb.RangeDescriptor,
 ) {
-	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints)
+	v.countRange(ctx, r, v.prevZoneKey, Constraint, v.prevConstraints, v.storeResolver,
+		voterNonVoterPredicate)
+	v.countRange(ctx, r, v.prevZoneKey, VoterConstraint, v.prevVoterConstraints, v.storeResolver,
+		voterPredicate)
+}
+
+func voterNonVoterPredicate(r roachpb.ReplicaDescriptor) bool {
+	switch r.GetType() {
+	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_OUTGOING, roachpb.VOTER_DEMOTING_NON_VOTER, roachpb.VOTER_DEMOTING_LEARNER, roachpb.NON_VOTER:
+		return true
+	default:
+		return false
+	}
+}
+
+func voterPredicate(r roachpb.ReplicaDescriptor) bool {
+	switch r.GetType() {
+	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_OUTGOING, roachpb.VOTER_DEMOTING_NON_VOTER, roachpb.VOTER_DEMOTING_LEARNER:
+		return true
+	default:
+		return false
+	}
 }
 
 func (v *constraintConformanceVisitor) countRange(
 	ctx context.Context,
 	r *roachpb.RangeDescriptor,
 	key ZoneKey,
+	constraintType ConstraintType,
 	constraints []zonepb.ConstraintsConjunction,
+	storeResolver StoreResolver,
+	replicaFilter func(rDesc roachpb.ReplicaDescriptor) bool,
 ) {
-	storeDescs := v.storeResolver(r)
+	storeDescs := storeResolver(r.Replicas().FilterToDescriptors(replicaFilter))
 	violated := getViolations(ctx, storeDescs, constraints)
 	for _, c := range violated {
-		v.report.AddViolation(key, Constraint, c)
+		v.report.AddViolation(key, constraintType, c)
 	}
 }
 

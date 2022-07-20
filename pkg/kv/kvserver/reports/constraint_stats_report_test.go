@@ -261,6 +261,52 @@ func TestConformanceReport(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "voter constraints violations",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						// The database has a zone requesting everything to be on SSDs.
+						zone: &zone{
+							voters: 2,
+							// The first conjunction will be satisfied; the second won't.
+							constraints:      `{"+region=us,+dc=dc1":1,"+region=us,+dc=dc2":1}`,
+							voterConstraints: `{"+region=us,+dc=dc2":1}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2"},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc3", stores: []store{{id: 2}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: VoterConstraint,
+					numRanges:      1,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc1:1",
+					constraintType: Constraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -316,6 +362,8 @@ type zone struct {
 	nonVoters int32
 	// "" means unset. "[]" means empty.
 	constraints string
+	// "" means unset. "[]" means empty.
+	voterConstraints string
 }
 
 func (z zone) toZoneConfig() zonepb.ZoneConfig {
@@ -330,6 +378,14 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 			panic(err)
 		}
 		cfg.Constraints = constraintsList.Constraints
+		cfg.InheritedConstraints = false
+	}
+	if z.voterConstraints != "" {
+		var constraintsList zonepb.ConstraintsList
+		if err := yaml.UnmarshalStrict([]byte(z.voterConstraints), &constraintsList); err != nil {
+			panic(err)
+		}
+		cfg.VoterConstraints = constraintsList.Constraints
 		cfg.InheritedConstraints = false
 	}
 	return *cfg
@@ -845,12 +901,9 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
 	}
 	allLocalities := expandLocalities(nodeLocalities)
-	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		replicas := r.Replicas().FilterToDescriptors(func(_ roachpb.ReplicaDescriptor) bool {
-			return true
-		})
-		stores := make([]roachpb.StoreDescriptor, len(replicas))
-		for i, rep := range replicas {
+	nodeResolver := func(rs []roachpb.ReplicaDescriptor) []roachpb.StoreDescriptor {
+		stores := make([]roachpb.StoreDescriptor, len(rs))
+		for i, rep := range rs {
 			for _, desc := range allStores {
 				if rep.StoreID == desc.StoreID {
 					stores[i] = desc
@@ -877,7 +930,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	return compiledTestCase{
 		iter:           testRangeIter{ranges: ranges},
 		cfg:            cfg,
-		resolver:       storeResolver,
+		resolver:       nodeResolver,
 		checker:        nodeChecker,
 		zoneToObject:   zoneToObject,
 		objectToZone:   objectToZone,

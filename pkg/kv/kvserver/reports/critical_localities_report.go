@@ -372,7 +372,7 @@ func (v *criticalLocalitiesVisitor) visitSameZone(ctx context.Context, r *roachp
 func (v *criticalLocalitiesVisitor) countRange(
 	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
 ) {
-	stores := v.storeResolver(r)
+	stores := v.storeResolver(r.Replicas().FilterToDescriptors(criticalReplicasPred))
 
 	// Collect all the localities of all the replicas. Note that we collect
 	// "expanded" localities: if a replica has a multi-tier locality like
@@ -392,6 +392,15 @@ func (v *criticalLocalitiesVisitor) countRange(
 	// them one by one.
 	for _, loc := range dedupLocal {
 		processLocalityForRange(ctx, r, zoneKey, loc, v.nodeChecker, stores, v.report)
+	}
+}
+
+func criticalReplicasPred(r roachpb.ReplicaDescriptor) bool {
+	switch r.GetType() {
+	case roachpb.VOTER_FULL, roachpb.VOTER_OUTGOING, roachpb.VOTER_DEMOTING_NON_VOTER, roachpb.VOTER_DEMOTING_LEARNER:
+		return true
+	default:
+		return false
 	}
 }
 
