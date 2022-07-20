@@ -46,10 +46,14 @@ func TestNormalizeAndValidate(t *testing.T) {
 		`CREATE TABLE foo (a INT PRIMARY KEY, status status, alt alt.status)`,
 		`CREATE DATABASE other`,
 		`CREATE TABLE other.foo (a INT)`,
+		`CREATE TABLE baz (a INT PRIMARY KEY, b INT, c STRING, FAMILY most (a, b), FAMILY only_c (c))`,
+		`CREATE TABLE bop (a INT, b INT, c STRING, FAMILY most (a, b), FAMILY only_c (c), primary key (a, b))`,
 	)
 
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	otherFooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "other", "foo")
+	bazDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "baz")
+	bopDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "bop")
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -64,47 +68,68 @@ func TestNormalizeAndValidate(t *testing.T) {
 	execCtx := p.(sql.JobExecContext)
 
 	for _, tc := range []struct {
-		name       string
-		desc       catalog.TableDescriptor
-		stmt       string
-		expectErr  string
-		expectStmt string
+		name         string
+		desc         catalog.TableDescriptor
+		stmt         string
+		expectErr    string
+		expectStmt   string
+		splitColFams bool
 	}{
 		{
-			name:      "reject multiple tables",
-			desc:      fooDesc,
-			stmt:      "SELECT * FROM foo, other.foo",
-			expectErr: "invalid CDC expression: only 1 table supported",
+			name:         "reject multiple tables",
+			desc:         fooDesc,
+			stmt:         "SELECT * FROM foo, other.foo",
+			expectErr:    "invalid CDC expression: only 1 table supported",
+			splitColFams: false,
 		},
 		{
-			name:      "reject contradiction",
-			desc:      fooDesc,
-			stmt:      "SELECT * FROM foo WHERE a IS NULL",
-			expectErr: `filter "a IS NULL" is a contradiction`,
+			name:         "reject contradiction",
+			desc:         fooDesc,
+			stmt:         "SELECT * FROM foo WHERE a IS NULL",
+			expectErr:    `filter "a IS NULL" is a contradiction`,
+			splitColFams: false,
 		},
 		{
-			name:      "enum must be referenced",
-			desc:      fooDesc,
-			stmt:      "SELECT 'open'::status, 'do not use':::unused FROM foo",
-			expectErr: `use of user defined types not referenced by target table is not supported`,
+			name:         "enum must be referenced",
+			desc:         fooDesc,
+			stmt:         "SELECT 'open'::status, 'do not use':::unused FROM foo",
+			expectErr:    `use of user defined types not referenced by target table is not supported`,
+			splitColFams: false,
 		},
 		{
-			name:       "replaces table name with ref",
-			desc:       fooDesc,
-			stmt:       "SELECT * FROM foo",
-			expectStmt: fmt.Sprintf("SELECT * FROM [%d AS foo]", fooDesc.GetID()),
+			name:         "reject multiple column families",
+			desc:         bazDesc,
+			stmt:         "SELECT a, b, c FROM baz",
+			expectErr:    `expressions can't reference columns from more than one column family`,
+			splitColFams: false,
 		},
 		{
-			name:       "replaces table name with other.ref",
-			desc:       otherFooDesc,
-			stmt:       "SELECT * FROM other.foo",
-			expectStmt: fmt.Sprintf("SELECT * FROM [%d AS foo]", otherFooDesc.GetID()),
+			name:         "reject multiple column families with star",
+			desc:         bazDesc,
+			stmt:         "SELECT * FROM baz",
+			expectErr:    `targeting a table with multiple column families requires WITH split_column_families and will emit multiple events per row.`,
+			splitColFams: false,
 		},
 		{
-			name:       "replaces table name with ref aliased",
-			desc:       fooDesc,
-			stmt:       "SELECT * FROM foo AS bar",
-			expectStmt: fmt.Sprintf("SELECT * FROM [%d AS bar]", fooDesc.GetID()),
+			name:         "replaces table name with ref",
+			desc:         fooDesc,
+			stmt:         "SELECT * FROM foo",
+			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS foo]", fooDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "replaces table name with other.ref",
+			desc:         otherFooDesc,
+			stmt:         "SELECT * FROM other.foo",
+			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS foo]", otherFooDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "replaces table name with ref aliased",
+			desc:         fooDesc,
+			stmt:         "SELECT * FROM foo AS bar",
+			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS bar]", fooDesc.GetID()),
+			splitColFams: false,
 		},
 		{
 			name: "UDTs fully qualified",
@@ -114,6 +139,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				"SELECT *, 'inactive':::defaultdb.public.status "+
 					"FROM [%d AS bar] WHERE status = 'open':::defaultdb.public.status",
 				fooDesc.GetID()),
+			splitColFams: false,
 		},
 		{
 			name: "can cast to standard type",
@@ -122,6 +148,91 @@ func TestNormalizeAndValidate(t *testing.T) {
 			expectStmt: fmt.Sprintf(
 				"SELECT 'cast'::STRING, 'type_annotation':::STRING FROM [%d AS bar]",
 				fooDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "can target one column family",
+			desc:         bazDesc,
+			stmt:         "SELECT a, b FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT a, b FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT a, b FROM bop",
+			desc:         bopDesc,
+			stmt:         "SELECT a, b FROM bop",
+			expectStmt:   fmt.Sprintf("SELECT a, b FROM [%d AS bop]", bopDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT a, c FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT a, c FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT a, c FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT b, b+1 AS c FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT b, b+1 AS c FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT b, b + 1 AS c FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT b, c FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT b, c FROM baz",
+			expectErr:    `expressions can't reference columns from more than one column family`,
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT B FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT B FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT b FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT baz.b FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT baz.b FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT b FROM baz WHERE c IS NULL",
+			desc:         bazDesc,
+			stmt:         "SELECT b FROM baz WHERE c IS NULL",
+			expectErr:    "expressions can't reference columns from more than one column family",
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT b, substring(c,1,2) FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT b, substring(c,1,2) FROM baz",
+			expectErr:    "expressions can't reference columns from more than one column family",
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT b::string = 'c' FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT b::string = 'c' FROM baz",
+			expectStmt:   fmt.Sprintf("SELECT b::STRING = 'c' FROM [%d AS baz]", bazDesc.GetID()),
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT *, c FROM baz",
+			desc:         bazDesc,
+			stmt:         "SELECT *, c FROM baz",
+			expectErr:    `can't reference non-primary key columns as well as star on a multi column family table`,
+			splitColFams: false,
+		},
+		{
+			name:         "SELECT * FROM baz WITH split_column_families",
+			desc:         bazDesc,
+			stmt:         "SELECT * FROM baz",
+			expectErr:    `split_column_families is not supported with changefeed expressions yet`,
+			splitColFams: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,7 +243,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				StatementTimeName: tc.desc.GetName(),
 			}
 
-			_, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			_, _, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, tc.splitColFams)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 				return
@@ -236,7 +347,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 				TableID:           tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 			}
-			normalized, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			normalized, _, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, false)
 			require.NoError(t, err)
 			actual, err := SelectClauseRequiresPrev(*execCtx.SemaCtx(), normalized)
 			require.NoError(t, err)
