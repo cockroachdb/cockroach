@@ -520,6 +520,9 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // latencies. Additionally, as of the time of writing, learner replicas are
 // only used for a short time in replica addition, so it's not worth working
 // out the edge cases.
+// NB: This logic should be in sync with constraint_stats_report as report
+// will check voter constraint violations. When changing this method, you need
+// to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDescriptor) error {
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {

@@ -1890,6 +1890,8 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	// Filter the replicas to only those that are relevant to the routing policy.
+	// NB: When changing leaseholder policy constraint_status_report should be
+	// updated appropriately.
 	var replicaFilter ReplicaSliceFilter
 	switch ba.RoutingPolicy {
 	case roachpb.RoutingPolicy_LEASEHOLDER:
