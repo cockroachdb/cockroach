@@ -19,6 +19,7 @@ go_test(
         "@cockroach//c-deps:libgeos",
     ],
     embed = [":logictestccl"],
+    shard_count = 4,
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",
