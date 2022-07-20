@@ -255,6 +255,13 @@ genrule(
     outs = [file + ".bnf" for file in FILES],
     cmd = """
     $(location //pkg/cmd/docgen) grammar bnf $(RULEDIR) --quiet --addr $(location //pkg/sql/parser:sql.y)
+    for FILE in $$(ls $(RULEDIR))
+    do
+        if [[ "$(OUTS)" != *"$$FILE"* ]]; then
+            echo "$$FILE is not a generated file; please add $${FILE%.bnf} to the list of FILES in docs/generated/sql/bnf/BUILD.bazel"
+            exit 1
+        fi
+    done
     """,
     exec_tools = ["//pkg/cmd/docgen"],
     visibility = [
