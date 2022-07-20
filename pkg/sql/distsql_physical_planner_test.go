@@ -848,6 +848,19 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"C", "C2"}},
 			},
 		},
+
+		// A single span touching multiple ranges but on the same node results
+		// in a single partitioned span.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"A1", 1}, {"B", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A", "B"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A", "B"}},
+			},
+		},
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
