@@ -129,14 +129,14 @@ SHOW GRANTS ON TYPE testdb.greeting_owner;
 testdb public greeting_owner admin ALL true
 testdb public greeting_owner public USAGE false
 testdb public greeting_owner root ALL true
-testdb public greeting_owner testuser ALL false
+testdb public greeting_owner testuser ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
 ----
 testdb public testtable_greeting_owner admin ALL true
 testdb public testtable_greeting_owner root ALL true
-testdb public testtable_greeting_owner testuser ALL false
+testdb public testtable_greeting_owner testuser ALL true
 
 
 # Let's take a backup of this cluster.
@@ -220,14 +220,14 @@ SHOW GRANTS ON TYPE testdb.greeting_owner;
 testdb public greeting_owner admin ALL true
 testdb public greeting_owner public USAGE false
 testdb public greeting_owner root ALL true
-testdb public greeting_owner testuser ALL false
+testdb public greeting_owner testuser ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
 ----
 testdb public testtable_greeting_owner admin ALL true
 testdb public testtable_greeting_owner root ALL true
-testdb public testtable_greeting_owner testuser ALL false
+testdb public testtable_greeting_owner testuser ALL true
 
 subtest end
 
@@ -281,14 +281,14 @@ SHOW GRANTS ON SCHEMA testuser_db.sc;
 ----
 testuser_db sc admin ALL true
 testuser_db sc root ALL true
-testuser_db sc testuser ALL false
+testuser_db sc testuser ALL true
 
 query-sql
 SHOW GRANTS ON testuser_db.sc.othertable
 ----
 testuser_db sc othertable admin ALL true
 testuser_db sc othertable root ALL true
-testuser_db sc othertable testuser ALL false
+testuser_db sc othertable testuser ALL true
 
 # Observe that none of `testuser` privileges in the backed up cluster are
 # restored.
@@ -303,7 +303,7 @@ SHOW GRANTS ON testuser_db.testtable_greeting_usage;
 ----
 testuser_db public testtable_greeting_usage admin ALL true
 testuser_db public testtable_greeting_usage root ALL true
-testuser_db public testtable_greeting_usage testuser ALL false
+testuser_db public testtable_greeting_usage testuser ALL true
 
 
 # Ensure that testuser is the owner of the restored schema and table.

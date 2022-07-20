@@ -446,22 +446,22 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, err)
 		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 		testDBGrants := [][]string{
-			{"test", "admin", "ALL", "false"},
-			{"test", "root", "ALL", "false"},
+			{"test", "admin", "ALL", "true"},
+			{"test", "root", "ALL", "true"},
 			{"test", "testuser", "ZONECONFIG", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on database test`, testDBGrants)
 
 		testTableGrants := [][]string{
-			{"test", "public", "test_table", "admin", "ALL", "false"},
-			{"test", "public", "test_table", "root", "ALL", "false"},
+			{"test", "public", "test_table", "admin", "ALL", "true"},
+			{"test", "public", "test_table", "root", "ALL", "true"},
 			{"test", "public", "test_table", "testuser", "ZONECONFIG", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on test.test_table`, testTableGrants)
 
 		testTable2Grants := [][]string{
-			{"test", "public", "test_table2", "admin", "ALL", "false"},
-			{"test", "public", "test_table2", "root", "ALL", "false"},
+			{"test", "public", "test_table2", "admin", "ALL", "true"},
+			{"test", "public", "test_table2", "root", "ALL", "true"},
 			{"test", "public", "test_table2", "testuser", "ALL", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on test.test_table2`, testTable2Grants)

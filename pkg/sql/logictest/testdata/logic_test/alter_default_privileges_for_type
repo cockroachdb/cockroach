@@ -19,7 +19,7 @@ database_name  schema_name  type_name   grantee   privilege_type  is_grantable
 d              public       testuser_t  admin     ALL             true
 d              public       testuser_t  public    USAGE           false
 d              public       testuser_t  root      ALL             true
-d              public       testuser_t  testuser  ALL             false
+d              public       testuser_t  testuser  ALL             true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser;
