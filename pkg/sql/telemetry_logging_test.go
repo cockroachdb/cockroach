@@ -52,6 +52,23 @@ func (s *stubTime) TimeNow() time.Time {
 	return s.t
 }
 
+type stubQueryMetrics struct {
+	syncutil.RWMutex
+	contentionTime int64
+}
+
+func (s *stubQueryMetrics) setContentionTime(t int64) {
+	s.RWMutex.Lock()
+	defer s.RWMutex.Unlock()
+	s.contentionTime = t
+}
+
+func (s *stubQueryMetrics) ContentionTime() int64 {
+	s.RWMutex.RLock()
+	defer s.RWMutex.RUnlock()
+	return s.contentionTime
+}
+
 func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	// Enable logging channels.
 	log.TestingResetActive()
@@ -84,11 +101,13 @@ func TestTelemetryLogging(t *testing.T) {
 	defer cleanup()
 
 	st := stubTime{}
+	sqm := stubQueryMetrics{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getTimeNow: st.TimeNow,
+				getTimeNow:        st.TimeNow,
+				getContentionTime: sqm.ContentionTime,
 			},
 		},
 	})
@@ -142,6 +161,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedStatsAvailable  bool
 		expectedRead            bool
 		expectedWrite           bool
+		contentionTime          int64
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -161,6 +181,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			contentionTime:          0,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -178,6 +199,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			contentionTime:          1,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -196,6 +218,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionTime:          2,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -213,6 +236,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionTime:          3,
 		},
 		{
 			// Test case with a full scan.
@@ -230,6 +254,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionTime:          0,
 		},
 		{
 			// Test case with a write.
@@ -247,6 +272,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           true,
+			contentionTime:          0,
 		},
 	}
 
@@ -255,6 +281,7 @@ func TestTelemetryLogging(t *testing.T) {
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
+			sqm.setContentionTime(tc.contentionTime)
 			db.Exec(t, tc.query)
 		}
 	}
@@ -327,6 +354,14 @@ func TestTelemetryLogging(t *testing.T) {
 				txnID := regexp.MustCompile("\"TransactionID\":(\"\\S+\")")
 				if !txnID.MatchString(e.Message) {
 					t.Errorf("expected to find TransactionID but none was found in: %s", e.Message)
+				}
+				contentionTime := regexp.MustCompile("\"ContentionTime\":[0-9]*")
+				if tc.contentionTime > 0 && !contentionTime.MatchString(e.Message) {
+					// If we have contention, we expect the ContentionTime field to be populated.
+					t.Errorf("expected to find ContentionTime but none was found")
+				} else if tc.contentionTime == 0 && contentionTime.MatchString(e.Message) {
+					// If we do not have contention, expect no ContentionTime field.
+					t.Errorf("expected no ContentionTime field, but was found")
 				}
 				for _, eTag := range tc.expectedUnredactedTags {
 					for _, tag := range strings.Split(e.Tags, ",") {

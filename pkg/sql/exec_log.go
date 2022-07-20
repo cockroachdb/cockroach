@@ -388,6 +388,7 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			contentionTime := telemetryMetrics.getContentionTime(p.instrumentation.queryLevelStatsWithErr.Stats.ContentionTime.Nanoseconds())
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			databaseName := p.CurrentDatabase()
 			sampledQuery := eventpb.SampledQuery{
@@ -409,6 +410,7 @@ func (p *planner) maybeLogStatementInternal(
 				BytesRead:                queryStats.bytesRead,
 				RowsRead:                 queryStats.rowsRead,
 				RowsWritten:              queryStats.rowsWritten,
+				ContentionTime:           contentionTime,
 			}
 			db, _ := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, databaseName, tree.DatabaseLookupFlags{Required: true})
 			if db != nil {

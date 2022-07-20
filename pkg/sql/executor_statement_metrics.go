@@ -102,7 +102,7 @@ var _ metric.Struct = GuardrailMetrics{}
 // MetricStruct is part of the metric.Struct interface.
 func (GuardrailMetrics) MetricStruct() {}
 
-// recordStatementSummery gathers various details pertaining to the
+// recordStatementSummary gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
 // - distSQLUsed reports whether the query was distributed.
@@ -203,6 +203,17 @@ func (ex *connExecutor) recordStatementSummary(
 			log.Warningf(ctx, "failed to record statement: %s", err)
 		}
 		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+	}
+
+	// Record statement execution statistics if span is recorded and no error was
+	// encountered while collecting query-level statistics.
+	if planner.instrumentation.sp != nil && planner.instrumentation.queryLevelStatsWithErr.Err == nil {
+		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, planner.instrumentation.queryLevelStatsWithErr.Stats)
+		if err != nil {
+			if log.V(2 /* level */) {
+				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
+			}
+		}
 	}
 
 	// Do some transaction level accounting for the transaction this statement is

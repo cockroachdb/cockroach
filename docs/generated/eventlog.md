@@ -2473,6 +2473,7 @@ contains common SQL event/execution details.
 | `BytesRead` | The number of bytes read from disk. | no |
 | `RowsRead` | The number of rows read from disk. | no |
 | `RowsWritten` | The number of rows written. | no |
+| `ContentionTime` | The duration of time in nanoseconds that the query experienced contention. | no |
 
 
 #### Common fields
