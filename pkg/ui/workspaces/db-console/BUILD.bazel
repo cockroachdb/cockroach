@@ -241,6 +241,7 @@ eslint_test(
         "ccl",
         "prettier.config.js",
         "src",
+        "//pkg/ui/workspaces/eslint-plugin-crdb",
         "@npm_db_console//@cockroachlabs/eslint-config",
         "@npm_db_console//@typescript-eslint/eslint-plugin",
         "@npm_db_console//@typescript-eslint/parser",

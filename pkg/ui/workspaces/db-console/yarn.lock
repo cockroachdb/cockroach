@@ -1379,6 +1379,10 @@
     "@typescript-eslint/parser" "^2.34.0"
     eslint-config-prettier "^6.11.0"
 
+"@cockroachlabs/eslint-plugin-crdb@link:../eslint-plugin-crdb":
+  version "0.0.0"
+  uid ""
+
 "@cockroachlabs/icons@0.5.2":
   version "0.5.2"
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.5.2.tgz#ddf87eba8e173f7ee6c787e178f460a0a1872b80"
