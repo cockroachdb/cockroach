@@ -75,3 +75,34 @@ query TTTTTB
 SHOW GRANTS ON TYPE other.typ FOR user1
 ----
 other  public  typ  user1  ALL  false
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+user root
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement ok
+GRANT testuser to owner_grant_option_child
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TYPE owner_grant_option AS ENUM('a')
+
+statement ok
+GRANT USAGE ON TYPE owner_grant_option TO owner_grant_option_child
+
+query TTTTTB colnames
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           true
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true
+test           public       owner_grant_option  testuser                  ALL             true
