@@ -60,7 +60,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 
 	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)
 	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
-	b := newInOrderResultsBuffer(budget, diskBuffer, false /* singleRowLookup */)
+	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
 
 	for run := 0; run < 10; run++ {

@@ -253,20 +253,6 @@ func (b *resultsBufferBase) error() error {
 	return b.err
 }
 
-func resultsToString(results []Result, printSubRequestIdx bool) string {
-	result := "results for positions "
-	for i, r := range results {
-		if i > 0 {
-			result += ", "
-		}
-		result += fmt.Sprintf("%d", r.Position)
-		if printSubRequestIdx {
-			result += fmt.Sprintf(" (%d)", r.subRequestIdx)
-		}
-	}
-	return result
-}
-
 // outOfOrderResultsBuffer is a resultsBuffer that returns the Results in an
 // arbitrary order (namely in the same order as the Results are added).
 type outOfOrderResultsBuffer struct {
@@ -398,25 +384,17 @@ type inOrderResultsBuffer struct {
 	// addCounter tracks the number of times add() has been called. See
 	// inOrderBufferedResult.addEpoch for why this is needed.
 	addCounter int32
-
-	// singleRowLookup is the value of Hints.SingleRowLookup. Only used for
-	// debug messages.
-	// TODO(yuzefovich): remove this when debug messages are removed.
-	singleRowLookup bool
 }
 
 var _ resultsBuffer = &inOrderResultsBuffer{}
 
-func newInOrderResultsBuffer(
-	budget *budget, diskBuffer ResultDiskBuffer, singleRowLookup bool,
-) resultsBuffer {
+func newInOrderResultsBuffer(budget *budget, diskBuffer ResultDiskBuffer) resultsBuffer {
 	if diskBuffer == nil {
 		panic(errors.AssertionFailedf("diskBuffer is nil"))
 	}
 	return &inOrderResultsBuffer{
 		resultsBufferBase: newResultsBufferBase(budget),
 		diskBuffer:        diskBuffer,
-		singleRowLookup:   singleRowLookup,
 	}
 }
 
@@ -499,13 +477,6 @@ func (b *inOrderResultsBuffer) addLocked(r Result) {
 	// Note that we don't increase b.numUnreleasedResults because all these
 	// results are "buffered".
 	b.checkIfCompleteLocked(r)
-	if debug {
-		subRequestIdx := ""
-		if !b.singleRowLookup {
-			subRequestIdx = fmt.Sprintf(" (%d)", r.subRequestIdx)
-		}
-		fmt.Printf("adding a result for position %d%s of size %d\n", r.Position, subRequestIdx, r.memoryTok.toRelease)
-	}
 	// All the Results have already been registered with the budget, so we're
 	// keeping them in-memory.
 	b.heapPush(inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
@@ -519,9 +490,6 @@ func (b *inOrderResultsBuffer) doneAddingLocked(ctx context.Context) {
 		int64(cap(b.resultScratch))*resultSize // b.resultsScratch
 	b.accountForOverheadLocked(ctx, overhead)
 	if len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
-		if debug {
-			fmt.Println("found head-of-the-line")
-		}
 		b.signal()
 	}
 }
@@ -534,9 +502,6 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	b.Lock()
 	defer b.Unlock()
 	res := b.resultScratch[:0]
-	if debug {
-		fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
-	}
 	for len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
 		result, toConsume, err := b.buffered[0].get(ctx, b)
 		if err != nil {
@@ -583,12 +548,6 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	// Now all the Results in res are no longer "buffered" and become
 	// "unreleased", so we increment the corresponding tracker.
 	b.numUnreleasedResults += len(res)
-	if debug {
-		if len(res) > 0 {
-			printSubRequestIdx := !b.singleRowLookup
-			fmt.Printf("returning %s to the client, headOfLinePosition is now %d\n", resultsToString(res, printSubRequestIdx), b.headOfLinePosition)
-		}
-	}
 	// All requests are complete IFF we have received the complete responses for
 	// all requests and there no buffered Results.
 	allComplete := b.numCompleteResponses == b.numExpectedResponses && len(b.buffered) == 0
@@ -607,13 +566,8 @@ func (b *inOrderResultsBuffer) stringLocked() string {
 		if b.buffered[i].onDisk {
 			onDiskInfo = " (on disk)"
 		}
-		var subRequestIdx string
-		if !b.singleRowLookup {
-			subRequestIdx = fmt.Sprintf(" (%d)", b.buffered[i].subRequestIdx)
-		}
 		result += fmt.Sprintf(
-			"[%d%s]%s: size %d", b.buffered[i].Position, subRequestIdx,
-			onDiskInfo, b.buffered[i].memoryTok.toRelease,
+			"[%d]%s: size %d", b.buffered[i].Position, onDiskInfo, b.buffered[i].memoryTok.toRelease,
 		)
 	}
 	return result
@@ -646,22 +600,11 @@ func (b *inOrderResultsBuffer) spill(
 		return false, nil
 	}
 	// Spill some results to disk.
-	if debug {
-		fmt.Printf(
-			"want to spill at least %d bytes with priority %d\t%s\n",
-			atLeastBytes, spillingPriority, b.stringLocked(),
-		)
-	}
+	//
 	// Iterate in reverse order so that the results with higher priority values
 	// are spilled first (this could matter if the query has a LIMIT).
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
 		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
-			if debug {
-				fmt.Printf(
-					"spilling a result for position %d (%d) which will free up %d bytes\n",
-					r.Position, r.subRequestIdx, r.memoryTok.toRelease,
-				)
-			}
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
 			if err != nil {
 				b.setErrorLocked(err)
@@ -672,9 +615,6 @@ func (b *inOrderResultsBuffer) spill(
 			b.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 			atLeastBytes -= r.memoryTok.toRelease
 			if atLeastBytes <= 0 {
-				if debug {
-					fmt.Println("the spill was successful")
-				}
 				return true, nil
 			}
 		}
