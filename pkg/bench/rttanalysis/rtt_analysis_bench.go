@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -117,32 +118,51 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	b.StopTimer()
 	var r tracingpb.Recording
 
+	// The statement trace records individual statements, but we may want to
+	// execute multiple SQL statements. Note that multi-statement traces won't
+	// count round trips correctly if there are duplicate statements.
+	statements, err := parser.Parse(tc.Stmt)
+	if err != nil {
+		require.NoError(b, err)
+	}
+
 	// Do an extra iteration and don't record it in order to deal with effects of
 	// running it the first time.
 	for i := 0; i < b.N()+1; i++ {
 		sql.Exec(b, "CREATE DATABASE bench;")
 		sql.Exec(b, tc.Setup)
-		cluster.clearStatementTrace(tc.Stmt)
+		for _, statement := range statements {
+			cluster.clearStatementTrace(statement.SQL)
+		}
 
 		b.StartTimer()
 		sql.Exec(b, tc.Stmt)
 		b.StopTimer()
 		var ok bool
-		r, ok = cluster.getStatementTrace(tc.Stmt)
-		if !ok {
-			b.Fatalf(
-				"could not find number of round trips for statement: %s",
-				tc.Stmt,
-			)
-		}
 
-		// If there's a retry error then we're just going to throw away this
-		// run.
-		rt, hasRetry := countKvBatchRequestsInRecording(r)
-		if hasRetry {
-			i--
-		} else if i > 0 { // skip the initial iteration
-			roundTrips += rt
+		total := 0
+		for _, statement := range statements {
+			r, ok = cluster.getStatementTrace(statement.SQL)
+			if !ok {
+				b.Fatalf(
+					"could not find number of round trips for statement: %s",
+					statement.SQL,
+				)
+			}
+
+			// If there's a retry error then we're just going to throw away this
+			// run.
+			rt, hasRetry := countKvBatchRequestsInRecording(r)
+			if hasRetry {
+				i--
+				ok = false
+				break
+			} else if i > 0 { // skip the initial iteration
+				total += rt
+			}
+		}
+		if ok {
+			roundTrips += total
 		}
 
 		sql.Exec(b, "DROP DATABASE bench;")

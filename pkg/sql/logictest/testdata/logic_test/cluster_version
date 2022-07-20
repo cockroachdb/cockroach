@@ -1,4 +1,4 @@
-# LogicTest: local-v1.1@v1.0-noupgrade
+# LogicTest: local-v1.1-at-v1.0-noupgrade
 
 query T
 SHOW CLUSTER SETTING version

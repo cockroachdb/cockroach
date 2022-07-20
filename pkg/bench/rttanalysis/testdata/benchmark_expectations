@@ -35,9 +35,9 @@ exp,benchmark
 16,DropDatabase/drop_database_1_table
 17,DropDatabase/drop_database_2_tables
 18,DropDatabase/drop_database_3_tables
-20,DropRole/drop_1_role
-27,DropRole/drop_2_roles
-34,DropRole/drop_3_roles
+18,DropRole/drop_1_role
+25,DropRole/drop_2_roles
+32,DropRole/drop_3_roles
 17,DropSequence/drop_1_sequence
 19,DropSequence/drop_2_sequences
 21,DropSequence/drop_3_sequences
@@ -92,3 +92,5 @@ exp,benchmark
 18,Truncate/truncate_2_column_2_rows
 1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
+4,VirtualTableQueries/virtual_table_cache_with_point_lookups
+12,VirtualTableQueries/virtual_table_cache_with_schema_change

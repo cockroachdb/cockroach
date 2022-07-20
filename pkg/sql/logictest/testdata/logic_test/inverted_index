@@ -42,8 +42,8 @@ c  CREATE TABLE public.c (
    "bAr" JSONB NULL,
    "qUuX" JSONB NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo ASC),
-   INVERTED INDEX "c_bAr_idx" ("bAr" ASC)
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX "c_bAr_idx" ("bAr")
 )
 
 # Test that only the permitted opclasses are usable to make an inverted index.
@@ -61,6 +61,12 @@ CREATE INVERTED INDEX ON c(foo jsonb_ops)
 
 statement ok
 CREATE INDEX ON c USING GIN(foo jsonb_ops)
+
+statement ok
+CREATE INVERTED INDEX ON c (foo ASC)
+
+statement error the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX ON c (foo DESC)
 
 # Regression test for #42944: make sure that mixed-case columns can be
 # inverted indexed.
@@ -80,6 +86,18 @@ CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
   INVERTED INDEX (foo)
+)
+
+statement error the last column in an inverted index cannot have the DESC option
+CREATE TABLE d (
+  foo JSON,
+  INVERTED INDEX (foo DESC)
+)
+
+statement ok
+CREATE TABLE d_asc (
+  foo JSON,
+  INVERTED INDEX (foo ASC)
 )
 
 statement ok
@@ -1206,8 +1224,8 @@ c  CREATE TABLE public.c (
    foo INT8[] NULL,
    bar STRING[] NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo ASC),
-   INVERTED INDEX c_bar_idx (bar ASC)
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX c_bar_idx (bar)
 )
 
 query ITT
@@ -1565,7 +1583,7 @@ CREATE TABLE table_desc_inverted_index (
    id INT PRIMARY KEY,
    last_accessed TIMESTAMP,
    testdata JSONB,
-   INVERTED INDEX inv_idx_testdata (testdata DESC),
+   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
    FAMILY f1 (id, last_accessed),
    FAMILY f2 (testdata)
 );
@@ -1578,7 +1596,7 @@ CREATE TABLE public.table_desc_inverted_index (
    last_accessed TIMESTAMP NULL,
    testdata JSONB NULL,
    CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX inv_idx_testdata (testdata DESC),
+   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
    FAMILY f1 (id, last_accessed),
    FAMILY f2 (testdata)
 )
@@ -1689,5 +1707,5 @@ SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
 
 # Regression test for incorrectly unwrapping a DOidWrapper (#84569).
 statement ok
-CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops DESC));
+CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops));
 INSERT INTO t84569 (name_col) VALUES ('X'::NAME)

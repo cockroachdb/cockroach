@@ -2188,7 +2188,7 @@ func (r *restoreResumer) dropDescriptors(
 		// descriptor validation.
 		mutSchema.SetDropped()
 		mutSchema.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(mutSchema); err != nil {
+		if err := descsCol.AddUncommittedDescriptor(ctx, mutSchema); err != nil {
 			return err
 		}
 
@@ -2258,7 +2258,7 @@ func (r *restoreResumer) dropDescriptors(
 		// descriptor validation.
 		db.SetDropped()
 		db.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(db); err != nil {
+		if err := descsCol.AddUncommittedDescriptor(ctx, db); err != nil {
 			return err
 		}
 

@@ -716,7 +716,7 @@ func createSchemaDescriptorWithID(
 	}
 	switch mutDesc.(type) {
 	case *schemadesc.Mutable:
-		if err := descsCol.AddUncommittedDescriptor(mutDesc); err != nil {
+		if err := descsCol.AddUncommittedDescriptor(ctx, mutDesc); err != nil {
 			return err
 		}
 	default:

@@ -75,7 +75,7 @@ CREATE TABLE t (
   INDEX (a, b, c) PARTITION BY LIST (d) (
     PARTITION a_b_c_implicit VALUES IN ((4))
   ),
-  INVERTED INDEX (j ASC) PARTITION BY LIST(a) (
+  INVERTED INDEX (j) PARTITION BY LIST(a) (
     PARTITION j_implicit VALUES IN (5)
   ),
   FAMILY (pk, a, b, c, d, j)
@@ -103,7 +103,7 @@ CREATE TABLE public.t (
   INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
     PARTITION a_b_c_implicit VALUES IN ((4))
   ),
-  INVERTED INDEX t_j_idx (j ASC) PARTITION BY LIST (a) (
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
     PARTITION j_implicit VALUES IN ((5))
   ),
   FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
@@ -137,7 +137,7 @@ CREATE TABLE public.t (
   INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
     PARTITION a_b_c_implicit VALUES IN ((4))
   ),
-  INVERTED INDEX t_j_idx (j ASC) PARTITION BY LIST (a) (
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
     PARTITION j_implicit VALUES IN ((5))
   ),
   INDEX new_idx (d ASC) PARTITION BY LIST (a) (
@@ -393,7 +393,7 @@ t          new_idx      CREATE INDEX new_idx ON test.public.t USING btree (d ASC
 t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
 t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC)
 t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
-t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j ASC)
+t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j)
 t          t_pkey       CREATE UNIQUE INDEX t_pkey ON test.public.t USING btree (pk ASC)
 
 statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
@@ -454,7 +454,7 @@ CREATE TABLE public.t (
   INDEX (a),
   UNIQUE (b),
   INDEX (partition_by, c),
-  INVERTED INDEX (j ASC),
+  INVERTED INDEX (j),
   FAMILY (pk, pk2, partition_by, a, b, c, d, j, u)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN (1),
@@ -501,7 +501,7 @@ CREATE TABLE public.t (
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
-  INVERTED INDEX t_j_idx (j ASC),
+  INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
   UNIQUE INDEX t_e_key (e ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
@@ -601,7 +601,7 @@ CREATE TABLE public.t (
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
-  INVERTED INDEX t_j_idx (j ASC),
+  INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
   UNIQUE INDEX t_e_key (e ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),

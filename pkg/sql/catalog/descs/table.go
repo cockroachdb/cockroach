@@ -81,10 +81,10 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 // GetUncommittedMutableTableByID returns an uncommitted mutable table by its
 // ID.
 func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.Mutable, error) {
-	if imm, status := tc.uncommitted.getImmutableByID(id); imm == nil || status == notValidatedYet {
+	if imm, status := tc.stored.getCachedByID(id); imm == nil || status == notValidatedYet {
 		return nil, nil
 	}
-	mut, err := tc.uncommitted.checkOut(id)
+	mut, err := tc.stored.checkOut(id)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.M
 		return table, nil
 	}
 	// Check non-table descriptors back in.
-	return nil, tc.uncommitted.checkIn(mut)
+	return nil, tc.stored.checkIn(mut)
 }
 
 // GetMutableTableByID returns a mutable table descriptor with
