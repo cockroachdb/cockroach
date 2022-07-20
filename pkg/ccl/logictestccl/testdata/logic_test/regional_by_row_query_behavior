@@ -54,8 +54,8 @@ TABLE regional_by_row_table
  │    │    ├── replica constraints
  │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
  │    │    │    ├── 1 replicas: [+region=ca-central-1]
- │    │    │    ├── 1 replicas: [+region=us-east-1]
- │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    │    └── 1 replicas: [+region=us-east-1]
+ │    │    ├── voter constraints: [+region=ca-central-1]
  │    │    └── lease preference: [+region=ca-central-1]
  │    └── partitions
  │         ├── ap-southeast-2
@@ -65,8 +65,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
  │         ├── ca-central-1
  │         │    ├── partition by list prefixes
@@ -75,8 +75,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
  │         └── us-east-1
  │              ├── partition by list prefixes
@@ -85,8 +85,8 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    ├── 1 replicas: [+region=us-east-1]
- │                   │    └── voter constraints: [+region=us-east-1]
+ │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INDEX regional_by_row_table_a_idx
  │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
@@ -96,8 +96,8 @@ TABLE regional_by_row_table
  │    │    ├── replica constraints
  │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
  │    │    │    ├── 1 replicas: [+region=ca-central-1]
- │    │    │    ├── 1 replicas: [+region=us-east-1]
- │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    │    └── 1 replicas: [+region=us-east-1]
+ │    │    ├── voter constraints: [+region=ca-central-1]
  │    │    └── lease preference: [+region=ca-central-1]
  │    └── partitions
  │         ├── ap-southeast-2
@@ -107,8 +107,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
  │         ├── ca-central-1
  │         │    ├── partition by list prefixes
@@ -117,8 +117,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
  │         └── us-east-1
  │              ├── partition by list prefixes
@@ -127,8 +127,8 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    ├── 1 replicas: [+region=us-east-1]
- │                   │    └── voter constraints: [+region=us-east-1]
+ │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── UNIQUE INDEX regional_by_row_table_b_key
  │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
@@ -138,8 +138,8 @@ TABLE regional_by_row_table
  │    │    ├── replica constraints
  │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
  │    │    │    ├── 1 replicas: [+region=ca-central-1]
- │    │    │    ├── 1 replicas: [+region=us-east-1]
- │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    │    └── 1 replicas: [+region=us-east-1]
+ │    │    ├── voter constraints: [+region=ca-central-1]
  │    │    └── lease preference: [+region=ca-central-1]
  │    └── partitions
  │         ├── ap-southeast-2
@@ -149,8 +149,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
  │         ├── ca-central-1
  │         │    ├── partition by list prefixes
@@ -159,8 +159,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
  │         └── us-east-1
  │              ├── partition by list prefixes
@@ -169,8 +169,8 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    ├── 1 replicas: [+region=us-east-1]
- │                   │    └── voter constraints: [+region=us-east-1]
+ │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INVERTED INDEX regional_by_row_table_j_idx
  │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@<enum_val>) [hidden] (implicit)
@@ -180,8 +180,8 @@ TABLE regional_by_row_table
  │    │    ├── replica constraints
  │    │    │    ├── 1 replicas: [+region=ap-southeast-2]
  │    │    │    ├── 1 replicas: [+region=ca-central-1]
- │    │    │    ├── 1 replicas: [+region=us-east-1]
- │    │    │    └── voter constraints: [+region=ca-central-1]
+ │    │    │    └── 1 replicas: [+region=us-east-1]
+ │    │    ├── voter constraints: [+region=ca-central-1]
  │    │    └── lease preference: [+region=ca-central-1]
  │    └── partitions
  │         ├── ap-southeast-2
@@ -191,8 +191,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ap-southeast-2]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
  │         ├── ca-central-1
  │         │    ├── partition by list prefixes
@@ -201,8 +201,8 @@ TABLE regional_by_row_table
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
- │         │         │    ├── 1 replicas: [+region=us-east-1]
- │         │         │    └── voter constraints: [+region=ca-central-1]
+ │         │         │    └── 1 replicas: [+region=us-east-1]
+ │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
  │         └── us-east-1
  │              ├── partition by list prefixes
@@ -211,8 +211,8 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    ├── 1 replicas: [+region=us-east-1]
- │                   │    └── voter constraints: [+region=us-east-1]
+ │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── UNIQUE WITHOUT INDEX (pk)
  └── UNIQUE WITHOUT INDEX (b)
