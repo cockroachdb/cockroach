@@ -296,7 +296,7 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 
 	// First use EXPLAIN to try to get the query plan. This is best-effort, and
 	// only for the purpose of debugging, so ignore any errors.
-	explainStmt := "EXPLAIN (OPT, VERBOSE) " + stmt
+	explainStmt := "EXPLAIN " + stmt
 	explainRows, err := runQueryImpl(explainStmt)
 	if err == nil {
 		h.statementsAndExplains = append(
