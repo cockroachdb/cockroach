@@ -92,6 +92,9 @@ message SampledQuery {
 
   // The number of rows written.
   int64 rows_written = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The duration of time in nanoseconds that the query experienced contention.
+  int64 contention_time = 22 [(gogoproto.jsontag) = ',omitempty'];
 }
 
 // CapturedIndexUsageStats
