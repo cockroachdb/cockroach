@@ -696,7 +696,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper,
 		txnMetrics,
 		stores,
-		nil,
 		cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
 		gcoords.Stores,

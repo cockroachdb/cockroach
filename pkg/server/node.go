@@ -345,9 +345,7 @@ func bootstrapCluster(
 
 // NewNode returns a new instance of Node.
 //
-// execCfg can be nil to help bootstrapping of a Server (the Node is created
-// before the ExecutorConfig is initialized). In that case, InitLogger() needs
-// to be called before the Node is used.
+// InitLogger() needs to be called before the Node is used.
 func NewNode(
 	cfg kvserver.StoreConfig,
 	recorder *status.MetricsRecorder,
@@ -355,7 +353,6 @@ func NewNode(
 	stopper *stop.Stopper,
 	txnMetrics kvcoord.TxnMetrics,
 	stores *kvserver.Stores,
-	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
 	storeGrantCoords *admission.StoreGrantCoordinators,
@@ -363,10 +360,6 @@ func NewNode(
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
-	var sqlExec *sql.InternalExecutor
-	if execCfg != nil {
-		sqlExec = execCfg.InternalExecutor
-	}
 	n := &Node{
 		storeCfg:   cfg,
 		stopper:    stopper,
@@ -374,7 +367,7 @@ func NewNode(
 		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores:     stores,
 		txnMetrics: txnMetrics,
-		sqlExec:    sqlExec,
+		sqlExec:    nil, // filled in later by InitLogger()
 		clusterID:  clusterID,
 		admissionController: kvserver.MakeKVAdmissionController(
 			kvAdmissionQ, storeGrantCoords, cfg.Settings),
@@ -388,7 +381,8 @@ func NewNode(
 	return n
 }
 
-// InitLogger needs to be called if a nil execCfg was passed to NewNode().
+// InitLogger connects the Node to the InternalExecutor to be used for event
+// logging.
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
 	n.sqlExec = execCfg.InternalExecutor
 }
