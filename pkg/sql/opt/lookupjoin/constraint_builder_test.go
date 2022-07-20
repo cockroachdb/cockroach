@@ -321,7 +321,7 @@ func makeFiltersExpr(
 func formatScalar(e opt.Expr, f *norm.Factory, evalCtx *eval.Context) string {
 	execBld := execbuilder.New(
 		context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
-		e, evalCtx, false, /* allowAutoCommit */
+		e, evalCtx, nil /* semaCtx */, false, /* allowAutoCommit */
 		false, /* isANSIDML */
 	)
 	expr, err := execBld.BuildScalar()
