@@ -180,36 +180,6 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/leases/ssds=2`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(4, spec.SSD(2)), // the last node is just used to generate load
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					t.Fatal("cannot run multi-store in local mode")
-				}
-
-				// Increase replication to 6 in order to allow lease shedding get the
-				// cluster perfectly balanced. Note that we have 6 stores here on 3
-				// nodes, and we disable replica moves. If we only have 3 replicas we
-				// may have hot stores that can only shed leases to other hot stores,
-				// and therefore we may never get to a balanced lease count.
-				db := c.Conn(ctx, t.L(), 1)
-				defer db.Close()
-				exec := func(stmt string) {
-					_, err := db.ExecContext(ctx, stmt)
-					require.NoError(t, err)
-				}
-				exec("ALTER RANGE default CONFIGURE ZONE USING num_replicas=6")
-				exec("ALTER DATABASE system CONFIGURE ZONE USING num_replicas=6")
-
-				rebalanceLoadRun(
-					ctx, t, c, "leases", 6*time.Minute, concurrency, false, /* mixedVersion */
-				)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
 			Name:    `rebalance/by-load/replicas`,
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
