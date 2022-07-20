@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -87,6 +88,7 @@ func readNextMessages(
 	ctx context.Context, f cdctest.TestFeed, numMessages int,
 ) ([]cdctest.TestFeedMessage, error) {
 	var actual []cdctest.TestFeedMessage
+	lastMessage := timeutil.Now()
 	for len(actual) < numMessages {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -94,11 +96,13 @@ func readNextMessages(
 		m, err := f.Next()
 		if log.V(1) {
 			if m != nil {
-				log.Infof(context.Background(), `msg %s: %s->%s (%s)`, m.Topic, m.Key, m.Value, m.Resolved)
+				log.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
+					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
 			} else {
 				log.Infof(context.Background(), `err %v`, err)
 			}
 		}
+		lastMessage = timeutil.Now()
 		if err != nil {
 			return nil, err
 		}
@@ -177,8 +181,14 @@ func assertPayloadsBase(
 	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) {
 	t.Helper()
+	timeout := assertPayloadsTimeout()
+	if len(expected) > 100 {
+		// Webhook sink is very slow; We have few tests that read 1000 messages.
+		timeout += 5 * time.Minute
+	}
+
 	require.NoError(t,
-		withTimeout(f, assertPayloadsTimeout(),
+		withTimeout(f, timeout,
 			func(ctx context.Context) error {
 				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
 			},
