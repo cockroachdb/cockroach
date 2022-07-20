@@ -91,7 +91,7 @@ func getStreamIngestionStats(
 		stats.ReplicationLagInfo = lagInfo
 	}
 
-	client, err := streamclient.NewClientFromTopology(evalCtx.Ctx(), &progress.GetStreamIngest().Topology)
+	client, err := streamclient.GetFirstActiveClient(evalCtx.Ctx(), progress.GetStreamIngest().StreamAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +113,11 @@ func connectToActiveClient(
 ) (streamclient.Client, error) {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
-	topology := progress.GetStreamIngest().Topology
+	streamAddresses := progress.GetStreamIngest().StreamAddresses
 
-	if len(topology.PartitionInfo) > 0 {
-		log.Infof(ctx, "ingestion job %d has existing topology, attempting to connect to topology addresses", ingestionJob.ID())
-		client, err := streamclient.NewClientFromTopology(ctx, &topology)
+	if len(streamAddresses) > 0 {
+		log.Infof(ctx, "ingestion job %d attempting to connect to existing stream addresses", ingestionJob.ID())
+		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses)
 		if err == nil {
 			return client, err
 		}
@@ -127,6 +127,8 @@ func connectToActiveClient(
 		// statement
 	}
 
+	// Without a list of addresses from existing progress we use the stream
+	// address from the creation statement
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
 	client, err := streamclient.NewStreamClient(streamAddress)
 
@@ -147,6 +149,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	// If there is an existing stream ID, reconnect to it.
 	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
+
 	client, err := connectToActiveClient(ctx, ingestionJob)
 	if err != nil {
 		return err
@@ -188,6 +191,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
 				md.Progress.GetStreamIngest().StartTime = startTime
 			}
+			md.Progress.GetStreamIngest().StreamAddresses = topology.StreamAddresses()
 			ju.UpdateProgress(md.Progress)
 			return nil
 		})

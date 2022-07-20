@@ -235,8 +235,8 @@ message StreamIngestionFrontierSpec {
   // Checkpoint stores a set of resolved spans denoting completed progress
   optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-  // Topology of the stream so that a stream client can be initialized.
-  optional jobs.jobspb.StreamTopology stream_topology = 8 [(gogoproto.nullable) = false];
+  // StreamAddresses are the addresses that can be connected to to interact with the source job
+  repeated string stream_addresses = 8 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {

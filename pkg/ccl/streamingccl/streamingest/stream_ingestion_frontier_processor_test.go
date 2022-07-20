@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -193,29 +194,27 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 
-			topology := jobspb.StreamTopology{
-				PartitionInfo: []jobspb.StreamTopology_PartitionInfo{
-					{
-						PartitionID:       pa1,
-						SubscriptionToken: []byte(pa1),
-						Address:           pa1,
-						Spans:             []roachpb.Span{pa1Span},
-					},
-					{
-						PartitionID:       pa2,
-						SubscriptionToken: []byte(pa2),
-						Address:           pa2,
-						Spans:             []roachpb.Span{pa2Span},
-					},
+			topology := streamclient.Topology{
+				{
+					ID:                pa1,
+					SubscriptionToken: []byte(pa1),
+					SrcAddr:           streamingccl.PartitionAddress(pa1),
+					Spans:             []roachpb.Span{pa1Span},
+				},
+				{
+					ID:                pa2,
+					SubscriptionToken: []byte(pa2),
+					SrcAddr:           streamingccl.PartitionAddress(pa2),
+					Spans:             []roachpb.Span{pa2Span},
 				},
 			}
 
 			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{}
-			for _, partition := range topology.PartitionInfo {
-				spec.PartitionSpecs[partition.PartitionID] = execinfrapb.StreamIngestionPartitionSpec{
-					PartitionID:       partition.PartitionID,
+			for _, partition := range topology {
+				spec.PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
+					PartitionID:       partition.ID,
 					SubscriptionToken: string(partition.SubscriptionToken),
-					Address:           partition.Address,
+					Address:           string(partition.SrcAddr),
 					Spans:             partition.Spans,
 				}
 			}
@@ -241,7 +240,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 			// Create a frontier processor.
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
-			frontierSpec.StreamTopology = topology
+			frontierSpec.StreamAddresses = topology.StreamAddresses()
 			frontierSpec.TrackedSpans = []roachpb.Span{pa1Span, pa2Span}
 			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 

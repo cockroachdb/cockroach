@@ -92,6 +92,20 @@ type Client interface {
 // stream. It specifies the number and addresses of partitions of the stream.
 type Topology []PartitionInfo
 
+// StreamAddresses returns a list of unique source addresses in a topology
+func (t Topology) StreamAddresses() []string {
+	uniqueAddresses := make(map[string]struct{})
+	for _, partition := range t {
+		uniqueAddresses[string(partition.SrcAddr)] = struct{}{}
+	}
+
+	var addresses []string
+	for address := range uniqueAddresses {
+		addresses = append(addresses, address)
+	}
+	return addresses
+}
+
 // PartitionInfo describes a partition of a replication stream, i.e. a set of key
 // spans in a source cluster in which changes will be emitted.
 type PartitionInfo struct {
@@ -151,33 +165,30 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	return streamClient, nil
 }
 
-// NewClientFromTopology iterates through each stream address in the topology
-// and returns the first client it's able to successfully connect to.
-func NewClientFromTopology(ctx context.Context, topology *jobspb.StreamTopology) (Client, error) {
-	streamAddresses := make(map[string]struct{})
-	for _, partition := range topology.PartitionInfo {
-		streamAddresses[partition.Address] = struct{}{}
-	}
-
+// GetFirstActiveClient iterates through each provided stream address
+// and returns the first client it's able to successfully Dial.
+func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
 	var combinedError error = nil
-	for address := range streamAddresses {
+	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
 		client, err := NewStreamClient(streamAddress)
 		if err == nil {
-			dialErr := client.Dial(ctx)
-
-			if dialErr == nil {
+			err = client.Dial(ctx)
+			if err == nil {
 				return client, err
 			}
+		}
 
-			err = errors.CombineErrors(err, dialErr)
+		// Only log the address if we can pick out just the host to avoid leaking
+		// credentials
+		addressStr := "<invalidURL>"
+		streamURL, parseErr := streamAddress.URL()
+		if parseErr == nil {
+			addressStr = streamURL.Host
 		}
 
 		// Note the failure and attempt the next address
-		streamURL, parseErr := streamAddress.URL()
-		if parseErr == nil {
-			log.Infof(ctx, "failed to connect to address %s: %s", streamURL.Host, err.Error())
-		}
+		log.Errorf(ctx, "failed to connect to address: %s %s", addressStr, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
 

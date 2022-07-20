@@ -583,6 +583,23 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
   ALTER TABLE d.scattered SCATTER;
   `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
 
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
+	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// We should've persisted the original topology
+	progress := jobutils.GetJobProgress(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	streamAddresses := progress.GetStreamIngest().StreamAddresses
+	require.Greater(t, len(streamAddresses), 1)
+
+	c.srcCluster.Server(0).Stopper().Stop(ctx)
+
 	// Once srcCluster.Server(0) is shut down queries must be ran against a different server
 	alternateSrcExec := func(exec srcInitExecFunc) {
 		srcSysSQL := sqlutils.MakeSQLRunner(c.srcCluster.ServerConn(1))
@@ -598,23 +615,6 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 		destData := c.getDestTenantSQL().QueryStr(c.t, query)
 		require.Equal(c.t, sourceData, destData)
 	}
-
-	producerJobID, ingestionJobID := c.startStreamReplication()
-	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-
-	srcTime := c.srcCluster.Server(0).Clock().Now()
-	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
-
-	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-
-	// We should've persisted the original topology
-	progress := jobutils.GetJobProgress(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-	topology := progress.GetStreamIngest().Topology
-	require.Greater(t, len(topology.PartitionInfo), 1)
-
-	c.srcCluster.Server(0).Stopper().Stop(ctx)
 
 	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToRun(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
