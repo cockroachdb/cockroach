@@ -8,7 +8,7 @@ tc_prepare
 
 tc_start_progress_block "Build Docker image"
 # Buffer noisy output and only print it on failure.
-run DOCKER_BUILDKIT=1 docker build \
+DOCKER_BUILDKIT=1 run docker build \
   -f ./pkg/ui/workspaces/e2e-tests/Dockerfile \
   -t cockroachdb/cockroach-ci-ui \
   --progress=plain \
