@@ -83,6 +83,12 @@ func (fit *fakeSpanResolverIterator) Seek(
 	// like breaking tracing and blocking on locks.
 	var b kv.Batch
 	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	if len(span.EndKey) == 0 {
+		// If the EndKey is omitted, then the span represents a point request.
+		// In such case we manually set the EndKey so that the Scan below
+		// doesn't complain.
+		span.EndKey = span.Key.Next()
+	}
 	b.Scan(span.Key, span.EndKey)
 	err := fit.db.Run(ctx, &b)
 	if err != nil {

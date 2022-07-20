@@ -1003,6 +1003,13 @@ func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLIns
 func (dsp *DistSQLPlanner) PartitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) ([]SpanPartition, error) {
+	if len(spans) == 0 {
+		return nil, errors.AssertionFailedf("no spans")
+	}
+	if planCtx.isLocal {
+		// If we're planning locally, map all spans to the gateway.
+		return []SpanPartition{{dsp.gatewaySQLInstanceID, spans}}, nil
+	}
 	if dsp.codec.ForSystemTenant() {
 		return dsp.partitionSpansSystem(ctx, planCtx, spans)
 	}
@@ -1013,38 +1020,11 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 // for a system tenant.
 func (dsp *DistSQLPlanner) partitionSpansSystem(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]SpanPartition, error) {
-	if len(spans) == 0 {
-		panic("no spans")
-	}
-	partitions := make([]SpanPartition, 0, 1)
-	if planCtx.isLocal {
-		// If we're planning locally, map all spans to the local node.
-		partitions = append(partitions,
-			SpanPartition{dsp.gatewaySQLInstanceID, spans})
-		return partitions, nil
-	}
+) (partitions []SpanPartition, _ error) {
 	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
 	nodeMap := make(map[base.SQLInstanceID]int)
 	it := planCtx.spanIter
-	for i := range spans {
-
-		span := spans[i]
-		noEndKey := false
-		if len(span.EndKey) == 0 {
-			// If we see a span to partition that has no end key, it means that
-			// we're going to do a point lookup on the start key of this span.
-			//
-			// The code below us doesn't really tolerate spans without an
-			// EndKey, so we manufacture a single-key span for this case. Note
-			// that we still, however, will preserve the point lookup.
-			span = roachpb.Span{
-				Key:    span.Key,
-				EndKey: span.Key.Next(),
-			}
-			noEndKey = true
-		}
-
+	for _, span := range spans {
 		// rSpan is the span we are currently partitioning.
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {
@@ -1082,12 +1062,6 @@ func (dsp *DistSQLPlanner) partitionSpansSystem(
 				)
 			}
 
-			// Limit the end key to the end of the span we are resolving.
-			endKey := desc.EndKey
-			if rSpan.EndKey.Less(endKey) {
-				endKey = rSpan.EndKey
-			}
-
 			sqlInstanceID := base.SQLInstanceID(replDesc.NodeID)
 			partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 			if !inNodeMap {
@@ -1111,13 +1085,19 @@ func (dsp *DistSQLPlanner) partitionSpansSystem(
 			}
 			partition := &partitions[partitionIdx]
 
-			if noEndKey {
-				// The original span had no EndKey, and we want to preserve it
-				// so that we could use a GetRequest.
-				partition.Spans = append(partition.Spans, roachpb.Span{
-					Key: lastKey.AsRawKey(),
-				})
+			if len(span.EndKey) == 0 {
+				// If we see a span to partition that has no end key, it means
+				// that we're going to do a point lookup on the start key of
+				// this span. Thus, we include the span into partition.Spans
+				// without trying to merge it with the last span.
+				partition.Spans = append(partition.Spans, span)
 				break
+			}
+
+			// Limit the end key to the end of the span we are resolving.
+			endKey := desc.EndKey
+			if rSpan.EndKey.Less(endKey) {
+				endKey = rSpan.EndKey
 			}
 
 			if lastSQLInstanceID == sqlInstanceID {
@@ -1146,17 +1126,7 @@ func (dsp *DistSQLPlanner) partitionSpansSystem(
 // assignments are made to all available instances in a round-robin fashion.
 func (dsp *DistSQLPlanner) partitionSpansTenant(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]SpanPartition, error) {
-	if len(spans) == 0 {
-		panic("no spans")
-	}
-	partitions := make([]SpanPartition, 0, 1)
-	if planCtx.isLocal {
-		// If we're planning locally, map all spans to the local node.
-		partitions = append(partitions,
-			SpanPartition{dsp.gatewaySQLInstanceID, spans})
-		return partitions, nil
-	}
+) (partitions []SpanPartition, _ error) {
 	if dsp.sqlInstanceProvider == nil {
 		return nil, errors.AssertionFailedf("sql instance provider not available in multi-tenant environment")
 	}
@@ -1178,8 +1148,7 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 	nodeMap := make(map[base.SQLInstanceID]int)
 	var lastKey roachpb.Key
 	var lastIdx int
-	for i := range spans {
-		span := spans[i]
+	for i, span := range spans {
 		if log.V(1) {
 			log.Infof(ctx, "partitioning span %s", span)
 		}
@@ -1303,7 +1272,7 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	ctx context.Context, planCtx *PlanningCtx, spans []roachpb.Span, reverse bool,
 ) (base.SQLInstanceID, error) {
 	if len(spans) == 0 {
-		panic("no spans")
+		return 0, errors.AssertionFailedf("no spans")
 	}
 
 	// Determine the node ID for the first range to be scanned.
