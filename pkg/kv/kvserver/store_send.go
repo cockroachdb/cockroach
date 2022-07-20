@@ -60,7 +60,8 @@ func (s *Store) SendWithWriteBytes(
 		arg := union.GetInner()
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
-			return nil, nil, roachpb.NewError(err)
+			return nil, nil, roachpb.NewError(errors.Wrapf(err,
+				"failed to verify keys for %s", arg.Method()))
 		}
 	}
 
