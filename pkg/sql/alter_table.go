@@ -1631,8 +1631,7 @@ func dropColumnImpl(
 	}
 
 	if tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colToDrop.GetID()) {
-		return nil, pgerror.Newf(pgcode.InvalidColumnReference,
-			"column %q is referenced by the primary key", colToDrop.GetName())
+		return nil, sqlerrors.NewColumnReferencedByPrimaryKeyError(colToDrop.GetName())
 	}
 	var idxNamesToDelete []string
 	for _, idx := range tableDesc.NonDropIndexes() {

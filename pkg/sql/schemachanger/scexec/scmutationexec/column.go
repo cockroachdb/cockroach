@@ -12,6 +12,7 @@ package scmutationexec
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -118,6 +119,18 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 	// that okay?
 	tbl.Columns = append(tbl.Columns,
 		*(protoutil.Clone(mut.GetColumn())).(*descpb.ColumnDescriptor))
+
+	// Ensure that the column is added in the right location. This is important
+	// when rolling back dropped columns.
+	getID := func(col *descpb.ColumnDescriptor) int {
+		if col.PGAttributeNum != 0 {
+			return int(col.PGAttributeNum)
+		}
+		return int(col.ID)
+	}
+	sort.Slice(tbl.Columns, func(i, j int) bool {
+		return getID(&tbl.Columns[i]) < getID(&tbl.Columns[j])
+	})
 	return nil
 }
 
