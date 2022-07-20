@@ -27,7 +27,7 @@ chmod a+x upstream_artifacts/cockroach
 tc_end_block "Prepare cockroach binary"
 
 tc_start_block "Run Cypress health checks"
-run_json_test docker run \
+docker run \
   --rm \
   -v $PWD/upstream_artifacts:/upstream_artifacts \
   -v $PWD/artifacts:/artifacts \
