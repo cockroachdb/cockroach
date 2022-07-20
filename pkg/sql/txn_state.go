@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -89,11 +88,6 @@ type txnState struct {
 	// took more than this.
 	recordingThreshold time.Duration
 	recordingStart     time.Time
-
-	// cancel is Ctx's cancellation function. Called upon COMMIT/ROLLBACK of the
-	// transaction to release resources associated with the context. nil when no
-	// txn is in progress.
-	cancel context.CancelFunc
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
@@ -190,16 +184,15 @@ func (ts *txnState) resetForNewSQLTxn(
 	opName := sqlTxnName
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
 
-	var txnCtx context.Context
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if alreadyRecording || duration > 0 {
-		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
-		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
 	} else {
-		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName)
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName)
 	}
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", attribute.StringValue("true"))
@@ -210,7 +203,6 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
-	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
 	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
 	txnID = func() (txnID uuid.UUID) {
 		ts.mu.Lock()
@@ -255,10 +247,6 @@ func (ts *txnState) resetForNewSQLTxn(
 // returned.
 func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 	ts.mon.Stop(ts.Ctx)
-	if ts.cancel != nil {
-		ts.cancel()
-		ts.cancel = nil
-	}
 	sp := tracing.SpanFromContext(ts.Ctx)
 	if sp == nil {
 		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
@@ -291,10 +279,6 @@ func (ts *txnState) finishExternalTxn() {
 		ts.mon.Stop(ts.connCtx)
 	} else {
 		ts.mon.Stop(ts.Ctx)
-	}
-	if ts.cancel != nil {
-		ts.cancel()
-		ts.cancel = nil
 	}
 
 	if ts.Ctx != nil {

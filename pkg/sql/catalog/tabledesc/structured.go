@@ -1089,7 +1089,9 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 	return nil
 }
 
-func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
+func checkColumnsValidForInvertedIndex(
+	tableDesc *Mutable, indexColNames []string, colDirs []catpb.IndexColumn_Direction,
+) error {
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
 		for _, col := range tableDesc.NonDropColumns() {
@@ -1098,6 +1100,10 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 				// inverted indexable.
 				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
 					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
+				}
+				if i == lastCol && colDirs[i] == catpb.IndexColumn_DESC {
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"the last column in an inverted index cannot have the DESC option")
 				}
 				// Any preceding columns must not be inverted indexable.
 				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
@@ -1188,7 +1194,9 @@ func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
 			return err
 		}
 	} else {
-		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(
+			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
+		); err != nil {
 			return err
 		}
 	}
@@ -2145,7 +2153,9 @@ func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
 			return err
 		}
 	case descpb.IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
+		if err := checkColumnsValidForInvertedIndex(
+			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
+		); err != nil {
 			return err
 		}
 	}
