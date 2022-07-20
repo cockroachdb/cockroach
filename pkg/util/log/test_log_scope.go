@@ -35,6 +35,7 @@ import (
 type TestLogScope struct {
 	logDir    string
 	cleanupFn func()
+	closed    bool
 	previous  struct {
 		appliedConfig           string
 		stderrSinkInfoTemplate  sinkInfo
@@ -374,10 +375,11 @@ func (l *TestLogScope) Rotate(t tShim) {
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
 	t.Helper()
-	if l == nil {
-		// Never initialized.
+	if l == nil || l.closed {
+		// Never initialized or already closed.
 		return
 	}
+	l.closed = true
 	t.Logf("-- test log scope end --")
 
 	// Ensure any remaining logs are written to files.
