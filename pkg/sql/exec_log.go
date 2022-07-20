@@ -391,6 +391,7 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			contentionNanos := telemetryMetrics.getContentionTime(p.instrumentation.queryLevelStatsWithErr.Stats.ContentionTime.Nanoseconds())
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:     execDetails,
@@ -426,6 +427,7 @@ func (p *planner) maybeLogStatementInternal(
 				InvertedJoinCount:        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
 				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
+				ContentionNanos:          contentionNanos,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {

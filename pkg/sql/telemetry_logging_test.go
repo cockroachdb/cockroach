@@ -51,6 +51,23 @@ func (s *stubTime) TimeNow() time.Time {
 	return s.t
 }
 
+type stubQueryMetrics struct {
+	syncutil.RWMutex
+	contentionNanos int64
+}
+
+func (s *stubQueryMetrics) setContentionNanos(t int64) {
+	s.RWMutex.Lock()
+	defer s.RWMutex.Unlock()
+	s.contentionNanos = t
+}
+
+func (s *stubQueryMetrics) ContentionNanos() int64 {
+	s.RWMutex.RLock()
+	defer s.RWMutex.RUnlock()
+	return s.contentionNanos
+}
+
 func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	// Enable logging channels.
 	log.TestingResetActive()
@@ -83,11 +100,13 @@ func TestTelemetryLogging(t *testing.T) {
 	defer cleanup()
 
 	st := stubTime{}
+	sqm := stubQueryMetrics{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getTimeNow: st.TimeNow,
+				getTimeNow:         st.TimeNow,
+				getContentionNanos: sqm.ContentionNanos,
 			},
 		},
 	})
@@ -138,6 +157,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedRead            bool
 		expectedWrite           bool
 		expectedErr             string // Empty string means no error is expected.
+		contentionNanos         int64
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -157,6 +177,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			contentionNanos:         0,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -174,6 +195,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			contentionNanos:         1,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -192,6 +214,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionNanos:         2,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -209,6 +232,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionNanos:         3,
 		},
 		{
 			// Test case with a full scan.
@@ -226,6 +250,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			contentionNanos:         0,
 		},
 		{
 			// Test case with a write.
@@ -243,6 +268,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           true,
+			contentionNanos:         0,
 		},
 		// Not of type DML so not sampled
 		{
@@ -268,6 +294,7 @@ func TestTelemetryLogging(t *testing.T) {
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
+			sqm.setContentionNanos(tc.contentionNanos)
 			_, err := db.DB.ExecContext(context.Background(), tc.query)
 			if err != nil && tc.expectedErr == "" {
 				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
@@ -420,7 +447,6 @@ func TestTelemetryLogging(t *testing.T) {
 						if RowsReadRe.MatchString(e.Message) {
 							t.Errorf("expected not to find RowsRead but it was found in: %s", e.Message)
 						}
-
 					}
 					RowsWrittenRe := regexp.MustCompile("\"RowsWritten\":[0-9]*")
 					if tc.expectedWrite {
@@ -431,6 +457,14 @@ func TestTelemetryLogging(t *testing.T) {
 						if RowsWrittenRe.MatchString(e.Message) {
 							t.Errorf("expected not to find RowsWritten but it was found in: %s", e.Message)
 						}
+					}
+					contentionNanos := regexp.MustCompile("\"ContentionNanos\":[0-9]*")
+					if tc.contentionNanos > 0 && !contentionNanos.MatchString(e.Message) {
+						// If we have contention, we expect the ContentionNanos field to be populated.
+						t.Errorf("expected to find ContentionNanos but none was found")
+					} else if tc.contentionNanos == 0 && contentionNanos.MatchString(e.Message) {
+						// If we do not have contention, expect no ContentionNanos field.
+						t.Errorf("expected no ContentionNanos field, but was found")
 					}
 					if tc.expectedErr != "" {
 						if !strings.Contains(e.Message, tc.expectedErr) {

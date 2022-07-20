@@ -2553,6 +2553,7 @@ contains common SQL event/execution details.
 | `InvertedJoinCount` | The number of inverted joins in the query plan. | no |
 | `ApplyJoinCount` | The number of apply joins in the query plan. | no |
 | `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
+| `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
 
 
 #### Common fields

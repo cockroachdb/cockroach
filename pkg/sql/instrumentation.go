@@ -101,12 +101,23 @@ type instrumentationHelper struct {
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 	withStatementTrace      func(trace tracingpb.Recording, stmt string)
 
+	// sp is always populated by the instrumentationHelper Setup method, except in
+	// the scenario where we do not need tracing information. This scenario occurs
+	// with the confluence of:
+	// - not collecting a bundle (collectBundle is false)
+	// - withStatementTrace is nil (only populated by testing knobs)
+	// - outputMode is unmodifiedOutput (i.e. outputMode not specified)
+	// - not collecting execution statistics (collectExecStats is false)
+	// TODO(yuzefovich): refactor statement span creation #85820
 	sp *tracing.Span
+
 	// shouldFinishSpan determines whether sp needs to be finished in
 	// instrumentationHelper.Finish.
 	shouldFinishSpan bool
 	origCtx          context.Context
 	evalCtx          *eval.Context
+
+	queryLevelStatsWithErr execstats.QueryLevelStatsWithErr
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -171,6 +182,15 @@ const (
 	explainAnalyzePlanOutput
 	explainAnalyzeDistSQLOutput
 )
+
+// Tracing returns the current value of the instrumentation helper's span,
+// along with a boolean that determines whether the span is populated.
+func (ih *instrumentationHelper) Tracing() (sp *tracing.Span, ok bool) {
+	if ih.sp != nil {
+		return ih.sp, true
+	}
+	return nil, false
+}
 
 // SetOutputMode can be called before Setup, if we are running an EXPLAIN
 // ANALYZE variant.
@@ -284,13 +304,15 @@ func (ih *instrumentationHelper) Finish(
 	retErr error,
 ) error {
 	ctx := ih.origCtx
-	if ih.sp == nil {
+	if _, ok := ih.Tracing(); !ok {
 		return retErr
 	}
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
 	var trace tracingpb.Recording
+	queryLevelStatsWithErr := ih.queryLevelStatsWithErr
+
 	if ih.shouldFinishSpan {
 		trace = ih.sp.FinishAndGetConfiguredRecording()
 	} else {
@@ -310,34 +332,11 @@ func (ih *instrumentationHelper) Finish(
 		)
 	}
 
-	// Get the query-level stats.
-	var flowsMetadata []*execstats.FlowsMetadata
-	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
-	}
-	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
-	if err != nil {
-		const msg = "error getting query level stats for statement: %s: %+v"
-		if buildutil.CrdbTestBuild {
-			panic(fmt.Sprintf(msg, ih.fingerprint, err))
-		}
-		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
-	} else {
-		stmtStatsKey := roachpb.StatementStatisticsKey{
-			Query:       ih.fingerprint,
-			ImplicitTxn: ih.implicitTxn,
-			Database:    p.SessionData().Database,
-			Failed:      retErr != nil,
-			PlanHash:    ih.planGist.Hash(),
-		}
-		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
-		if err != nil {
-			if log.V(2 /* level */) {
-				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
-			}
-		}
+	// Accumulate txn stats if no error was encountered while collecting
+	// query-level statistics.
+	if queryLevelStatsWithErr.Err == nil {
 		if collectExecStats || ih.implicitTxn {
-			txnStats.Accumulate(queryLevelStats)
+			txnStats.Accumulate(queryLevelStatsWithErr.Stats)
 		}
 	}
 
@@ -355,7 +354,7 @@ func (ih *instrumentationHelper) Finish(
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 				explain.Flags{Verbose: true, ShowTypes: true},
 				phaseTimes,
-				&queryLevelStats,
+				&queryLevelStatsWithErr.Stats,
 			)
 			bundle = buildStatementBundle(
 				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
@@ -381,7 +380,7 @@ func (ih *instrumentationHelper) Finish(
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
 		}
-		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStats, flows, trace)
+		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStatsWithErr.Stats, flows, trace)
 
 	default:
 		return nil

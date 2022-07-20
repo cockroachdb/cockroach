@@ -3792,6 +3792,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.ZigZagJoinCount), 10)
 	}
 
+	if m.ContentionNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContentionNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.ContentionNanos), 10)
+	}
+
 	return printComma, b
 }
 

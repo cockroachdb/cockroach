@@ -102,7 +102,7 @@ var _ metric.Struct = GuardrailMetrics{}
 // MetricStruct is part of the metric.Struct interface.
 func (GuardrailMetrics) MetricStruct() {}
 
-// recordStatementSummery gathers various details pertaining to the
+// recordStatementSummary gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
 // - distSQLUsed reports whether the query was distributed.
@@ -206,6 +206,17 @@ func (ex *connExecutor) recordStatementSummary(
 		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 	}
 
+	// Record statement execution statistics if span is recorded and no error was
+	// encountered while collecting query-level statistics.
+	if _, ok := planner.instrumentation.Tracing(); ok && planner.instrumentation.queryLevelStatsWithErr.Err == nil {
+		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, planner.instrumentation.queryLevelStatsWithErr.Stats)
+		if err != nil {
+			if log.V(2 /* level */) {
+				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
+			}
+		}
+	}
+
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 
@@ -265,7 +276,7 @@ func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 func getNodesFromPlanner(planner *planner) []int64 {
 	// Retrieve the list of all nodes which the statement was executed on.
 	var nodes []int64
-	if planner.instrumentation.sp != nil {
+	if _, ok := planner.instrumentation.Tracing(); !ok {
 		trace := planner.instrumentation.sp.GetRecording(tracingpb.RecordingStructured)
 		// ForEach returns nodes in order.
 		execinfrapb.ExtractNodesFromSpans(planner.EvalContext().Context, trace).ForEach(func(i int) {

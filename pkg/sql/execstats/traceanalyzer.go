@@ -126,6 +126,22 @@ type QueryLevelStats struct {
 	Regions               []string
 }
 
+// QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
+// if an error occurred while getting query-level stats.
+type QueryLevelStatsWithErr struct {
+	Stats QueryLevelStats
+	Err   error
+}
+
+// MakeQueryLevelStatsWithErr creates a QueryLevelStatsWithErr from a
+// QueryLevelStats and error.
+func MakeQueryLevelStatsWithErr(stats QueryLevelStats, err error) QueryLevelStatsWithErr {
+	return QueryLevelStatsWithErr{
+		stats,
+		err,
+	}
+}
+
 // Accumulate accumulates other's stats into the receiver.
 func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.NetworkBytesSent += other.NetworkBytesSent
