@@ -155,3 +155,11 @@ message DescriptorState {
   // Authorization is information about the creator of the schema change.
   Authorization authorization = 3 [(gogoproto.nullable) = false];
 }
+
+message TelemetryPayload {
+  message ElementStatus {
+    ElementProto element = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+    Status status = 2;
+  }
+  repeated ElementStatus element_statuses = 1 [(gogoproto.nullable) = false];
+}

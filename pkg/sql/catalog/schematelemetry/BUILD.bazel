@@ -1,0 +1,25 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "schematelemetry",
+    srcs = ["schema_telemetry_event.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/descmetadata",
+        "//pkg/sql/schemachanger/scdecomp",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util/log/eventpb",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -13,6 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 import "util/log/eventpb/events.proto";
 import "util/log/eventpb/sql_audit_events.proto";
 
@@ -108,4 +109,12 @@ message ChangefeedFailed {
   // The reason / environment with which the changefeed failed (ex:
   // connection_closed, changefeed_behind)
   string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+}
+
+// Schema is an event for schema telemetry.
+message Schema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 current_page = 2;
+  uint32 num_pages = 3;
+  google.protobuf.Any payload = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
