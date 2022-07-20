@@ -45,6 +45,12 @@ func TestTenantLogic(t *testing.T) {
 	logictest.RunLogicTestWithDefaultConfig(
 		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
 		filepath.Join(testdataDir, logictestGlob))
+}
+
+// TestTenantCCLLogic is the same as TestTenantLogic but runs all CCL logic test
+// files.
+func TestTenantCCLLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	logictest.RunLogicTestWithDefaultConfig(
 		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
 		testutils.TestDataPath(t, logictestGlob))
