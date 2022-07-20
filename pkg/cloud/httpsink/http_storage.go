@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -35,9 +35,9 @@ import (
 
 func parseHTTPURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_http
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_http
 	conf.HttpPath.BaseUri = uri.String()
 	return conf, nil
 }
@@ -62,7 +62,7 @@ func (e *retryableHTTPError) Error() string {
 
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.http")
 	if args.IOConf.DisableHTTP {
@@ -90,10 +90,10 @@ func MakeHTTPStorage(
 	}, nil
 }
 
-func (h *httpStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_http,
-		HttpPath: roachpb.ExternalStorage_Http{
+func (h *httpStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider: cloudpb.ExternalStorageProvider_http,
+		HttpPath: cloudpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
 	}
@@ -282,6 +282,6 @@ func (h *httpStorage) req(
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_http,
 		parseHTTPURL, MakeHTTPStorage, cloud.RedactedParams(), "http", "https")
 }

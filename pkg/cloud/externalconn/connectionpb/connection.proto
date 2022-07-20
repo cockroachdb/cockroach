@@ -13,7 +13,7 @@ package cockroach.cloud.externalconn.connectionpb;
 option go_package = "connectionpb";
 
 import "gogoproto/gogo.proto";
-import "roachpb/api.proto";
+import "cloud/cloudpb/external_storage.proto";
 
 enum ConnectionType {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -29,5 +29,5 @@ message ConnectionDetails {
 }
 
 message NodelocalConnectionDetails {
-  roachpb.LocalFileConfig cfg = 1 [(gogoproto.nullable) = false];
+  cloudpb.LocalFileConfig cfg = 1 [(gogoproto.nullable) = false];
 }

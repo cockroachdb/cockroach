@@ -22,7 +22,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,11 +65,11 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 	true, /* default */
 )
 
-func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_gs
+func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_gs
 	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
-	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
+	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
 		Prefix:              uri.Path,
 		Auth:                uri.Query().Get(cloud.AuthParam),
@@ -86,7 +86,7 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 type gcsStorage struct {
 	bucket   *gcs.BucketHandle
 	client   *gcs.Client
-	conf     *roachpb.ExternalStorage_GCS
+	conf     *cloudpb.ExternalStorage_GCS
 	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
@@ -94,9 +94,9 @@ type gcsStorage struct {
 
 var _ cloud.ExternalStorage = &gcsStorage{}
 
-func (g *gcsStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:          roachpb.ExternalStorageProvider_gs,
+func (g *gcsStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:          cloudpb.ExternalStorageProvider_gs,
 		GoogleCloudConfig: g.conf,
 	}
 }
@@ -112,7 +112,7 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.google_cloud")
 	conf := dest.GoogleCloudConfig
@@ -344,6 +344,6 @@ func (g *gcsStorage) Close() error {
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_gs,
 		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam, BearerTokenParam), "gs")
 }

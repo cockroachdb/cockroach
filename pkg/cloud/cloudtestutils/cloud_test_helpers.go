@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -487,7 +487,7 @@ func uploadData(
 	t *testing.T,
 	testSettings *cluster.Settings,
 	rnd *rand.Rand,
-	dest roachpb.ExternalStorage,
+	dest cloudpb.ExternalStorage,
 	basename string,
 ) ([]byte, func()) {
 	data := randutil.RandBytes(rnd, 16<<20)
@@ -507,7 +507,7 @@ func uploadData(
 // CheckAntagonisticRead checks an external storage is able to perform reads if
 // the HTTP client's dialer artificially degrades its connections.
 func CheckAntagonisticRead(
-	t *testing.T, conf roachpb.ExternalStorage, testSettings *cluster.Settings,
+	t *testing.T, conf cloudpb.ExternalStorage, testSettings *cluster.Settings,
 ) {
 	rnd, _ := randutil.NewTestRand()
 

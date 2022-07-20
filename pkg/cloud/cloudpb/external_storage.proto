@@ -1,0 +1,124 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.cloud.cloudpb;
+option go_package = "cloudpb";
+
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+
+enum ExternalStorageProvider {
+  Unknown = 0;
+  nodelocal = 1;
+  http = 2;
+  s3 = 3;
+  gs = 4;
+  azure = 5;
+  reserved 6;
+  userfile = 7;
+  null = 8;
+}
+
+message LocalFileConfig {
+  string path = 1;
+  uint32 node_id = 2 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
+message ExternalStorage {
+  ExternalStorageProvider provider = 1;
+
+  message Http {
+    string baseUri = 1;
+  }
+  message S3 {
+    string bucket = 1;
+    string prefix = 2;
+
+    string access_key = 3;
+    string secret = 4;
+    string temp_token = 5;
+    string endpoint = 6;
+    string region = 7;
+    string auth = 8;
+    string server_enc_mode  = 9;
+    string server_kms_id = 10  [(gogoproto.customname) = "ServerKMSID"];
+    string storage_class = 11;
+
+    // RoleARN if non-empty, is the ARN of the role that should be assumed in
+    // order to access this storage.
+    string role_arn = 12 [(gogoproto.customname) = "RoleARN"];
+
+    // DelegateRoleARNs are the ARNs of intermediate roles in an assume role
+    // chain. These roles will be assumed in the order they appear in the list
+    // so that the role specified by RoleARN can be assumed.
+    repeated string delegate_role_arns = 13 [(gogoproto.customname) = "DelegateRoleARNs"];
+  }
+  message GCS {
+    string bucket = 1;
+    string prefix = 2;
+    string auth = 3;
+
+    // BillingProject if non-empty, is the Google Cloud project to bill for all storage requests.
+    // This is required to be set if using a "requestor pays" bucket.
+    string billing_project = 4;
+
+    string credentials = 5;
+
+    // AssumeRole if non-empty, is the email of the service account that should
+    // be assumed in order to access this storage.
+    string assume_role = 6;
+
+    // AssumeRoleDelegates are the intermediate service account email addresses
+    // in an assume role chain. These delegates will be assumed in the order
+    // they appear in the list so that the service account specified by
+    // AssumeRole can be assumed.
+    repeated string assume_role_delegates = 8;
+
+    // BearerToken is a temporary bearer token that could be used to access the
+    // storage. This token is only used for "specified" auth mode and if
+    // Credentials is not supplied. Currently only OAuth 2.0 tokens are
+    // supported.
+    string bearer_token = 7;
+
+    // Next ID: 9
+  }
+  message Azure {
+    string container = 1;
+    string prefix = 2;
+
+    string account_name = 3;
+    string account_key = 4;
+    string environment = 5;
+  }
+  message FileTable {
+    // User interacting with the external storage. This is used to check access
+    // privileges of the requested user scoped tables.
+    // This field is really of type security.SQLUsername. We can't use
+    // the type directly however because it would create a circular dependency.
+    string user = 1;
+
+    // QualifiedTableName specifies the database.schema.tablename which the
+    // FileTableSystem should interact with when servicing reads/writes.
+    string qualified_table_name = 2;
+
+    // Path is the filename being read/written to via the FileTableSystem.
+    string path = 3;
+  }
+  LocalFileConfig local_file_config = 2 [(gogoproto.nullable) = false];
+  Http HttpPath = 3 [(gogoproto.nullable) = false];
+  GCS GoogleCloudConfig = 4;
+  S3 S3Config = 5;
+  Azure AzureConfig = 6;
+  reserved 7;
+  FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
+}
+

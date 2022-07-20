@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -335,7 +336,7 @@ func WriteNewLatestFile(
 	// above-mentioned List method to return us the most recent latest file.
 	// Instead, we disregard write once semantics and always read and write
 	// a non-timestamped latest file for HTTP.
-	if exportStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
+	if exportStore.Conf().Provider == cloudpb.ExternalStorageProvider_http {
 		return cloud.WriteFile(ctx, exportStore, backupbase.LatestFileName, strings.NewReader(suffix))
 	}
 

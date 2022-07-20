@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,8 +36,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func makeLocalFileConfig(uri *url.URL) (roachpb.LocalFileConfig, error) {
-	localCfg := roachpb.LocalFileConfig{}
+func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
+	localCfg := cloudpb.LocalFileConfig{}
 	if uri.Host == "" {
 		return localCfg, errors.Errorf(
 			"host component of nodelocal URI must be a node ID ("+
@@ -59,16 +60,16 @@ func makeLocalFileConfig(uri *url.URL) (roachpb.LocalFileConfig, error) {
 
 func makeLocalFileExternalStorageConf(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_nodelocal
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_nodelocal
 	var err error
 	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
 	return conf, err
 }
 
 type localFileStorage struct {
-	cfg        roachpb.LocalFileConfig  // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	cfg        cloudpb.LocalFileConfig  // contains un-prefixed filepath -- DO NOT use for I/O ops.
 	ioConf     base.ExternalIODirConfig // server configurations for the ExternalStorage
 	base       string                   // relative filepath prefixed with externalIODir, for I/O ops on this node.
 	blobClient blobs.BlobClient         // inter-node file sharing service
@@ -89,7 +90,7 @@ func MakeLocalStorageURI(path string) string {
 }
 
 func makeLocalFileStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nodelocal")
 	if args.BlobClientFactory == nil {
@@ -107,9 +108,9 @@ func makeLocalFileStorage(
 		settings: args.Settings}, nil
 }
 
-func (l *localFileStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:        roachpb.ExternalStorageProvider_nodelocal,
+func (l *localFileStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:        cloudpb.ExternalStorageProvider_nodelocal,
 		LocalFileConfig: l.cfg,
 	}
 }
@@ -246,7 +247,7 @@ func makeLocalFileConnectionDetails(
 
 func init() {
 	scheme := "nodelocal"
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
 		makeLocalFileExternalStorageConf, makeLocalFileStorage, cloud.RedactedParams(), scheme)
 
 	externalconn.RegisterConnectionDetailsFromURIFactory(scheme, makeLocalFileConnectionDetails)

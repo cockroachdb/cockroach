@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -236,7 +237,7 @@ func (rec *SpanSetReplicaEvalContext) GetClosedTimestampOlderThanStorageSnapshot
 // GetExternalStorage returns an ExternalStorage object, based on
 // information parsed from a URI, stored in `dest`.
 func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
+	ctx context.Context, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	return rec.i.GetExternalStorage(ctx, dest)
 }

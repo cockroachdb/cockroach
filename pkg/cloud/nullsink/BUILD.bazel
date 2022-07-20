@@ -9,7 +9,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb",
+        "//pkg/cloud/cloudpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/util/ioctx",
@@ -23,7 +23,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb",
+        "//pkg/cloud/cloudpb",
         "//pkg/security/username",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

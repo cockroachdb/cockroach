@@ -54,12 +54,8 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (roachpb.Response, *roachpb.Error) {
 		req := &roachpb.ExportRequest{
-			RequestHeader: roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
-			StartTime:     start,
-			Storage: roachpb.ExternalStorage{
-				Provider:        roachpb.ExternalStorageProvider_nodelocal,
-				LocalFileConfig: roachpb.LocalFileConfig{Path: "/foo"},
-			},
+			RequestHeader:  roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+			StartTime:      start,
 			MVCCFilter:     mvccFilter,
 			ReturnSST:      true,
 			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),

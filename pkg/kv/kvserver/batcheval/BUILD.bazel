@@ -57,6 +57,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/abortspan",

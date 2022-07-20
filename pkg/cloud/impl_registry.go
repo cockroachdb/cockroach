@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -42,7 +42,7 @@ var confParsers = map[string]ExternalStorageURIParser{}
 
 // implementations maps an ExternalStorageProvider enum value to a constructor
 // of instances of that external storage.
-var implementations = map[roachpb.ExternalStorageProvider]ExternalStorageConstructor{}
+var implementations = map[cloudpb.ExternalStorageProvider]ExternalStorageConstructor{}
 
 // rateAndBurstSettings represents a pair of byteSizeSettings used to configure
 // the rate a burst properties of a quotapool.RateLimiter.
@@ -55,12 +55,12 @@ type readAndWriteSettings struct {
 	read, write rateAndBurstSettings
 }
 
-var limiterSettings = map[roachpb.ExternalStorageProvider]readAndWriteSettings{}
+var limiterSettings = map[cloudpb.ExternalStorageProvider]readAndWriteSettings{}
 
 // RegisterExternalStorageProvider registers an external storage provider for a
 // given URI scheme and provider type.
 func RegisterExternalStorageProvider(
-	providerType roachpb.ExternalStorageProvider,
+	providerType cloudpb.ExternalStorageProvider,
 	parseFn ExternalStorageURIParser,
 	constructFn ExternalStorageConstructor,
 	redactedParams map[string]struct{},
@@ -117,16 +117,16 @@ func RegisterExternalStorageProvider(
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
 	path string, user username.SQLUsername,
-) (roachpb.ExternalStorage, error) {
+) (cloudpb.ExternalStorage, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
-		return roachpb.ExternalStorage{}, err
+		return cloudpb.ExternalStorage{}, err
 	}
 	if fn, ok := confParsers[uri.Scheme]; ok {
 		return fn(ExternalStorageURIContext{CurrentUser: user}, uri)
 	}
 	// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
-	return roachpb.ExternalStorage{}, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
+	return cloudpb.ExternalStorage{}, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
 		" storage schemes", uri.Scheme)
 }
 
@@ -187,7 +187,7 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 // MakeExternalStorage creates an ExternalStorage from the given config.
 func MakeExternalStorage(
 	ctx context.Context,
-	dest roachpb.ExternalStorage,
+	dest cloudpb.ExternalStorage,
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
@@ -203,7 +203,7 @@ func MakeExternalStorage(
 		InternalExecutor:  ie,
 		DB:                kvDB,
 	}
-	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
+	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
 	}
 	options := ExternalStorageOptions{}
@@ -231,7 +231,7 @@ type rwLimiter struct {
 
 // Limiters represents a collection of rate limiters for a given server to use
 // when interacting with the providers in the collection.
-type Limiters map[roachpb.ExternalStorageProvider]rwLimiter
+type Limiters map[cloudpb.ExternalStorageProvider]rwLimiter
 
 func makeLimiter(
 	ctx context.Context, sv *settings.Values, s rateAndBurstSettings,

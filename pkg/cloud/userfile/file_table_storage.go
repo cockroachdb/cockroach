@@ -21,9 +21,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -43,8 +43,8 @@ const (
 
 func parseUserfileURL(
 	args cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
 	qualifiedTableName := uri.Host
 	if args.CurrentUser.Undefined() {
 		return conf, errors.Errorf("user creating the FileTable ExternalStorage must be specified")
@@ -61,7 +61,7 @@ func parseUserfileURL(
 			composedTableName.SQLIdentifier()
 	}
 
-	conf.Provider = roachpb.ExternalStorageProvider_userfile
+	conf.Provider = cloudpb.ExternalStorageProvider_userfile
 	conf.FileTableConfig.User = normUser
 	conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 	conf.FileTableConfig.Path = uri.Path
@@ -70,7 +70,7 @@ func parseUserfileURL(
 
 type fileTableStorage struct {
 	fs       *filetable.FileToTableSystem
-	cfg      roachpb.ExternalStorage_FileTable
+	cfg      cloudpb.ExternalStorage_FileTable
 	ioConf   base.ExternalIODirConfig
 	db       *kv.DB
 	ie       sqlutil.InternalExecutor
@@ -81,7 +81,7 @@ type fileTableStorage struct {
 var _ cloud.ExternalStorage = &fileTableStorage{}
 
 func makeFileTableStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.filetable")
 
@@ -135,7 +135,7 @@ func makeFileTableStorage(
 // interact with the underlying FileToTableSystem. It only supports a subset of
 // methods compared to the internal SQL connection backed FileTableStorage.
 func MakeSQLConnFileTableStorage(
-	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn cloud.SQLConnI,
+	ctx context.Context, cfg cloudpb.ExternalStorage_FileTable, conn cloud.SQLConnI,
 ) (cloud.ExternalStorage, error) {
 	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
 
@@ -173,9 +173,9 @@ func (f *fileTableStorage) Close() error {
 
 // Conf implements the ExternalStorage interface and returns the FileTable
 // configuration.
-func (f *fileTableStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:        roachpb.ExternalStorageProvider_userfile,
+func (f *fileTableStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:        cloudpb.ExternalStorageProvider_userfile,
 		FileTableConfig: f.cfg,
 	}
 }
@@ -305,6 +305,6 @@ func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, er
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_userfile,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_userfile,
 		parseUserfileURL, makeFileTableStorage, cloud.RedactedParams(), "userfile")
 }

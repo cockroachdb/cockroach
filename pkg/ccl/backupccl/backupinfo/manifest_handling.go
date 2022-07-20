@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1008,7 +1009,7 @@ func WriteBackupManifestCheckpoint(
 	// and teach the job to always reach for that filename in the face of
 	// a resume. We may lose progress, but this is a cost we are willing
 	// to pay to uphold write-once semantics.
-	if defaultStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
+	if defaultStore.Conf().Provider == cloudpb.ExternalStorageProvider_http {
 		// TODO (darryl): We should do this only for file not found or directory
 		// does not exist errors. As of right now we only specifically wrap
 		// ReadFile errors for file not found so this is not possible yet.

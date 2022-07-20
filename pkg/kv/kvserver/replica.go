@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -2060,7 +2061,7 @@ func EnableLeaseHistory(maxEntries int) func() {
 // GetExternalStorage returns an ExternalStorage object, based on
 // information parsed from a URI, stored in `dest`.
 func (r *Replica) GetExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
+	ctx context.Context, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	return r.store.cfg.ExternalStorage(ctx, dest)
 }
