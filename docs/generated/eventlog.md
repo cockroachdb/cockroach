@@ -2465,6 +2465,7 @@ contains common SQL event/execution details.
 | `TransactionID` | Transaction ID of the query. | no |
 | `DatabaseID` | Database ID of the query. | no |
 | `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
+| `ContentionTime` | The duration of time in nanoseconds that the query experienced contention. | no |
 
 
 #### Common fields
