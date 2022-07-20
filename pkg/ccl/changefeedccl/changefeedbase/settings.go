@@ -45,7 +45,7 @@ func TestingSetDefaultFlushFrequency(f time.Duration) func() {
 var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
-	1<<30,
+	1<<27, // 128MiB
 )
 
 // SlowSpanLogThreshold controls when we will log slow spans.
