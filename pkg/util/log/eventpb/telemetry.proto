@@ -13,6 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 import "util/log/eventpb/events.proto";
 import "util/log/eventpb/sql_audit_events.proto";
 
@@ -108,4 +109,39 @@ message ChangefeedFailed {
   // The reason / environment with which the changefeed failed (ex:
   // connection_closed, changefeed_behind)
   string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+}
+
+// Schema is an event for schema telemetry.
+// Each event corresponds to a record in the outer join of the
+// system.namespace and the system.descriptor tables.
+// The whole set of these records forms a snapshot.
+// The snapshot can be uniquely identified by the Timestamp field.
+//
+// TODO(postamar): include system.zones.
+message Schema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // NumPages is how many events are in the snapshot.
+  uint32 num_pages = 2;
+  // CurrentPage is the ordinal of the event within the snapshot.
+  // The first event has value 1, therefore the last event verifies
+  // CurrentPage = NumPages.
+  uint32 current_page = 3;
+
+  // ParentDatabaseID matches the same key column in system.namespace.
+  uint32 parent_database_id = 4 [(gogoproto.customname) = "ParentDatabaseID", (gogoproto.jsontag) = ",omitempty"];
+  // ParentSchemaID matches the same key column in system.namespace.
+  uint32 parent_schema_id = 5 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.jsontag) = ",omitempty"];
+  // Name matches the same key column in system.namespace.
+  string name = 6 [(gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // ID matches the same value column in system.namespace
+  // and the same key column in system.descriptor.
+  uint32 id = 7 [(gogoproto.customname) = "ID", (gogoproto.jsontag) = ",omitempty"];
+  // Desc matches the 'descriptor' column in system.descriptor.
+  // Some contents of the descriptor may be redacted to prevent leaking PII.
+  // Couldn't use descpb.Descriptor directly due to a circular dependency.
+  google.protobuf.Any desc = 8 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Errors records any errors encountered when post-processing this data,
+  // which includes the redaction of any potential PII.
+  repeated string errors = 9 [(gogoproto.jsontag) = ",omitempty"];
 }

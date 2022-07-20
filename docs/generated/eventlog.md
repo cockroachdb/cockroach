@@ -2489,6 +2489,36 @@ contains common SQL event/execution details.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
+### `schema`
+
+An event of type `schema` is an event for schema telemetry.
+Each event corresponds to a record in the outer join of the
+system.namespace and the system.descriptor tables.
+The whole set of these records forms a snapshot.
+The snapshot can be uniquely identified by the Timestamp field.
+
+TODO(postamar): include system.zones.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NumPages` | NumPages is how many events are in the snapshot. | no |
+| `CurrentPage` | CurrentPage is the ordinal of the event within the snapshot. The first event has value 1, therefore the last event verifies CurrentPage = NumPages. | no |
+| `ParentDatabaseID` | ParentDatabaseID matches the same key column in system.namespace. | no |
+| `ParentSchemaID` | ParentSchemaID matches the same key column in system.namespace. | no |
+| `Name` | Name matches the same key column in system.namespace. | no |
+| `ID` | ID matches the same value column in system.namespace and the same key column in system.descriptor. | no |
+| `Desc` | Desc matches the 'descriptor' column in system.descriptor. Some contents of the descriptor may be redacted to prevent leaking PII. Couldn't use descpb.Descriptor directly due to a circular dependency. | no |
+| `Errors` | Errors records any errors encountered when post-processing this data, which includes the redaction of any potential PII. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Zone config events
 
 Events in this category pertain to zone configuration changes on
