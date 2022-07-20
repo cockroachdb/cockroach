@@ -757,7 +757,7 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "off",
 	},
 	{
-		name:                "local-v1.1@v1.0-noupgrade",
+		name:                "local-v1.1-at-v1.0-noupgrade",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		bootstrapVersion:    roachpb.Version{Major: 1},
