@@ -389,6 +389,7 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+			contentionTime := telemetryMetrics.getContentionTime(p.instrumentation.queryLevelStatsWithErr.Stats.ContentionTime.Nanoseconds())
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:     execDetails,
@@ -409,6 +410,7 @@ func (p *planner) maybeLogStatementInternal(
 				BytesRead:                queryStats.bytesRead,
 				RowsRead:                 queryStats.rowsRead,
 				RowsWritten:              queryStats.rowsWritten,
+				ContentionTime:           contentionTime,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {

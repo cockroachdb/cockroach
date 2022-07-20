@@ -53,6 +53,10 @@ type TelemetryLoggingTestingKnobs struct {
 	// getTimeNow allows tests to override the timeutil.Now() function used
 	// when updating rolling query counts.
 	getTimeNow func() time.Time
+	// getContentionTime allows tests to override the recorded contention time
+	// for the query. Used to stub non-zero values to populate the log's contention
+	// time field.
+	getContentionTime func() int64
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -81,6 +85,13 @@ func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
 	}
 
 	return false
+}
+
+func (t *TelemetryLoggingMetrics) getContentionTime(contentionTimeInNanoseconds int64) int64 {
+	if t.Knobs != nil && t.Knobs.getContentionTime != nil {
+		return t.Knobs.getContentionTime()
+	}
+	return contentionTimeInNanoseconds
 }
 
 func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
