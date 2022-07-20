@@ -190,19 +190,16 @@ func (stats *Reporter) update(
 	}
 
 	allStores := stats.storePool.GetStores()
-	var getStoresFromGossip StoreResolver = func(
-		r *roachpb.RangeDescriptor,
-	) []roachpb.StoreDescriptor {
-		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().VoterDescriptors()))
+	// Used to be voter descriptors
+	var storesFromGossip StoreResolver = func(
+		id roachpb.StoreID,
+	) roachpb.StoreDescriptor {
 		// We'll return empty descriptors for stores that gossip doesn't have a
 		// descriptor for. These stores will be considered to satisfy all
 		// constraints.
 		// TODO(andrei): note down that some descriptors were missing from gossip
 		// somewhere in the report.
-		for i, repl := range r.Replicas().VoterDescriptors() {
-			storeDescs[i] = allStores[repl.StoreID]
-		}
-		return storeDescs
+		return allStores[id]
 	}
 
 	isLiveMap := stats.liveness.GetIsLiveMap()
@@ -220,10 +217,10 @@ func (stats *Reporter) update(
 
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
-		ctx, stats.latestConfig, getStoresFromGossip)
+		ctx, stats.latestConfig, storesFromGossip)
 	localityStatsVisitor := makeCriticalLocalitiesVisitor(
 		ctx, nodeLocalities, stats.latestConfig,
-		getStoresFromGossip, isNodeLive)
+		storesFromGossip, isNodeLive)
 	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
 
 	// Iterate through all the ranges.
@@ -510,7 +507,7 @@ func getZoneByID(id config.ObjectID, cfg *config.SystemConfig) (*zonepb.ZoneConf
 // StoreResolver is a function resolving a range to a store descriptor for each
 // of the replicas. Empty store descriptors are to be returned when there's no
 // information available for the store.
-type StoreResolver func(*roachpb.RangeDescriptor) []roachpb.StoreDescriptor
+type StoreResolver func(roachpb.StoreID) roachpb.StoreDescriptor
 
 // rangeVisitor abstracts the interface for range iteration implemented by all
 // report generators.
