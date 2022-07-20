@@ -613,8 +613,21 @@ func (desc *wrapper) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	if desc.IsVirtualTable() {
+		// Virtual tables are somewhat of a weird case in that they
+		// have descriptors.
+		// For virtual tables, we don't store privileges on the
+		// descriptor as we don't allow the privilege descriptor to
+		// change.
+		// It is also problematic that virtual table descriptors
+		// do not store a database id, so the descriptors are not
+		// "per database" even though regular tables are per database.
+		vsName, found := planner.GetVirtualSchemaNameByID(desc.GetParentSchemaID())
+		if !found {
+			return nil, errors.AssertionFailedf("no virtual schema found for virtual table %s", desc.GetName())
+		}
 		vDesc := &syntheticprivilege.VirtualTablePrivilege{
-			ID: desc.ID,
+			SchemaName: vsName,
+			TableName:  desc.GetName(),
 		}
 		return vDesc.GetPrivilegeDescriptor(ctx, planner)
 	}

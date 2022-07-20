@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -172,18 +173,22 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 			if err != nil {
 				return nil, err
 			}
-			_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+			tableNames, _, err := expandTableGlob(ctx, p, tableGlob)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(objectIDs) == 0 {
+			if len(tableNames) == 0 {
 				return nil, errors.AssertionFailedf("no tables found")
 			}
 
-			for _, id := range objectIDs {
+			for _, name := range tableNames {
+				if !name.ExplicitCatalog {
+					p.BufferClientNotice(ctx, pgnotice.Newf("virtual table privileges are not database specific"))
+				}
 				ret = append(ret, &syntheticprivilege.VirtualTablePrivilege{
-					ID: id,
+					SchemaName: name.Schema(),
+					TableName:  name.Table(),
 				})
 			}
 		}

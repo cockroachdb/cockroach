@@ -337,6 +337,10 @@ type Planner interface {
 	// GetDescriptorVersionByTableName returns the descriptor version of a
 	// given table.
 	GetDescriptorVersionByTableName(ctx context.Context, name tree.ObjectName, flags tree.ObjectLookupFlags) (descpb.DescriptorVersion, error)
+
+	// GetVirtualSchemaNameByID returns the name of the virtual schema given
+	// the id and whether or not it was found.
+	GetVirtualSchemaNameByID(id descpb.ID) (string, bool)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
