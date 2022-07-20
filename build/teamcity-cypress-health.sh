@@ -19,6 +19,13 @@ tc_end_block "Build Docker image"
 # Expect the timeout to come from the TC environment.
 TESTTIMEOUT=${TESTTIMEOUT:-20m}
 
+tc_start_block "Prepare cockroach binary"
+# TeamCity doesn't restore permissions for files retrieved from artifact
+# dependencies, so ensure the cockroach binary is executable before running it
+# in a Docker container.
+chmod a+x upstream_artifacts/cockroach
+tc_end_block "Prepare cockroach binary"
+
 tc_start_block "Run Cypress health checks"
 run_json_test docker run \
   --rm \
