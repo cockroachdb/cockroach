@@ -340,8 +340,9 @@ func (r *replicationConstraintStatsReportSaver) upsertConstraintStatus(
 // computes the constraint conformance report (i.e. the
 // system.replication_constraint_stats table).
 type constraintConformanceVisitor struct {
-	cfg           *config.SystemConfig
-	storeResolver StoreResolver
+	cfg                        *config.SystemConfig
+	voterStoreResolver         StoreResolver
+	voterNonVoterStoreResolver StoreResolver
 
 	// report is the output of the visitor. visit*() methods populate it.
 	// After visiting all the ranges, it can be retrieved with Report().
@@ -351,18 +352,21 @@ type constraintConformanceVisitor struct {
 	// prevZoneKey and prevConstraints maintain state from one range to the next.
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
-	prevZoneKey     ZoneKey
-	prevConstraints []zonepb.ConstraintsConjunction
+	prevZoneKey       ZoneKey
+	prevConstraints   []zonepb.ConstraintsConjunction
+	prevStoreResolver StoreResolver
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
 
 func makeConstraintConformanceVisitor(
-	ctx context.Context, cfg *config.SystemConfig, storeResolver StoreResolver,
+	ctx context.Context, cfg *config.SystemConfig,
+	voterStoreResolver, voterNonVoterStoreResolver StoreResolver,
 ) constraintConformanceVisitor {
 	v := constraintConformanceVisitor{
-		cfg:           cfg,
-		storeResolver: storeResolver,
+		cfg:                        cfg,
+		voterStoreResolver:         voterStoreResolver,
+		voterNonVoterStoreResolver: voterNonVoterStoreResolver,
 	}
 	v.reset(ctx)
 	return v
@@ -382,9 +386,10 @@ func (v *constraintConformanceVisitor) Report() ConstraintReport {
 // reset is part of the rangeVisitor interface.
 func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	*v = constraintConformanceVisitor{
-		cfg:           v.cfg,
-		storeResolver: v.storeResolver,
-		report:        make(ConstraintReport, len(v.report)),
+		cfg:                        v.cfg,
+		voterStoreResolver:         v.voterStoreResolver,
+		voterNonVoterStoreResolver: v.voterNonVoterStoreResolver,
+		report:                     make(ConstraintReport, len(v.report)),
 	}
 
 	// Iterate through all the zone configs to create report entries for all the
@@ -418,6 +423,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}()
 
 	// Find the applicable constraints, which may be inherited.
+	storeResolver := v.voterStoreResolver
 	var constraints []zonepb.ConstraintsConjunction
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
@@ -426,6 +432,21 @@ func (v *constraintConformanceVisitor) visitNewZone(
 				return false
 			}
 			constraints = zone.Constraints
+			// If we have number of voters configured separately, then we need to use
+			// different constraints if they are provided, or try to work around
+			// ambiguous constraints.
+			if zone.NumVoters != nil && *zone.NumVoters != *zone.NumReplicas {
+				if len(zone.VoterConstraints) > 0 {
+					constraints = zone.VoterConstraints
+				} else {
+					// This is a special case where number of voters were configured
+					// but constraints for them not. In this case we can't validate
+					// if all constraints are met because we don't have enough voters.
+					// We will use resolver that gives us voters and non-voters to perform
+					// validation.
+					storeResolver = v.voterNonVoterStoreResolver
+				}
+			}
 			zKey = key
 			return true
 		})
@@ -434,7 +455,8 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}
 	v.prevZoneKey = zKey
 	v.prevConstraints = constraints
-	v.countRange(ctx, r, zKey, constraints)
+	v.prevStoreResolver = storeResolver
+	v.countRange(ctx, r, zKey, constraints, storeResolver)
 	return nil
 }
 
@@ -442,7 +464,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 func (v *constraintConformanceVisitor) visitSameZone(
 	ctx context.Context, r *roachpb.RangeDescriptor,
 ) {
-	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints)
+	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints, v.prevStoreResolver)
 }
 
 func (v *constraintConformanceVisitor) countRange(
@@ -450,8 +472,9 @@ func (v *constraintConformanceVisitor) countRange(
 	r *roachpb.RangeDescriptor,
 	key ZoneKey,
 	constraints []zonepb.ConstraintsConjunction,
+	storeResolver StoreResolver,
 ) {
-	storeDescs := v.storeResolver(r)
+	storeDescs := storeResolver(r)
 	violated := getViolations(ctx, storeDescs, constraints)
 	for _, c := range violated {
 		v.report.AddViolation(key, Constraint, c)

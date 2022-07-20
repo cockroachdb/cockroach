@@ -25,7 +25,7 @@ func computeConstraintConformanceReport(
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 ) (ConstraintReport, error) {
-	v := makeConstraintConformanceVisitor(ctx, cfg, storeResolver)
+	v := makeConstraintConformanceVisitor(ctx, cfg, storeResolver, storeResolver)
 	err := visitRanges(ctx, rangeStore, cfg, &v)
 	return v.Report(), err
 }
