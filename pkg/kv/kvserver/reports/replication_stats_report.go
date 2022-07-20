@@ -370,7 +370,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 				desiredNumVoters = int(*zone.NumVoters)
 				return true
 			}
-			if *zone.NumReplicas != 0 && desiredNumVoters == 0 {
+			if zone.NumReplicas != nil && desiredNumVoters == 0 {
 				desiredNumVoters = int(*zone.NumReplicas)
 			}
 			// We had already found the zone to report to, but we're haven't found
