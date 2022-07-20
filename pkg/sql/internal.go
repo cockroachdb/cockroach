@@ -261,6 +261,108 @@ func (ie *InternalExecutor) initConnEx(
 	return nil
 }
 
+// initConnExUpdated creates a connExecutor and runs it on a separate goroutine. It
+// takes in a StmtBuf into which commands can be pushed and a WaitGroup that
+// will be signaled when connEx.run() returns.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// The ieResultWriter coordinates communicating results to the client. It may
+// block execution when rows are being sent in order to prevent hazardous
+// concurrency.
+//
+// sd will constitute the executor's session state.
+//
+// The difference between initConnExUpdated and initConnEx is that,
+// initConnExUpdated gets the underlying `kv.Txn` from `ie.extraTxnState`,
+// instead of from the parameter. This is to ensure that `kv.Txn` is more
+// tightly coupled with the txn related info (e.g. descriptor collections).
+func (ie *InternalExecutor) initConnExUpdated(
+	ctx context.Context,
+	w ieResultWriter,
+	sd *sessiondata.SessionData,
+	stmtBuf *StmtBuf,
+	wg *sync.WaitGroup,
+	syncCallback func([]resWithPos),
+	errCallback func(error),
+) error {
+	clientComm := &internalClientComm{
+		w: w,
+		// init lastDelivered below the position of the first result (0).
+		lastDelivered: -1,
+		sync:          syncCallback,
+	}
+
+	// When the connEx is serving an internal executor, it can inherit the
+	// application name from an outer session. This happens e.g. during ::regproc
+	// casts and built-in functions that use SQL internally. In that case, we do
+	// not want to record statistics against the outer application name directly;
+	// instead we want to use a separate bucket. However we will still want to
+	// have separate buckets for different applications so that we can measure
+	// their respective "pressure" on internal queries. Hence the choice here to
+	// add the delegate prefix to the current app name.
+	var appStatsBucketName string
+	if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+		appStatsBucketName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
+	} else {
+		// If this is already an "internal app", don't put more prefix.
+		appStatsBucketName = sd.ApplicationName
+	}
+	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
+
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	var ex *connExecutor
+	var err error
+
+	var txn *kv.Txn
+	if ie.extraTxnState != nil && ie.extraTxnState.txn != nil {
+		txn = ie.extraTxnState.txn
+	}
+	if txn == nil {
+		ex = ie.s.newConnExecutor(
+			ctx,
+			sdMutIterator,
+			stmtBuf,
+			clientComm,
+			ie.memMetrics,
+			&ie.s.InternalMetrics,
+			applicationStats,
+			nil, /* postSetupFns */
+		)
+	} else {
+		ex, err = ie.newConnExecutorWithTxn(
+			ctx,
+			txn,
+			sdMutIterator,
+			stmtBuf,
+			clientComm,
+			applicationStats,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	ex.executorType = executorTypeInternal
+
+	wg.Add(1)
+	go func() {
+		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			errCallback(err)
+		}
+		w.finish()
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
+		wg.Done()
+	}()
+	return nil
+}
+
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
 // under a higher-level txn. This connExecutor runs with a different state
 // machine, much reduced from the regular one. It cannot initiate or end
@@ -719,6 +821,154 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	)
 }
 
+// QueryBufferedExUpdated executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (ie *InternalExecutor) QueryBufferedExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	datums, _, err := ie.queryInternalBufferedUpdated(ctx, opName, session, stmt, 0 /* limit */, qargs...)
+	return datums, err
+}
+
+// QueryBufferedExWithColsUpdated is like QueryBufferedEx, additionally
+// returning the computed ResultColumns of the input query.
+func (ie *InternalExecutor) QueryBufferedExWithColsUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	datums, cols, err := ie.queryInternalBufferedUpdated(ctx, opName, session, stmt, 0 /* limit */, qargs...)
+	return datums, cols, err
+}
+
+func (ie *InternalExecutor) queryInternalBufferedUpdated(
+	ctx context.Context,
+	opName string,
+	sessionDataOverride sessiondata.InternalExecutorOverride,
+	stmt string,
+	// Non-zero limit specifies the limit on the number of rows returned.
+	limit int,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	// We will run the query to completion, so we can use an async result
+	// channel.
+	rw := newAsyncIEResultChannel()
+	it, err := ie.execInternalUpdated(ctx, opName, rw, sessionDataOverride, stmt, qargs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	var rows []tree.Datums
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		rows = append(rows, it.Cur())
+		if limit != 0 && len(rows) == limit {
+			// We have accumulated the requested number of rows, so we can
+			// short-circuit the iteration.
+			err = it.Close()
+			break
+		}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return rows, it.Types(), nil
+}
+
+// QueryRowExUpdated is like QueryRow, but allows the caller to override some
+// session data fields (e.g. the user).
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (ie *InternalExecutor) QueryRowExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	rows, _, err := ie.QueryRowExWithColsUpdated(ctx, opName, session, stmt, qargs...)
+	return rows, err
+}
+
+// QueryRowExWithColsUpdated is like QueryRowEx, additionally returning the
+// computed ResultColumns of the input query.
+func (ie *InternalExecutor) QueryRowExWithColsUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	rows, cols, err := ie.queryInternalBufferedUpdated(ctx, opName, session, stmt, 2 /* limit */, qargs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, nil, nil
+	case 1:
+		return rows[0], cols, nil
+	default:
+		return nil, nil, &tree.MultipleResultsError{SQL: stmt}
+	}
+}
+
+// ExecExUpdated is like Exec, but allows the caller to override some session
+// data fields (e.g. the user).
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (ie *InternalExecutor) ExecExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	// We will run the query to completion, so we can use an async result
+	// channel.
+	rw := newAsyncIEResultChannel()
+	it, err := ie.execInternalUpdated(ctx, opName, rw, session, stmt, qargs...)
+	if err != nil {
+		return 0, err
+	}
+	// We need to exhaust the iterator so that it can count the number of rows
+	// affected.
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+	}
+	if err != nil {
+		return 0, err
+	}
+	return it.rowsAffected, nil
+}
+
+// QueryIteratorExUpdated executes the query, returning an iterator that can be
+// used to get the results. If the call is successful, the returned iterator
+// *must* be closed.
+func (ie *InternalExecutor) QueryIteratorExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	return ie.execInternalUpdated(
+		ctx, opName, newSyncIEResultChannel(), session, stmt, qargs...,
+	)
+}
+
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
 	if !o.User.Undefined() {
@@ -773,6 +1023,7 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 // sessionDataOverride can be used to control select fields in the executor's
 // session data. It overrides what has been previously set through
 // SetSessionData(), if anything.
+// TODO(janexing): should deprecate execInternal and use execInternalUpdated.
 func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
 	opName string,
@@ -880,6 +1131,216 @@ func (ie *InternalExecutor) execInternal(
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
 	err = ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	if err != nil {
+		return nil, err
+	}
+
+	typeHints := make(tree.PlaceholderTypes, len(datums))
+	for i, d := range datums {
+		// Arg numbers start from 1.
+		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
+	}
+	if len(qargs) == 0 {
+		resPos = 0
+		if err := stmtBuf.Push(
+			ctx,
+			ExecStmt{
+				Statement:    parsed,
+				TimeReceived: timeReceived,
+				ParseStart:   parseStart,
+				ParseEnd:     parseEnd,
+				// This is the only and last statement in the batch, so that this
+				// transaction can be autocommited as a single statement transaction.
+				LastInBatch: true,
+			}); err != nil {
+			return nil, err
+		}
+	} else {
+		resPos = 2
+		if err := stmtBuf.Push(
+			ctx,
+			PrepareStmt{
+				Statement:  parsed,
+				ParseStart: parseStart,
+				ParseEnd:   parseEnd,
+				TypeHints:  typeHints,
+			},
+		); err != nil {
+			return nil, err
+		}
+
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+			return nil, err
+		}
+
+		if err := stmtBuf.Push(ctx,
+			ExecPortal{
+				TimeReceived: timeReceived,
+				// Next command will be a sync, so this can be considered as another single
+				// statement transaction.
+				FollowedBySync: true,
+			},
+		); err != nil {
+			return nil, err
+		}
+	}
+	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
+		return nil, err
+	}
+	r = &rowsIterator{
+		r:       rw,
+		stmtBuf: stmtBuf,
+		wg:      &wg,
+	}
+
+	if parsed.AST.StatementReturnType() != tree.Rows {
+		r.resultCols = rowsAffectedResultColumns
+	}
+
+	// Now we need to block the reader goroutine until the query planning has
+	// been performed by the connExecutor goroutine. We do so by waiting until
+	// the first object is sent on the data channel.
+	{
+		var first ieIteratorResult
+		if first, r.done, r.lastErr = rw.firstResult(ctx); !r.done {
+			r.first = &first
+		}
+	}
+	if !r.done && r.first.cols != nil {
+		// If the query is of ROWS statement type, the very first thing sent on
+		// the channel will be the column schema. This will occur before the
+		// query is given to the execution engine, so we actually need to get
+		// the next piece from the data channel.
+		//
+		// Note that only statements of ROWS type should send the cols, but we
+		// choose to be defensive and don't assert that.
+		if r.resultCols == nil {
+			r.resultCols = r.first.cols
+		}
+		var first ieIteratorResult
+		first, r.done, r.lastErr = rw.nextResult(ctx)
+		if !r.done {
+			r.first = &first
+		}
+	}
+
+	// Note that if a context cancellation error has occurred, we still return
+	// the iterator and nil retErr so that the iterator is properly closed by
+	// the caller which will cleanup the connExecutor goroutine.
+	return r, nil
+}
+
+// execInternalUpdated executes a statement.
+//
+// sessionDataOverride can be used to control select fields in the executor's
+// session data. It overrides what has been previously set through
+// SetSessionData(), if anything.
+func (ie *InternalExecutor) execInternalUpdated(
+	ctx context.Context,
+	opName string,
+	rw *ieResultChannel,
+	sessionDataOverride sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (r *rowsIterator, retErr error) {
+	ctx = logtags.AddTag(ctx, "intExec", opName)
+
+	var sd *sessiondata.SessionData
+	if ie.sessionDataStack != nil {
+		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
+		sd = ie.sessionDataStack.Top().Clone()
+	} else {
+		sd = ie.s.newSessionData(SessionArgs{})
+	}
+	applyOverrides(sessionDataOverride, sd)
+	sd.Internal = true
+	if sd.User().Undefined() {
+		return nil, errors.AssertionFailedf("no user specified for internal query")
+	}
+	if sd.ApplicationName == "" {
+		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
+	}
+
+	// The returned span is finished by this function in all error paths, but if
+	// an iterator is returned, then we transfer the responsibility of closing
+	// the span to the iterator. This is necessary so that the connExecutor
+	// exits before the span is finished.
+	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
+	stmtBuf := NewStmtBuf()
+	var wg sync.WaitGroup
+
+	defer func() {
+		// We wrap errors with the opName, but not if they're retriable - in that
+		// case we need to leave the error intact so that it can be retried at a
+		// higher level.
+		//
+		// TODO(knz): track the callers and check whether opName could be turned
+		// into a type safe for reporting.
+		if retErr != nil || r == nil {
+			// Both retErr and r can be nil in case of panic.
+			if retErr != nil && !errIsRetriable(retErr) {
+				retErr = errors.Wrapf(retErr, "%s", opName)
+			}
+			stmtBuf.Close()
+			wg.Wait()
+			sp.Finish()
+		} else {
+			r.errCallback = func(err error) error {
+				if err != nil && !errIsRetriable(err) {
+					err = errors.Wrapf(err, "%s", opName)
+				}
+				return err
+			}
+			r.sp = sp
+		}
+	}()
+
+	timeReceived := timeutil.Now()
+	parseStart := timeReceived
+	parsed, err := parser.ParseOne(stmt)
+	if err != nil {
+		return nil, err
+	}
+	parseEnd := timeutil.Now()
+
+	// Transforms the args to datums. The datum types will be passed as type
+	// hints to the PrepareStmt command below.
+	datums, err := golangFillQueryArguments(qargs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// resPos will be set to the position of the command that represents the
+	// statement we care about before that command is sent for execution.
+	var resPos CmdPos
+
+	syncCallback := func(results []resWithPos) {
+		// Close the stmtBuf so that the connExecutor exits its run() loop.
+		stmtBuf.Close()
+		for _, res := range results {
+			if res.Err() != nil {
+				// If we encounter an error, there's no point in looking
+				// further; the rest of the commands in the batch have been
+				// skipped.
+				_ = rw.addResult(ctx, ieIteratorResult{err: res.Err()})
+				return
+			}
+			if res.pos == resPos {
+				return
+			}
+		}
+		_ = rw.addResult(ctx, ieIteratorResult{
+			err: errors.AssertionFailedf(
+				"missing result for pos: %d and no previous error", resPos,
+			),
+		})
+	}
+	// errCallback is called if an error is returned from the connExecutor's
+	// run() loop.
+	errCallback := func(err error) {
+		_ = rw.addResult(ctx, ieIteratorResult{err: err})
+	}
+	err = ie.initConnExUpdated(ctx, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 	if err != nil {
 		return nil, err
 	}
