@@ -64,6 +64,9 @@ message SampledQuery {
 
   // Statement fingerprint ID of the query.
   uint64 statement_fingerprint_id = 13 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty'];
+
+  // The duration of time in nanoseconds that the query experienced contention.
+  int64 contention_time = 14 [(gogoproto.jsontag) = ',omitempty'];
 }
 
 // CapturedIndexUsageStats

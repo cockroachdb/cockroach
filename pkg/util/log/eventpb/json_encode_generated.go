@@ -3353,6 +3353,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendUint(b, uint64(m.StatementFingerprintID), 10)
 	}
 
+	if m.ContentionTime != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContentionTime\":"...)
+		b = strconv.AppendInt(b, int64(m.ContentionTime), 10)
+	}
+
 	return printComma, b
 }
 
