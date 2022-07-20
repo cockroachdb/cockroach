@@ -49,7 +49,7 @@ func (p *planner) FormatAstAsRedactableString(
 }
 
 // SchemaChange provides the planNode for the new schema changer.
-func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
+func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
 
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
@@ -59,7 +59,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	if mode == sessiondatapb.UseNewSchemaChangerOff ||
 		((mode == sessiondatapb.UseNewSchemaChangerOn ||
 			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
-		return nil, false, nil
+		return nil, nil
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
@@ -81,7 +81,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
-		return nil, false, nil
+		return nil, nil
 	}
 	if err != nil {
 		// If we need to wait for a concurrent schema change to finish, release our
@@ -89,14 +89,14 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		if scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID {
 			p.Descriptors().ReleaseLeases(ctx)
 		}
-		return nil, false, err
+		return nil, err
 	}
 	return &schemaChangePlanNode{
 		stmt:         stmt,
 		sql:          p.stmt.SQL,
 		lastState:    scs.state,
 		plannedState: state,
-	}, true, nil
+	}, nil
 }
 
 // waitForDescriptorSchemaChanges polls the specified descriptor (in separate
