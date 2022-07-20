@@ -1214,6 +1214,21 @@ define NthValue {
     Nth ScalarExpr
 }
 
+# UserDefinedFunction invokes a user-defined function. The
+# UserDefinedFunctionPrivate field contains the name of the function and a
+# pointer to its type.
+[Scalar]
+define UserDefinedFunction {
+    Body RelExpr
+    _ UserDefinedFunctionPrivate
+}
+
+[Private]
+define UserDefinedFunctionPrivate {
+    Name string
+    Typ Type
+}
+
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
 # that are used as modifiers for various statements (see tree.KVOptions). The
 # key is a constant string but the value can be a scalar expression.
