@@ -261,6 +261,52 @@ func TestConformanceReport(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "voter constraints violations",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						// The database has a zone requesting everything to be on SSDs.
+						zone: &zone{
+							voters: 2,
+							// The first conjunction will be satisfied; the second won't.
+							constraints:      `{"+region=us,+dc=dc1":1,"+region=us,+dc=dc2":1}`,
+							voterConstraints: `{"+region=us,+dc=dc2":1}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2"},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc3", stores: []store{{id: 2}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc1:1",
+					constraintType: Constraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: VoterConstraint,
+					numRanges:      1,
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -277,7 +323,7 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 		t.Fatal(err)
 	}
 	rep, err := computeConstraintConformanceReport(
-		context.Background(), &ctc.iter, ctc.cfg, ctc.resolver)
+		context.Background(), &ctc.iter, ctc.cfg, ctc.voterResolver, ctc.voterNonVoterResolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,6 +362,8 @@ type zone struct {
 	nonVoters int32
 	// "" means unset. "[]" means empty.
 	constraints string
+	// "" means unset. "[]" means empty.
+	voterConstraints string
 }
 
 func (z zone) toZoneConfig() zonepb.ZoneConfig {
@@ -330,6 +378,14 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 			panic(err)
 		}
 		cfg.Constraints = constraintsList.Constraints
+		cfg.InheritedConstraints = false
+	}
+	if z.voterConstraints != "" {
+		var constraintsList zonepb.ConstraintsList
+		if err := yaml.UnmarshalStrict([]byte(z.voterConstraints), &constraintsList); err != nil {
+			panic(err)
+		}
+		cfg.VoterConstraints = constraintsList.Constraints
 		cfg.InheritedConstraints = false
 	}
 	return *cfg
@@ -742,7 +798,8 @@ type compiledTestCase struct {
 	// The SystemConfig populated with descriptors and zone configs.
 	cfg *config.SystemConfig
 	// A collection of stores represented as an implementation of StoreResolver.
-	resolver StoreResolver
+	voterResolver         StoreResolver
+	voterNonVoterResolver StoreResolver
 	// A function that dictates whether a node is to be considered live or dead.
 	checker nodeChecker
 
@@ -845,20 +902,20 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
 	}
 	allLocalities := expandLocalities(nodeLocalities)
-	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		replicas := r.Replicas().FilterToDescriptors(func(_ roachpb.ReplicaDescriptor) bool {
-			return true
-		})
-		stores := make([]roachpb.StoreDescriptor, len(replicas))
-		for i, rep := range replicas {
-			for _, desc := range allStores {
-				if rep.StoreID == desc.StoreID {
-					stores[i] = desc
-					break
+	getResolver := func(filter func(rs roachpb.ReplicaSet) []roachpb.ReplicaDescriptor) func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
+		return func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
+			replicas := filter(r.Replicas())
+			stores := make([]roachpb.StoreDescriptor, len(replicas))
+			for i, rep := range replicas {
+				for _, desc := range allStores {
+					if rep.StoreID == desc.StoreID {
+						stores[i] = desc
+						break
+					}
 				}
 			}
+			return stores
 		}
-		return stores
 	}
 	nodeChecker := func(nodeID roachpb.NodeID) bool {
 		for _, n := range tc.nodes {
@@ -875,9 +932,14 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		objectToZone[v] = k
 	}
 	return compiledTestCase{
-		iter:           testRangeIter{ranges: ranges},
-		cfg:            cfg,
-		resolver:       storeResolver,
+		iter: testRangeIter{ranges: ranges},
+		cfg:  cfg,
+		voterResolver: getResolver(func(rs roachpb.ReplicaSet) []roachpb.ReplicaDescriptor {
+			return rs.VoterDescriptors()
+		}),
+		voterNonVoterResolver: getResolver(func(rs roachpb.ReplicaSet) []roachpb.ReplicaDescriptor {
+			return rs.VoterFullAndNonVoterDescriptors()
+		}),
 		checker:        nodeChecker,
 		zoneToObject:   zoneToObject,
 		objectToZone:   objectToZone,

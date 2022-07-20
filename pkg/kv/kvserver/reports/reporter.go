@@ -190,7 +190,7 @@ func (stats *Reporter) update(
 	}
 
 	allStores := stats.storePool.GetStores()
-	var getStoresFromGossip StoreResolver = func(
+	var getVoterStoresFromGossip StoreResolver = func(
 		r *roachpb.RangeDescriptor,
 	) []roachpb.StoreDescriptor {
 		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().VoterDescriptors()))
@@ -200,6 +200,17 @@ func (stats *Reporter) update(
 		// TODO(andrei): note down that some descriptors were missing from gossip
 		// somewhere in the report.
 		for i, repl := range r.Replicas().VoterDescriptors() {
+			storeDescs[i] = allStores[repl.StoreID]
+		}
+		return storeDescs
+	}
+	var getVoterNonVoterStoresFromGossip StoreResolver = func(
+		r *roachpb.RangeDescriptor,
+	) []roachpb.StoreDescriptor {
+		replicas := r.Replicas().VoterAndNonVoterDescriptors()
+		storeDescs := make([]roachpb.StoreDescriptor, len(replicas))
+		// See comments above regarding empty descriptors for missing stores.
+		for i, repl := range replicas {
 			storeDescs[i] = allStores[repl.StoreID]
 		}
 		return storeDescs
@@ -220,10 +231,10 @@ func (stats *Reporter) update(
 
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
-		ctx, stats.latestConfig, getStoresFromGossip)
+		ctx, stats.latestConfig, getVoterStoresFromGossip, getVoterNonVoterStoresFromGossip)
 	localityStatsVisitor := makeCriticalLocalitiesVisitor(
 		ctx, nodeLocalities, stats.latestConfig,
-		getStoresFromGossip, isNodeLive)
+		getVoterStoresFromGossip, isNodeLive)
 	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
 
 	// Iterate through all the ranges.

@@ -23,9 +23,10 @@ func computeConstraintConformanceReport(
 	ctx context.Context,
 	rangeStore RangeIterator,
 	cfg *config.SystemConfig,
-	storeResolver StoreResolver,
+	voterStoreResolver StoreResolver,
+	voterNonVoterStoreResolver StoreResolver,
 ) (ConstraintReport, error) {
-	v := makeConstraintConformanceVisitor(ctx, cfg, storeResolver)
+	v := makeConstraintConformanceVisitor(ctx, cfg, voterStoreResolver, voterNonVoterStoreResolver)
 	err := visitRanges(ctx, rangeStore, cfg, &v)
 	return v.Report(), err
 }

@@ -101,8 +101,8 @@ func TestCriticalLocalitiesReport(t *testing.T) {
 					// All the learners are dead, but learners don't matter. So only reg1
 					// is critical for this range.
 					{key: "/Table/t5", stores: "1 2 3 4l 5l 6l 7l"},
-					// Joint-consensus case. Here 1,2,3 are part of the outgoing quorum and
-					// 1,4,8 are part of the incoming quorum. 4 and 5 are dead, which
+					// Joint-consensus case. Here 1,2,4 are part of the outgoing quorum and
+					// 1,5,8 are part of the incoming quorum. 4 and 5 are dead, which
 					// makes all the other nodes critical. So localities "reg1",
 					// "reg1,az1", "reg1,az=2" and "reg8" are critical for this range.
 					{key: "/Table/t6", stores: "1 2o 4o 5i 8i"},
@@ -126,7 +126,12 @@ func TestCriticalLocalitiesReport(t *testing.T) {
 				{object: "default", locality: "region=reg1", atRiskRanges: 2},
 				{object: "t6", locality: "region=reg1", atRiskRanges: 1},
 				{object: "t6", locality: "region=reg1,az=az1", atRiskRanges: 1},
-				{object: "t6", locality: "region=reg1,az=az2", atRiskRanges: 1},
+				// TODO(oleg): Following locality is commented out as replica filter
+				// in test was different from real ones used when generating report.
+				// Now that filter is fixed, this az is not critical, but we may
+				// actually need to rethink report if it should only look on voters
+				// and incoming voters but also should it include outgoing?
+				// {object: "t6", locality: "region=reg1,az=az2", atRiskRanges: 1},
 				{object: "t6", locality: "region=reg8", atRiskRanges: 1},
 			},
 		},
@@ -145,7 +150,7 @@ func runCriticalLocalitiesTestCase(
 	require.NoError(t, err)
 
 	rep, err := computeCriticalLocalitiesReport(
-		ctx, ctc.nodeLocalities, &ctc.iter, ctc.checker, ctc.cfg, ctc.resolver,
+		ctx, ctc.nodeLocalities, &ctc.iter, ctc.checker, ctc.cfg, ctc.voterResolver,
 	)
 	require.NoError(t, err)
 
