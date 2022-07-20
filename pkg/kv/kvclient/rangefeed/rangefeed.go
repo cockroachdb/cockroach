@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -53,7 +54,7 @@ type DB interface {
 		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
 		withDiff bool,
-		eventC chan<- *roachpb.RangeFeedEvent,
+		eventC chan<- kvcoord.RangeFeedMessage,
 	) error
 
 	// Scan encapsulates scanning a key span at a given point in time. The method
@@ -278,7 +279,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 	// TODO(ajwerner): Consider adding event buffering. Doing so would require
 	// draining when the rangefeed fails.
-	eventCh := make(chan *roachpb.RangeFeedEvent)
+	eventCh := make(chan kvcoord.RangeFeedMessage)
 
 	for i := 0; r.Next(); i++ {
 		ts := frontier.Frontier()
@@ -332,7 +333,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 // processEvents processes events sent by the rangefeed on the eventCh.
 func (f *RangeFeed) processEvents(
-	ctx context.Context, frontier *span.Frontier, eventCh <-chan *roachpb.RangeFeedEvent,
+	ctx context.Context, frontier *span.Frontier, eventCh <-chan kvcoord.RangeFeedMessage,
 ) error {
 	for {
 		select {
@@ -356,7 +357,7 @@ func (f *RangeFeed) processEvents(
 					return errors.AssertionFailedf(
 						"received unexpected rangefeed SST event with no OnSSTable handler")
 				}
-				f.onSSTable(ctx, ev.SST)
+				f.onSSTable(ctx, ev.SST, ev.RegisteredSpan)
 			case ev.DeleteRange != nil:
 				if f.onDeleteRange == nil {
 					return errors.AssertionFailedf(

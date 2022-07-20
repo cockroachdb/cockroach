@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -490,7 +491,7 @@ func TestWithOnSSTable(t *testing.T) {
 	// narrower.
 	var once sync.Once
 	checkpointC := make(chan struct{})
-	sstC := make(chan *roachpb.RangeFeedSSTable)
+	sstC := make(chan kvcoord.RangeFeedMessage)
 	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
 	r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
@@ -499,9 +500,14 @@ func TestWithOnSSTable(t *testing.T) {
 				close(checkpointC)
 			})
 		}),
-		rangefeed.WithOnSSTable(func(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+		rangefeed.WithOnSSTable(func(ctx context.Context, sst *roachpb.RangeFeedSSTable, registeredSpan roachpb.Span) {
 			select {
-			case sstC <- sst:
+			case sstC <- kvcoord.RangeFeedMessage{
+				RangeFeedEvent: &roachpb.RangeFeedEvent{
+					SST: sst,
+				},
+				RegisteredSpan: registeredSpan,
+			}:
 			case <-ctx.Done():
 			}
 		}),
@@ -533,16 +539,17 @@ func TestWithOnSSTable(t *testing.T) {
 	require.Nil(t, pErr)
 
 	// Wait for the SST event and check its contents.
-	var sstEvent *roachpb.RangeFeedSSTable
+	var sstMessage kvcoord.RangeFeedMessage
 	select {
-	case sstEvent = <-sstC:
+	case sstMessage = <-sstC:
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timed out waiting for SST event")
 	}
 
-	require.Equal(t, roachpb.Span{Key: sstStart, EndKey: sstEnd}, sstEvent.Span)
-	require.Equal(t, now, sstEvent.WriteTS)
-	require.Equal(t, sstKVs, storageutils.ScanSST(t, sstEvent.Data))
+	require.Equal(t, roachpb.Span{Key: sstStart, EndKey: sstEnd}, sstMessage.SST.Span)
+	require.Equal(t, now, sstMessage.SST.WriteTS)
+	require.Equal(t, sstKVs, storageutils.ScanSST(t, sstMessage.SST.Data))
+	require.Equal(t, spans[0], sstMessage.RegisteredSpan)
 }
 
 // TestWithOnSSTableCatchesUpIfNotSet tests that the rangefeed runs a catchup
