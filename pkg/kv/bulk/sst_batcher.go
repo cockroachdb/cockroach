@@ -627,7 +627,7 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 }
 
 type sstSpan struct {
-	start, end roachpb.Key
+	start, end roachpb.Key // [inclusive, exclusive)
 	sstBytes   []byte
 	stats      enginepb.MVCCStats
 }
@@ -829,7 +829,7 @@ func createSplitSSTable(
 				return nil, nil, err
 			}
 
-			left = &sstSpan{start: first, end: last.PrefixEnd(), sstBytes: sstFile.Data()}
+			left = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 			*sstFile = storage.MemFile{}
 			w = storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 			split = true
@@ -853,6 +853,6 @@ func createSplitSSTable(
 	if err != nil {
 		return nil, nil, err
 	}
-	right = &sstSpan{start: first, end: last.PrefixEnd(), sstBytes: sstFile.Data()}
+	right = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 	return left, right, nil
 }
