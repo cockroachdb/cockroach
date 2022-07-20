@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -37,13 +38,13 @@ type rangefeedFactory func(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- *kvclient.RangeFeedEnvelope,
 ) error
 
 type rangefeed struct {
 	memBuf kvevent.Writer
 	cfg    rangeFeedConfig
-	eventC chan *roachpb.RangeFeedEvent
+	eventC chan *kvclient.RangeFeedEnvelope
 	knobs  TestingKnobs
 }
 
@@ -68,7 +69,7 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	feed := rangefeed{
 		memBuf: sink,
 		cfg:    cfg,
-		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		eventC: make(chan *kvclient.RangeFeedEnvelope, 128),
 		knobs:  cfg.Knobs,
 	}
 	g := ctxgroup.WithContext(ctx)

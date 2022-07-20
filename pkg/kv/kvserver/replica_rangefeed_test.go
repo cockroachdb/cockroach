@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -376,6 +377,7 @@ func TestReplicaRangefeed(t *testing.T) {
 		storage.MVCCValue{Value: expVal7q}))
 	require.NoError(t, sstWriter.Finish())
 
+	// Does this mean all ts in sst should be equal to the batch ts?
 	_, _, _, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		true /* ingestAsWrites */, ts7)
@@ -419,6 +421,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			Key: roachpb.Key("q"), Value: expVal7q, PrevValue: expVal6q,
 		}},
 	}...)
+	// here
 	checkForExpEvents(expEvents)
 
 	// Cancel each of the rangefeed streams.
@@ -1085,12 +1088,12 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	ts1 := tc.Server(0).Clock().Now()
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
-	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
+	rangeFeedChs := make([]chan *kvclient.RangeFeedEnvelope, len(repls))
 	rangeFeedErrC := make(chan error, len(repls))
 	for i := range repls {
 		desc := repls[i].Desc()
 		ds := tc.Server(i).DistSenderI().(*kvcoord.DistSender)
-		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+		rangeFeedCh := make(chan *kvclient.RangeFeedEnvelope)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {
 			span := roachpb.Span{
@@ -1239,7 +1242,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
-	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedCh := make(chan *kvclient.RangeFeedEnvelope)
 	rangeFeedErrC := make(chan error, 1)
 	go func() {
 		span := roachpb.Span{
@@ -1402,7 +1405,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
-	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedCh := make(chan *kvclient.RangeFeedEnvelope)
 	rangeFeedErrC := make(chan error, 1)
 	startRangefeed := func() {
 		span := roachpb.Span{

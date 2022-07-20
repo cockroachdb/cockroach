@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -72,7 +73,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 			EndKey: descTableKey.PrefixEnd(),
 		}
 
-		evChan := make(chan *roachpb.RangeFeedEvent)
+		evChan := make(chan *kvclient.RangeFeedEnvelope)
 		rangefeedErrChan := make(chan error, 1)
 		ctxToCancel, cancel := context.WithCancel(ctx)
 		go func() {
@@ -129,7 +130,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 			}
 			return nil
 		})
-		evChan := make(chan *roachpb.RangeFeedEvent)
+		evChan := make(chan *kvclient.RangeFeedEnvelope)
 		require.Regexp(t, `rangefeeds require the kv\.rangefeed.enabled setting`,
 			ds.RangeFeed(ctx, []roachpb.Span{scratchSpan}, startTS, false /* withDiff */, evChan))
 	})
@@ -179,7 +180,7 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	defer cancel()
 	rangefeedErrChan := make(chan error, 1)
 	// Make the buffer large so we don't risk blocking.
-	eventCh := make(chan *roachpb.RangeFeedEvent, 1000)
+	eventCh := make(chan *kvclient.RangeFeedEnvelope, 1000)
 	start := db.Clock().Now()
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(rangefeedCtx,
@@ -244,7 +245,7 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	require.NoError(t, err)
 
 	rangefeedErrChan := make(chan error, 1)
-	eventCh := make(chan *roachpb.RangeFeedEvent, 1000)
+	eventCh := make(chan *kvclient.RangeFeedEnvelope, 1000)
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(
 			rangefeedCtx,

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -70,7 +71,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	}
 
 	startTs := firstDB.Clock().Now()
-	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+	eventC := make(chan *kvclient.RangeFeedEnvelope, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
@@ -147,7 +148,9 @@ func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr
 	}
 }
 
-func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeFeedEvent) error {
+func (w *Watcher) processEvents(
+	ctx context.Context, eventC chan *kvclient.RangeFeedEnvelope,
+) error {
 	for {
 		select {
 		case <-ctx.Done():

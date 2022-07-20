@@ -158,6 +158,8 @@ func WithOnCheckpoint(f OnCheckpoint) Option {
 // provided, a catchup scan will be run instead that will include the contents
 // of these SSTs.
 //
+// 'registeredSpan' is a span of rangefeed registration that emits the SSTable.
+//
 // Note that the SST is emitted as it was ingested, so it may contain keys
 // outside of the rangefeed span, and the caller should prune the SST contents
 // as appropriate. Futhermore, these events do not contain previous values as
@@ -169,7 +171,11 @@ func WithOnCheckpoint(f OnCheckpoint) Option {
 // MVCCHistoryMutationError and thus will not be emitted here -- there should be
 // no such requests into spans with rangefeeds across them, but it is up to
 // callers to ensure this.
-type OnSSTable func(ctx context.Context, sst *roachpb.RangeFeedSSTable)
+type OnSSTable func(
+	ctx context.Context,
+	sst *roachpb.RangeFeedSSTable,
+	registeredSpan roachpb.Span,
+)
 
 // WithOnSSTable sets up a callback that's invoked whenever an SSTable is
 // ingested.

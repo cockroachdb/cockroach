@@ -42,6 +42,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
+        "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/multitenant",

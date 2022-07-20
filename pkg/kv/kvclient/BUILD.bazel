@@ -5,6 +5,7 @@ go_library(
     name = "kvclient",
     srcs = [
         "placeholder.go",
+        "rangefeed_envelope.go",
         "revision_reader.go",
         "scan_meta.go",
     ],

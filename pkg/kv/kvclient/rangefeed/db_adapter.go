@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -73,7 +74,7 @@ func (dbc *dbAdapter) RangeFeed(
 	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- *kvclient.RangeFeedEnvelope,
 ) error {
 	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
 }
