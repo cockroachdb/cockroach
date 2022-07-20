@@ -70,6 +70,9 @@ const (
 	// Constraint means that the entry refers to a constraint (i.e. a member of
 	// the constraints field in a zone config).
 	Constraint ConstraintType = "constraint"
+	// VoterConstraint means that the entry refers to a voter_constraint (i.e. a
+	// member of voter_constraint field in a zone config).
+	VoterConstraint ConstraintType = "voter_constraint"
 	// TODO(andrei): add leaseholder preference
 )
 
@@ -336,6 +339,14 @@ func (r *replicationConstraintStatsReportSaver) upsertConstraintStatus(
 	return nil
 }
 
+type replicaPredicate func(r roachpb.ReplicaDescriptor) bool
+
+type rangeConstraints struct {
+	cType        ConstraintType
+	conjunctions []zonepb.ConstraintsConjunction
+	predicate    replicaPredicate
+}
+
 // constraintConformanceVisitor is a visitor that, when passed to visitRanges(),
 // computes the constraint conformance report (i.e. the
 // system.replication_constraint_stats table).
@@ -352,7 +363,7 @@ type constraintConformanceVisitor struct {
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
 	prevZoneKey     ZoneKey
-	prevConstraints []zonepb.ConstraintsConjunction
+	prevConstraints []rangeConstraints
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -418,14 +429,23 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}()
 
 	// Find the applicable constraints, which may be inherited.
-	var constraints []zonepb.ConstraintsConjunction
+	var constraints []rangeConstraints
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if zone.Constraints == nil {
 				return false
 			}
-			constraints = zone.Constraints
+			if len(zone.VoterConstraints) == 0 {
+				constraints = []rangeConstraints{
+					{cType: Constraint, conjunctions: zone.Constraints, predicate: voterNonVoterPredicate},
+				}
+			} else {
+				constraints = []rangeConstraints{
+					{cType: Constraint, conjunctions: zone.Constraints, predicate: voterNonVoterPredicate},
+					{cType: VoterConstraint, conjunctions: zone.VoterConstraints, predicate: voterPredicate},
+				}
+			}
 			zKey = key
 			return true
 		})
@@ -445,16 +465,40 @@ func (v *constraintConformanceVisitor) visitSameZone(
 	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints)
 }
 
+func voterNonVoterPredicate(r roachpb.ReplicaDescriptor) bool {
+	if voterPredicate(r) {
+		return true
+	}
+	switch r.GetType() {
+	case roachpb.NON_VOTER, roachpb.VOTER_INCOMING:
+		return true
+	default:
+		return false
+	}
+}
+
+func voterPredicate(r roachpb.ReplicaDescriptor) bool {
+	switch r.GetType() {
+	case roachpb.VOTER_FULL, roachpb.VOTER_OUTGOING, roachpb.VOTER_DEMOTING_NON_VOTER, roachpb.VOTER_DEMOTING_LEARNER:
+		return true
+	default:
+		return false
+	}
+}
+
 func (v *constraintConformanceVisitor) countRange(
-	ctx context.Context,
-	r *roachpb.RangeDescriptor,
-	key ZoneKey,
-	constraints []zonepb.ConstraintsConjunction,
+	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []rangeConstraints,
 ) {
-	storeDescs := v.storeResolver(r)
-	violated := getViolations(ctx, storeDescs, constraints)
-	for _, c := range violated {
-		v.report.AddViolation(key, Constraint, c)
+	for _, c := range constraints {
+		matchingReplicas := r.Replicas().FilterToDescriptors(c.predicate)
+		storeDescs := make([]roachpb.StoreDescriptor, len(matchingReplicas))
+		for i, r := range matchingReplicas {
+			storeDescs[i] = v.storeResolver(r.StoreID)
+		}
+		violated := getViolations(ctx, storeDescs, c.conjunctions)
+		for _, cs := range violated {
+			v.report.AddViolation(key, c.cType, cs)
+		}
 	}
 }
 
