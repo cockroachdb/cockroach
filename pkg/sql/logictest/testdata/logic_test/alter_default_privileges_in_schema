@@ -30,7 +30,7 @@ SHOW GRANTS ON t1
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t1          admin      ALL             true
 test           public       t1          root       ALL             true
-test           public       t1          testuser   ALL             false
+test           public       t1          testuser   ALL             true
 test           public       t1          testuser2  SELECT          false
 
 # When creating an object, take the union of the default privileges on
@@ -48,7 +48,7 @@ SHOW GRANTS ON t2
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t2          admin      ALL             true
 test           public       t2          root       ALL             true
-test           public       t2          testuser   ALL             false
+test           public       t2          testuser   ALL             true
 test           public       t2          testuser2  INSERT          false
 test           public       t2          testuser2  SELECT          false
 
@@ -64,7 +64,7 @@ SHOW GRANTS ON t3
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t3          admin      ALL             true
 test           public       t3          root       ALL             true
-test           public       t3          testuser   ALL             false
+test           public       t3          testuser   ALL             true
 test           public       t3          testuser2  ALL             true
 
 # Revoke default privileges in schema.
@@ -80,7 +80,7 @@ SHOW GRANTS ON t4
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t4          admin      ALL             true
 test           public       t4          root       ALL             true
-test           public       t4          testuser   ALL             false
+test           public       t4          testuser   ALL             true
 test           public       t4          testuser2  SELECT          false
 
 # Multiple schemas.
@@ -103,7 +103,7 @@ SHOW GRANTS ON public.t5
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t5          admin      ALL             true
 test           public       t5          root       ALL             true
-test           public       t5          testuser   ALL             false
+test           public       t5          testuser   ALL             true
 test           public       t5          testuser2  ALL             true
 
 query TTTTTB colnames
@@ -112,7 +112,7 @@ SHOW GRANTS ON s.t6
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           s            t6          admin      ALL             true
 test           s            t6          root       ALL             true
-test           s            t6          testuser   ALL             false
+test           s            t6          testuser   ALL             true
 test           s            t6          testuser2  ALL             true
 
 # In schema for all roles.
@@ -134,7 +134,7 @@ SHOW GRANTS ON public.t7
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t7          admin      ALL             true
 test           public       t7          root       ALL             true
-test           public       t7          testuser   ALL             false
+test           public       t7          testuser   ALL             true
 test           public       t7          testuser2  SELECT          false
 
 query TTTTTB colnames
@@ -143,7 +143,7 @@ SHOW GRANTS ON s.t8
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           s            t8          admin      ALL             true
 test           s            t8          root       ALL             true
-test           s            t8          testuser   ALL             false
+test           s            t8          testuser   ALL             true
 test           s            t8          testuser2  SELECT          false
 
 # Switch user to root, since we defined it on FOR ALL ROLES, the privileges

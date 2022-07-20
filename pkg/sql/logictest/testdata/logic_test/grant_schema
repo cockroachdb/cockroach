@@ -59,7 +59,7 @@ SHOW GRANTS ON SCHEMA s
 database_name  schema_name  grantee    privilege_type  is_grantable
 test           s            admin      ALL             true
 test           s            root       ALL             true
-test           s            testuser   ALL             false
+test           s            testuser   ALL             true
 test           s            testuser2  CREATE          false
 
 # Check grant information in backing table. We have to strip off the session
@@ -88,7 +88,7 @@ public     test           public              USAGE           NO
 root       test           public              ALL             YES
 admin      test           s                   ALL             YES
 root       test           s                   ALL             YES
-testuser   test           s                   ALL             NO
+testuser   test           s                   ALL             YES
 testuser2  test           s                   CREATE          NO
 
 # Check grants for testuser2, which should inherit from the public role.
@@ -109,3 +109,30 @@ pg_extension        false       true
 pg_temp             true        true
 public              true        true
 s                   true        false
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+user root
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement ok
+GRANT testuser to owner_grant_option_child
+
+user testuser
+
+statement ok
+CREATE SCHEMA owner_grant_option
+
+statement ok
+GRANT USAGE ON SCHEMA owner_grant_option TO owner_grant_option_child
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA owner_grant_option
+----
+database_name  schema_name         grantee                   privilege_type  is_grantable
+test           owner_grant_option  admin                     ALL             true
+test           owner_grant_option  owner_grant_option_child  USAGE           true
+test           owner_grant_option  root                      ALL             true
+test           owner_grant_option  testuser                  ALL             true

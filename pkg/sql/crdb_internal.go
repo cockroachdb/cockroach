@@ -4868,7 +4868,12 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 					for _, priv := range u.Privileges {
 						var isGrantable tree.Datum
 						if populateGrantOption {
-							isGrantable = yesOrNoDatum(priv.GrantOption)
+							// We use this function to check for the grant option so that the
+							// object owner also gets is_grantable=true.
+							grantOptionErr := p.CheckGrantOptionsForUser(
+								ctx, db, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+							)
+							isGrantable = yesOrNoDatum(grantOptionErr == nil)
 						} else {
 							isGrantable = tree.DNull
 						}

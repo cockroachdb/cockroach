@@ -623,7 +623,7 @@ SHOW GRANTS ON TABLE t1;
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t1          admin     ALL             true
 test           public       t1          root      ALL             true
-test           public       t1          testuser  ALL             false
+test           public       t1          testuser  ALL             true
 
 statement ok
 GRANT SELECT ON TABLE t1 TO testuser2
@@ -729,3 +729,28 @@ SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
 ----
 database_name  schema_name  table_name            grantee              privilege_type  is_grantable
 test           public       grant_ordering_table  grant_ordering_user  ALL             true
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement oko
+GRANT testuser to owner_grant_option_child
+
+user testuser
+
+statement ok
+CREATE TABLE owner_grant_option()
+
+statement ok
+GRANT SELECT ON TABLE owner_grant_option TO owner_grant_option_child
+
+query TTTTTB colnames
+SHOW GRANTS ON TABLE owner_grant_option
+----
+database_name  schema_name  table_name          grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  owner_grant_option_child  SELECT          true
+test           public       owner_grant_option  root                      ALL             true
+test           public       owner_grant_option  testuser                  ALL             true
