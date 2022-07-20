@@ -452,15 +452,23 @@ func InsertEventRecord(
 	reportingID int32,
 	dst LogEventDestination,
 	targetID int32,
-	info eventpb.EventPayload,
+	info ...eventpb.EventPayload,
 ) error {
+	if len(info) == 0 {
+		return nil
+	}
+	entries := make([]eventLogEntry, len(info))
+	for i, ev := range info {
+		entries[i].targetID = targetID
+		entries[i].event = ev
+	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(ctx, ex, txn, reportingID,
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
-		eventLogEntry{targetID: targetID, event: info})
+		entries...)
 }
 
 // insertEventRecords inserts one or more event into the event log as
