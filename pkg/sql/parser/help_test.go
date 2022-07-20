@@ -184,6 +184,8 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
 
+		{`DROP EXTERNAL CONNECTION blah ??`, `DROP EXTERNAL CONNECTION`},
+
 		{`DROP USER ??`, `DROP ROLE`},
 		{`DROP USER IF ??`, `DROP ROLE`},
 		{`DROP USER IF EXISTS bluh ??`, `DROP ROLE`},
