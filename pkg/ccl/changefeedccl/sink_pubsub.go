@@ -9,13 +9,10 @@
 package changefeedccl
 
 import (
+	"cloud.google.com/go/pubsub"
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
-	"net/url"
-
-	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -28,6 +25,9 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"hash/crc32"
+	"net/url"
+	"os"
 )
 
 const credentialsParam = "CREDENTIALS"
@@ -126,11 +126,11 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	authOption := u.consumeParam(authParam)
 	assumeRoleOption := u.consumeParam(assumeRoleParam)
 	authScope := gcpScope
-	if assumeRoleOption != "" {
-		// If we need to assume a role, the credentials need to have the scope to
-		// impersonate instead.
-		authScope = cloudPlatformScope
-	}
+	//if assumeRoleOption != "" {
+	//	// If we need to assume a role, the credentials need to have the scope to
+	//	// impersonate instead.
+	//	authScope = cloudPlatformScope
+	//}
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
@@ -156,6 +156,9 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 
 	credsOpt := option.WithCredentials(creds)
 	if assumeRoleOption != "" {
+		fmt.Println("@@@ str=", string(creds.JSON))
+		fmt.Println("@@@ creds=", creds.ProjectID, creds.TokenSource)
+		fmt.Println("@@@ env=", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 		assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleOption)
 		cfg := impersonate.CredentialsConfig{
 			TargetPrincipal: assumeRole,

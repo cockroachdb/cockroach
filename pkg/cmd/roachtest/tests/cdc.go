@@ -829,11 +829,11 @@ func registerCDC(r registry.Registry) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1,
-				workloadDuration:         "30m",
+				workloadDuration:         "5m",
 				initialScan:              true,
 				whichSink:                pubsubSink,
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
-				targetInitialScanLatency: 30 * time.Minute,
+				targetInitialScanLatency: 5 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
 		},
@@ -852,11 +852,11 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				tpccWarehouseCount:       50,
-				workloadDuration:         "30m",
+				workloadDuration:         "5m",
 				initialScan:              true,
 				whichSink:                cloudStorageSink,
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
-				targetInitialScanLatency: 30 * time.Minute,
+				targetInitialScanLatency: 5 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
 		},
