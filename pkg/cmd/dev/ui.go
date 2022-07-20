@@ -49,6 +49,8 @@ type UIDirectories struct {
 	clusterUI string
 	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
 	dbConsole string
+	// eslintPlugin is the absolute path to ./pkg/ui/workspaces/eslint-plugin-crdb.
+	eslintPlugin string
 }
 
 // getUIDirs computes the absolute path to the root of each UI sub-project.
@@ -59,8 +61,9 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
-		clusterUI: path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
-		dbConsole: path.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		clusterUI:    path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
+		dbConsole:    path.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		eslintPlugin: path.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
 	}, nil
 }
 
@@ -286,7 +289,9 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 				filepath.Join(uiDirs.dbConsole, "src", "js", "protos.d.ts"),
 				filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "protos.js"),
 				filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "protos.d.ts"),
+				filepath.Join(uiDirs.dbConsole, "dist"),
 				filepath.Join(uiDirs.clusterUI, "dist"),
+				filepath.Join(uiDirs.eslintPlugin, "dist"),
 			}
 			if all {
 				workspace, err := d.getWorkspace(d.cli.Context())
