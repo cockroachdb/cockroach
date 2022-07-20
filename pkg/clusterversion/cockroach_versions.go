@@ -331,6 +331,9 @@ const (
 	AlterSystemSQLInstancesAddLocality
 	// SystemExternalConnectionsTable adds system.external_connections table.
 	SystemExternalConnectionsTable
+	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	// telemetry logging jobs.
+	SQLSchemaTelemetryScheduledJobs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -571,6 +574,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
+	},
+	{
+		Key:     SQLSchemaTelemetryScheduledJobs,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
 	},
 
 	// *************************************************

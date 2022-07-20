@@ -6793,6 +6793,71 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.schedule_sql_schema_telemetry": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SchemaTelemetryController == nil {
+					return nil, errors.AssertionFailedf("schema telemetry controller not set")
+				}
+				ctx := evalCtx.Ctx()
+				// The user must be an admin to use this builtin.
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				if err := evalCtx.SchemaTelemetryController.CreateSchemaTelemetrySchedule(ctx); err != nil {
+					return tree.DNull, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used to create the schema telemetry job schedule.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	builtinconstants.CreateSchemaTelemetryJobBuiltinName: makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SchemaTelemetryController == nil {
+					return nil, errors.AssertionFailedf("schema telemetry controller not set")
+				}
+				ctx := evalCtx.Ctx()
+				// The user must be an admin to use this builtin.
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				id, err := evalCtx.SchemaTelemetryController.CreateSchemaTelemetryJob(
+					ctx,
+					builtinconstants.CreateSchemaTelemetryJobBuiltinName,
+					int64(evalCtx.NodeID.SQLInstanceID()),
+				)
+				if err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDInt(tree.DInt(id)), nil
+			},
+			Info:       "This function is used to create a schema telemetry job instance.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,

@@ -78,10 +78,6 @@ func buildLogEvents(
 	return events, nil
 }
 
-// Keep the linter happy.
-// TODO(postamar): use this function
-var _ = buildLogEvents
-
 // CollectClusterSchemaForTelemetry returns a projection of the cluster's SQL
 // schema as of the provided system time, suitably filtered for the purposes of
 // schema telemetry.
