@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -172,16 +173,16 @@ func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	etArg, hasET := ba.GetArg(roachpb.EndTxn)
-	firstLockingIndex, pErr := firstLockingIndex(&ba)
+	randLockingIndex, pErr := randLockingIndex(&ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	if firstLockingIndex != -1 {
-		// Set txn key based on the key of the first transactional write if not
+	if randLockingIndex != -1 {
+		// Set txn key based on the key of a random transactional write if not
 		// already set. If it is already set, make sure we keep the anchor key
 		// the same.
 		if len(h.mu.txn.Key) == 0 {
-			anchor := ba.Requests[firstLockingIndex].GetInner().Header().Key
+			anchor := ba.Requests[randLockingIndex].GetInner().Header().Key
 			h.mu.txn.Key = anchor
 			// Put the anchor also in the ba's copy of the txn, since this batch
 			// was prepared before we had an anchor.
@@ -549,11 +550,13 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	}
 }
 
-// firstLockingIndex returns the index of the first request that acquires locks
+// randLockingIndex returns the index of a random request that acquires locks
 // in the BatchRequest. Returns -1 if the batch has no intention to acquire
 // locks. It also verifies that if an EndTxnRequest is included, then it is the
 // last request in the batch.
-func firstLockingIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
+func randLockingIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
+	numLocking := 0
+	idx := -1
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
@@ -562,8 +565,12 @@ func firstLockingIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
 			}
 		}
 		if roachpb.IsLocking(args) {
-			return i, nil
+			numLocking += 1
+			rnd := rand.Intn(numLocking)
+			if rnd == 0 {
+				idx = i
+			}
 		}
 	}
-	return -1, nil
+	return idx, nil
 }

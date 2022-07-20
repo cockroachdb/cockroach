@@ -27,9 +27,9 @@ message TxnMeta {
       (gogoproto.nullable) = false];
   reserved 2;
   // key is the key which anchors the transaction. This is typically
-  // the first key read or written during the transaction and
-  // determines which range in the cluster will hold the transaction
-  // record.
+  // a random locking (write, SFU etc.) key accessed in the first batch by
+  // the transaction. It determines which range in the cluster will hold the
+  // transaction record.
   bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
   // Incremented on txn retry.
   int32 epoch = 4 [(gogoproto.casttype) = "TxnEpoch"];
