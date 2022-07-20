@@ -1,0 +1,7 @@
+parse
+DROP EXTERNAL CONNECTION 'foo'
+----
+DROP EXTERNAL CONNECTION 'foo'
+DROP EXTERNAL CONNECTION ('foo') -- fully parenthesized
+DROP EXTERNAL CONNECTION '_' -- literals removed
+DROP EXTERNAL CONNECTION 'foo' -- identifiers removed
