@@ -712,6 +712,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		nil, /* catalog */
 		root,
 		&h.evalCtx,
+		&h.semaCtx,
 		true, /* allowAutoCommit */
 		stmt.IsANSIDML(),
 	)
@@ -767,6 +768,7 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		nil, /* catalog */
 		root,
 		&h.evalCtx,
+		&h.semaCtx,
 		true,  /* allowAutoCommit */
 		false, /* isANSIDML */
 	)

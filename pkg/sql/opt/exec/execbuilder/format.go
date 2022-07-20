@@ -48,6 +48,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 		nil, /* catalog */
 		scalar,
 		nil,   /* evalCtx */
+		nil,   /* semaCtx */
 		false, /* allowAutoCommit */
 		false, /* isANSIDML */
 	)
