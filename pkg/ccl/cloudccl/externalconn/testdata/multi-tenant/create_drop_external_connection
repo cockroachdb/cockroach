@@ -1,5 +1,8 @@
 subtest basic-nodelocal
 
+initialize tenant=10
+----
+
 exec-sql
 CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo/bar';
 ----
@@ -23,5 +26,25 @@ inspect-system-table
 ----
 bar123 STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/baz"}}}
 foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+
+# Drop an External Connection that does not exist.
+exec-sql
+DROP EXTERNAL CONNECTION baz;
+----
+
+exec-sql
+DROP EXTERNAL CONNECTION bar123;
+----
+
+inspect-system-table
+----
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+
+exec-sql
+DROP EXTERNAL CONNECTION foo;
+----
+
+inspect-system-table
+----
 
 subtest end

@@ -217,3 +217,20 @@ func (node *DropSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString(node.DropBehavior.String())
 	}
 }
+
+// DropExternalConnection represents a DROP EXTERNAL CONNECTION statement.
+type DropExternalConnection struct {
+	ConnectionLabel Expr
+}
+
+var _ Statement = &DropExternalConnection{}
+
+// Format implements the Statement interface.
+func (node *DropExternalConnection) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP EXTERNAL CONNECTION")
+
+	if node.ConnectionLabel != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.ConnectionLabel)
+	}
+}
