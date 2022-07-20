@@ -38,6 +38,7 @@ import {
 } from "src/util/api";
 import { CaretRight } from "@cockroachlabs/icons";
 import { Switch } from "antd";
+import "antd/lib/switch/style";
 import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
 import ITracingSpan = cockroach.server.serverpb.ITracingSpan;
 import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
