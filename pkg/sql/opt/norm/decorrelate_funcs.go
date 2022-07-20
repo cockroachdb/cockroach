@@ -62,6 +62,10 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		// WHERE clause, it will be transformed to an Exists operator, so this case
 		// only occurs when the Any is nested, in a projection, etc.
 		return !t.Input.Relational().OuterCols.Empty()
+
+	case *memo.UserDefinedFunctionExpr:
+		// Do not attempt to hoist UDFs.
+		return false
 	}
 
 	// If HasHoistableSubquery is true for any child, then it's true for this
