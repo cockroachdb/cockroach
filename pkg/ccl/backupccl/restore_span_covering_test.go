@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -63,7 +64,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 			backups[i].Files[f].Path = fmt.Sprintf("12345-b%d-f%d.sst", i, f)
 		}
 		// A non-nil Dir more accurately models the footprint of produced coverings.
-		backups[i].Dir = roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{}}
+		backups[i].Dir = cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{}}
 	}
 	return backups
 }

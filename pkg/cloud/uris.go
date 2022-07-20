@@ -15,7 +15,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 )
 
 const (
@@ -24,10 +24,10 @@ const (
 	AuthParam = "AUTH"
 	// AuthParamImplicit is the query parameter for the implicit authentication
 	// mode in a URI.
-	AuthParamImplicit = roachpb.ExternalStorageAuthImplicit
+	AuthParamImplicit = cloudpb.ExternalStorageAuthImplicit
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
-	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
+	AuthParamSpecified = cloudpb.ExternalStorageAuthSpecified
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-

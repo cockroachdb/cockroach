@@ -79,6 +79,7 @@ go_library(
         "//pkg/blobs/blobspb",
         "//pkg/build",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
