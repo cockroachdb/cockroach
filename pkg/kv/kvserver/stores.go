@@ -181,7 +181,8 @@ func (ls *Stores) GetReplicaForRangeID(
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, _, pErr := ls.SendWithWriteBytes(ctx, ba)
+	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
 	return br, pErr
 }
 
@@ -195,11 +196,16 @@ var storeWriteBytesPool = sync.Pool{
 }
 
 func newStoreWriteBytes() *StoreWriteBytes {
-	return storeWriteBytesPool.Get().(*StoreWriteBytes)
+	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
+	*wb = StoreWriteBytes{}
+	return wb
 }
 
 // Release returns the *StoreWriteBytes to the pool.
 func (wb *StoreWriteBytes) Release() {
+	if wb == nil {
+		return
+	}
 	storeWriteBytesPool.Put(wb)
 }
 

@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "doc.go",
         "granter.go",
+        "store_token_estimation.go",
         "work_queue.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission",
@@ -32,6 +33,7 @@ go_test(
     name = "admission_test",
     srcs = [
         "granter_test.go",
+        "store_token_estimation_test.go",
         "work_queue_test.go",
     ],
     data = glob(["testdata/**"]),
