@@ -887,6 +887,72 @@ func (ie *wrappedInternalExecutor) SetSessionData(sessionData *sessiondata.Sessi
 	panic("not implemented")
 }
 
+func (ie *wrappedInternalExecutor) ExecExUpdated(
+	ctx context.Context,
+	opName string,
+	o sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryRowExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryRowExWithColsUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryBufferedExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryIteratorExUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryBufferedExWithColsUpdated(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) SetDescriptorCollection(
+	txn *kv.Txn, descsCol sqlutil.DescsCollection,
+) {
+	panic("not implemented")
+}
+
 func (ie *wrappedInternalExecutor) QueryBufferedExWithCols(
 	ctx context.Context,
 	opName string,
