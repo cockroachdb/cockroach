@@ -2304,8 +2304,8 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
 	}
-	bld := execbuilder.New(context.Background(), f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true,
-		false, /* isANSIDML */
+	bld := execbuilder.New(context.Background(), f, ot.makeOptimizer(), mem, ot.catalog, expr,
+		&ot.evalCtx, &ot.semaCtx, true, false, /* isANSIDML */
 	)
 	return bld.Build()
 }
