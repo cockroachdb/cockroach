@@ -2321,6 +2321,14 @@ var charts = []sectionDescription{
 					"jobs.auto_schema_telemetry.resume_retry_error",
 				},
 			},
+			{
+				Title: "Scheduled Jobs Statistics",
+				Metrics: []string{
+					"schedules.scheduled-schema-telemetry-executor.succeeded",
+					"schedules.scheduled-schema-telemetry-executor.started",
+					"schedules.scheduled-schema-telemetry-executor.failed",
+				},
+			},
 		},
 	},
 	{
