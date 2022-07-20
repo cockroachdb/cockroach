@@ -195,7 +195,9 @@ var storeWriteBytesPool = sync.Pool{
 }
 
 func newStoreWriteBytes() *StoreWriteBytes {
-	return storeWriteBytesPool.Get().(*StoreWriteBytes)
+	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
+	*wb = StoreWriteBytes{}
+	return wb
 }
 
 // Release returns the *StoreWriteBytes to the pool.

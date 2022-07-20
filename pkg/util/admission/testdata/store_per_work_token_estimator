@@ -1,0 +1,57 @@
+init
+----
+
+# First call initializes.
+update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0
+----
+interval state: {intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0}}
+at-admission-tokens: 1
+write-tokens: int: 0.00x+0 smoothed: 1.75x+1 per-work-accounted: 1
+ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
+
+# Writes account for ~1/2 of what is written, reflecting what can happen with
+# application to the state machine. No ingests.
+update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0
+----
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intL0WriteAccountedBytes:500 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:1.98 constant:1} intIngestedLinearModel:{multiplier:0 constant:0}}
+at-admission-tokens: 50
+write-tokens: int: 1.98x+1 smoothed: 1.86x+1 per-work-accounted: 25
+ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
+
+# Same as previous.
+update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0
+----
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intL0WriteAccountedBytes:500 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:1.98 constant:1} intIngestedLinearModel:{multiplier:0 constant:0}}
+at-admission-tokens: 75
+write-tokens: int: 1.98x+1 smoothed: 1.92x+1 per-work-accounted: 37
+ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
+
+# Ingestion also happens. Bumps up the at-admission-tokens since at that time
+# we can't differentiate between writes and ingests. The constants in the
+# linear models stays 1, since we can fit effectively using the multipliers.
+# This means a mix of regular writes and sstable ingests (say index
+# backfills), will not effect the cost attributed to regular writes.
+update flushed=1000 ingested=1000 admitted=10 write-accounted=500 ingested-accounted=4000
+----
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000 intL0WriteAccountedBytes:500 intL0IngestedAccountedBytes:4000 intWriteLinearModel:{multiplier:1.98 constant:1} intIngestedLinearModel:{multiplier:0.2475 constant:1}}
+at-admission-tokens: 137
+write-tokens: int: 1.98x+1 smoothed: 1.95x+1 per-work-accounted: 43
+ingest-tokens: int: 0.25x+1 smoothed: 0.50x+1 per-work-accounted: 200
+
+# No ingestion observed by LSM, though ingested-accounted is non-zero -- this
+# updates the model since all these ingested bytes could have gone to levels
+# lower than L0.
+update flushed=1000 ingested=0 admitted=10 write-accounted=450 ingested-accounted=500
+----
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intL0WriteAccountedBytes:450 intL0IngestedAccountedBytes:500 intWriteLinearModel:{multiplier:2.2 constant:1} intIngestedLinearModel:{multiplier:0.001 constant:1}}
+at-admission-tokens: 118
+write-tokens: int: 2.20x+1 smoothed: 2.08x+1 per-work-accounted: 44
+ingest-tokens: int: 0.00x+1 smoothed: 0.25x+1 per-work-accounted: 125
+
+# Large amount of ingestion. Bumps up at-admission-tokens.
+update flushed=1000 ingested=1000000 admitted=10 write-accounted=450 ingested-accounted=2000000
+----
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000000 intL0WriteAccountedBytes:450 intL0IngestedAccountedBytes:2000000 intWriteLinearModel:{multiplier:2.2 constant:1} intIngestedLinearModel:{multiplier:0.499995 constant:1}}
+at-admission-tokens: 50109
+write-tokens: int: 2.20x+1 smoothed: 2.14x+1 per-work-accounted: 44
+ingest-tokens: int: 0.50x+1 smoothed: 0.37x+1 per-work-accounted: 100062

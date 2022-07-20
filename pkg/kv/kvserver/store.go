@@ -3724,7 +3724,7 @@ type KVAdmissionController interface {
 	) (handle interface{}, err error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(handle interface{})
+	AdmittedKVWorkDone(handle interface{}, writeBytes *StoreWriteBytes)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -3823,7 +3823,6 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 		}
 		admissionEnabled := true
 		if ah.storeAdmissionQ != nil {
-			// TODO(sumeer): Plumb WriteBytes for ingest requests.
 			ah.storeWorkHandle, err = ah.storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
@@ -3835,11 +3834,16 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
 				// stay false.
 				ah.storeAdmissionQ = nil
+				admissionEnabled = false
 			}
 		}
 		if admissionEnabled {
 			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
+				if ah.storeAdmissionQ != nil {
+					// No bytes were written.
+					_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
+				}
 				return admissionHandle{}, err
 			}
 		}
@@ -3848,14 +3852,23 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 }
 
 // AdmittedKVWorkDone implements the KVAdmissionController interface.
-func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
+func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(
+	handle interface{}, writeBytes *StoreWriteBytes,
+) {
 	ah := handle.(admissionHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
 	if ah.storeAdmissionQ != nil {
-		// TODO(sumeer): Plumb ingestedIntoL0Bytes and handle error return value.
-		_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, 0)
+		var doneInfo admission.StoreWorkDoneInfo
+		if writeBytes != nil {
+			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
+		}
+		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
+		if err != nil {
+			// This shouldn't be happening, so log.
+			log.Errorf(context.Background(), "%s", err)
+		}
 	}
 }
 
