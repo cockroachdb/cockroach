@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	kvcoord "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	gomock "github.com/golang/mock/gomock"
@@ -37,7 +38,7 @@ func (m *MockDB) EXPECT() *MockDBMockRecorder {
 }
 
 // RangeFeed mocks base method.
-func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 bool, arg4 chan<- *roachpb.RangeFeedEvent) error {
+func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 bool, arg4 chan<- kvcoord.RangeFeedMessage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RangeFeed", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)

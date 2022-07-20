@@ -16,6 +16,7 @@ go_library(
         "lock_spans_over_budget_error.go",
         "node_store.go",
         "range_iter.go",
+        "rangefeed_message.go",
         "replica_slice.go",
         "testing_knobs.go",
         "transport.go",
