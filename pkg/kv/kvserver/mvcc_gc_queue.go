@@ -467,9 +467,10 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 			return err
 		}
 	}
-	_, pErr := r.repl.Send(ctx, ba)
+	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
+	defer writeBytes.Release()
 	if r.admissionController != nil {
-		r.admissionController.AdmittedKVWorkDone(admissionHandle)
+		r.admissionController.AdmittedKVWorkDone(admissionHandle, writeBytes)
 	}
 	if pErr != nil {
 		log.VErrEventf(ctx, 2, "%v", pErr.String())

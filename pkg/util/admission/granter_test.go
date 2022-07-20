@@ -188,8 +188,8 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granter granter, settings *cluster.Settings,
-					opts workQueueOptions) storeRequester {
+					ambientCtx log.AmbientContext, granter granterWithStoreWriteDone,
+					settings *cluster.Settings, opts workQueueOptions) storeRequester {
 					req := &testRequester{
 						workKind:               KVWork,
 						granter:                granter,
@@ -375,7 +375,7 @@ func TestStoreCoordinators(t *testing.T) {
 		Settings:          settings,
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granter granter, settings *cluster.Settings,
+			ctx log.AmbientContext, granter granterWithStoreWriteDone, settings *cluster.Settings,
 			opts workQueueOptions) storeRequester {
 			req := makeRequesterFunc(ctx, KVWork, granter, settings, opts)
 			return req.(*testRequester)
@@ -442,9 +442,7 @@ func (r *testRequesterForIOLL) getStoreAdmissionStats() storeAdmissionStats {
 }
 
 func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEstimates) {
-	fmt.Fprintf(&r.buf,
-		"store-request-estimates: fractionOfIngestIntoL0: %.2f, workByteAddition: %d",
-		estimates.fractionOfIngestIntoL0, estimates.workByteAddition)
+	fmt.Fprintf(&r.buf, "store-request-estimates: writeTokens: %d", estimates.writeTokens)
 }
 
 type testGranterWithIOTokens struct {
@@ -452,12 +450,24 @@ type testGranterWithIOTokens struct {
 	allTokensUsed bool
 }
 
+var _ granterWithIOTokens = &testGranterWithIOTokens{}
+
 func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
 	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensForTokenTickDurationToString(tokens))
 	if g.allTokensUsed {
 		return tokens * 2
 	}
 	return 0
+}
+
+func (g *testGranterWithIOTokens) setAdmittedDoneModelsLocked(
+	writeLM tokensLinearModel, ingestedLM tokensLinearModel,
+) {
+	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: write-lm: ")
+	printLinearModel(&g.buf, writeLM)
+	fmt.Fprintf(&g.buf, " ingested-lm: ")
+	printLinearModel(&g.buf, ingestedLM)
+	fmt.Fprintf(&g.buf, "\n")
 }
 
 func tokensForTokenTickDurationToString(tokens int64) string {
@@ -484,8 +494,9 @@ func TestIOLoadListener(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				ioll = &ioLoadListener{
-					settings:    st,
-					kvRequester: req,
+					settings:              st,
+					kvRequester:           req,
+					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -497,21 +508,16 @@ func TestIOLoadListener(t *testing.T) {
 
 			case "prep-admission-stats":
 				req.stats = storeAdmissionStats{
-					admittedCount:            0,
-					admittedWithBytesCount:   0,
-					admittedAccountedBytes:   0,
-					ingestedAccountedBytes:   0,
-					ingestedAccountedL0Bytes: 0,
+					admittedCount:          0,
+					writeAccountedBytes:    0,
+					ingestedAccountedBytes: 0,
 				}
 				d.ScanArgs(t, "admitted", &req.stats.admittedCount)
-				if d.HasArg("admitted-bytes") {
-					d.ScanArgs(t, "admitted-bytes", &req.stats.admittedAccountedBytes)
+				if d.HasArg("write-bytes") {
+					d.ScanArgs(t, "write-bytes", &req.stats.writeAccountedBytes)
 				}
 				if d.HasArg("ingested-bytes") {
 					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedAccountedBytes)
-				}
-				if d.HasArg("ingested-into-l0") {
-					d.ScanArgs(t, "ingested-into-l0", &req.stats.ingestedAccountedL0Bytes)
 				}
 				return fmt.Sprintf("%+v", req.stats)
 
@@ -527,10 +533,13 @@ func TestIOLoadListener(t *testing.T) {
 				var l0Bytes uint64
 				d.ScanArgs(t, "l0-bytes", &l0Bytes)
 				metrics.Levels[0].Size = int64(l0Bytes)
-				var l0Added uint64
-				d.ScanArgs(t, "l0-added", &l0Added)
-				metrics.Levels[0].BytesIngested = l0Added / 2
-				metrics.Levels[0].BytesFlushed = l0Added - metrics.Levels[0].BytesIngested
+				var l0AddedWrite, l0AddedIngested uint64
+				d.ScanArgs(t, "l0-added-write", &l0AddedWrite)
+				metrics.Levels[0].BytesFlushed = l0AddedWrite
+				if d.HasArg("l0-added-ingested") {
+					d.ScanArgs(t, "l0-added-ingested", &l0AddedIngested)
+				}
+				metrics.Levels[0].BytesIngested = l0AddedIngested
 				var l0Files int
 				d.ScanArgs(t, "l0-files", &l0Files)
 				metrics.Levels[0].NumFiles = int64(l0Files)
@@ -635,26 +644,25 @@ func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) 
 	return 0
 }
 
+func (g *testGranterNonNegativeTokens) setAdmittedDoneModelsLocked(
+	writeLM tokensLinearModel, ingestedLM tokensLinearModel,
+) {
+	require.LessOrEqual(g.t, 0.5, writeLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), writeLM.constant)
+	require.Less(g.t, 0.0, ingestedLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), ingestedLM.constant)
+}
+
+// TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
+// of the adjustTokensResult computed by adjustTokensInner has become a subset
+// of what is logged below, and the rest is logged with 0 values. Expand this
+// test to call adjustTokens.
 func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	const mb = 12 + 1<<20
-	prevAdmStats := storeAdmissionStats{
-		admittedCount:            100,
-		admittedWithBytesCount:   80,
-		admittedAccountedBytes:   420 * mb,
-		ingestedAccountedBytes:   200 * mb,
-		ingestedAccountedL0Bytes: 100 * mb,
-	}
-	admStats := prevAdmStats
-	admStats.admittedCount = 721
-	admStats.admittedWithBytesCount += 123
-	admStats.admittedAccountedBytes += 371 * mb
-	admStats.ingestedAccountedBytes += 193 * mb
-	admStats.ingestedAccountedL0Bytes += 73 * mb
 	tests := []struct {
-		name           redact.SafeString
-		prev           ioLoadListenerState
-		admissionStats storeAdmissionStats
-		l0Metrics      pebble.LevelMetrics
+		name      redact.SafeString
+		prev      ioLoadListenerState
+		l0Metrics pebble.LevelMetrics
 	}{
 		{
 			name: "zero",
@@ -662,16 +670,13 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 		{
 			name: "real-numbers",
 			prev: ioLoadListenerState{
-				cumAdmissionStats:                           prevAdmStats,
-				cumL0AddedBytes:                             1402 * mb,
-				curL0Bytes:                                  400 * mb,
-				smoothedIntL0CompactedBytes:                 47 * mb,
-				smoothedIntPerWorkUnaccountedL0Bytes:        2204, // 2kb
-				smoothedIntIngestedAccountedL0BytesFraction: 0.3,
-				smoothedCompactionByteTokens:                201 * mb,
-				totalNumByteTokens:                          int64(201 * mb),
+				cumL0AddedBytes:              1402 * mb,
+				curL0Bytes:                   400 * mb,
+				cumWriteStallCount:           10,
+				smoothedIntL0CompactedBytes:  47 * mb,
+				smoothedCompactionByteTokens: 201 * mb,
+				totalNumByteTokens:           int64(201 * mb),
 			},
-			admissionStats: admStats,
 			l0Metrics: pebble.LevelMetrics{
 				Sublevels:     27,
 				NumFiles:      195,
@@ -686,8 +691,8 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
 		res := (*ioLoadListener)(nil).adjustTokensInner(
-			ctx, tt.prev, tt.admissionStats, tt.l0Metrics, 0,
-			&pebble.InternalIntervalMetrics{}, 100, 10, 0.50)
+			ctx, tt.prev, tt.l0Metrics, 12, &pebble.InternalIntervalMetrics{},
+			100, 10, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(testutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
@@ -712,16 +717,15 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		m.Levels[0].BytesFlushed = rand.Uint64()
 		m.Levels[0].BytesIngested = rand.Uint64()
 		req.stats.admittedCount = rand.Uint64()
-		req.stats.admittedWithBytesCount = rand.Uint64()
-		req.stats.admittedAccountedBytes = rand.Uint64()
+		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
-		req.stats.ingestedAccountedL0Bytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:    st,
-		kvRequester: req,
+		settings:              st,
+		kvRequester:           req,
+		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 	}
 	ioll.mu.Mutex = &syncutil.Mutex{}
 	ioll.mu.kvGranter = kvGranter
@@ -734,9 +738,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
-			require.LessOrEqual(t, float64(0), ioll.smoothedIntPerWorkUnaccountedL0Bytes)
-			require.LessOrEqual(t, float64(0), ioll.smoothedIntIngestedAccountedL0BytesFraction)
 			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
+			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
+			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
 		}
