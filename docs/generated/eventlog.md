@@ -2489,6 +2489,30 @@ contains common SQL event/execution details.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
+### `schema`
+
+An event of type `schema` is an event for schema telemetry.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `CurrentPage` |  | no |
+| `NumPages` |  | no |
+| `ParentDatabaseId` |  | no |
+| `ParentSchemaId` |  | no |
+| `Name` |  | no |
+| `Id` |  | no |
+| `Desc` |  | no |
+| `Errors` |  | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Zone config events
 
 Events in this category pertain to zone configuration changes on

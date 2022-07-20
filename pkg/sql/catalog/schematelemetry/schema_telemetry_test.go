@@ -70,6 +70,7 @@ var (
 )
 
 const qHasJob = `SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'AUTO SCHEMA TELEMETRY' AND status = 'succeeded'`
+const qHasLogs = `SELECT sign(count(*)) FROM system.eventlog WHERE "eventType" = 'schema'`
 
 func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -93,6 +94,7 @@ func TestSchemaTelemetryJob(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, makeTestServerArgs())
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `SET CLUSTER SETTING server.eventlog.enabled = true`)
 
 	// Pause the existing schema telemetry schedule so that it doesn't interfere.
 	res := tdb.QueryStr(t, qID)
@@ -101,7 +103,10 @@ func TestSchemaTelemetryJob(t *testing.T) {
 	id := res[0][0]
 	tdb.ExecSucceedsSoon(t, fmt.Sprintf("PAUSE SCHEDULE %s", id))
 	tdb.CheckQueryResults(t, qHasJob, [][]string{{"0"}})
+	tdb.CheckQueryResults(t, qHasLogs, [][]string{{"0"}})
 	// Run a schema telemetry job and wait for it to succeed.
 	tdb.Exec(t, qJob)
 	tdb.CheckQueryResultsRetry(t, qHasJob, [][]string{{"1"}})
+	tdb.CheckQueryResults(t, qHasLogs, [][]string{{"1"}})
+
 }

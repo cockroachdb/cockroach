@@ -352,8 +352,11 @@ func readInput(
 			}
 
 			typ := fieldDefRe.ReplaceAllString(line, "$typ")
-			if typ == "google.protobuf.Timestamp" {
+			switch typ {
+			case "google.protobuf.Timestamp":
 				typ = "timestamp"
+			case "google.protobuf.Any":
+				typ = "any"
 			}
 
 			if otherMsg, ok := infos[typ]; ok {
@@ -590,6 +593,18 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+   }
+   {{- else if eq .FieldType "any"}}
+   if m.{{.FieldName}} != nil {
+     if printComma { b = append(b, ',')}; printComma = true
+     if v, err := serializeAny(m.{{.FieldName}}); err != nil {
+       b = append(b, "\"Error\":\""...)
+       b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), err.Error()))
+       b = append(b, '"')
+     } else {
+       b = append(b, "\"{{.FieldName}}\":"...)
+       b = append(b, v...)
+     }
    }
    {{- else}}
    {{ error  .FieldType }}

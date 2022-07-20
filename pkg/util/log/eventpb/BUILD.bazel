@@ -40,6 +40,8 @@ go_library(
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -73,7 +75,10 @@ proto_library(
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:any_proto",
+    ],
 )
 
 go_proto_library(
