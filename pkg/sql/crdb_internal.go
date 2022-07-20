@@ -4905,11 +4905,16 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				for _, u := range privs {
 					userNameStr := tree.NewDString(u.User.Normalized())
 					for _, priv := range u.Privileges {
+						// We use this function to check for the grant option so that the
+						// object owner also gets is_grantable=true.
+						grantOptionErr := p.CheckGrantOptionsForUser(
+							ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+						)
 						if err := addRow(
 							dbNameStr,                           // database_name
 							userNameStr,                         // grantee
 							tree.NewDString(priv.Kind.String()), // privilege_type
-							yesOrNoDatum(priv.GrantOption),      // is_grantable
+							yesOrNoDatum(grantOptionErr == nil), // is_grantable
 						); err != nil {
 							return err
 						}

@@ -170,7 +170,7 @@ SHOW GRANTS ON TABLE t7;
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t7          admin     ALL             true
 test           public       t7          root      ALL             true
-test           public       t7          testuser  ALL             false
+test           public       t7          testuser  ALL             true
 
 statement ok
 GRANT SELECT ON TABLE t7 TO testuser
@@ -242,7 +242,7 @@ SHOW GRANTS ON TABLE t12;
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t12         admin     ALL             true
 test           public       t12         root      ALL             true
-test           public       t12         testuser  ALL             false
+test           public       t12         testuser  ALL             true
 
 statement ok
 GRANT INSERT, DELETE ON TABLE t12 TO testuser
@@ -269,7 +269,7 @@ SHOW GRANTS ON TABLE t13
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t13         admin     ALL             true
 test           public       t13         root      ALL             true
-test           public       t13         testuser  ALL             false
+test           public       t13         testuser  ALL             true
 
 # one created user to another (testuser to testuser2)
 user testuser
@@ -508,7 +508,7 @@ SHOW GRANTS ON seq1
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       seq1        admin      ALL             true
 test           public       seq1        root       ALL             true
-test           public       seq1        testuser   ALL             false
+test           public       seq1        testuser   ALL             true
 test           public       seq1        testuser2  CREATE          true
 
 # Test Types
@@ -530,7 +530,7 @@ database_name  schema_name  type_name  grantee    privilege_type  is_grantable
 test           public       type1      admin      ALL             true
 test           public       type1      public     USAGE           false
 test           public       type1      root       ALL             true
-test           public       type1      testuser   ALL             false
+test           public       type1      testuser   ALL             true
 test           public       type1      testuser2  USAGE           true
 
 statement ok
