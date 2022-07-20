@@ -155,6 +155,78 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) ([]tree.Datums, colinfo.ResultColumns, error)
 
+	// ExecExUpdated is like Exec, but allows the caller to override some session data
+	// fields.
+	//
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
+	ExecExUpdated(
+		ctx context.Context,
+		opName string,
+		o sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (int, error)
+
+	// QueryRowExUpdated is like QueryRow, but allows the caller to override some
+	// session data fields.
+	//
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
+	QueryRowExUpdated(
+		ctx context.Context,
+		opName string,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (tree.Datums, error)
+
+	// QueryRowExWithCols is like QueryRowEx, additionally returning the
+	// computed ResultColumns of the input query.
+	QueryRowExWithColsUpdated(
+		ctx context.Context,
+		opName string,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (tree.Datums, colinfo.ResultColumns, error)
+
+	// QueryBufferedExUpdated executes the supplied SQL statement and returns the
+	// resulting rows (meaning all of them are buffered at once).
+	//
+	// If txn is not nil, the statement will be executed in the respective txn.
+	//
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
+	QueryBufferedExUpdated(
+		ctx context.Context,
+		opName string,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, error)
+
+	// QueryIteratorExUpdated executes the query, returning an iterator that can be
+	// used to get the results. If the call is successful, the returned iterator
+	// *must* be closed.
+	QueryIteratorExUpdated(
+		ctx context.Context,
+		opName string,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+
+	// QueryBufferedExWithColsUpdated is like QueryBufferedEx, additionally
+	// returning the computed ResultColumns of the input query.
+	QueryBufferedExWithColsUpdated(
+		ctx context.Context,
+		opName string,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// WithSyntheticDescriptors sets the synthetic descriptors before running the
 	// the provided closure and resets them afterward. Used for queries/statements
 	// that need to use in-memory synthetic descriptors different from descriptors
