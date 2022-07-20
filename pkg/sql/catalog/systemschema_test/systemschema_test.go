@@ -17,12 +17,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/stretchr/testify/require"
 )
 
 func createTestServerParams() base.TestServerArgs {
@@ -41,31 +45,44 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 		// New database for each test file.
 		s, db, _ := serverutils.StartServer(t, createTestServerParams())
 		defer s.Stopper().Stop(ctx)
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "bootstrap":
+			case "show_create":
 				// Create a connection to the database cluster.
 				sqlRunner := sqlutils.MakeSQLRunner(db)
 
-				// Prepare the SQL query.
-				sql := `USE SYSTEM; SHOW CREATE ALL TABLES;`
-
 				// Execute the SQL query.
-				rows := sqlRunner.QueryStr(t, sql)
+				rows := sqlRunner.QueryStr(t, d.Input)
 
-				// Extract return and return.
+				// Extract results and return.
 				var sb strings.Builder
 				for _, row := range rows {
 					if len(row) != 1 {
-						d.Fatalf(t, "`SHOW CREATE ALL TABLES` returns has zero column.")
+						d.Fatalf(t, "expect 1 column in %q result set, instead found %d", d.Input, len(row))
 					}
 					sb.WriteString(row[0])
 					sb.WriteString("\n")
 				}
 				return sb.String()
-			}
 
+			case "schema_telemetry":
+				// Collect a projection of the bootstrapped cluster's schema.
+				ess, err := schematelemetry.CollectClusterSchemaForTelemetry(ctx, &execCfg, execCfg.Clock.Now())
+				require.NoError(t, err)
+
+				// Return the results, one element per line.
+				var sb strings.Builder
+				jsonEncoder := jsonpb.Marshaler{}
+				for _, es := range ess {
+					str, err := jsonEncoder.MarshalToString(&es)
+					require.NoError(t, err)
+					sb.WriteString(str)
+					sb.WriteRune('\n')
+				}
+				return sb.String()
+			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
 		})
