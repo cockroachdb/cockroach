@@ -39,6 +39,7 @@ go_test(
         "gc_old_test.go",
         "gc_random_test.go",
         "gc_test.go",
+        "main_test.go",
     ],
     embed = [":gc"],
     deps = [
