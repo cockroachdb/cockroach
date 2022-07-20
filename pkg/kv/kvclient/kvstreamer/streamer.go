@@ -12,7 +12,6 @@ package kvstreamer
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"runtime"
 	"sort"
@@ -37,9 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
-
-// TODO(yuzefovich): remove this once the Streamer is stabilized.
-const debug = false
 
 // OperationMode describes the mode of operation of the Streamer.
 type OperationMode int
@@ -383,8 +379,6 @@ func NewStreamer(
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
 	}
-	// TODO(yuzefovich): consider lazily allocating this IntPool only when
-	// enqueued requests span multiple batches.
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
@@ -415,7 +409,7 @@ func (s *Streamer) Init(
 		s.results = newOutOfOrderResultsBuffer(s.budget)
 	} else {
 		s.requestsToServe = newInOrderRequestsProvider()
-		s.results = newInOrderResultsBuffer(s.budget, diskBuffer, hints.SingleRowLookup)
+		s.results = newInOrderResultsBuffer(s.budget, diskBuffer)
 	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
@@ -594,10 +588,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			}
 		}
 
-		// TODO(yuzefovich): perform the de-duplication here.
-		//if !s.hints.UniqueRequests {
-		//}
-
 		overheadAccountedFor := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(singleRangeReqs)) + // reqs
 			intSliceOverhead + intSize*int64(cap(positions)) + // positions
 			subRequestIdxOverhead // subRequestIdx
@@ -665,9 +655,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
-	if debug {
-		fmt.Printf("enqueuing %s to serve\n", reqsToString(requestsToServe))
-	}
 	s.requestsToServe.enqueue(requestsToServe)
 	return nil
 }
@@ -683,22 +670,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 	for {
 		results, allComplete, err := s.results.get(ctx)
 		if len(results) > 0 || allComplete || err != nil {
-			if debug {
-				if len(results) > 0 {
-					printSubRequestIdx := s.mode == InOrder && !s.hints.SingleRowLookup
-					fmt.Printf("returning %s to the client\n", resultsToString(results, printSubRequestIdx))
-				} else {
-					suffix := "all requests have been responded to"
-					if !allComplete {
-						suffix = fmt.Sprintf("%v", err)
-					}
-					fmt.Printf("returning no results to the client because %s\n", suffix)
-				}
-			}
 			return results, err
-		}
-		if debug {
-			fmt.Println("client blocking to wait for results")
 		}
 		s.results.wait()
 		// Check whether the Streamer has been canceled or closed while we were
@@ -925,12 +897,6 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 			// the budget.
 			return false
 		}
-		if debug {
-			fmt.Printf(
-				"waiting for budget to free up: atLeastBytes %d, available %d\n",
-				atLeastBytes, w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
-			)
-		}
 		// We have to wait for some budget.release() calls.
 		w.s.budget.mu.waitForBudget.Wait()
 		// Check if the Streamer has been canceled or closed while we were
@@ -1081,12 +1047,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// overloaded already, so it seems better to not ask it to receive
 			// any more responses at the moment.
 			return err
-		}
-		if debug {
-			fmt.Printf(
-				"issuing an async request for positions %v, targetBytes=%d, headOfLine=%t\n",
-				singleRangeReqs.positions, targetBytes, headOfLine,
-			)
 		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
 		w.s.requestsToServe.removeNextLocked()
@@ -1662,12 +1622,6 @@ func buildResumeSingleRangeBatch(
 				// use the double of the original target.
 				resumeReq.minTargetBytes = 2 * req.minTargetBytes
 			}
-		}
-		if debug {
-			fmt.Printf(
-				"request for positions %v came back empty, original minTargetBytes=%d, "+
-					"resumeReq.minTargetBytes=%d\n", req.positions, req.minTargetBytes, resumeReq.minTargetBytes,
-			)
 		}
 	}
 
