@@ -1291,6 +1291,9 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.AssertionFailedf("primary index %q has invalid encoding type %d in proto, expected %d",
 					idx.GetName(), idx.IndexDesc().EncodingType, descpb.PrimaryIndexEncoding)
 			}
+			if idx.IsNotVisible() {
+				return errors.Newf("primary index %q cannot be not visible", idx.GetName())
+			}
 		}
 		// Ensure that index column ID subsets are well formed.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {

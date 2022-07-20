@@ -1457,6 +1457,11 @@ func (oi *optIndex) IsInverted() bool {
 	return oi.idx.GetType() == descpb.IndexDescriptor_INVERTED
 }
 
+// IsNotVisible is part of the cat.Index interface.
+func (oi *optIndex) IsNotVisible() bool {
+	return oi.idx.IsNotVisible()
+}
+
 // ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
@@ -2228,6 +2233,11 @@ func (oi *optVirtualIndex) IsUnique() bool {
 
 // IsInverted is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsInverted() bool {
+	return false
+}
+
+// IsNotVisible is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsNotVisible() bool {
 	return false
 }
 
