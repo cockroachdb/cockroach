@@ -140,34 +140,36 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	sc.previous.exitOverrideHideStack = logging.mu.exitOverride.hideStack
 	logging.mu.Unlock()
 
-	defer func() {
-		// If any of the following initialization fails, we close the scope.
-		// We use the scope's Close() method as general-purpose finalizer,
-		// to avoid writing a complex defer function here.
-		if t.Failed() {
-			sc.Close(t)
+	err := func() error {
+		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+		if err != nil {
+			return err
 		}
+		// Remember the directory name for the Close() function.
+		sc.logDir = tempDir
+
+		// Obtain the standard test configuration, with the configured
+		// destination directory.
+		cfg := getTestConfig(&sc.logDir, mostlyInline)
+
+		// Switch to the new configuration.
+		TestingResetActive()
+		sc.cleanupFn, err = ApplyConfig(cfg)
+		if err != nil {
+			return err
+		}
+
+		t.Logf("test logs captured to: %s", sc.logDir)
+		return nil
 	}()
-
-	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
-		t.Fatal(err)
-	}
-	// Remember the directory name for the Close() function.
-	sc.logDir = tempDir
-
-	// Obtain the standard test configuration, with the configured
-	// destination directory.
-	cfg := getTestConfig(&sc.logDir, mostlyInline)
-
-	// Switch to the new configuration.
-	TestingResetActive()
-	sc.cleanupFn, err = ApplyConfig(cfg)
-	if err != nil {
+		// If any of the initialization failed, we close the scope. We use the
+		// scope's Close() method as general-purpose finalizer, to avoid writing
+		// a more complex function here.
+		sc.Close(t)
 		t.Fatal(err)
 	}
 
-	t.Logf("test logs captured to: %s", sc.logDir)
 	return sc
 }
 
