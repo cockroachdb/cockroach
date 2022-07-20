@@ -232,6 +232,7 @@ type messageMetadata struct {
 	alloc         kvevent.Alloc
 	updateMetrics recordOneMessageCallback
 	mvcc          hlc.Timestamp
+	retrying      bool
 }
 
 // EmitRow implements the Sink interface.
@@ -243,7 +244,10 @@ func (s *kafkaSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	if s.asapSink != nil {
-		return s.asapSink.EmitRow(ctx, topicDescr, key, value, updated, mvcc, alloc)
+		err := s.asapSink.Flush(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	topic, err := s.topics.Name(topicDescr)
@@ -265,11 +269,6 @@ func (s *kafkaSink) EmitRow(
 func (s *kafkaSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	// TODO: This effectively turns off batching permanently for emitting resolved timestamps,
-	// as a sink that emits resolved timestamps never flushes emitted rows, which is what
-	// triggers the state change that enables batching.
-	// Tentatively, this seems like sensible behavior--if you're batching resolved timestamps,
-	// why not just send them less often? But we should discuss this.
 	if s.asapSink != nil {
 		return s.asapSink.EmitResolvedTimestamp(ctx, encoder, resolved)
 	}
@@ -322,16 +321,16 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *kafkaSink) Flush(ctx context.Context) (e error) {
-	if s.asapSink != nil {
-		err := s.asapSink.Flush(ctx)
-		if err == nil {
-			// After the first successful flush,
-			// permanently switch to the primary sink.
-			_ = s.asapSink.Close()
-			s.asapSink = nil
-		}
+	if err := s.flush(ctx); err != nil {
 		return err
 	}
+	if s.asapSink != nil {
+		return s.asapSink.flush(ctx)
+	}
+	return
+}
+
+func (s *kafkaSink) flush(ctx context.Context) (e error) {
 	defer func() { e = s.maybeMarkFatal(e) }()
 
 	defer s.metrics.recordFlushRequestCallback()()
@@ -395,6 +394,21 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 
 func (s *kafkaSink) workerLoop() {
 	defer s.worker.Done()
+	var children []context.CancelFunc
+	cancelChildren := func() {
+		for _, c := range children {
+			c()
+		}
+	}
+	defer cancelChildren()
+
+	const (
+		success = iota
+		failure
+		retry
+	)
+
+	var state int
 
 	for {
 		var ackMsg *sarama.ProducerMessage
@@ -405,6 +419,7 @@ func (s *kafkaSink) workerLoop() {
 			return
 		case m := <-s.producer.Successes():
 			ackMsg = m
+			state = success
 		case err := <-s.producer.Errors():
 			ackMsg, ackError = err.Msg, err.Err
 			if ackError != nil {
@@ -417,20 +432,34 @@ func (s *kafkaSink) workerLoop() {
 						err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length(), s.stats.String())
 				}
 			}
+			if s.shouldRetryWithoutBatching(ackError) {
+				if m, ok := ackMsg.Metadata.(messageMetadata); ok {
+					m.retrying = true
+					ctx, cancel := context.WithCancel(context.Background())
+					children = append(children, cancel)
+					s.asapSink.emitMessage(ctx, ackMsg)
+				}
+				state = retry
+			} else {
+				state = failure
+			}
 		}
 
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
-			if ackError == nil {
+			if state == success {
 				sz := ackMsg.Key.Length() + ackMsg.Value.Length()
 				s.stats.finishMessage(int64(sz))
 				m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
+				m.alloc.Release(s.ctx)
 			}
-			m.alloc.Release(s.ctx)
+			if state == failure {
+				m.alloc.Release(s.ctx)
+			}
 		}
 
 		s.mu.Lock()
 		s.mu.inflight--
-		if s.mu.flushErr == nil && ackError != nil {
+		if s.mu.flushErr == nil && state == failure {
 			s.mu.flushErr = ackError
 		}
 
@@ -757,6 +786,14 @@ func makeKafkaSink(
 	return primarySink, nil
 }
 
+func (s *kafkaSink) shouldRetryWithoutBatching(err error) bool {
+	if s.batchingDisabled() {
+		return false
+	}
+	var kError sarama.KError
+	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
+}
+
 func (s *kafkaSink) maybeMarkFatal(err error) error {
 	if err == nil {
 		return nil
@@ -782,7 +819,8 @@ func (s *kafkaSink) maybeMarkFatal(err error) error {
 }
 
 func (s *kafkaSink) batchingDisabled() bool {
-	return s.kafkaCfg.Producer.Flush.MaxMessages == 1
+	// kafkaCfg can only be nil in (some) tests
+	return s.kafkaCfg == nil || s.kafkaCfg.Producer.Flush.MaxMessages == 1
 }
 
 type kafkaStats struct {
