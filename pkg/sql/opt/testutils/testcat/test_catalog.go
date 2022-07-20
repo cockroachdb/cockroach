@@ -935,6 +935,9 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
+	// NotVisible is true when this index is a not visible index.
+	NotVisible bool
+
 	Columns []cat.IndexColumn
 
 	// IdxZone is the zone associated with the index. This may be inherited from
@@ -994,6 +997,11 @@ func (ti *Index) IsUnique() bool {
 // IsInverted is part of the cat.Index interface.
 func (ti *Index) IsInverted() bool {
 	return ti.Inverted
+}
+
+// IsNotVisible is part of the cat.Index interface.
+func (ti *Index) IsNotVisible() bool {
+	return ti.NotVisible
 }
 
 // ColumnCount is part of the cat.Index interface.

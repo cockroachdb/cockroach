@@ -491,7 +491,13 @@ message IndexDescriptor {
   optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
-  // Next ID: 28
+  // NotVisible specifies whether the index is not visible to the optimizer.
+  // A not visible index is ignored by the optimizer unless it is used for
+  // constraint check or is explicitly selected with index hinting (force
+  // index). By default, an index should be visible.
+  optional bool not_visible = 28 [(gogoproto.nullable) = false];
+
+  // Next ID: 29
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
