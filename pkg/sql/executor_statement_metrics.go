@@ -197,6 +197,13 @@ func (ex *connExecutor) recordStatementSummary(
 		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 	}
 
+	err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, planner.instrumentation.queryLevelStats)
+	if err != nil {
+		if log.V(2 /* level */) {
+			log.Warningf(ctx, "unable to record statement exec stats: %s", err)
+		}
+	}
+
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 

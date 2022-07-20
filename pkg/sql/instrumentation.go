@@ -99,12 +99,15 @@ type instrumentationHelper struct {
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 	withStatementTrace      func(trace tracingpb.Recording, stmt string)
 
-	sp *tracing.Span
+	sp    *tracing.Span
+	trace tracingpb.Recording
 	// shouldFinishSpan determines whether sp needs to be finished in
 	// instrumentationHelper.Finish.
 	shouldFinishSpan bool
 	origCtx          context.Context
 	evalCtx          *eval.Context
+
+	queryLevelStats execstats.QueryLevelStats
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -260,11 +263,10 @@ func (ih *instrumentationHelper) Finish(
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
-	var trace tracingpb.Recording
+	trace := ih.trace
+	queryLevelStats := ih.queryLevelStats
 	if ih.shouldFinishSpan {
-		trace = ih.sp.FinishAndGetConfiguredRecording()
-	} else {
-		trace = ih.sp.GetConfiguredRecording()
+		ih.sp.Finish()
 	}
 
 	if ih.withStatementTrace != nil {
@@ -280,35 +282,8 @@ func (ih *instrumentationHelper) Finish(
 		)
 	}
 
-	// Get the query-level stats.
-	var flowsMetadata []*execstats.FlowsMetadata
-	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
-	}
-	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
-	if err != nil {
-		const msg = "error getting query level stats for statement: %s: %+v"
-		if buildutil.CrdbTestBuild {
-			panic(fmt.Sprintf(msg, ih.fingerprint, err))
-		}
-		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
-	} else {
-		stmtStatsKey := roachpb.StatementStatisticsKey{
-			Query:       ih.fingerprint,
-			ImplicitTxn: ih.implicitTxn,
-			Database:    p.SessionData().Database,
-			Failed:      retErr != nil,
-			PlanHash:    ih.planGist.Hash(),
-		}
-		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
-		if err != nil {
-			if log.V(2 /* level */) {
-				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
-			}
-		}
-		if collectExecStats || ih.implicitTxn {
-			txnStats.Accumulate(queryLevelStats)
-		}
+	if collectExecStats || ih.implicitTxn {
+		txnStats.Accumulate(queryLevelStats)
 	}
 
 	var bundle diagnosticsBundle
