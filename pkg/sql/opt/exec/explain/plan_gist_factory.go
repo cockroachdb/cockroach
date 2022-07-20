@@ -493,7 +493,7 @@ func (u *unknownTable) DeletableIndexCount() int {
 }
 
 func (u *unknownTable) Index(i cat.IndexOrdinal) cat.Index {
-	panic(errors.AssertionFailedf("not implemented"))
+	return &unknownIndex{}
 }
 
 func (u *unknownTable) StatisticCount() int {
