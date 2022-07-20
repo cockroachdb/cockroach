@@ -1512,6 +1512,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *FunctionPrivate:
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
+	case *UserDefinedFunctionPrivate:
+		fmt.Fprintf(f.Buffer, " %s", t.Name)
+
 	case *WindowsItemPrivate:
 		fmt.Fprintf(f.Buffer, " frame=%q", &t.Frame)
 
