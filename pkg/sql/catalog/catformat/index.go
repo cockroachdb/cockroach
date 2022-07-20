@@ -175,6 +175,11 @@ func indexForDisplay(
 		}
 	}
 
+	// TODO(wenyihu6): add test cases for SHOW CREATE TABLE once not visible indexes can be added.
+	if index.NotVisible {
+		f.WriteString(" NOT VISIBLE")
+	}
+
 	return f.CloseAndGetString(), nil
 }
 

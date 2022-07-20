@@ -102,6 +102,11 @@ func (w index) IsSharded() bool {
 	return w.desc.IsSharded()
 }
 
+// IsNotVisible returns true iff the index is not visible.
+func (w index) IsNotVisible() bool {
+	return w.desc.NotVisible
+}
+
 // IsCreatedExplicitly returns true iff this index was created explicitly, i.e.
 // via 'CREATE INDEX' statement.
 func (w index) IsCreatedExplicitly() bool {
