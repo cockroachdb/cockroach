@@ -214,6 +214,8 @@ message Index {
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
+  // IsNotVisible specifies whether this index is not visible.
+  bool is_not_visible = 23;
   reserved 3, 4, 5, 6, 7;
 }
 

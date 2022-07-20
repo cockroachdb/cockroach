@@ -175,6 +175,10 @@ func indexForDisplay(
 		}
 	}
 
+	if index.NotVisible {
+		f.WriteString(" NOT VISIBLE")
+	}
+
 	return f.CloseAndGetString(), nil
 }
 
