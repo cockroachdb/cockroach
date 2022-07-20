@@ -140,11 +140,12 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	sc.previous.exitOverrideHideStack = logging.mu.exitOverride.hideStack
 	logging.mu.Unlock()
 
+	alreadyFailed := t.Failed()
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
 		// We use the scope's Close() method as general-purpose finalizer,
 		// to avoid writing a complex defer function here.
-		if t.Failed() {
+		if t.Failed() && !alreadyFailed {
 			sc.Close(t)
 		}
 	}()
