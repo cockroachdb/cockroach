@@ -17,8 +17,17 @@ describe("health check", () => {
       url: "/",
       failOnStatusCode: true,
     });
-    cy.findByText("Log in to the DB Console").should("exist");
-    cy.findByPlaceholderText("Username").should("exist");
-    cy.findByPlaceholderText("Password").should("exist");
+    cy.findByText("Log in to the DB Console");
+    cy.findByPlaceholderText("Username");
+    cy.findByPlaceholderText("Password");
   });
+
+  it("includes the word 'banana' on the login screen", () => {
+    cy.visit({
+      url: "/",
+      failOnStatusCode: true,
+    });
+
+    cy.findByText("Banana");
+  })
 })
