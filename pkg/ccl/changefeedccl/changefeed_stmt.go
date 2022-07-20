@@ -379,7 +379,7 @@ func createChangefeedJobRecord(
 
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
-		normalized, err := validateAndNormalizeChangefeedExpression(
+		normalized, _, err := validateAndNormalizeChangefeedExpression(
 			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(),
 		)
 		if err != nil {
@@ -831,9 +831,9 @@ func validateAndNormalizeChangefeedExpression(
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 	targets []jobspb.ChangefeedTargetSpecification,
 	includeVirtual bool,
-) (n cdceval.NormalizedSelectClause, _ error) {
+) (n cdceval.NormalizedSelectClause, target jobspb.ChangefeedTargetSpecification, _ error) {
 	if len(descriptors) != 1 || len(targets) != 1 {
-		return n, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
+		return n, target, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
 	}
 	var tableDescr catalog.TableDescriptor
 	for _, d := range descriptors {

@@ -46,10 +46,12 @@ func TestNormalizeAndValidate(t *testing.T) {
 		`CREATE TABLE foo (a INT PRIMARY KEY, status status, alt alt.status)`,
 		`CREATE DATABASE other`,
 		`CREATE TABLE other.foo (a INT)`,
+		`CREATE TABLE baz (a INT PRIMARY KEY, b INT, c STRING, FAMILY most (a, b), FAMILY only_c (c))`,
 	)
 
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	otherFooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "other", "foo")
+	bazDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "baz")
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -89,6 +91,18 @@ func TestNormalizeAndValidate(t *testing.T) {
 			expectErr: `use of user defined types not referenced by target table is not supported`,
 		},
 		{
+			name:      "reject multiple column families",
+			desc:      bazDesc,
+			stmt:      "SELECT a, b, c FROM baz",
+			expectErr: `projections and filter cannot be used when running against multifamily table`,
+		},
+		{
+			name:      "reject multiple column families with star",
+			desc:      bazDesc,
+			stmt:      "SELECT * FROM baz",
+			expectErr: `projections and filter cannot be used when running against multifamily table`,
+		},
+		{
 			name:       "replaces table name with ref",
 			desc:       fooDesc,
 			stmt:       "SELECT * FROM foo",
@@ -123,6 +137,12 @@ func TestNormalizeAndValidate(t *testing.T) {
 				"SELECT 'cast'::STRING, 'type_annotation':::STRING FROM [%d AS bar]",
 				fooDesc.GetID()),
 		},
+		{
+			name:       "can target one column family",
+			desc:       bazDesc,
+			stmt:       "SELECT a, b FROM baz",
+			expectStmt: fmt.Sprintf("SELECT a, b FROM [%d AS baz]", bazDesc.GetID()),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sc, err := ParseChangefeedExpression(tc.stmt)
@@ -132,7 +152,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				StatementTimeName: tc.desc.GetName(),
 			}
 
-			_, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			_, _, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 				return
@@ -236,7 +256,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 				TableID:           tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 			}
-			normalized, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			normalized, _, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
 			require.NoError(t, err)
 			actual, err := SelectClauseRequiresPrev(*execCtx.SemaCtx(), normalized)
 			require.NoError(t, err)
