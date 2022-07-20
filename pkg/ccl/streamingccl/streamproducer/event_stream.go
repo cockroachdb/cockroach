@@ -250,11 +250,14 @@ func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) erro
 	}
 }
 
-func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+func (s *eventStream) onSSTable(
+	ctx context.Context, sst *roachpb.RangeFeedSSTable, registeredSpan roachpb.Span,
+) {
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{SST: sst}:
-		log.VInfof(ctx, 1, "onSSTable: %s@%s", sst.Span, sst.WriteTS)
+		log.VInfof(ctx, 1, "onSSTable: %s@%s with registered span %s",
+			sst.Span, sst.WriteTS, registeredSpan)
 	}
 }
 
