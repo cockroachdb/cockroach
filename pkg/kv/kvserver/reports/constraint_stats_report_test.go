@@ -261,6 +261,145 @@ func TestConformanceReport(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "voter constraints violations",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						// The database has a zone requesting everything to be on SSDs.
+						zone: &zone{
+							voters: 2,
+							// The first conjunction will be satisfied; the second won't.
+							constraints:      `{"+region=us,+dc=dc1":1,"+region=us,+dc=dc2":1}`,
+							voterConstraints: `{"+region=us,+dc=dc2":1}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2"},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc3", stores: []store{{id: 2}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc1:1",
+					constraintType: Constraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: VoterConstraint,
+					numRanges:      1,
+				},
+			},
+		},
+		{
+			name: "learner constraint",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{voters: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						zone: &zone{
+							// We have learners in both of those stores, but they should
+							// be ignored for the sake of inclusion, but accounted for
+							// for the sake of exclusion
+							constraints: `{"-dc=dc1","+dc=dc5"}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1l 2 3 4 5l"},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc2", stores: []store{{id: 2}}},
+					{id: 3, locality: "region=us,dc=dc3", stores: []store{{id: 3}}},
+					{id: 4, locality: "region=us,dc=dc4", stores: []store{{id: 4}}},
+					{id: 5, locality: "region=us,dc=dc5", stores: []store{{id: 5}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "-dc=dc1",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+				{
+					object:         "db1",
+					constraint:     "+dc=dc5",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+			},
+		},
+		{
+			name: "quorum constraints",
+			baseReportTestCase: baseReportTestCase{
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						zone: &zone{
+							voters:           3,
+							constraints:      `{"+region=us":3}`,
+							voterConstraints: `{"+dc=dc1":1,"+dc=dc2":1,"+dc=dc3":1}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3o 4i"},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc2", stores: []store{{id: 2}}},
+					{id: 3, locality: "region=us,dc=dc3", stores: []store{{id: 3}}},
+					{id: 4, locality: "region=us,dc=dc3", stores: []store{{id: 4}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "+region=us:3",
+					constraintType: Constraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+dc=dc1:1",
+					constraintType: VoterConstraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+dc=dc2:1",
+					constraintType: VoterConstraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+dc=dc3:1",
+					constraintType: VoterConstraint,
+					numRanges:      0,
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -304,7 +443,10 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 			ConstraintStatus:    v,
 		}
 	}
-	require.Equal(t, expRows, gotRows)
+	sort.Slice(expRows, func(i, j int) bool {
+		return expRows[i].ConstraintStatusKey.Less(expRows[j].ConstraintStatusKey)
+	})
+	require.EqualValues(t, expRows, gotRows)
 }
 
 type zone struct {
@@ -316,6 +458,8 @@ type zone struct {
 	nonVoters int32
 	// "" means unset. "[]" means empty.
 	constraints string
+	// "" means unset. "[]" means empty.
+	voterConstraints string
 }
 
 func (z zone) toZoneConfig() zonepb.ZoneConfig {
@@ -330,6 +474,14 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 			panic(err)
 		}
 		cfg.Constraints = constraintsList.Constraints
+		cfg.InheritedConstraints = false
+	}
+	if z.voterConstraints != "" {
+		var constraintsList zonepb.ConstraintsList
+		if err := yaml.UnmarshalStrict([]byte(z.voterConstraints), &constraintsList); err != nil {
+			panic(err)
+		}
+		cfg.VoterConstraints = constraintsList.Constraints
 		cfg.InheritedConstraints = false
 	}
 	return *cfg
@@ -845,20 +997,14 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
 	}
 	allLocalities := expandLocalities(nodeLocalities)
-	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		replicas := r.Replicas().FilterToDescriptors(func(_ roachpb.ReplicaDescriptor) bool {
-			return true
-		})
-		stores := make([]roachpb.StoreDescriptor, len(replicas))
-		for i, rep := range replicas {
-			for _, desc := range allStores {
-				if rep.StoreID == desc.StoreID {
-					stores[i] = desc
-					break
-				}
+	storeResolver := func(id roachpb.StoreID) (desc roachpb.StoreDescriptor) {
+		for _, s := range allStores {
+			if id == s.StoreID {
+				desc = s
+				break
 			}
 		}
-		return stores
+		return desc
 	}
 	nodeChecker := func(nodeID roachpb.NodeID) bool {
 		for _, n := range tc.nodes {
