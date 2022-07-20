@@ -3357,6 +3357,103 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *Schema) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.CurrentPage != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CurrentPage\":"...)
+		b = strconv.AppendUint(b, uint64(m.CurrentPage), 10)
+	}
+
+	if m.NumPages != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumPages\":"...)
+		b = strconv.AppendUint(b, uint64(m.NumPages), 10)
+	}
+
+	if m.ParentDatabaseId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ParentDatabaseId\":"...)
+		b = strconv.AppendUint(b, uint64(m.ParentDatabaseId), 10)
+	}
+
+	if m.ParentSchemaId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ParentSchemaId\":"...)
+		b = strconv.AppendUint(b, uint64(m.ParentSchemaId), 10)
+	}
+
+	if m.Name != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Name\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Name)))
+		b = append(b, '"')
+	}
+
+	if m.Id != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Id\":"...)
+		b = strconv.AppendUint(b, uint64(m.Id), 10)
+	}
+
+	if m.Desc != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		if v, err := serializeAny(m.Desc); err != nil {
+			b = append(b, "\"Error\":\""...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), err.Error()))
+			b = append(b, '"')
+		} else {
+			b = append(b, "\"Desc\":"...)
+			b = append(b, v...)
+		}
+	}
+
+	if len(m.Errors) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Errors\":["...)
+		for i, v := range m.Errors {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = append(b, redact.StartMarker()...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
+			b = append(b, redact.EndMarker()...)
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SensitiveTableAccess) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
