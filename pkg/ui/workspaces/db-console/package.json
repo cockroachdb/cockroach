@@ -23,6 +23,7 @@
     "@cockroachlabs/crdb-protobuf-client": "link:./src/js",
     "@cockroachlabs/crdb-protobuf-client-ccl": "link:./ccl/src/js",
     "@cockroachlabs/design-tokens": "0.4.5",
+    "@cockroachlabs/eslint-plugin-crdb": "link:../eslint-plugin-crdb",
     "@cockroachlabs/icons": "0.5.2",
     "@cockroachlabs/ui-components": "0.2.20",
     "analytics-node": "^3.5.0",
