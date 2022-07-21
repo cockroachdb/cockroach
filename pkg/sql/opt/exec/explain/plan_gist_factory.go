@@ -36,10 +36,14 @@ import (
 
 func init() {
 	if numOperators != 58 {
-		// If this error occurs please make sure the new op is the last one in order
-		// to not invalidate existing plan gists/hashes. If we are just adding an
-		// operator at the end there's no need to update version below and we can
-		// just bump the hardcoded literal here.
+		// This error occurs when an operator has been added or removed in
+		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
+		// end of factory.opt, simply adjust the hardcoded value above. If an
+		// operator is removed or added anywhere else in factory.opt, increment
+		// gistVersion below. Note that we currently do not have a mechanism for
+		// decoding gists of older versions. This means that if gistVersion is
+		// incremented in a release, upgrading a cluster to that release will
+		// cause decoding errors for any previously generated plan gists.
 		panic(errors.AssertionFailedf("Operator field changed (%d), please update check and consider incrementing version", numOperators))
 	}
 }
