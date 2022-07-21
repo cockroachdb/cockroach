@@ -100,7 +100,9 @@ func (s *Storage) CreateInstance(
 			log.Warningf(ctx, "failed to encode row for instance id %d: %v", instanceID, err)
 			return err
 		}
-		return txn.Put(ctx, row.Key, row.Value)
+		b := txn.NewBatch()
+		b.Put(row.Key, row.Value)
+		return txn.CommitInBatch(ctx, b)
 	})
 
 	if err != nil {
