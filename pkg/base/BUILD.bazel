@@ -12,6 +12,7 @@ go_library(
         "license.go",
         "node_id.go",
         "store_spec.go",
+        "test_cluster_replication_mode.go",
         "test_server_args.go",
         "testing_knobs.go",
         "zone.go",
@@ -71,7 +72,7 @@ go_test(
 
 stringer(
     name = "gen-clusterreplication-stringer",
-    src = "test_server_args.go",
+    src = "test_cluster_replication_mode.go",
     typ = "TestClusterReplicationMode",
 )
 

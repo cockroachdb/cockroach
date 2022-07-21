@@ -35,11 +35,17 @@ func init() {
 func TestAnalyzer(t *testing.T) {
 	skip.UnderStress(t)
 
+	// The test fails unless RunDespiteErrors is set to true.
+	// This is not fully understood, something to do with missing metadata
+	// for the "C" pseudo-package.
+	// See comments on #84867 and https://github.com/golang/go/issues/36547.
+	testAnalyzer := *loopvarcapture.Analyzer
+	testAnalyzer.RunDespiteErrors = true
 	originalGoRoutineFunctions := loopvarcapture.GoRoutineFunctions
 	loopvarcapture.GoRoutineFunctions = append(originalGoRoutineFunctions, extraGoRoutineFunctions...)
 	defer func() { loopvarcapture.GoRoutineFunctions = originalGoRoutineFunctions }()
 
 	testdata := testutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
-	analysistest.Run(t, testdata, loopvarcapture.Analyzer, "p")
+	analysistest.Run(t, testdata, &testAnalyzer, "p")
 }
