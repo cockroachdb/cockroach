@@ -259,6 +259,7 @@ SHOW GRANTS ON TABLE t13
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t13         admin     ALL             true
 test           public       t13         root      ALL             true
+test           public       t13         testuser  ALL             true
 
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t13 TO testuser
@@ -299,6 +300,7 @@ SHOW GRANTS ON TABLE t14;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t14         admin      ALL             true
 test           public       t14         root       ALL             true
+test           public       t14         testuser   ALL             true
 test           public       t14         testuser2  INSERT          true
 test           public       t14         testuser2  SELECT          false
 

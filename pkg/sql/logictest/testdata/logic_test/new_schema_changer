@@ -1944,7 +1944,7 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 19 elements transitioning toward ABSENT
+      │    ├── 18 elements transitioning toward ABSENT
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 265, ColumnID: 2, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 265, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
@@ -1952,7 +1952,6 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
       │    │    ├── PUBLIC     → ABSENT      Owner:{DescID: 266}
       │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: admin}
       │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: root}
-      │    │    ├── PUBLIC     → ABSENT      UserPrivileges:{DescID: 266, Name: testuser}
       │    │    ├── OFFLINE    → DROPPED     View:{DescID: 266}
       │    │    ├── PUBLIC     → ABSENT      ObjectParent:{DescID: 266, ReferencedDescID: 105}
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 266, ColumnID: 1}
@@ -1994,6 +1993,7 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":266}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
 
 statement ok
 SET use_declarative_schema_changer = 'on'
