@@ -23,6 +23,7 @@ package colexec
 
 import (
 	"context"
+	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -140,7 +141,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) reset() {
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
@@ -157,7 +158,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
