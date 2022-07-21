@@ -341,7 +341,6 @@ func checkEqualIntervals(t *testing.T, actual, expected items) {
 	for i := 0; i < len(actual)-1; i++ {
 		if actual[i].Range().Start.Compare(actual[i+1].Range().Start) > 0 {
 			t.Fatalf("interval slice is not sorted: %v", actual)
-			break
 		}
 	}
 	itemsLen := len(expected)
