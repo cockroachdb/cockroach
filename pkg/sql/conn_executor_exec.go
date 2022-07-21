@@ -279,9 +279,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
-	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = contextutil.WithCancel(ctx)
-
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
@@ -327,10 +324,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.planner.EvalContext().Placeholders = pinfo
 	}
 
+	var cancelQuery context.CancelFunc
+	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, cancelQuery)
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
-	}
 
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
@@ -344,6 +340,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 		ex.removeActiveQuery(queryID, ast)
+		cancelQuery()
 		if ex.executorType != executorTypeInternal {
 			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		}
@@ -385,6 +382,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		}
 	}(ctx, res)
+
+	if ex.executorType != executorTypeInternal {
+		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	}
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -505,7 +506,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		timeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
-				ex.cancelQuery(queryID)
+				cancelQuery()
 				queryTimedOut = true
 				doneAfterFunc <- struct{}{}
 			})
