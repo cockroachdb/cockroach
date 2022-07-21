@@ -8870,6 +8870,156 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 	})
 }
 
+// BenchmarkMVCCGCWithForegroundTraffic benchmarks performing GC of a key
+// concurrently with reads on that key.
+func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, b, stopper)
+
+	key := roachpb.Key("test")
+	now := func() hlc.Timestamp { return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()} }
+
+	// send sends the Request with a present-time batch timestamp.
+	send := func(args roachpb.Request) *roachpb.BatchResponse {
+		var header roachpb.Header
+		header.Timestamp = now()
+		ba := roachpb.BatchRequest{}
+		ba.Header = header
+		ba.Add(args)
+		resp, err := tc.Sender().Send(ctx, ba)
+		require.Nil(b, err)
+		return resp
+	}
+
+	// gc issues a GC request to garbage collect `key` at `timestamp` with a
+	// present-time batch header timestamp.
+	gc := func(key roachpb.Key, timestamp hlc.Timestamp) {
+		// Note that we're not bumping the GC threshold, just GC'ing the keys.
+		gcReq := gcArgs(key, key.Next(), gcKey(key, timestamp))
+		send(&gcReq)
+	}
+
+	// read issues a present time read over `key`.
+	read := func() {
+		send(scanArgs(key, key.Next()))
+	}
+
+	// put issues a present time put over `key`.
+	put := func(key roachpb.Key) (writeTS hlc.Timestamp) {
+		putReq := putArgs(key, []byte("00"))
+		resp := send(&putReq)
+		return resp.Timestamp
+	}
+
+	// Issue no-op GC requests every 10 microseconds while reads are being
+	// benchmarked.
+	b.Run("noop gc with reads", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for {
+				gc(key, now()) // NB: These are no-op GC requests.
+				time.Sleep(10 * time.Microsecond)
+
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+
+		go func() {
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+			wg.Done()
+		}()
+		wg.Wait()
+	})
+
+	// Write and GC the same key indefinitely while benchmarking read performance.
+	b.Run("gc with reads and writes", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+		lastWriteTS := put(key)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for {
+				// Write a new version and immediately GC the previous version.
+				writeTS := put(key)
+				gc(key, lastWriteTS)
+				lastWriteTS = writeTS
+
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+		}()
+		wg.Wait()
+	})
+
+	// Write a bunch of versions of a key. Then, GC them while concurrently
+	// reading those keys.
+	b.Run("gc with reads", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+
+		writeTimestamps := make([]hlc.Timestamp, 0, b.N)
+		for i := 0; i < b.N; i++ {
+			writeTimestamps = append(writeTimestamps, put(key))
+		}
+		put(key)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for _, ts := range writeTimestamps {
+				gc(key, ts)
+
+				// Stop GC-ing once the reads are done and we're shutting down.
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+		}()
+		wg.Wait()
+	})
+}
+
 func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
