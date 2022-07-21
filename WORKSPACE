@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.18.4.darwin-amd64.tar.gz", "315e1a2b21a827c68da1b7f492b5dcbe81d8df8a79ebe50922df9588893f87f0"),
+        "darwin_amd64": ("go1.18.4.darwin-amd64.tar.gz", "5202f77d94b1bf1ff9ffdae2a663e4cda123d6f9a3851340291ae741e25672f9"),
         "darwin_arm64": ("go1.18.4.darwin-arm64.tar.gz", "04eed623d5143ffa44965b618b509e0beccccfd3a4a1bfebc0cdbcf906046769"),
         "freebsd_amd64": ("go1.18.4.freebsd-amd64.tar.gz", "fb00f8aaffcc80e0a2bd39db1d8e8e21ef0a691c564f7b7601383dd6adad4042"),
-        "linux_amd64": ("go1.18.4.linux-amd64.tar.gz", "c9b099b68d93f5c5c8a8844a89f8db07eaa58270e3a1e01804f17f4cf8df02f5"),
-        "linux_arm64": ("go1.18.4.linux-arm64.tar.gz", "35014d92b50d97da41dade965df7ebeb9a715da600206aa59ce1b2d05527421f"),
-        "windows_amd64": ("go1.18.4.windows-amd64.zip", "dfb93c517e050ba0cfc066802b38a8e7cda2ef666efd634859356b33f543cc49"),
+        "linux_amd64": ("go1.18.4.linux-amd64.tar.gz", "87fdb4133707d90c1e8f303348302f2db61dc4f2478bcfcdf7c7de26ae14188b"),
+        "linux_arm64": ("go1.18.4.linux-arm64.tar.gz", "19a7c55563e9c09c916f5ddd350779ceeaba7178070b716f623f736780fae09e"),
+        "windows_amd64": ("go1.18.4.windows-amd64.tar.gz", "65cf73c972ab1a1d9b29eaa0d791f557677085c57e7f8901072ad9df13885501"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20220727-185937/{}"],
     version = "1.18.4",
 )
 
