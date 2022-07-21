@@ -26,8 +26,6 @@ DROP OWNED BY r
   {descriptorId: 105, owner: r}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 105, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: 2, userName: root}
 - [[Schema:{DescID: 105}, ABSENT], PUBLIC]
@@ -42,8 +40,6 @@ DROP OWNED BY r
   {descriptorId: 106, owner: r}
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 106, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 106, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 106, privileges: 2, userName: root}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
@@ -56,8 +52,6 @@ DROP OWNED BY r
   {descriptorId: 109, owner: r}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 109, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 109, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 109, privileges: 2, userName: root}
 - [[Table:{DescID: 109}, ABSENT], PUBLIC]
@@ -114,8 +108,6 @@ DROP OWNED BY r
   {descriptorId: 107, owner: r}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 107, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 107, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 107, privileges: 2, userName: root}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
@@ -128,8 +120,6 @@ DROP OWNED BY r
   {descriptorId: 108, owner: r}
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 108, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 108, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 108, privileges: 2, userName: root}
 - [[Table:{DescID: 108}, ABSENT], PUBLIC]
@@ -186,8 +176,6 @@ DROP OWNED BY r
   {descriptorId: 110, owner: r}
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 110, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 110, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 110, privileges: 2, userName: root}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
@@ -220,8 +208,6 @@ DROP OWNED BY r
   {descriptorId: 111, privileges: 2, userName: admin}
 - [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 111, privileges: 512, userName: public}
-- [[UserPrivileges:{DescID: 111, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 111, privileges: 2, userName: root}
 - [[EnumType:{DescID: 111}, ABSENT], PUBLIC]
@@ -238,8 +224,6 @@ DROP OWNED BY r
   {descriptorId: 112, privileges: 2, userName: admin}
 - [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: 512, userName: public}
-- [[UserPrivileges:{DescID: 112, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: 2, userName: root}
 - [[AliasType:{DescID: 112}, ABSENT], PUBLIC]
@@ -252,8 +236,6 @@ DROP OWNED BY r
   {descriptorId: 113, owner: r}
 - [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 113, privileges: 2, userName: admin}
-- [[UserPrivileges:{DescID: 113, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: 2, userName: r}
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 113, privileges: 2, userName: root}
 - [[View:{DescID: 113}, ABSENT], PUBLIC]

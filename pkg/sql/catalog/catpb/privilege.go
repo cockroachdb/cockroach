@@ -214,6 +214,9 @@ func NewPublicSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
 func (p *PrivilegeDescriptor) CheckGrantOptions(
 	user username.SQLUsername, privList privilege.List,
 ) bool {
+	if p.Owner() == user {
+		return true
+	}
 	userPriv, exists := p.FindUser(user)
 	if !exists {
 		return false
@@ -462,10 +465,26 @@ type UserPrivilege struct {
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilege {
+// The owner always implicitly receives ALL privileges with the GRANT OPTION. If
+// showImplicitOwnerPrivs is true, then that implicit privilege is shown here.
+// Otherwise, only the privileges that were explicitly granted to the owner are
+// shown.
+func (p PrivilegeDescriptor) Show(
+	objectType privilege.ObjectType, showImplicitOwnerPrivs bool,
+) []UserPrivilege {
 	ret := make([]UserPrivilege, 0, len(p.Users))
+	sawOwner := false
 	for _, userPriv := range p.Users {
-		privileges := privilege.PrivilegesFromBitFields(userPriv.Privileges, userPriv.WithGrantOption, objectType)
+		privBits := userPriv.Privileges
+		grantOptionBits := userPriv.WithGrantOption
+		if userPriv.User() == p.Owner() {
+			sawOwner = true
+			if showImplicitOwnerPrivs {
+				privBits = privilege.ALL.Mask()
+				grantOptionBits = privilege.ALL.Mask()
+			}
+		}
+		privileges := privilege.PrivilegesFromBitFields(privBits, grantOptionBits, objectType)
 		sort.Slice(privileges, func(i, j int) bool {
 			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0
 		})
@@ -474,11 +493,22 @@ func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivile
 			Privileges: privileges,
 		})
 	}
+	// The node user owns system tables, but since it's just an internal reserved
+	// name, we don't show node's privileges here.
+	if showImplicitOwnerPrivs && !sawOwner && !p.Owner().IsNodeUser() {
+		ret = append(ret, UserPrivilege{
+			User:       p.Owner(),
+			Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}},
+		})
+	}
 	return ret
 }
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
 func (p PrivilegeDescriptor) CheckPrivilege(user username.SQLUsername, priv privilege.Kind) bool {
+	if p.Owner() == user {
+		return true
+	}
 	userPriv, ok := p.FindUser(user)
 	if !ok {
 		// User "node" has all privileges.

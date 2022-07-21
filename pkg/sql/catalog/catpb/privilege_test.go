@@ -160,7 +160,7 @@ func TestPrivilege(t *testing.T) {
 				descriptor.Revoke(tc.grantee, tc.revoke, tc.objectType, false)
 			}
 		}
-		show := descriptor.Show(tc.objectType)
+		show := descriptor.Show(tc.objectType, true /* showImplicitOwnerPrivs */)
 		if len(show) != len(tc.show) {
 			t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
 				tcNum, descriptor, show, tc.show)

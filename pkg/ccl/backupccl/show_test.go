@@ -413,19 +413,33 @@ GRANT UPDATE ON top_secret TO agent_bond;
 		sqlDB.Exec(t, `BACKUP DATABASE mi5 TO $1;`, showPrivs)
 
 		want := [][]string{
-			{`mi5`, `database`, `GRANT ALL ON DATABASE mi5 TO admin; GRANT ALL ON DATABASE mi5 TO agents; GRANT CONNECT ON DATABASE mi5 TO public; GRANT ALL ON DATABASE mi5 TO root; `, `root`},
-			{`public`, `schema`, `GRANT ALL ON SCHEMA public TO admin; GRANT CREATE, USAGE ON SCHEMA public TO public; GRANT ALL ON SCHEMA public TO root; `, `admin`},
-			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin; GRANT CREATE ON SCHEMA locator TO agent_bond; GRANT ALL ON SCHEMA locator TO m; ` +
-				`GRANT ALL ON SCHEMA locator TO root; `, `root`},
-			{`continent`, `type`, `GRANT ALL ON TYPE continent TO admin; GRANT ALL ON TYPE continent TO m; GRANT USAGE ON TYPE continent TO public; GRANT ALL ON TYPE continent TO root; `, `root`},
-			{`_continent`, `type`, `GRANT ALL ON TYPE _continent TO admin; GRANT USAGE ON TYPE _continent TO public; GRANT ALL ON TYPE _continent TO root; `, `root`},
-			{`agent_locations`, `table`, `GRANT ALL ON TABLE agent_locations TO admin; ` +
-				`GRANT SELECT ON TABLE agent_locations TO agent_bond; GRANT UPDATE ON TABLE agent_locations TO agents; ` +
-				`GRANT ALL ON TABLE agent_locations TO m; GRANT ALL ON TABLE agent_locations TO root; `,
-				`root`},
-			{`top_secret`, `table`, `GRANT ALL ON TABLE top_secret TO admin; ` +
-				`GRANT SELECT, UPDATE ON TABLE top_secret TO agent_bond; GRANT INSERT ON TABLE top_secret TO agents; ` +
-				`GRANT ALL ON TABLE top_secret TO m; GRANT ALL ON TABLE top_secret TO root; `, `root`},
+			{`mi5`, `database`, `GRANT ALL ON DATABASE mi5 TO admin WITH GRANT OPTION; ` +
+				`GRANT ALL ON DATABASE mi5 TO agents; ` +
+				`GRANT CONNECT ON DATABASE mi5 TO public; ` +
+				`GRANT ALL ON DATABASE mi5 TO root WITH GRANT OPTION; `, `root`},
+			{`public`, `schema`, `GRANT ALL ON SCHEMA public TO admin WITH GRANT OPTION; ` +
+				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +
+				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `admin`},
+			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin WITH GRANT OPTION; ` +
+				`GRANT CREATE ON SCHEMA locator TO agent_bond; ` +
+				`GRANT ALL ON SCHEMA locator TO m; ` +
+				`GRANT ALL ON SCHEMA locator TO root WITH GRANT OPTION; `, `root`},
+			{`continent`, `type`, `GRANT ALL ON TYPE continent TO admin WITH GRANT OPTION; ` +
+				`GRANT ALL ON TYPE continent TO m; ` +
+				`GRANT USAGE ON TYPE continent TO public; ` +
+				`GRANT ALL ON TYPE continent TO root WITH GRANT OPTION; `, `root`},
+			{`_continent`, `type`, `GRANT ALL ON TYPE _continent TO admin WITH GRANT OPTION; ` +
+				`GRANT USAGE ON TYPE _continent TO public; ` +
+				`GRANT ALL ON TYPE _continent TO root WITH GRANT OPTION; `, `root`},
+			{`agent_locations`, `table`, `GRANT ALL ON TABLE agent_locations TO admin WITH GRANT OPTION; ` +
+				`GRANT SELECT ON TABLE agent_locations TO agent_bond; ` +
+				`GRANT UPDATE ON TABLE agent_locations TO agents; ` +
+				`GRANT ALL ON TABLE agent_locations TO m; ` +
+				`GRANT ALL ON TABLE agent_locations TO root WITH GRANT OPTION; `, `root`},
+			{`top_secret`, `table`, `GRANT ALL ON TABLE top_secret TO admin WITH GRANT OPTION; ` +
+				`GRANT SELECT, UPDATE ON TABLE top_secret TO agent_bond; ` +
+				`GRANT INSERT ON TABLE top_secret TO agents; GRANT ALL ON TABLE top_secret TO m; ` +
+				`GRANT ALL ON TABLE top_secret TO root WITH GRANT OPTION; `, `root`},
 		}
 
 		showQuery := fmt.Sprintf(`SELECT object_name, object_type, privileges, owner FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs)

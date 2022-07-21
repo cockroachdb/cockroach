@@ -371,10 +371,9 @@ func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 			nonSystemDatabaseID, creatorUser, targetObject, &catpb.PrivilegeDescriptor{},
 		)
 
-		// There are no preset privileges on a default privilege descriptor defined
-		// for a schema.
-		if newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
-			t.Errorf("creator should not have ALL privileges on %s", targetObject)
+		// The owner always has ALL privileges.
+		if !newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
+			t.Errorf("expected creator to have ALL privileges on %s", targetObject)
 		}
 
 		if targetObject == privilege.Types {
