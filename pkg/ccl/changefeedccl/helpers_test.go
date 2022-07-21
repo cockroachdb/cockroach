@@ -561,7 +561,7 @@ func newTestOptions() feedTestOptions {
 	// percentTenant is the percentage of tests that will be run against
 	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
 	// tenant.
-	const percentTenant = 1
+	const percentTenant = 0.5
 	return feedTestOptions{
 		useTenant: rand.Float32() < percentTenant,
 	}
