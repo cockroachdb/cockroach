@@ -117,16 +117,23 @@ module.exports = {
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
 
   // A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
-  moduleNameMapper: Object.assign(
-    {},
-    pathsToModuleNameMapper(compilerOptions.paths, { prefix: "<rootDir>/" }),
-    {
-      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
-        "<rootDir>/src/test-utils/file.mock.js",
-      "\\.(css|scss|less|styl)$": "identity-obj-proxy",
-      "^react($|/.+)": "<rootDir>/node_modules/react$1",
-    },
-  ),
+  moduleNameMapper: (function(){
+    const map = Object.assign(
+      {},
+      pathsToModuleNameMapper(
+        Object.fromEntries(
+          Object.entries(compilerOptions.paths).filter(([name, _paths]) => !name.includes("@cockroachlabs"))
+        ), { prefix: "<rootDir>/" }),
+      {
+        "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
+          "<rootDir>/src/test-utils/file.mock.js",
+        "\\.(css|scss|less|styl)$": "identity-obj-proxy",
+        "^react($|/.+)": "<rootDir>/node_modules/react$1",
+      },
+    );
+    console.log(map);
+    return map;
+  })(),
 
   // An alternative API to setting the NODE_PATH env variable, modulePaths is an array of absolute paths to additional locations to search when resolving modules.
   modulePaths: ["<rootDir>/", ...module.paths],

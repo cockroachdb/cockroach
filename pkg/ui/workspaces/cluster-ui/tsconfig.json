@@ -13,7 +13,14 @@
     "outDir": "./dist/types",
     "target": "es6",
     "skipLibCheck": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "@cockroachlabs/crdb-protobuf-client": [
+        "../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js",
+        "./node_modules/@cockroachlabs/crdb-protobuf-client"
+      ]
+    }
   },
   "exclude": [
     "node_modules",

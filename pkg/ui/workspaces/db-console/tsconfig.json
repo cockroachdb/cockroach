@@ -27,6 +27,14 @@
       "src/*": [
         "ccl/src/*",
         "src/*"
+      ],
+      "@cockroachlabs/cluster-ui": [
+        "../../../../_bazel/bin/pkg/ui/workspaces/cluster-ui",
+        "./node_modules/@cockroachlabs/cluster-ui"
+      ],
+      "@cockroachlabs/crdb-protobuf-client": [
+        "../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js",
+        "./node_modules/@cockroachlabs/crdb-protobuf-client"
       ]
     }
   },
