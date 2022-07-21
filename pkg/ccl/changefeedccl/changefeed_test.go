@@ -6910,7 +6910,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							t, ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
 					})
 				return nil
 			}, 20*expectTimeout))

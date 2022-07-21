@@ -31,6 +31,8 @@ type TestingKnobs struct {
 	// It allows the tests to muck with the Sink, and even return altogether different
 	// implementation.
 	WrapSink func(s Sink, jobID jobspb.JobID) Sink
+	// WrapEncoder, if set, wraps or replaces the Encoder.
+	WrapEncoder func(Encoder) Encoder
 	// ShouldSkipResolved is a filter returning true if the resolved span event should
 	// be skipped.
 	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
