@@ -623,8 +623,13 @@ func (mgcq *mvccGCQueue) process(
 	// https://github.com/cockroachdb/cockroach/issues/82920. To fix this we
 	// recompute stats, it's an expensive operation but it's better to recompute
 	// them then to spin the GC queue.
+	// Note: the score is not recomputed as if the GC queue was going to run again,
+	// because we are reusing the old lastGC and canAdvanceGCThreshold. This helps
+	// avoid issues with e.g. cooldown timers and focuses the recomputation on the
+	// difference in stats after GC.
+
 	if scoreAfter.ShouldQueue {
-		log.Infof(ctx, "triggering stats re-computation")
+		log.Infof(ctx, "GC still needed following GC, recomputing MVCC stats (old score %s; new score %s)", r, scoreAfter)
 		req := roachpb.RecomputeStatsRequest{
 			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
 		}
@@ -632,7 +637,7 @@ func (mgcq *mvccGCQueue) process(
 		b.AddRawRequest(&req)
 		err := repl.store.db.Run(ctx, &b)
 		if err != nil {
-			log.Errorf(ctx, "Failed to recompute stats with error=%s", err)
+			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
 	return true, nil
