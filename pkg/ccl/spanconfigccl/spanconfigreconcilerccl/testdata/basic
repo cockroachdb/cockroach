@@ -56,6 +56,7 @@ upsert /Table/4{6-7}                       database system (host)
 upsert /Table/4{7-8}                       database system (host)
 upsert /Table/5{0-1}                       database system (host)
 upsert /Table/5{1-2}                       database system (host)
+upsert /Table/5{2-3}                       database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -94,6 +95,7 @@ state offset=47
 ...
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 /Table/10{7-8}                             num_replicas=7
 /Table/11{2-3}                             num_replicas=7
@@ -187,6 +189,8 @@ delete /Table/5{0-1}
 upsert /Table/5{0-1}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/5{1-2}
 upsert /Table/5{1-2}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/5{2-3}
+upsert /Table/5{2-3}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 
 state offset=5 limit=42
 ----

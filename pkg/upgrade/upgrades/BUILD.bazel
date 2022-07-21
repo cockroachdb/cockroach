@@ -16,6 +16,7 @@ go_library(
         "sampled_stmt_diagnostics_requests.go",
         "schema_changes.go",
         "span_count_table.go",
+        "system_external_connections.go",
         "system_privileges.go",
         "upgrade_sequence_to_be_referenced_by_ID.go",
         "upgrades.go",

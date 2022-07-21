@@ -373,3 +373,11 @@ CREATE TABLE public.privileges (
 	grant_options STRING[] NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC)
 );
+CREATE TABLE public.external_connections (
+	connection_name STRING NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	updated TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	connection_type STRING NOT NULL,
+	connection_details BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (connection_name ASC)
+);

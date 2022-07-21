@@ -19,4 +19,3 @@ query II
 SELECT v, w FROM t WHERE k = 23
 ----
 1  2
-

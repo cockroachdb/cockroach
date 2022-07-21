@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -33,12 +35,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func parseNodelocalURL(
-	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
+func makeLocalFileConfig(uri *url.URL) (roachpb.LocalFileConfig, error) {
+	localCfg := roachpb.LocalFileConfig{}
 	if uri.Host == "" {
-		return conf, errors.Errorf(
+		return localCfg, errors.Errorf(
 			"host component of nodelocal URI must be a node ID ("+
 				"use 'self' to specify each node should access its own local filesystem): %s",
 			uri.String(),
@@ -49,26 +49,37 @@ func parseNodelocalURL(
 
 	nodeID, err := strconv.Atoi(uri.Host)
 	if err != nil {
-		return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
+		return localCfg, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
 	}
+	localCfg.Path = uri.Path
+	localCfg.NodeID = roachpb.NodeID(nodeID)
+
+	return localCfg, nil
+}
+
+func makeLocalFileExternalStorageConf(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_nodelocal
-	conf.LocalFile.Path = uri.Path
-	conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
-	return conf, nil
+	var err error
+	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
+	return conf, err
 }
 
 type localFileStorage struct {
-	cfg        roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
-	ioConf     base.ExternalIODirConfig              // server configurations for the ExternalStorage
-	base       string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
-	blobClient blobs.BlobClient                      // inter-node file sharing service
-	settings   *cluster.Settings                     // cluster settings for the ExternalStorage
+	cfg        roachpb.LocalFileConfig  // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	ioConf     base.ExternalIODirConfig // server configurations for the ExternalStorage
+	base       string                   // relative filepath prefixed with externalIODir, for I/O ops on this node.
+	blobClient blobs.BlobClient         // inter-node file sharing service
+	settings   *cluster.Settings        // cluster settings for the ExternalStorage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
 
-// LocalRequiresExternalIOAccounting is the return falues for
-// (*localFileStorage).RequiresExternalIOAccounting. This is exposed for testing.
+// LocalRequiresExternalIOAccounting is the return values for
+// (*localFileStorage).RequiresExternalIOAccounting. This is exposed for
+// testing.
 var LocalRequiresExternalIOAccounting = false
 
 // MakeLocalStorageURI converts a local path (should always be relative) to a
@@ -77,26 +88,14 @@ func MakeLocalStorageURI(path string) string {
 	return fmt.Sprintf("nodelocal://0/%s", path)
 }
 
-// TestingMakeLocalStorage is used by tests.
-func TestingMakeLocalStorage(
-	ctx context.Context,
-	cfg roachpb.ExternalStorage_LocalFilePath,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ioConf base.ExternalIODirConfig,
-) (cloud.ExternalStorage, error) {
-	args := cloud.ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
-	return makeLocalStorage(ctx, args, roachpb.ExternalStorage{LocalFile: cfg})
-}
-
-func makeLocalStorage(
+func makeLocalFileStorage(
 	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nodelocal")
 	if args.BlobClientFactory == nil {
 		return nil, errors.New("nodelocal storage is not available")
 	}
-	cfg := dest.LocalFile
+	cfg := dest.LocalFileConfig
 	if cfg.Path == "" {
 		return nil, errors.Errorf("local storage requested but path not provided")
 	}
@@ -110,8 +109,8 @@ func makeLocalStorage(
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:  roachpb.ExternalStorageProvider_nodelocal,
-		LocalFile: l.cfg,
+		Provider:        roachpb.ExternalStorageProvider_nodelocal,
+		LocalFileConfig: l.cfg,
 	}
 }
 
@@ -214,7 +213,41 @@ func (*localFileStorage) Close() error {
 	return nil
 }
 
+var _ externalconn.ConnectionDetails = &localFileConnectionDetails{}
+
+type localFileConnectionDetails struct {
+	connectionpb.ConnectionDetails
+}
+
+// ConnectionType implements the external.ConnectionDetails interface.
+func (l *localFileConnectionDetails) ConnectionType() connectionpb.ConnectionType {
+	return connectionpb.TypeStorage
+}
+
+// ConnectionProto implements the external.ConnectionDetails interface.
+func (l *localFileConnectionDetails) ConnectionProto() *connectionpb.ConnectionDetails {
+	return &connectionpb.ConnectionDetails{
+		Details: l.Details,
+	}
+}
+
+func makeLocalFileConnectionDetails(
+	_ context.Context, uri *url.URL,
+) (externalconn.ConnectionDetails, error) {
+	connDetails := connectionpb.ConnectionDetails{
+		Details: &connectionpb.ConnectionDetails_Nodelocal{
+			Nodelocal: &connectionpb.NodelocalConnectionDetails{},
+		},
+	}
+	var err error
+	connDetails.GetNodelocal().Cfg, err = makeLocalFileConfig(uri)
+	return &localFileConnectionDetails{ConnectionDetails: connDetails}, err
+}
+
 func init() {
+	scheme := "nodelocal"
 	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
-		parseNodelocalURL, makeLocalStorage, cloud.RedactedParams(), "nodelocal")
+		makeLocalFileExternalStorageConf, makeLocalFileStorage, cloud.RedactedParams(), scheme)
+
+	externalconn.RegisterConnectionDetailsFromURIFactory(scheme, makeLocalFileConnectionDetails)
 }
