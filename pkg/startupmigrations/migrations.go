@@ -13,12 +13,10 @@ package startupmigrations
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -463,44 +460,6 @@ func NewManager(
 		settings:     settings,
 		jobRegistry:  registry,
 	}
-}
-
-// ExpectedDescriptorIDs returns the list of all expected system descriptor IDs,
-// including those added by completed migrations. This is needed for certain
-// tests, which check the number of ranges and system tables at node startup.
-//
-// NOTE: This value may be out-of-date if another node is actively running
-// migrations, and so should only be used in test code where the migration
-// lifecycle is tightly controlled.
-func ExpectedDescriptorIDs(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (descpb.IDs, error) {
-	completedMigrations, err := getCompletedMigrations(ctx, db, codec)
-	if err != nil {
-		return nil, err
-	}
-	descriptorIDs := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
-	for _, migration := range backwardCompatibleMigrations {
-		// Is the migration not creating descriptors?
-		if migration.newDescriptorIDs == nil ||
-			// Is the migration included in the metadata schema considered above?
-			(migration.includedInBootstrap != roachpb.Version{}) {
-			continue
-		}
-		if _, ok := completedMigrations[string(migrationKey(codec, migration))]; ok {
-			newIDs, err := migration.newDescriptorIDs(ctx, db, codec)
-			if err != nil {
-				return nil, err
-			}
-			descriptorIDs = append(descriptorIDs, newIDs...)
-		}
-	}
-	sort.Sort(descriptorIDs)
-	return descriptorIDs, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all
