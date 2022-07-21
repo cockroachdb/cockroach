@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -135,6 +136,8 @@ type DistSQLPlanner struct {
 	codec keys.SQLCodec
 
 	clock *hlc.Clock
+
+	rng *rand.Rand
 }
 
 // DistributionType is an enum defining when a plan should be distributed.
@@ -184,6 +187,7 @@ func NewDistSQLPlanner(
 	sqlInstanceProvider sqlinstance.Provider,
 	clock *hlc.Clock,
 ) *DistSQLPlanner {
+	rng, _ := randutil.NewPseudoRand()
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
 		st:                   st,
@@ -204,6 +208,7 @@ func NewDistSQLPlanner(
 		sqlInstanceProvider: sqlInstanceProvider,
 		codec:               codec,
 		clock:               clock,
+		rng:                 rng,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -1054,154 +1059,67 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	return dsp.partitionSpansTenant(ctx, planCtx, spans)
 }
 
-// partitionSpansSystem finds node owners for ranges touching the given spans
-// for a system tenant.
-func (dsp *DistSQLPlanner) partitionSpansSystem(
-	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, _ error) {
-	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
-	nodeMap := make(map[base.SQLInstanceID]int)
+// partitionSpans takes a single span and splits it up according to the owning
+// nodes (if the span touches multiple ranges).
+//
+// - partitions is the set of SpanPartitions so far. The updated set is
+//   returned.
+// - nodeMap maps a SQLInstanceID to an index inside the partitions array. If
+//   the SQL instance chosen for the span is not in this map, then a new
+//   SpanPartition is appended to partitions and nodeMap is updated accordingly.
+// - getSQLInstanceIDForKVNodeID is a resolver from the KV node ID to the SQL
+//   instance ID.
+//
+// The updated array of SpanPartitions is returned as well as the index into
+// that array pointing to the SpanPartition that included the last part of the
+// span.
+func (dsp *DistSQLPlanner) partitionSpan(
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	span roachpb.Span,
+	partitions []SpanPartition,
+	nodeMap map[base.SQLInstanceID]int,
+	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) base.SQLInstanceID,
+) (_ []SpanPartition, lastPartitionIdx int, _ error) {
 	it := planCtx.spanIter
-	for _, span := range spans {
-		// rSpan is the span we are currently partitioning.
-		rSpan, err := keys.SpanAddr(span)
-		if err != nil {
-			return nil, err
-		}
-
-		var lastSQLInstanceID base.SQLInstanceID
-		// lastKey maintains the EndKey of the last piece of `span`.
-		lastKey := rSpan.Key
-		if log.V(1) {
-			log.Infof(ctx, "partitioning span %s", span)
-		}
-		// We break up rSpan into its individual ranges (which may or
-		// may not be on separate nodes). We then create "partitioned
-		// spans" using the end keys of these individual ranges.
-		for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
-			if !it.Valid() {
-				return nil, it.Error()
-			}
-			replDesc, err := it.ReplicaInfo(ctx)
-			if err != nil {
-				return nil, err
-			}
-			desc := it.Desc()
-			if log.V(1) {
-				descCpy := desc // don't let desc escape
-				log.Infof(ctx, "lastKey: %s desc: %s", lastKey, &descCpy)
-			}
-
-			if !desc.ContainsKey(lastKey) {
-				// This range must contain the last range's EndKey.
-				log.Fatalf(
-					ctx, "next range %v doesn't cover last end key %v. Partitions: %#v",
-					desc.RSpan(), lastKey, partitions,
-				)
-			}
-
-			sqlInstanceID := base.SQLInstanceID(replDesc.NodeID)
-			partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
-			if !inNodeMap {
-				// This is the first time we are seeing this sqlInstanceID for these
-				// spans. Check its health.
-				status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
-				// If the node is unhealthy or its DistSQL version is incompatible, use
-				// the gateway to process this span instead of the unhealthy host.
-				// An empty address indicates an unhealthy host.
-				if status != NodeOK {
-					log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
-					sqlInstanceID = dsp.gatewaySQLInstanceID
-					partitionIdx, inNodeMap = nodeMap[sqlInstanceID]
-				}
-
-				if !inNodeMap {
-					partitionIdx = len(partitions)
-					partitions = append(partitions, SpanPartition{SQLInstanceID: sqlInstanceID})
-					nodeMap[sqlInstanceID] = partitionIdx
-				}
-			}
-			partition := &partitions[partitionIdx]
-
-			if len(span.EndKey) == 0 {
-				// If we see a span to partition that has no end key, it means
-				// that we're going to do a point lookup on the start key of
-				// this span. Thus, we include the span into partition.Spans
-				// without trying to merge it with the last span.
-				partition.Spans = append(partition.Spans, span)
-				break
-			}
-
-			// Limit the end key to the end of the span we are resolving.
-			endKey := desc.EndKey
-			if rSpan.EndKey.Less(endKey) {
-				endKey = rSpan.EndKey
-			}
-
-			if lastSQLInstanceID == sqlInstanceID {
-				// Two consecutive ranges on the same node, merge the spans.
-				partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
-			} else {
-				partition.Spans = append(partition.Spans, roachpb.Span{
-					Key:    lastKey.AsRawKey(),
-					EndKey: endKey.AsRawKey(),
-				})
-			}
-
-			if !endKey.Less(rSpan.EndKey) {
-				// Done.
-				break
-			}
-
-			lastKey = endKey
-			lastSQLInstanceID = sqlInstanceID
-		}
-	}
-	return partitions, nil
-}
-
-// partitionSpansTenant assigns SQL instances in a tenant to spans. Currently
-// assignments are made to all available instances in a round-robin fashion.
-func (dsp *DistSQLPlanner) partitionSpansTenant(
-	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, _ error) {
-	if dsp.sqlInstanceProvider == nil {
-		return nil, errors.AssertionFailedf("sql instance provider not available in multi-tenant environment")
-	}
-	// GetAllInstances only returns healthy instances.
-	instances, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	// rSpan is the span we are currently partitioning.
+	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if len(instances) == 0 {
-		return nil, errors.New("no healthy sql instances available for planning")
-	}
-	// Randomize the order in which we assign partitions, so that work is
-	// allocated fairly across queries.
-	rand.Shuffle(len(instances), func(i, j int) {
-		instances[i], instances[j] = instances[j], instances[i]
-	})
 
-	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
-	nodeMap := make(map[base.SQLInstanceID]int)
-	var lastKey roachpb.Key
-	var lastIdx int
-	for i, span := range spans {
+	var lastSQLInstanceID base.SQLInstanceID
+	// lastKey maintains the EndKey of the last piece of `span`.
+	lastKey := rSpan.Key
+	if log.V(1) {
+		log.Infof(ctx, "partitioning span %s", span)
+	}
+	// We break up rSpan into its individual ranges (which may or may not be on
+	// separate nodes). We then create "partitioned spans" using the end keys of
+	// these individual ranges.
+	for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
+		if !it.Valid() {
+			return nil, 0, it.Error()
+		}
+		replDesc, err := it.ReplicaInfo(ctx)
+		if err != nil {
+			return nil, 0, err
+		}
+		desc := it.Desc()
 		if log.V(1) {
-			log.Infof(ctx, "partitioning span %s", span)
+			descCpy := desc // don't let desc escape
+			log.Infof(ctx, "lastKey: %s desc: %s", lastKey, &descCpy)
 		}
-		// Rows with column families may have been split into different spans. These
-		// spans should be assigned the same pod so that the pod can stitch together
-		// the rows correctly. Split rows are in adjacent spans.
-		if safeKey, err := keys.EnsureSafeSplitKey(span.Key); err == nil {
-			if safeKey.Equal(lastKey) {
-				partition := &partitions[lastIdx]
-				partition.Spans = append(partition.Spans, span)
-				continue
-			}
-			lastKey = safeKey
+
+		if !desc.ContainsKey(lastKey) {
+			// This range must contain the last range's EndKey.
+			log.Fatalf(
+				ctx, "next range %v doesn't cover last end key %v. Partitions: %#v",
+				desc.RSpan(), lastKey, partitions,
+			)
 		}
-		sqlInstanceID := instances[i%len(instances)].InstanceID
+
+		sqlInstanceID := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
@@ -1209,21 +1127,239 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 			nodeMap[sqlInstanceID] = partitionIdx
 		}
 		partition := &partitions[partitionIdx]
-		partition.Spans = append(partition.Spans, span)
-		lastIdx = partitionIdx
+		lastPartitionIdx = partitionIdx
+
+		if len(span.EndKey) == 0 {
+			// If we see a span to partition that has no end key, it means that
+			// we're going to do a point lookup on the start key of this span.
+			// Thus, we include the span into partition.Spans without trying to
+			// merge it with the last span.
+			partition.Spans = append(partition.Spans, span)
+			break
+		}
+
+		// Limit the end key to the end of the span we are resolving.
+		endKey := desc.EndKey
+		if rSpan.EndKey.Less(endKey) {
+			endKey = rSpan.EndKey
+		}
+
+		if lastSQLInstanceID == sqlInstanceID {
+			// Two consecutive ranges on the same node, merge the spans.
+			partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
+		} else {
+			partition.Spans = append(partition.Spans, roachpb.Span{
+				Key:    lastKey.AsRawKey(),
+				EndKey: endKey.AsRawKey(),
+			})
+		}
+
+		if !endKey.Less(rSpan.EndKey) {
+			// Done.
+			break
+		}
+
+		lastKey = endKey
+		lastSQLInstanceID = sqlInstanceID
 	}
-	// If spans were only assigned to one SQL instance, then assign them all to
-	// the gateway instance. The primary reason is to avoid an extra hop.
-	// TODO(harding): Don't do this if using an instance in another locality.
-	if len(partitions) == 1 && partitions[0].SQLInstanceID != dsp.gatewaySQLInstanceID {
-		partitions[0].SQLInstanceID = dsp.gatewaySQLInstanceID
+	return partitions, lastPartitionIdx, nil
+}
+
+// partitionSpansSystem finds node owners for ranges touching the given spans
+// for a system tenant.
+func (dsp *DistSQLPlanner) partitionSpansSystem(
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
+) (partitions []SpanPartition, _ error) {
+	nodeMap := make(map[base.SQLInstanceID]int)
+	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
+		sqlInstanceID := base.SQLInstanceID(nodeID)
+		_, inNodeMap := nodeMap[sqlInstanceID]
+		// If this is the first time we are seeing this sqlInstanceID for these
+		// spans, then we check its health.
+		checkHealth := !inNodeMap
+		return dsp.getSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID, checkHealth)
+	}
+	for _, span := range spans {
+		var err error
+		partitions, _, err = dsp.partitionSpan(
+			ctx, planCtx, span, partitions, nodeMap, resolver,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return partitions, nil
 }
 
-// getInstanceIDForScan retrieves the SQL Instance ID where the single table reader
-// should reside for a limited scan. Ideally this is the lease holder for the
-// first range in the specified spans. But if that node is unhealthy or
+// partitionSpansTenant assigns SQL instances in a tenant to spans. It performs
+// region-aware physical planning among all available SQL instances.
+func (dsp *DistSQLPlanner) partitionSpansTenant(
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
+) (partitions []SpanPartition, _ error) {
+	resolver, instances, err := dsp.makeSQLInstanceIDForKVNodeIDTenantResolver(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodeMap := make(map[base.SQLInstanceID]int)
+	var lastKey roachpb.Key
+	var lastPartitionIdx int
+	for _, span := range spans {
+		// Rows with column families may have been split into different spans.
+		// These spans should be assigned the same pod so that the pod can
+		// stitch together the rows correctly. Split rows are in adjacent spans.
+		if safeKey, err := keys.EnsureSafeSplitKey(span.Key); err == nil {
+			if safeKey.Equal(lastKey) {
+				if log.V(1) {
+					log.Infof(ctx, "partitioning span %s", span)
+				}
+				partition := &partitions[lastPartitionIdx]
+				partition.Spans = append(partition.Spans, span)
+				continue
+			}
+			lastKey = safeKey
+		}
+		partitions, lastPartitionIdx, err = dsp.partitionSpan(
+			ctx, planCtx, span, partitions, nodeMap, resolver,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err = dsp.maybeReassignToGatewaySQLInstance(partitions, instances); err != nil {
+		return nil, err
+	}
+	return partitions, nil
+}
+
+// getSQLInstanceIDForKVNodeIDSystem returns the SQL instance ID that should
+// handle the range with the given node ID when planning is done on behalf of
+// the system tenant. It ensures that the chosen SQL instance is healthy and of
+// the compatible DistSQL version.
+func (dsp *DistSQLPlanner) getSQLInstanceIDForKVNodeIDSystem(
+	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID, checkHealth bool,
+) base.SQLInstanceID {
+	sqlInstanceID := base.SQLInstanceID(nodeID)
+	if checkHealth {
+		status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
+		// If the node is unhealthy or its DistSQL version is incompatible, use
+		// the gateway to process this span instead of the unhealthy host. An
+		// empty address indicates an unhealthy host.
+		if status != NodeOK {
+			log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
+			sqlInstanceID = dsp.gatewaySQLInstanceID
+		}
+	}
+	return sqlInstanceID
+}
+
+// makeSQLInstanceIDForKVNodeIDTenantResolver returns a function that can choose
+// the SQL instance ID for a provided node ID on behalf of a tenant. It also
+// returns a list of all healthy instances for the current tenant.
+func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
+	ctx context.Context,
+) (func(roachpb.NodeID) base.SQLInstanceID, []sqlinstance.InstanceInfo, error) {
+	if dsp.sqlInstanceProvider == nil {
+		return nil, nil, errors.AssertionFailedf("sql instance provider not available in multi-tenant environment")
+	}
+	// GetAllInstances only returns healthy instances.
+	// TODO(yuzefovich): confirm that all instances are of compatible version.
+	instances, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(instances) == 0 {
+		return nil, nil, errors.New("no healthy sql instances available for planning")
+	}
+
+	// Populate a map from the region string to all healthy SQL instances in
+	// that region.
+	regionToSQLInstanceIDs := make(map[string][]base.SQLInstanceID)
+	for _, instance := range instances {
+		region, ok := instance.Locality.Find("region")
+		if !ok {
+			// If we can't determine the region of this instance, don't use it
+			// for planning.
+			log.Eventf(ctx, "could not find region for SQL instance %s", instance)
+			continue
+		}
+		instancesInRegion := regionToSQLInstanceIDs[region]
+		instancesInRegion = append(instancesInRegion, instance.InstanceID)
+		regionToSQLInstanceIDs[region] = instancesInRegion
+	}
+
+	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
+		nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(nodeID)
+		if err != nil {
+			log.Eventf(ctx, "unable to get node descriptor for KV node %s", nodeID)
+			return dsp.gatewaySQLInstanceID
+		}
+		region, ok := nodeDesc.Locality.Find("region")
+		if !ok {
+			log.Eventf(ctx, "could not find region for KV node %s", nodeDesc)
+			return dsp.gatewaySQLInstanceID
+		}
+		instancesInRegion, ok := regionToSQLInstanceIDs[region]
+		if !ok {
+			// There are no instances in this region, so just use the gateway.
+			// TODO(yuzefovich): we should instead pick the closest instance in
+			// a different region.
+			return dsp.gatewaySQLInstanceID
+		}
+		// Pick a random instance in this region in order to spread the load.
+		return instancesInRegion[dsp.rng.Intn(len(instancesInRegion))]
+	}
+
+	return resolver, instances, nil
+}
+
+// maybeReassignToGatewaySQLInstance checks whether the span partitioning is
+// such that it contains only a single SQL instance that is different from the
+// gateway, yet the gateway instance is in the same region as the assigned one.
+// If that is the case, then all spans are reassigned to the gateway instance in
+// order to avoid an extra hop needed when setting up the distributed plan.
+func (dsp *DistSQLPlanner) maybeReassignToGatewaySQLInstance(
+	partitions []SpanPartition, instances []sqlinstance.InstanceInfo,
+) error {
+	if len(partitions) != 1 || partitions[0].SQLInstanceID == dsp.gatewaySQLInstanceID {
+		// Keep the existing partitioning if more than one instance is used or
+		// the gateway is already used as the single instance.
+		return nil
+	}
+	assignedInstance := partitions[0].SQLInstanceID
+	var gatewayRegion, assignedRegion string
+	var ok bool
+	for _, instance := range instances {
+		if instance.InstanceID == dsp.gatewaySQLInstanceID {
+			gatewayRegion, ok = instance.Locality.Find("region")
+			if !ok {
+				// If we can't determine the region of the gateway, keep the
+				// spans assigned to the other instance.
+				break
+			}
+		} else if instance.InstanceID == assignedInstance {
+			assignedRegion, ok = instance.Locality.Find("region")
+			if !ok {
+				// We couldn't determine the region of the assigned instance
+				// but it shouldn't be possible since we wouldn't have used
+				// the instance in the planning (since we wouldn't include
+				// it into regionToSQLInstanceIDs map in
+				// makeSQLInstanceIDForKVNodeIDTenantResolver).
+				return errors.AssertionFailedf(
+					"unexpectedly planned all spans on a SQL instance %s "+
+						"which we could not find region for", instance,
+				)
+			}
+		}
+	}
+	if gatewayRegion == assignedRegion {
+		partitions[0].SQLInstanceID = dsp.gatewaySQLInstanceID
+	}
+	return nil
+}
+
+// getInstanceIDForScan retrieves the SQL Instance ID where the single table
+// reader should reside for a limited scan. Ideally this is the lease holder for
+// the first range in the specified spans. But if that node is unhealthy or
 // incompatible, we use the gateway node instead.
 func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	ctx context.Context, planCtx *PlanningCtx, spans []roachpb.Span, reverse bool,
@@ -1247,13 +1383,16 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 		return 0, err
 	}
 
-	sqlInstanceID := base.SQLInstanceID(replDesc.NodeID)
-	status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
-	if status != NodeOK {
-		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
-		return dsp.gatewaySQLInstanceID, nil
+	if dsp.codec.ForSystemTenant() {
+		return dsp.getSQLInstanceIDForKVNodeIDSystem(
+			ctx, planCtx, replDesc.NodeID, true, /* checkHealth */
+		), nil
 	}
-	return sqlInstanceID, nil
+	resolver, _, err := dsp.makeSQLInstanceIDForKVNodeIDTenantResolver(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return resolver(replDesc.NodeID), nil
 }
 
 // convertOrdering maps the columns in props.ordering to the output columns of a
