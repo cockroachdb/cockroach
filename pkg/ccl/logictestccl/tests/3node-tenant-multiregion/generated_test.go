@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -32,6 +33,7 @@ import (
 const configIdx = 10
 
 var logicTestDir string
+var execBuildLogicTestDir string
 
 func init() {
 	if bazel.BuiltWithBazel() {
@@ -42,6 +44,15 @@ func init() {
 		}
 	} else {
 		logicTestDir = "../../../../sql/logictest/testdata/logic_test"
+	}
+	if bazel.BuiltWithBazel() {
+		var err error
+		execBuildLogicTestDir, err = bazel.Runfile("pkg/sql/opt/exec/execbuilder/testdata")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		execBuildLogicTestDir = "../../../../sql/opt/exec/execbuilder/testdata"
 	}
 }
 
@@ -58,6 +69,14 @@ func runLogicTest(t *testing.T, file string) {
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
+func runExecBuildLogicTest(t *testing.T, file string) {
+	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
+	skip.UnderDeadlock(t, "times out and/or hangs")
+	serverArgs := logictest.TestServerArgs{
+		DisableWorkmemRandomization: true,
+	}
+	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
+}
 
 func TestTenantLogic_distsql_tenant(
 	t *testing.T,
@@ -71,4 +90,11 @@ func TestTenantLogic_distsql_tenant_locality(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_tenant_locality")
+}
+
+func TestTenantExecBuild_distsql_tenant_locality(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_tenant_locality")
 }

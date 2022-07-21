@@ -8,8 +8,9 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/sql/logictest:testdata",  # keep
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
-    shard_count = 2,
+    shard_count = 3,
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",
@@ -17,6 +18,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/logictest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
