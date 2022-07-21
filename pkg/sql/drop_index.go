@@ -358,7 +358,7 @@ func (p *planner) dropIndexByName(
 		if s.IndexID != uint32(idx.GetID()) {
 			_, err = GenerateSubzoneSpans(
 				p.ExecCfg().Settings,
-				p.ExecCfg().LogicalClusterID(),
+				p.ExecCfg().NodeInfo.LogicalClusterID(),
 				p.ExecCfg().Codec,
 				tableDesc,
 				zone.Subzones,

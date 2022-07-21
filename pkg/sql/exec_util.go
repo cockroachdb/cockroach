@@ -1147,8 +1147,8 @@ type nodeStatusGenerator interface {
 // All fields holding a pointer or an interface are required to create
 // an Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
-	Settings *cluster.Settings
-	NodeInfo
+	Settings          *cluster.Settings
+	NodeInfo          NodeInfo
 	Codec             keys.SQLCodec
 	DefaultZoneConfig *zonepb.ZoneConfig
 	Locality          roachpb.Locality

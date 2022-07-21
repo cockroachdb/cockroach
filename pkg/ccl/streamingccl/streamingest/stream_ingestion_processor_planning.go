@@ -126,7 +126,7 @@ func distStreamIngest(
 	)
 
 	execCfg := execCtx.ExecCfg()
-	gatewayNodeID, err := execCfg.NodeID.OptionalNodeIDErr(48274)
+	gatewayNodeID, err := execCfg.NodeInfo.NodeID.OptionalNodeIDErr(48274)
 	if err != nil {
 		return err
 	}

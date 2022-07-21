@@ -535,7 +535,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Run the index backfill
 		changer := sql.NewSchemaChangerForTesting(
-			tableID, 1, execCfg.NodeID.SQLInstanceID(), s0.DB(), lm, jr, &execCfg, settings)
+			tableID, 1, execCfg.NodeInfo.NodeID.SQLInstanceID(), s0.DB(), lm, jr, &execCfg, settings)
 		changer.SetJob(j)
 		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, test.indexToBackfill)}
 		require.NoError(t, changer.TestingDistIndexBackfill(ctx, table.GetVersion(), spans,

@@ -407,7 +407,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		InternalExecutor:        &sqlStatsInternalExecutor,
 		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
 		KvDB:                    cfg.DB,
-		SQLIDContainer:          cfg.NodeID,
+		SQLIDContainer:          cfg.NodeInfo.NodeID,
 		JobRegistry:             s.cfg.JobRegistry,
 		Knobs:                   cfg.SQLStatsTestingKnobs,
 		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
@@ -880,7 +880,7 @@ func (s *Server) newConnExecutor(
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
 	)
 
-	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
+	nodeIDOrZero, _ := s.cfg.NodeInfo.NodeID.OptionalNodeID()
 	ex := &connExecutor{
 		server:              s,
 		metrics:             srvMetrics,
@@ -960,7 +960,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
-	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
+	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -2477,7 +2477,7 @@ func stmtHasNoData(stmt tree.Statement) bool {
 // HLC timestamp. These IDs are either scoped at the query level or at the
 // session level.
 func (ex *connExecutor) generateID() clusterunique.ID {
-	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.SQLInstanceID())
+	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in

@@ -186,12 +186,12 @@ CREATE TABLE crdb_internal.node_build_info (
 )`,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
-		nodeID, _ := execCfg.NodeID.OptionalNodeID() // zero if not available
+		nodeID, _ := execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		info := build.GetInfo()
 		for k, v := range map[string]string{
 			"Name":         "CockroachDB",
-			"ClusterID":    execCfg.LogicalClusterID().String(),
+			"ClusterID":    execCfg.NodeInfo.LogicalClusterID().String(),
 			"Organization": execCfg.Organization(),
 			"Build":        info.Short(),
 			"Version":      info.Tag,
@@ -733,7 +733,7 @@ CREATE TABLE crdb_internal.leases (
 	populate: func(
 		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) (err error) {
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, takenOffline bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
 			if p.CheckAnyPrivilege(ctx, desc) != nil {
 				// TODO(ajwerner): inspect what type of error got returned.
@@ -1120,7 +1120,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return err
 		}
 
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *roachpb.CollectedStatementStatistics) error {
 			anonymized := tree.DNull
@@ -1264,7 +1264,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return err
 		}
 
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		transactionVisitor := func(_ context.Context, stats *roachpb.CollectedTransactionStatistics) error {
 			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
@@ -1338,7 +1338,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		appTxnStatsVisitor := func(appName string, stats *roachpb.TxnStats) error {
 			return addRow(

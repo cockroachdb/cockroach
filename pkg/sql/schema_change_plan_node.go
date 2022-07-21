@@ -64,7 +64,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := scdeps.NewBuilderDependencies(
-		p.ExecCfg().LogicalClusterID(),
+		p.ExecCfg().NodeInfo.LogicalClusterID(),
 		p.ExecCfg().Codec,
 		p.Txn(),
 		p.Descriptors(),
@@ -190,7 +190,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// phase was not executed.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
 		deps := scdeps.NewBuilderDependencies(
-			p.ExecCfg().LogicalClusterID(),
+			p.ExecCfg().NodeInfo.LogicalClusterID(),
 			p.ExecCfg().Codec,
 			p.Txn(),
 			p.Descriptors(),

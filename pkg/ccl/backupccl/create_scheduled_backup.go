@@ -780,7 +780,7 @@ func makeScheduledBackupEval(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(),
+		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
 		"BACKUP INTO LATEST")
 	eval.isEnterpriseUser = enterpriseCheckErr == nil
 

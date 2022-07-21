@@ -101,7 +101,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
 		s.AmbientCtx(),
-		execCfg.NodeID,
+		execCfg.NodeInfo.NodeID,
 		execCfg.DB,
 		execCfg.Clock,
 		execCfg.InternalExecutor,
