@@ -173,3 +173,24 @@ owner_grant_option  admin                     ALL             true
 owner_grant_option  owner_grant_option_child  CONNECT         true
 owner_grant_option  public                    CONNECT         false
 owner_grant_option  root                      ALL             true
+owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER DATABASE owner_grant_option OWNER TO other_owner
+
+query TTTB colnames
+SHOW GRANTS ON DATABASE owner_grant_option
+----
+database_name       grantee                   privilege_type  is_grantable
+owner_grant_option  admin                     ALL             true
+owner_grant_option  other_owner               ALL             true
+owner_grant_option  owner_grant_option_child  CONNECT         false
+owner_grant_option  public                    CONNECT         false
+owner_grant_option  root                      ALL             true

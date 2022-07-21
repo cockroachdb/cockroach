@@ -554,6 +554,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", username.AdminRole, "INSERT", true).
 				Results("system", "public", "users", username.AdminRole, "SELECT", true).
 				Results("system", "public", "users", username.AdminRole, "UPDATE", true).
+				Results("system", "public", "users", username.NodeUser, "ALL", true).
 				Results("system", "public", "users", username.RootUser, "DELETE", true).
 				Results("system", "public", "users", username.RootUser, "INSERT", true).
 				Results("system", "public", "users", username.RootUser, "SELECT", true).

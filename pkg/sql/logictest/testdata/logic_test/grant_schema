@@ -15,6 +15,7 @@ query TTTTB colnames
 SHOW GRANTS ON SCHEMA pg_catalog
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
+test           pg_catalog   node     ALL             true
 test           pg_catalog   public   USAGE           false
 
 # Check information_schema grants.
@@ -22,6 +23,7 @@ query TTTTB colnames
 SHOW GRANTS ON SCHEMA information_schema
 ----
 database_name  schema_name         grantee  privilege_type  is_grantable
+test           information_schema  node     ALL             true
 test           information_schema  public   USAGE           false
 
 # Check public schema grants.
@@ -89,11 +91,15 @@ FROM information_schema.schema_privileges
 ----
 grantee    table_catalog  table_schema        privilege_type  is_grantable
 public     test           crdb_internal       USAGE           NO
+node       test           crdb_internal       ALL             YES
 admin      test           derp                ALL             YES
 root       test           derp                ALL             YES
 public     test           information_schema  USAGE           NO
+node       test           information_schema  ALL             YES
 public     test           pg_catalog          USAGE           NO
+node       test           pg_catalog          ALL             YES
 public     test           pg_extension        USAGE           NO
+node       test           pg_extension        ALL             YES
 admin      test           pg_temp             ALL             YES
 public     test           pg_temp             CREATE          NO
 public     test           pg_temp             USAGE           NO
@@ -104,8 +110,8 @@ public     test           public              USAGE           NO
 root       test           public              ALL             YES
 admin      test           s                   ALL             YES
 root       test           s                   ALL             YES
-testuser   test           s                   ALL             YES
 testuser2  test           s                   CREATE          NO
+testuser   test           s                   ALL             YES
 
 # Check grants for testuser2, which should inherit from the public role.
 query TBB colnames rowsort
@@ -153,3 +159,22 @@ test           owner_grant_option  admin                     ALL             tru
 test           owner_grant_option  owner_grant_option_child  USAGE           true
 test           owner_grant_option  root                      ALL             true
 test           owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER SCHEMA owner_grant_option OWNER TO other_owner
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA owner_grant_option
+----
+database_name  schema_name         grantee                   privilege_type  is_grantable
+test           owner_grant_option  admin                     ALL             true
+test           owner_grant_option  other_owner               ALL             true
+test           owner_grant_option  owner_grant_option_child  USAGE           false
+test           owner_grant_option  root                      ALL             true
