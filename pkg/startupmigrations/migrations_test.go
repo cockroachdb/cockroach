@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,17 @@ type fakeDB struct {
 	kvs     map[string][]byte
 	scanErr error
 	putErr  error
+}
+
+// ReadCommittedScan never returns any data.
+func (f *fakeDB) ReadCommittedScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]kv.KeyValue, error) {
+	// Sometimes return the data, sometimes return nothing.
+	if rand.Float64() < .9 {
+		return f.Scan(ctx, begin, end, maxRows)
+	}
+	return nil, nil
 }
 
 func (f *fakeDB) Scan(
@@ -520,7 +532,7 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 	return m.workFn(ctx, runner{
 		settings:    mt.server.ClusterSettings(),
 		codec:       keys.SystemSQLCodec,
-		db:          mt.kvDB,
+		db:          dbAdapter{DB: mt.kvDB},
 		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})
 }

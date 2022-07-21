@@ -419,6 +419,10 @@ type DB interface {
 	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
 	Txn(ctx context.Context, retryable func(ctx context.Context, txn *kv.Txn) error) error
+
+	// ReadCommittedScan is like Scan but may return an inconsistent and stale
+	// snapshot.
+	ReadCommittedScan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
 }
 
 // Manager encapsulates the necessary functionality for handling migrations
@@ -453,13 +457,31 @@ func NewManager(
 	return &Manager{
 		stopper:      stopper,
 		leaseManager: leasemanager.New(db, clock, opts),
-		db:           db,
+		db:           dbAdapter{DB: db},
 		codec:        codec,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
 		settings:     settings,
 		jobRegistry:  registry,
 	}
+}
+
+// dbAdapter augments the kv.DB with a ReadCommittedScan method as required
+// by the DB interface.
+type dbAdapter struct {
+	*kv.DB
+}
+
+func (d dbAdapter) ReadCommittedScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]kv.KeyValue, error) {
+	var b kv.Batch
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
+	b.Scan(begin, end)
+	if err := d.Run(ctx, &b); err != nil {
+		return nil, err
+	}
+	return b.Results[0].Rows, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all
@@ -470,27 +492,18 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		defer m.testingKnobs.AfterEnsureMigrations()
 	}
 	// First, check whether there are any migrations that need to be run.
-	completedMigrations, err := getCompletedMigrations(ctx, m.db, m.codec)
-	if err != nil {
+	// We do the check potentially twice, once with a readCommittedScan which
+	// might read stale values, but can be performed locally, and then, if
+	// there are migrations to run, again with a consistent scan.
+	if allComplete, err := m.checkIfAllMigrationsAreComplete(
+		ctx, bootstrapVersion, m.db.ReadCommittedScan,
+	); err != nil || allComplete {
 		return err
 	}
-	allMigrationsCompleted := true
-	for _, migration := range backwardCompatibleMigrations {
-		if !m.shouldRunMigration(migration, bootstrapVersion) {
-			continue
-		}
-		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
-			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
-				migration.name)
-			break
-		}
-		key := migrationKey(m.codec, migration)
-		if _, ok := completedMigrations[string(key)]; !ok {
-			allMigrationsCompleted = false
-		}
-	}
-	if allMigrationsCompleted {
-		return nil
+	if allComplete, err := m.checkIfAllMigrationsAreComplete(
+		ctx, bootstrapVersion, m.db.Scan,
+	); err != nil || allComplete {
+		return err
 	}
 
 	// If there are any, grab the migration lease to ensure that only one
@@ -502,6 +515,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	if log.V(1) {
 		log.Info(ctx, "trying to acquire lease")
 	}
+	var err error
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.StartupMigrationLeaseKey())
 		if err == nil {
@@ -556,7 +570,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err = getCompletedMigrations(ctx, m.db, m.codec)
+	completedMigrations, err := getCompletedMigrations(ctx, m.db.Scan, m.codec)
 	if err != nil {
 		return err
 	}
@@ -601,6 +615,34 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	return nil
 }
 
+func (m *Manager) checkIfAllMigrationsAreComplete(
+	ctx context.Context, bootstrapVersion roachpb.Version, scan scanFunc,
+) (completedAll bool, _ error) {
+	completedMigrations, err := getCompletedMigrations(ctx, scan, m.codec)
+	if err != nil {
+		return false, err
+	}
+	allMigrationsCompleted := true
+	for _, migration := range backwardCompatibleMigrations {
+		if !m.shouldRunMigration(migration, bootstrapVersion) {
+			continue
+		}
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
+		key := migrationKey(m.codec, migration)
+		if _, ok := completedMigrations[string(key)]; !ok {
+			allMigrationsCompleted = false
+		}
+	}
+	if allMigrationsCompleted {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (m *Manager) shouldRunMigration(
 	migration migrationDescriptor, bootstrapVersion roachpb.Version,
 ) bool {
@@ -621,14 +663,16 @@ func (m *Manager) shouldRunMigration(
 	return true
 }
 
+type scanFunc = func(_ context.Context, from, to interface{}, maxRows int64) ([]kv.KeyValue, error)
+
 func getCompletedMigrations(
-	ctx context.Context, db DB, codec keys.SQLCodec,
+	ctx context.Context, scan scanFunc, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
 	prefix := codec.StartupMigrationKeyPrefix()
-	keyvals, err := db.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+	keyvals, err := scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}
