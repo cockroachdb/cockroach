@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -53,7 +54,6 @@ func IsStoreValid(
 	if len(constraints) == 0 {
 		return true
 	}
-
 	for _, subConstraints := range constraints {
 		if constraintsOK := constraint.ConjunctionsCheck(
 			store, subConstraints.Constraints,
@@ -70,6 +70,10 @@ type TestingKnobs struct {
 	// targets produced by the Allocator to include replicas that may be waiting
 	// for snapshots.
 	AllowLeaseTransfersToReplicasNeedingSnapshots bool
+	RaftStatusFn                                  func(r interface {
+		Desc() *roachpb.RangeDescriptor
+		StoreID() roachpb.StoreID
+	}) *raft.Status
 }
 
 // QPSRebalanceThreshold is much like rangeRebalanceThreshold, but for
@@ -164,6 +168,9 @@ type TransferLeaseOptions struct {
 	// to disregard the existing lease counts on candidates.
 	CheckCandidateFullness bool
 	DryRun                 bool
+	// AllowUninitializedCandidates allows a lease transfer target to include
+	// replicas which are not in the existing replica set.
+	AllowUninitializedCandidates bool
 }
 
 // LeaseTransferOutcome represents the result of shedLease().
