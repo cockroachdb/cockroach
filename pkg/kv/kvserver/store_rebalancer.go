@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -639,35 +638,69 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			continue
 		}
 
-		storeDescMap := allStoresList.ToMap()
-
 		// Pick the voter with the least QPS to be leaseholder;
 		// RelocateRange transfers the lease to the first provided target.
 		//
-		// TODO(aayush): Does this logic need to exist? This logic does not take
-		// lease preferences into account. So it is already broken in a way.
+		// If a lease preference exists among the incoming voting set, then we
+		// consider only those stores as lease transfer targets. Otherwise, if
+		// there are no preferred leaseholders, either due to no lease
+		// preference being set or no preferred stores in the incoming voting
+		// set, we consider every incoming voter as a transfer candidate.
+		// NB: This implies that lease preferences will be ignored if no voting
+		// replicas exist that satisfy the lease preference. We could also
+		// ignore this rebalance opportunity in this case, however we do not as
+		// it is more likely than not that this would only occur under
+		// misconfiguration.
+		validTargets := sr.rq.allocator.ValidLeaseTargets(
+			ctx,
+			rebalanceCtx.conf,
+			targetVoterRepls,
+			rebalanceCtx.replWithStats.repl,
+			allocator.TransferLeaseOptions{
+				AllowUninitializedCandidates: true,
+			},
+		)
+
+		// When there are no valid targets, due to all existing voting replicas
+		// requiring a snapshot as well as the incoming, new voting replicas
+		// being on dead stores, ignore this rebalance option. The lease for
+		// this range post-rebalance would have no suitable location.
+		if len(validTargets) == 0 {
+			log.VEventf(
+				ctx,
+				3,
+				"could not find rebalance opportunities for r%d, no replica found to hold lease",
+				replWithStats.repl.RangeID,
+			)
+			continue
+		}
+
+		storeDescMap := allStoresList.ToMap()
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
-		var raftStatus *raft.Status
-		for i := 0; i < len(targetVoterRepls); i++ {
-			// Ensure we don't transfer the lease to an existing replica that is behind
-			// in processing its raft log.
-			if replica, ok := rangeDesc.GetReplicaDescriptor(targetVoterRepls[i].StoreID); ok {
-				if raftStatus == nil {
-					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
-				}
-				if raftutil.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
-					continue
-				}
-			}
 
-			storeDesc, ok := storeDescMap[targetVoterRepls[i].StoreID]
+		// Find the voter in the resulting voting set, which is a valid lease
+		// target and on a store with the least QPS to become the leaseholder.
+		// NB: The reason we do not call allocator.TransferLeaseTarget is
+		// because it requires that all the candidates are existing, rather
+		// than possibly new, incoming voters that are yet to be initialized.
+		for i := range validTargets {
+			storeDesc, ok := storeDescMap[validTargets[i].StoreID]
 			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
 				newLeaseIdx = i
 				newLeaseQPS = storeDesc.Capacity.QueriesPerSecond
 			}
 		}
-		targetVoterRepls[0], targetVoterRepls[newLeaseIdx] = targetVoterRepls[newLeaseIdx], targetVoterRepls[0]
+
+		// Swap the target leaseholder with the first target voter, to transfer
+		// the lease to this voter target when rebalancing the range.
+		for i := range targetVoterRepls {
+			if targetVoterRepls[i].StoreID == validTargets[newLeaseIdx].StoreID {
+				targetVoterRepls[0], targetVoterRepls[i] = targetVoterRepls[i], targetVoterRepls[0]
+				break
+			}
+		}
+
 		return replWithStats,
 			roachpb.MakeReplicaSet(targetVoterRepls).ReplicationTargets(),
 			roachpb.MakeReplicaSet(targetNonVoterRepls).ReplicationTargets()

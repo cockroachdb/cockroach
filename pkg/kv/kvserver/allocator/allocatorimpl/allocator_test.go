@@ -1682,6 +1682,9 @@ func (r *mockRepl) GetFirstIndex() uint64 {
 func (r *mockRepl) StoreID() roachpb.StoreID {
 	return r.storeID
 }
+func (r *mockRepl) Desc() *roachpb.RangeDescriptor {
+	return &roachpb.RangeDescriptor{}
+}
 
 func (r *mockRepl) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(0)

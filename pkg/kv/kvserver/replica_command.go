@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -3544,8 +3545,7 @@ func (r *Replica) adminScatter(
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc := r.Desc()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
-			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, false, /* excludeLeaseRepl */
-		)
+			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
