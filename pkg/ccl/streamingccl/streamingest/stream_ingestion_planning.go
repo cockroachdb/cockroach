@@ -52,7 +52,7 @@ func ingestionPlanHook(
 					errors.Newf("stream replication is only supported experimentally"),
 					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
 				),
-				pgcode.FeatureNotSupported,
+				pgcode.ExperimentalFeature,
 			),
 			"replication.ingest.disabled",
 		)
