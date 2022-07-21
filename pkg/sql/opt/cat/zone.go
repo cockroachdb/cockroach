@@ -312,9 +312,9 @@ func FormatZone(zone Zone, tp treeprinter.Node) {
 		constraintStr := formatConstraintSet(voterConstraint)
 		if zone.VoterConstraintsCount() > 1 {
 			numReplicas := voterConstraint.ReplicaCount()
-			replicaChild.Childf("%d voter replicas: %s", numReplicas, constraintStr)
+			voterChild.Childf("%d voter replicas: %s", numReplicas, constraintStr)
 		} else {
-			replicaChild.Childf("voter constraints: %s", constraintStr)
+			voterChild.Childf("voter constraints: %s", constraintStr)
 		}
 	}
 

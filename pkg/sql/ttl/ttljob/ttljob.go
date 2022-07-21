@@ -209,7 +209,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	statsCloseCh := make(chan struct{})
 	ch := make(chan rangeToProcess, rangeConcurrency)
 	rowCount := int64(0)
-	for i := 0; i < rangeConcurrency; i++ {
+	for i := int64(0); i < rangeConcurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
 			for r := range ch {
 				start := timeutil.Now()
@@ -329,39 +329,40 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	return nil
 }
 
-func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int {
-	if bs := ttl.SelectBatchSize; bs != 0 {
-		return int(bs)
+func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+	bs := ttl.SelectBatchSize
+	if bs == 0 {
+		bs = defaultSelectBatchSize.Get(sv)
 	}
-	return int(defaultSelectBatchSize.Get(sv))
+	return bs
 }
 
-func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int {
-	if bs := ttl.DeleteBatchSize; bs != 0 {
-		return int(bs)
+func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+	bs := ttl.DeleteBatchSize
+	if bs == 0 {
+		bs = defaultDeleteBatchSize.Get(sv)
 	}
-	return int(defaultDeleteBatchSize.Get(sv))
+	return bs
 }
 
-func getRangeConcurrency(sv *settings.Values, ttl catpb.RowLevelTTL) int {
-	if rc := ttl.RangeConcurrency; rc != 0 {
-		return int(rc)
+func getRangeConcurrency(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+	rc := ttl.RangeConcurrency
+	if rc == 0 {
+		rc = defaultRangeConcurrency.Get(sv)
 	}
-	return int(defaultRangeConcurrency.Get(sv))
+	return rc
 }
 
 func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
-	val := func() int64 {
-		if bs := ttl.DeleteRateLimit; bs != 0 {
-			return bs
-		}
-		return defaultDeleteRateLimit.Get(sv)
-	}()
-	// Put the maximum tokens possible if there is no rate limit.
-	if val == 0 {
-		return math.MaxInt64
+	rl := ttl.DeleteRateLimit
+	if rl == 0 {
+		rl = defaultDeleteRateLimit.Get(sv)
 	}
-	return val
+	// Put the maximum tokens possible if there is no rate limit.
+	if rl == 0 {
+		rl = math.MaxInt64
+	}
+	return rl
 }
 
 func fetchStatistics(
@@ -440,7 +441,7 @@ func runTTLOnRange(
 	endPK tree.Datums,
 	pkColumns []string,
 	relationName string,
-	selectBatchSize, deleteBatchSize int,
+	selectBatchSize, deleteBatchSize int64,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
 	ttlExpression string,
@@ -497,14 +498,15 @@ func runTTLOnRange(
 		if err != nil {
 			return rangeRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
-		metrics.RowSelections.Inc(int64(len(expiredRowsPKs)))
+		numExpiredRows := int64(len(expiredRowsPKs))
+		metrics.RowSelections.Inc(numExpiredRows)
 
 		// Step 2. Delete the rows which have expired.
 
-		for startRowIdx := 0; startRowIdx < len(expiredRowsPKs); startRowIdx += deleteBatchSize {
+		for startRowIdx := int64(0); startRowIdx < numExpiredRows; startRowIdx += deleteBatchSize {
 			until := startRowIdx + deleteBatchSize
-			if until > len(expiredRowsPKs) {
-				until = len(expiredRowsPKs)
+			if until > numExpiredRows {
+				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
 			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
@@ -554,7 +556,7 @@ func runTTLOnRange(
 
 		// If we selected less than the select batch size, we have selected every
 		// row and so we end it here.
-		if len(expiredRowsPKs) < selectBatchSize {
+		if numExpiredRows < selectBatchSize {
 			break
 		}
 	}
