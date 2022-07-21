@@ -991,6 +991,42 @@ func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLIns
 	return nil
 }
 
+// nodeVersionIsCompatible decides whether a particular node's DistSQL version
+// is compatible with dsp.planVersion. It uses gossip to find out the node's
+// version range.
+func (dsp *DistSQLPlanner) nodeVersionIsCompatible(sqlInstanceID base.SQLInstanceID) bool {
+	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
+	if !ok {
+		return true // no gossip - always compatible; only a single gateway running in Phase 2
+	}
+	var v execinfrapb.DistSQLVersionGossipInfo
+	if err := g.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(sqlInstanceID), &v); err != nil {
+		return false
+	}
+	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
+}
+
+// CheckInstanceHealthAndVersion returns information about a node's health and
+// compatibility. The info is also recorded in planCtx.NodeStatuses.
+func (dsp *DistSQLPlanner) CheckInstanceHealthAndVersion(
+	ctx context.Context, planCtx *PlanningCtx, sqlInstanceID base.SQLInstanceID,
+) NodeStatus {
+	if status, ok := planCtx.NodeStatuses[sqlInstanceID]; ok {
+		return status
+	}
+
+	var status NodeStatus
+	if err := dsp.nodeHealth.check(ctx, sqlInstanceID); err != nil {
+		status = NodeUnhealthy
+	} else if !dsp.nodeVersionIsCompatible(sqlInstanceID) {
+		status = NodeDistSQLVersionIncompatible
+	} else {
+		status = NodeOK
+	}
+	planCtx.NodeStatuses[sqlInstanceID] = status
+	return status
+}
+
 // PartitionSpans finds out which nodes are owners for ranges touching the
 // given spans, and splits the spans according to owning nodes. The result is a
 // set of SpanPartitions (guaranteed one for each relevant node), which form a
@@ -1183,19 +1219,68 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 	return partitions, nil
 }
 
-// nodeVersionIsCompatible decides whether a particular node's DistSQL version
-// is compatible with dsp.planVersion. It uses gossip to find out the node's
-// version range.
-func (dsp *DistSQLPlanner) nodeVersionIsCompatible(sqlInstanceID base.SQLInstanceID) bool {
-	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
-	if !ok {
-		return true // no gossip - always compatible; only a single gateway running in Phase 2
+// getInstanceIDForScan retrieves the SQL Instance ID where the single table reader
+// should reside for a limited scan. Ideally this is the lease holder for the
+// first range in the specified spans. But if that node is unhealthy or
+// incompatible, we use the gateway node instead.
+func (dsp *DistSQLPlanner) getInstanceIDForScan(
+	ctx context.Context, planCtx *PlanningCtx, spans []roachpb.Span, reverse bool,
+) (base.SQLInstanceID, error) {
+	if len(spans) == 0 {
+		return 0, errors.AssertionFailedf("no spans")
 	}
-	var v execinfrapb.DistSQLVersionGossipInfo
-	if err := g.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(sqlInstanceID), &v); err != nil {
-		return false
+
+	// Determine the node ID for the first range to be scanned.
+	it := planCtx.spanIter
+	if reverse {
+		it.Seek(ctx, spans[len(spans)-1], kvcoord.Descending)
+	} else {
+		it.Seek(ctx, spans[0], kvcoord.Ascending)
 	}
-	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
+	if !it.Valid() {
+		return 0, it.Error()
+	}
+	replDesc, err := it.ReplicaInfo(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	sqlInstanceID := base.SQLInstanceID(replDesc.NodeID)
+	status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
+	if status != NodeOK {
+		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
+		return dsp.gatewaySQLInstanceID, nil
+	}
+	return sqlInstanceID, nil
+}
+
+// convertOrdering maps the columns in props.ordering to the output columns of a
+// processor.
+func (dsp *DistSQLPlanner) convertOrdering(
+	reqOrdering ReqOrdering, planToStreamColMap []int,
+) execinfrapb.Ordering {
+	if len(reqOrdering) == 0 {
+		return execinfrapb.Ordering{}
+	}
+	result := execinfrapb.Ordering{
+		Columns: make([]execinfrapb.Ordering_Column, len(reqOrdering)),
+	}
+	for i, o := range reqOrdering {
+		streamColIdx := o.ColIdx
+		if planToStreamColMap != nil {
+			streamColIdx = planToStreamColMap[o.ColIdx]
+		}
+		if streamColIdx == -1 {
+			panic("column in ordering not part of processor output")
+		}
+		result.Columns[i].ColIdx = uint32(streamColIdx)
+		dir := execinfrapb.Ordering_Column_ASC
+		if o.Direction == encoding.Descending {
+			dir = execinfrapb.Ordering_Column_DESC
+		}
+		result.Columns[i].Direction = dir
+	}
+	return result
 }
 
 // initTableReaderSpecTemplate initializes a TableReaderSpec/PostProcessSpec
@@ -1233,91 +1318,6 @@ func initTableReaderSpecTemplate(
 		s.LimitHint = n.softLimit
 	}
 	return s, post, nil
-}
-
-// convertOrdering maps the columns in props.ordering to the output columns of a
-// processor.
-func (dsp *DistSQLPlanner) convertOrdering(
-	reqOrdering ReqOrdering, planToStreamColMap []int,
-) execinfrapb.Ordering {
-	if len(reqOrdering) == 0 {
-		return execinfrapb.Ordering{}
-	}
-	result := execinfrapb.Ordering{
-		Columns: make([]execinfrapb.Ordering_Column, len(reqOrdering)),
-	}
-	for i, o := range reqOrdering {
-		streamColIdx := o.ColIdx
-		if planToStreamColMap != nil {
-			streamColIdx = planToStreamColMap[o.ColIdx]
-		}
-		if streamColIdx == -1 {
-			panic("column in ordering not part of processor output")
-		}
-		result.Columns[i].ColIdx = uint32(streamColIdx)
-		dir := execinfrapb.Ordering_Column_ASC
-		if o.Direction == encoding.Descending {
-			dir = execinfrapb.Ordering_Column_DESC
-		}
-		result.Columns[i].Direction = dir
-	}
-	return result
-}
-
-// getInstanceIDForScan retrieves the SQL Instance ID where the single table reader
-// should reside for a limited scan. Ideally this is the lease holder for the
-// first range in the specified spans. But if that node is unhealthy or
-// incompatible, we use the gateway node instead.
-func (dsp *DistSQLPlanner) getInstanceIDForScan(
-	ctx context.Context, planCtx *PlanningCtx, spans []roachpb.Span, reverse bool,
-) (base.SQLInstanceID, error) {
-	if len(spans) == 0 {
-		return 0, errors.AssertionFailedf("no spans")
-	}
-
-	// Determine the node ID for the first range to be scanned.
-	it := planCtx.spanIter
-	if reverse {
-		it.Seek(ctx, spans[len(spans)-1], kvcoord.Descending)
-	} else {
-		it.Seek(ctx, spans[0], kvcoord.Ascending)
-	}
-	if !it.Valid() {
-		return 0, it.Error()
-	}
-	replDesc, err := it.ReplicaInfo(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	sqlInstanceID := base.SQLInstanceID(replDesc.NodeID)
-	status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
-	if status != NodeOK {
-		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
-		return dsp.gatewaySQLInstanceID, nil
-	}
-	return sqlInstanceID, nil
-}
-
-// CheckInstanceHealthAndVersion returns a information about a node's health and
-// compatibility. The info is also recorded in planCtx.Nodes.
-func (dsp *DistSQLPlanner) CheckInstanceHealthAndVersion(
-	ctx context.Context, planCtx *PlanningCtx, sqlInstanceID base.SQLInstanceID,
-) NodeStatus {
-	if status, ok := planCtx.NodeStatuses[sqlInstanceID]; ok {
-		return status
-	}
-
-	var status NodeStatus
-	if err := dsp.nodeHealth.check(ctx, sqlInstanceID); err != nil {
-		status = NodeUnhealthy
-	} else if !dsp.nodeVersionIsCompatible(sqlInstanceID) {
-		status = NodeDistSQLVersionIncompatible
-	} else {
-		status = NodeOK
-	}
-	planCtx.NodeStatuses[sqlInstanceID] = status
-	return status
 }
 
 // createTableReaders generates a plan consisting of table reader processors,
