@@ -117,6 +117,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	} else {
 		pred, args = makeBoolExprWithPlaceholders(s, cols)
 	}
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -201,6 +202,7 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	}
 	table1.Format(f)
 	tableName1 := f.CloseAndGetString()
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	table2.Format(f)
 	tableName2 := f.CloseAndGetString()
 
@@ -218,6 +220,7 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 		leftJoinTrue, leftJoinFalse, leftJoinFalse,
 	)
 
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	pred := makeBoolExpr(s, cols1)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
@@ -279,6 +282,7 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	}
 	table1.Format(f)
 	tableName1 := f.CloseAndGetString()
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	table2.Format(f)
 	tableName2 := f.CloseAndGetString()
 
@@ -289,6 +293,7 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 
 	cols := cols1.extend(cols2...)
 	pred := makeBoolExpr(s, cols)
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -373,6 +378,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 		innerAgg, tableName, tableNameAlias,
 	)
 
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	pred := makeBoolExpr(s, cols)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
@@ -436,6 +442,7 @@ func (s *Smither) generateDistinctTLP() (unpartitioned, partitioned string) {
 	distinctCols := strings.Join(colStrs, ",")
 	unpartitioned = fmt.Sprintf("SELECT DISTINCT %s FROM %s", distinctCols, tableName)
 
+	f = tree.NewFmtCtx(tree.FmtParsable)
 	pred := makeBoolExpr(s, cols)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
