@@ -121,6 +121,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",

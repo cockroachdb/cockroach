@@ -1981,8 +1981,16 @@ alter_database_drop_secondary_region:
   {
     $$.val = &tree.AlterDatabaseDropSecondaryRegion{
       DatabaseName: tree.Name($3),
+      IfExists: false,
     }
   }
+  | ALTER DATABASE database_name DROP SECONDARY REGION IF EXISTS
+    {
+      $$.val = &tree.AlterDatabaseDropSecondaryRegion{
+        DatabaseName: tree.Name($3),
+        IfExists: true,
+      }
+    }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL

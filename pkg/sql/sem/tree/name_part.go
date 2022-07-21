@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -126,6 +127,16 @@ func (l NameList) Contains(name Name) bool {
 		}
 	}
 	return false
+}
+
+// NameToRegionName returns a slice of region names.
+func (l NameList) NameToRegionName() []catpb.RegionName {
+	regionList := make([]catpb.RegionName, len(l))
+	for i, region := range l {
+		regionList[i] = catpb.RegionName(region)
+	}
+
+	return regionList
 }
 
 // ArraySubscript corresponds to the syntax `<name>[ ... ]`.
