@@ -87,21 +87,22 @@ SELECT
   privilege_type,
   is_grantable
 FROM information_schema.schema_privileges
+ORDER BY 1, 2, 3, 4
 ----
 grantee    table_catalog  table_schema        privilege_type  is_grantable
+admin      test           pg_temp             ALL             NULL
+admin      test           public              ALL             NULL
+admin      test           s                   ALL             NULL
 public     test           crdb_internal       USAGE           NULL
 public     test           information_schema  USAGE           NULL
 public     test           pg_catalog          USAGE           NULL
 public     test           pg_extension        USAGE           NULL
-admin      test           pg_temp             ALL             NULL
 public     test           pg_temp             CREATE          NULL
 public     test           pg_temp             USAGE           NULL
-root       test           pg_temp             ALL             NULL
-admin      test           public              ALL             NULL
 public     test           public              CREATE          NULL
 public     test           public              USAGE           NULL
+root       test           pg_temp             ALL             NULL
 root       test           public              ALL             NULL
-admin      test           s                   ALL             NULL
 root       test           s                   ALL             NULL
 testuser   test           s                   ALL             NULL
 testuser2  test           s                   CREATE          NULL

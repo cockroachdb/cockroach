@@ -4858,7 +4858,7 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				privs := db.GetPrivileges().Show(privilege.Database)
+				privs := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
 				dbNameStr := tree.NewDString(db.GetName())
 				// TODO(knz): This should filter for the current user, see
 				// https://github.com/cockroachdb/cockroach/issues/35572

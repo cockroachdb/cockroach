@@ -121,6 +121,7 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 
 	tdb.CheckQueryResults(t, "SHOW GRANTS ON DATABASE test", [][]string{
 		{"test", "admin", "ALL", "true"},
+		{"test", "demo", "ALL", "true"},
 		{"test", "root", "ALL", "true"},
 		{"test", "testuser2", "CREATE", "false"},
 	})

@@ -742,25 +742,45 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	if privDesc == nil {
 		return ""
 	}
-	for _, userPriv := range privDesc.Show(objectType) {
+	for _, userPriv := range privDesc.Show(objectType, false /* showImplicitOwnerPrivs */) {
 		privs := userPriv.Privileges
 		if len(privs) == 0 {
 			continue
 		}
-		privStringBuilder.WriteString("GRANT ")
-
-		for j, priv := range privs {
-			if j != 0 {
-				privStringBuilder.WriteString(", ")
+		var privsWithGrantOption []string
+		for _, priv := range privs {
+			if priv.GrantOption {
+				privsWithGrantOption = append(privsWithGrantOption, priv.Kind.String())
 			}
-			privStringBuilder.WriteString(priv.Kind.String())
 		}
-		privStringBuilder.WriteString(" ON ")
-		privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
-		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
-		privStringBuilder.WriteString(" TO ")
-		privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
-		privStringBuilder.WriteString("; ")
+		if len(privsWithGrantOption) > 0 {
+			privStringBuilder.WriteString("GRANT ")
+			privStringBuilder.WriteString(strings.Join(privsWithGrantOption, ", "))
+			privStringBuilder.WriteString(" ON ")
+			privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
+			privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
+			privStringBuilder.WriteString(" TO ")
+			privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
+			privStringBuilder.WriteString(" WITH GRANT OPTION; ")
+		}
+
+		var privsWithoutGrantOption []string
+		for _, priv := range privs {
+			if !priv.GrantOption {
+				privsWithoutGrantOption = append(privsWithoutGrantOption, priv.Kind.String())
+			}
+
+		}
+		if len(privsWithoutGrantOption) > 0 {
+			privStringBuilder.WriteString("GRANT ")
+			privStringBuilder.WriteString(strings.Join(privsWithoutGrantOption, ", "))
+			privStringBuilder.WriteString(" ON ")
+			privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
+			privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
+			privStringBuilder.WriteString(" TO ")
+			privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
+			privStringBuilder.WriteString("; ")
+		}
 	}
 
 	return privStringBuilder.String()

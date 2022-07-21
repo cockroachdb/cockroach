@@ -269,9 +269,10 @@ CREATE TABLE t9()
 query TTTTTB colnames
 SHOW GRANTS ON TABLE t9;
 ----
-database_name  schema_name  table_name  grantee  privilege_type  is_grantable
-test           public       t9          admin    ALL             true
-test           public       t9          root     ALL             true
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t9          admin     ALL             true
+test           public       t9          root      ALL             true
+test           public       t9          testuser  ALL             true
 
 statement ok
 GRANT DELETE ON TABLE t9 TO testuser
@@ -326,6 +327,7 @@ SHOW GRANTS ON TABLE t11;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t11         admin      ALL             true
 test           public       t11         root       ALL             true
+test           public       t11         testuser   ALL             true
 test           public       t11         testuser2  SELECT          false
 
 user testuser2
@@ -350,6 +352,7 @@ SHOW GRANTS ON TABLE t12;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t12         admin      ALL             true
 test           public       t12         root       ALL             true
+test           public       t12         testuser   ALL             true
 test           public       t12         testuser2  INSERT          true
 test           public       t12         testuser2  SELECT          true
 
@@ -375,6 +378,7 @@ SHOW GRANTS ON TABLE t13;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t13         admin      ALL             true
 test           public       t13         root       ALL             true
+test           public       t13         testuser   ALL             true
 test           public       t13         testuser2  ALL             true
 
 user testuser2
@@ -399,7 +403,14 @@ SHOW GRANTS ON TABLE t14;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t14         admin      ALL             true
 test           public       t14         root       ALL             true
+test           public       t14         testuser   ALL             true
 test           public       t14         testuser2  ALL             false
+
+statement ok
+GRANT INSERT, DELETE ON TABLE t12 TO target WITH GRANT OPTION
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
 
 user testuser2
 
@@ -417,9 +428,10 @@ CREATE TABLE t15()
 query TTTTTB colnames
 SHOW GRANTS ON TABLE t15;
 ----
-database_name  schema_name  table_name  grantee  privilege_type  is_grantable
-test           public       t15         admin    ALL             true
-test           public       t15         root     ALL             true
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t15         admin     ALL             true
+test           public       t15         root      ALL             true
+test           public       t15         testuser  ALL             true
 
 #
 # Test schemas
