@@ -356,6 +356,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 84414, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// TODO(casper): now this has the same race issue with
