@@ -126,11 +126,11 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	authOption := u.consumeParam(authParam)
 	assumeRoleOption := u.consumeParam(assumeRoleParam)
 	authScope := gcpScope
-	//if assumeRoleOption != "" {
-	//	// If we need to assume a role, the credentials need to have the scope to
-	//	// impersonate instead.
-	//	authScope = cloudPlatformScope
-	//}
+	if assumeRoleOption != "" {
+		// If we need to assume a role, the credentials need to have the scope to
+		// impersonate instead.
+		authScope = cloudPlatformScope
+	}
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
@@ -160,13 +160,14 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 		fmt.Println("@@@ creds=", creds.ProjectID, creds.TokenSource)
 		fmt.Println("@@@ env=", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 		assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleOption)
+		fmt.Println("@@@ assume", assumeRole, "delegates", delegateRoles)
 		cfg := impersonate.CredentialsConfig{
 			TargetPrincipal: assumeRole,
 			Scopes:          []string{gcpScope},
 			Delegates:       delegateRoles,
 		}
 
-		ts, err := impersonate.CredentialsTokenSource(ctx, cfg)
+		ts, err := impersonate.CredentialsTokenSource(ctx, cfg, credsOpt)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating impersonate credentials")
 		}
