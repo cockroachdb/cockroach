@@ -14,8 +14,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	atomic2 "go.uber.org/atomic"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -78,6 +82,14 @@ func (e *errRetryLiveness) Cause() error {
 func (e *errRetryLiveness) Error() string {
 	return fmt.Sprintf("%T: %s", *e, e.error)
 }
+
+var sigCh = func() chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP)
+	return ch
+}()
+
+var weDead atomic2.Int32
 
 func isErrRetryLiveness(ctx context.Context, err error) bool {
 	if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
@@ -949,6 +961,19 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// checks don't work across process restarts.
 	if newLiveness.Expiration.Less(oldLiveness.Expiration) {
 		return errors.Errorf("proposed liveness update expires earlier than previous record")
+	}
+
+	select {
+	case <-sigCh:
+			weDead.Store(1)
+			log.Warningf(ctx, "no liveness for u")
+			return errors.Errorf("no liveness for u")
+	default:
+	}
+
+	if weDead.Load() == 1 {
+		log.Warningf(ctx, "no liveness for u")
+		return errors.Errorf("no liveness for u")
 	}
 
 	update := livenessUpdate{
