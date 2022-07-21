@@ -613,7 +613,7 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: +index_name,+non_unique,+seq_in_index,+column_name,+direction,+storing,+implicit
+│ order: +index_name,+seq_in_index
 │
 └── • render
     │
