@@ -281,6 +281,10 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
+	// When we exit this method, the execution flow must have finished, so
+	// canceling the context here is safe. This cancellation is needed to
+	// prevent a leak of the context.
+	defer cancelQuery()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
