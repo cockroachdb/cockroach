@@ -1226,6 +1226,17 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Server Side Retry",
+				Metrics: []string{
+					"txn.server_side_retry.write_evaluation.success",
+					"txn.server_side_retry.write_evaluation.failure",
+					"txn.server_side_retry.read_evaluation.success",
+					"txn.server_side_retry.read_evaluation.failure",
+					"txn.server_side_retry.uncertainty_interval_error.success",
+					"txn.server_side_retry.uncertainty_interval_error.failure",
+				},
+			},
+			{
 				Title:   "Durations",
 				Metrics: []string{"txn.durations"},
 			},

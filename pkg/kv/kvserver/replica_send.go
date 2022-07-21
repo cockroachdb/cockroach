@@ -795,8 +795,11 @@ func (r *Replica) handleReadWithinUncertaintyIntervalError(
 	// latchSpans, because we have already released our latches and plan to
 	// re-acquire them if the retry is allowed.
 	if !canDoServersideRetry(ctx, pErr, ba, nil /* br */, nil /* g */, nil /* deadline */) {
+		r.store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetryFailure.Inc(1)
 		return nil, pErr
 	}
+	r.store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Inc(1)
+
 	if ba.Txn == nil {
 		// If the request is non-transactional and it was refreshed into the future
 		// after observing a value with a timestamp in the future, immediately sleep
