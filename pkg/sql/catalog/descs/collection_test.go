@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -782,4 +784,55 @@ func TestDescriptorCache(t *testing.T) {
 			return nil
 		}))
 	})
+}
+
+// TestHydrateCatalog verifies that table descriptors have their type metadata
+// hydrated when returned by a range lookup.
+func TestCollectionHydratesCatalog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TYPE db.schema.typ AS ENUM ('a', 'b')`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table(x db.schema.typ)`)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		// The descriptors in this catalog should be hydrated.
+		cat, err := descriptors.GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		tbl := desctestutils.TestingGetTableDescriptor(txn.DB(), keys.SystemSQLCodec, "db", "schema", "table")
+		tblDesc := cat.LookupDescriptorEntry(tbl.GetID()).(catalog.TableDescriptor)
+		expected := types.UserDefinedTypeMetadata{
+			Name: &types.UserDefinedTypeName{
+				Catalog:        "db",
+				ExplicitSchema: true,
+				Schema:         "schema",
+				Name:           "typ",
+			},
+			Version: 2,
+			EnumData: &types.EnumMetadata{
+				PhysicalRepresentations: [][]uint8{{0x40}, {0x80}},
+				LogicalRepresentations:  []string{"a", "b"},
+				IsMemberReadOnly:        []bool{false, false},
+			},
+		}
+		actual := tblDesc.UserDefinedTypeColumns()[0].GetType().TypeMeta
+		// Verify that the table descriptor was hydrated.
+		require.Equal(t, expected, actual)
+		return nil
+	}))
 }

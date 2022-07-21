@@ -84,6 +84,7 @@ go_test(
     deps = [
         ":descs",
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
@@ -97,6 +98,7 @@ go_test(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
