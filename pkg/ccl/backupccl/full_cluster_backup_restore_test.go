@@ -87,19 +87,6 @@ func TestFullClusterBackup(t *testing.T) {
 		}
 	}
 
-	// The claim_session_id field in jobs is a uuid and so needs to be excluded
-	// when comparing jobs pre/post restore. The span config reconciliation job
-	// too is something we exclude; because it's a singleton job, when restored
-	// into another cluster it self-terminates.
-	const jobsQuery = `
-SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
-FROM system.jobs
-WHERE id NOT IN
-(
-	SELECT job_id FROM [SHOW AUTOMATIC JOBS]
-  WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'
-)
-	`
 	// Pause SQL Stats compaction job to ensure the test is deterministic.
 	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
 
@@ -151,7 +138,6 @@ CREATE TABLE data2.foo (a int);
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
-	preBackupJobs := sqlDB.QueryStr(t, jobsQuery)
 	// Populate system.settings.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
@@ -321,27 +307,6 @@ CREATE TABLE data2.foo (a int);
 		sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
 		grantCheck = "use data; SHOW grants"
 		sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
-	})
-
-	t.Run("ensure that jobs are restored", func(t *testing.T) {
-		// Ensure that the jobs in the RESTORE cluster is a superset of the jobs
-		// that were in the BACKUP cluster (before the full cluster BACKUP job was
-		// run). There may be more jobs now because the restore can run jobs of
-		// its own.
-		newJobsStr := sqlDBRestore.QueryStr(t, jobsQuery)
-		newJobs := make(map[string][]string)
-
-		for _, newJob := range newJobsStr {
-			// The first element of the slice is the job id.
-			newJobs[newJob[0]] = newJob
-		}
-		for _, oldJob := range preBackupJobs {
-			newJob, ok := newJobs[oldJob[0]]
-			if !ok {
-				t.Errorf("Expected to find job %+v in RESTORE cluster, but not found", oldJob)
-			}
-			require.Equal(t, oldJob, newJob)
-		}
 	})
 
 	t.Run("zone_configs", func(t *testing.T) {
@@ -676,7 +641,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"comments"},
 				{"database_role_settings"},
 				{"external_connections"},
-				{"jobs"},
 				{"locations"},
 				{"role_members"},
 				{"role_options"},
@@ -768,7 +732,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"comments"},
 				{"database_role_settings"},
 				{"external_connections"},
-				{"jobs"},
 				{"locations"},
 				{"role_members"},
 				{"role_options"},
@@ -1042,30 +1005,6 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 		checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
 		expectedCount = srcDB.QueryStr(t, checkQuery)
 		destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
-	})
-
-	t.Run("restore-canceled", func(t *testing.T) {
-		args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}},
-		}
-		_, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
-		defer cleanupDst()
-
-		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsMidRestore, clusterBackupLoc)
-
-		// Wait for the cluster restore job to finish, as well as the restored RESTORE TABLE
-		// job to cancel.
-		destDB.CheckQueryResultsRetry(t, `
-		SELECT description, status FROM [SHOW JOBS]
-		WHERE job_type = 'RESTORE' AND status NOT IN ('succeeded', 'canceled')`,
-			[][]string{},
-		)
-		// The cluster restore should succeed, but the table restore should have failed.
-		destDB.CheckQueryResults(t,
-			`SELECT status, count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' GROUP BY status ORDER BY status`,
-			[][]string{{"canceled", "1"}, {"succeeded", "1"}})
-
-		destDB.ExpectErr(t, `relation "restoredb.bank" does not exist`, `SELECT count(*) FROM restoredb.bank`)
 	})
 }
 
