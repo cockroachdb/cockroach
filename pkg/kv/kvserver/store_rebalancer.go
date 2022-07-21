@@ -106,6 +106,7 @@ type StoreRebalancer struct {
 	metrics         StoreRebalancerMetrics
 	st              *cluster.Settings
 	rq              *replicateQueue
+	rr              RangeRebalancer
 	replRankings    *replicaRankings
 	getRaftStatusFn func(replica *Replica) *raft.Status
 }
@@ -123,6 +124,7 @@ func NewStoreRebalancer(
 		metrics:        makeStoreRebalancerMetrics(),
 		st:             st,
 		rq:             rq,
+		rr:             rq,
 		replRankings:   replRankings,
 		getRaftStatusFn: func(replica *Replica) *raft.Status {
 			return replica.RaftStatus()
@@ -251,7 +253,13 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
-			return sr.rq.transferLease(ctx, replWithStats.repl, target, replWithStats.qps)
+			return sr.rr.TransferLease(
+				ctx,
+				replWithStats.repl,
+				replWithStats.repl.StoreID(),
+				target.StoreID,
+				replWithStats.qps,
+			)
 		}); err != nil {
 			log.Errorf(ctx, "unable to transfer lease to s%d: %+v", target.StoreID, err)
 			continue
@@ -320,7 +328,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
-			return sr.rq.store.DB().AdminRelocateRange(
+			return sr.rr.RelocateRange(
 				ctx,
 				descBeforeRebalance.StartKey.AsRawKey(),
 				voterTargets,
