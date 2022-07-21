@@ -133,7 +133,7 @@ func getSchemaForCreateTable(
 						),
 						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
 					),
-					pgcode.FeatureNotSupported,
+					pgcode.ExperimentalFeature,
 				),
 				"sql.schema.temp_tables_disabled",
 			)
@@ -1500,7 +1500,7 @@ func NewTableDesc(
 			if !evalCtx.SessionData().ImplicitColumnPartitioningEnabled {
 				return nil, errors.WithHint(
 					pgerror.New(
-						pgcode.FeatureNotSupported,
+						pgcode.ExperimentalFeature,
 						"PARTITION ALL BY LIST/RANGE is currently experimental",
 					),
 					"to enable, use SET experimental_enable_implicit_column_partitioning = true",
