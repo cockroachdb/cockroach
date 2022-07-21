@@ -2781,6 +2781,7 @@ CREATE TABLE crdb_internal.table_indexes (
   is_unique           BOOL NOT NULL,
   is_inverted         BOOL NOT NULL,
   is_sharded          BOOL NOT NULL,
+  is_visible          BOOL NOT NULL,
   shard_bucket_count  INT,
   created_at          TIMESTAMP
 )
@@ -2826,6 +2827,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
+							tree.MakeDBool(tree.DBool(!idx.IsNotVisible())),
 							shardBucketCnt,
 							createdAt,
 						)
