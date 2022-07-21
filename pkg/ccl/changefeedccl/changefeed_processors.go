@@ -65,7 +65,7 @@ type changeAggregator struct {
 	encoder Encoder
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
-	sink Sink
+	sink EventSink
 	// changedRowBuf, if non-nil, contains changed rows to be emitted. Anything
 	// queued in `resolvedSpanBuf` is dependent on these having been emitted, so
 	// this one must be empty before moving on to that one.
@@ -266,7 +266,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.sink, err = getSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
 		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
 
 	if err != nil {
@@ -686,7 +686,7 @@ type changeFrontier struct {
 	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
-	sink Sink
+	sink ResolvedTimestampSink
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
 	freqEmitResolved time.Duration
@@ -915,7 +915,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 	cf.sliMetrics = sli
-	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
+	cf.sink, err = getResolvedTimestampSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
