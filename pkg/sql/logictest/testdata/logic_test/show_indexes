@@ -9,20 +9,20 @@ CREATE TABLE t1 (
   UNIQUE INDEX d_b_idx (d ASC, b ASC)
 )
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES from t1
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t1          c_idx       true        1             c            ASC        false    false
-t1          c_idx       true        2             a            ASC        false    true
-t1          c_idx       true        3             b            ASC        false    true
-t1          d_b_idx     false       1             d            ASC        false    false
-t1          d_b_idx     false       2             b            ASC        false    false
-t1          d_b_idx     false       3             a            ASC        true     true
-t1          t1_pkey     false       1             a            ASC        false    false
-t1          t1_pkey     false       2             b            ASC        false    false
-t1          t1_pkey     false       3             c            N/A        true     false
-t1          t1_pkey     false       4             d            N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t1          c_idx       true        1             c            ASC        false    false     true
+t1          c_idx       true        2             a            ASC        false    true      true
+t1          c_idx       true        3             b            ASC        false    true      true
+t1          d_b_idx     false       1             d            ASC        false    false     true
+t1          d_b_idx     false       2             b            ASC        false    false     true
+t1          d_b_idx     false       3             a            ASC        true     true      true
+t1          t1_pkey     false       1             a            ASC        false    false     true
+t1          t1_pkey     false       2             b            ASC        false    false     true
+t1          t1_pkey     false       3             c            N/A        true     false     true
+t1          t1_pkey     false       4             d            N/A        true     false     true
 
 statement ok
 CREATE TABLE t2 (
@@ -38,29 +38,29 @@ CREATE TABLE t2 (
   INDEX d_idx (d ASC)
 )
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES from t2
 ----
-table_name  index_name   non_unique  seq_in_index  column_name  direction  storing  implicit
-t2          a_e_c_idx    true        1             a            ASC        false    false
-t2          a_e_c_idx    true        2             e            ASC        false    false
-t2          a_e_c_idx    true        3             c            ASC        false    false
-t2          a_e_c_idx    true        4             b            ASC        false    true
-t2          b_d_idx      false       1             b            ASC        false    false
-t2          b_d_idx      false       2             d            ASC        false    false
-t2          b_d_idx      false       3             c            ASC        true     true
-t2          b_d_idx      false       4             a            ASC        true     true
-t2          c_e_d_a_idx  false       1             c            ASC        false    false
-t2          c_e_d_a_idx  false       2             e            ASC        false    false
-t2          c_e_d_a_idx  false       3             d            ASC        false    false
-t2          c_e_d_a_idx  false       4             a            ASC        false    false
-t2          c_e_d_a_idx  false       5             b            ASC        true     true
-t2          d_idx        true        1             d            ASC        false    false
-t2          d_idx        true        2             c            ASC        false    true
-t2          d_idx        true        3             b            ASC        false    true
-t2          d_idx        true        4             a            ASC        false    true
-t2          t2_pkey      false       1             c            ASC        false    false
-t2          t2_pkey      false       2             b            ASC        false    false
-t2          t2_pkey      false       3             a            ASC        false    false
-t2          t2_pkey      false       4             d            N/A        true     false
-t2          t2_pkey      false       5             e            N/A        true     false
+table_name  index_name   non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t2          a_e_c_idx    true        1             a            ASC        false    false     true
+t2          a_e_c_idx    true        2             e            ASC        false    false     true
+t2          a_e_c_idx    true        3             c            ASC        false    false     true
+t2          a_e_c_idx    true        4             b            ASC        false    true      true
+t2          b_d_idx      false       1             b            ASC        false    false     true
+t2          b_d_idx      false       2             d            ASC        false    false     true
+t2          b_d_idx      false       3             c            ASC        true     true      true
+t2          b_d_idx      false       4             a            ASC        true     true      true
+t2          c_e_d_a_idx  false       1             c            ASC        false    false     true
+t2          c_e_d_a_idx  false       2             e            ASC        false    false     true
+t2          c_e_d_a_idx  false       3             d            ASC        false    false     true
+t2          c_e_d_a_idx  false       4             a            ASC        false    false     true
+t2          c_e_d_a_idx  false       5             b            ASC        true     true      true
+t2          d_idx        true        1             d            ASC        false    false     true
+t2          d_idx        true        2             c            ASC        false    true      true
+t2          d_idx        true        3             b            ASC        false    true      true
+t2          d_idx        true        4             a            ASC        false    true      true
+t2          t2_pkey      false       1             c            ASC        false    false     true
+t2          t2_pkey      false       2             b            ASC        false    false     true
+t2          t2_pkey      false       3             a            ASC        false    false     true
+t2          t2_pkey      false       4             d            N/A        true     false     true
+t2          t2_pkey      false       5             e            N/A        true     false     true
