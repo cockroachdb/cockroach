@@ -1810,6 +1810,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		if formatVers < pebble.FormatRangeKeys {
 			formatVers = pebble.FormatRangeKeys
 		}
+	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatSplitUserKeysMarkedCompacted)):
+		if formatVers < pebble.FormatMarkedCompacted {
+			formatVers = pebble.FormatMarkedCompacted
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatSplitUserKeysMarked)):
 		if formatVers < pebble.FormatSplitUserKeysMarked {
 			formatVers = pebble.FormatSplitUserKeysMarked
