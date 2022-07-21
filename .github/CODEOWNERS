@@ -166,6 +166,7 @@
 /pkg/ccl/importerccl/        @cockroachdb/bulk-io
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-io
+/pkg/ccl/cloudccl/           @cockroachdb/bulk-io
 /pkg/cloud/                  @cockroachdb/bulk-io
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-io
 

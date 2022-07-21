@@ -76,6 +76,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:create_database.html",
   "//docs/generated/sql/bnf:create_ddl.html",
   "//docs/generated/sql/bnf:create_extension.html",
+  "//docs/generated/sql/bnf:create_external_connection.html",
   "//docs/generated/sql/bnf:create_func.html",
   "//docs/generated/sql/bnf:create_index.html",
   "//docs/generated/sql/bnf:create_index_with_storage_param.html",

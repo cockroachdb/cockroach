@@ -76,6 +76,7 @@ FILES = [
     "create_database_stmt",
     "create_ddl_stmt",
     "create_extension_stmt",
+    "create_external_connection_stmt",
     "create_func_stmt",
     "create_index_stmt",
     "create_index_with_storage_param",

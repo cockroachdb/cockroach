@@ -88,6 +88,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:create_database_stmt.bnf",
   "//docs/generated/sql/bnf:create_ddl_stmt.bnf",
   "//docs/generated/sql/bnf:create_extension_stmt.bnf",
+  "//docs/generated/sql/bnf:create_external_connection_stmt.bnf",
   "//docs/generated/sql/bnf:create_func_stmt.bnf",
   "//docs/generated/sql/bnf:create_index_stmt.bnf",
   "//docs/generated/sql/bnf:create_index_with_storage_param.bnf",

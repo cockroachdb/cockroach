@@ -1411,6 +1411,7 @@ system         public              sql_instances                          BASE T
 system         public              span_configurations                    BASE TABLE   YES                 1
 system         public              tenant_settings                        BASE TABLE   YES                 1
 system         public              privileges                             BASE TABLE   YES                 1
+system         public              external_connections                   BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1486,6 +1487,12 @@ system              public             630200280_12_3_not_null                  
 system              public             630200280_12_4_not_null                                                                                         system         public        eventlog                         CHECK            NO             NO
 system              public             630200280_12_6_not_null                                                                                         system         public        eventlog                         CHECK            NO             NO
 system              public             primary                                                                                                         system         public        eventlog                         PRIMARY KEY      NO             NO
+system              public             630200280_52_1_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             630200280_52_2_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             630200280_52_3_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             630200280_52_4_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             630200280_52_5_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             primary                                                                                                         system         public        external_connections             PRIMARY KEY      NO             NO
 system              public             630200280_15_1_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_2_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_3_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
@@ -1832,6 +1839,11 @@ system              public             630200280_51_1_not_null                  
 system              public             630200280_51_2_not_null                                                                                         path IS NOT NULL
 system              public             630200280_51_3_not_null                                                                                         privileges IS NOT NULL
 system              public             630200280_51_4_not_null                                                                                         grant_options IS NOT NULL
+system              public             630200280_52_1_not_null                                                                                         connection_name IS NOT NULL
+system              public             630200280_52_2_not_null                                                                                         created IS NOT NULL
+system              public             630200280_52_3_not_null                                                                                         updated IS NOT NULL
+system              public             630200280_52_4_not_null                                                                                         connection_type IS NOT NULL
+system              public             630200280_52_5_not_null                                                                                         connection_details IS NOT NULL
 system              public             630200280_5_1_not_null                                                                                          id IS NOT NULL
 system              public             630200280_6_1_not_null                                                                                          name IS NOT NULL
 system              public             630200280_6_2_not_null                                                                                          value IS NOT NULL
@@ -1858,6 +1870,7 @@ system         public        database_role_settings           role_name         
 system         public        descriptor                       id                                                                                                        system              public             primary
 system         public        eventlog                         timestamp                                                                                                 system              public             primary
 system         public        eventlog                         uniqueID                                                                                                  system              public             primary
+system         public        external_connections             connection_name                                                                                           system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            descID                                                                                                    system              public             primary
@@ -2031,6 +2044,11 @@ system         public        eventlog                         reportingID       
 system         public        eventlog                         targetID                                                                                                  3
 system         public        eventlog                         timestamp                                                                                                 1
 system         public        eventlog                         uniqueID                                                                                                  6
+system         public        external_connections             connection_details                                                                                        5
+system         public        external_connections             connection_name                                                                                           1
+system         public        external_connections             connection_type                                                                                           4
+system         public        external_connections             created                                                                                                   2
+system         public        external_connections             updated                                                                                                   3
 system         pg_extension  geography_columns                coord_dimension                                                                                           5
 system         pg_extension  geography_columns                f_geography_column                                                                                        4
 system         pg_extension  geography_columns                f_table_catalog                                                                                           1
@@ -3022,6 +3040,14 @@ NULL     root     system         public              eventlog                   
 NULL     root     system         public              eventlog                               INSERT          YES           NO
 NULL     root     system         public              eventlog                               SELECT          YES           YES
 NULL     root     system         public              eventlog                               UPDATE          YES           NO
+NULL     admin    system         public              external_connections                   DELETE          YES           NO
+NULL     admin    system         public              external_connections                   INSERT          YES           NO
+NULL     admin    system         public              external_connections                   SELECT          YES           YES
+NULL     admin    system         public              external_connections                   UPDATE          YES           NO
+NULL     root     system         public              external_connections                   DELETE          YES           NO
+NULL     root     system         public              external_connections                   INSERT          YES           NO
+NULL     root     system         public              external_connections                   SELECT          YES           YES
+NULL     root     system         public              external_connections                   UPDATE          YES           NO
 NULL     admin    system         public              jobs                                   DELETE          YES           NO
 NULL     admin    system         public              jobs                                   INSERT          YES           NO
 NULL     admin    system         public              jobs                                   SELECT          YES           YES
@@ -3814,6 +3840,14 @@ NULL     root     system         public              privileges                 
 NULL     root     system         public              privileges                             INSERT          YES           NO
 NULL     root     system         public              privileges                             SELECT          YES           YES
 NULL     root     system         public              privileges                             UPDATE          YES           NO
+NULL     admin    system         public              external_connections                   DELETE          YES           NO
+NULL     admin    system         public              external_connections                   INSERT          YES           NO
+NULL     admin    system         public              external_connections                   SELECT          YES           YES
+NULL     admin    system         public              external_connections                   UPDATE          YES           NO
+NULL     root     system         public              external_connections                   DELETE          YES           NO
+NULL     root     system         public              external_connections                   INSERT          YES           NO
+NULL     root     system         public              external_connections                   SELECT          YES           YES
+NULL     root     system         public              external_connections                   UPDATE          YES           NO
 
 statement ok
 USE other_db;
