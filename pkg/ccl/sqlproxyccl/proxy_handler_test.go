@@ -282,6 +282,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
 
 	require.Equal(t, int64(3), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(3), s.metrics.ConnectionLatency.TotalCount())
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
 }
@@ -415,6 +416,7 @@ func TestProxyTLSClose(t *testing.T) {
 	_ = conn.Close(ctx)
 
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
@@ -504,6 +506,7 @@ func TestInsecureProxy(t *testing.T) {
 	})
 	require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
 }
 
 func TestErroneousFrontend(t *testing.T) {
@@ -580,6 +583,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(0), s.metrics.ConnectionLatency.TotalCount())
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 

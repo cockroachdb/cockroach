@@ -290,6 +290,8 @@ func newProxyHandler(
 // handle is called by the proxy server to handle a single incoming client
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
+	connRecievedTime := timeutil.Now()
+
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = fe.Conn.Close() }()
 	if fe.Err != nil {
@@ -357,11 +359,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	connector := &connector{
-		ClusterName:    clusterName,
-		TenantID:       tenID,
-		DirectoryCache: handler.directoryCache,
-		Balancer:       handler.balancer,
-		StartupMsg:     backendStartupMsg,
+		ClusterName:       clusterName,
+		TenantID:          tenID,
+		DirectoryCache:    handler.directoryCache,
+		Balancer:          handler.balancer,
+		StartupMsg:        backendStartupMsg,
+		DialTenantLatency: handler.metrics.DialTenantLatency,
+		DialTenantRetries: handler.metrics.DialTenantRetries,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
@@ -399,6 +403,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	defer func() { _ = crdbConn.Close() }()
 
+	// Record the connection success and how long it took.
+	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
 	log.Infof(ctx, "new connection")
