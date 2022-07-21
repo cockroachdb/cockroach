@@ -195,11 +195,11 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 
 	mockVersion := descpb.DescriptorVersion(0)
 	testCases := []struct {
-		desc                              string
-		expectedTTLError                  string
-		aostDuration                      time.Duration
-		mockDescriptorVersionDuringDelete *descpb.DescriptorVersion
-		onDeleteLoopStart                 func(*testing.T, **sqlutils.SQLRunner) func() error
+		desc                                   string
+		expectedTTLError                       string
+		aostDuration                           time.Duration
+		mockTableDescriptorVersionDuringDelete *descpb.DescriptorVersion
+		preSelectDeleteStatement               string
 	}{
 		{
 			desc:             "schema change too recent to start TTL job",
@@ -213,35 +213,24 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			// We cannot use a schema change to change the version in this test as
 			// we overtook the job adoption method, which means schema changes get
 			// blocked and may not run.
-			mockDescriptorVersionDuringDelete: &mockVersion,
+			mockTableDescriptorVersionDuringDelete: &mockVersion,
 		},
 		{
-			desc:             "disable cluster setting",
-			expectedTTLError: `ttl jobs are currently disabled by CLUSTER SETTING sql.ttl.job.enabled`,
-			onDeleteLoopStart: func(t *testing.T, sqlDB **sqlutils.SQLRunner) func() error {
-				return func() error {
-					(*sqlDB).Exec(t, `SET CLUSTER SETTING sql.ttl.job.enabled = false`)
-					return nil
-				}
-			},
+			desc:                     "disable cluster setting",
+			expectedTTLError:         `ttl jobs are currently disabled by CLUSTER SETTING sql.ttl.job.enabled`,
+			preSelectDeleteStatement: `SET CLUSTER SETTING sql.ttl.job.enabled = false`,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			var onDeleteLoopStart func() error
-			var sqlDB *sqlutils.SQLRunner
-			if tc.onDeleteLoopStart != nil {
-				onDeleteLoopStart = tc.onDeleteLoopStart(t, &sqlDB)
-			}
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
-				AOSTDuration:                      &tc.aostDuration,
-				MockDescriptorVersionDuringDelete: tc.mockDescriptorVersionDuringDelete,
-				OnDeleteLoopStart:                 onDeleteLoopStart,
+				AOSTDuration:                           &tc.aostDuration,
+				MockTableDescriptorVersionDuringDelete: tc.mockTableDescriptorVersionDuringDelete,
+				PreSelectDeleteStatement:               tc.preSelectDeleteStatement,
 			}, false /* testMultiTenant */)
 			defer cleanupFunc()
-			sqlDB = th.sqlDB
-			sqlDB.Exec(t, createTable)
+			th.sqlDB.Exec(t, createTable)
 
 			// Force the schedule to execute.
 			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
@@ -533,10 +522,8 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
 				&sql.TTLTestingKnobs{
-					AOSTDuration: &zeroDuration,
-					OnStatisticsError: func(err error) {
-						require.NoError(t, err, "error gathering statistics")
-					},
+					AOSTDuration:     &zeroDuration,
+					ReturnStatsError: true,
 				},
 				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 			)
