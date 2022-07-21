@@ -1178,7 +1178,7 @@ func (p *planner) AlterDatabasePlacement(
 
 	if !p.EvalContext().SessionData().PlacementEnabled {
 		return nil, errors.WithHint(pgerror.New(
-			pgcode.FeatureNotSupported,
+			pgcode.ExperimentalFeature,
 			"ALTER DATABASE PLACEMENT requires that the session setting "+
 				"enable_multiregion_placement_policy is enabled",
 		),
@@ -1488,7 +1488,7 @@ func (p *planner) isSuperRegionEnabled() error {
 			pgerror.WithCandidateCode(
 				errors.WithHint(errors.New("super regions are only supported experimentally"),
 					"You can enable super regions by running `SET enable_super_regions = 'on'`."),
-				pgcode.FeatureNotSupported),
+				pgcode.ExperimentalFeature),
 			"sql.schema.super_regions_disabled",
 		)
 	}
