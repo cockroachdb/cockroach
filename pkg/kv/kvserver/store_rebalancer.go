@@ -636,16 +636,29 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 
 		// Pick the voter with the least QPS to be leaseholder;
 		// RelocateRange transfers the lease to the first provided target.
-		//
-		// TODO(aayush): Does this logic need to exist? This logic does not take
-		// lease preferences into account. So it is already broken in a way.
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
 		var raftStatus *raft.Status
-		for i := 0; i < len(targetVoterRepls); i++ {
+
+		// If a lease preference exists among the incoming voting set, then we
+		// consider only those stores as lease transfer targets. Otherwise, if
+		// there are no preferred leaseholders, either due to no lease
+		// preference being set or no preferred stores in the incoming voting
+		// set, we consider every incoming voter as a transfer candidate.
+		// NB: This implies that lease preferences will be ignored if no voting
+		// replicas exist that satisfy the lease preference. We could also
+		// ignore this rebalance opportunity in this case, however we do not as
+		// it is more likely than not that this would only occur under
+		// misconfiguration.
+		leaseCandidates := sr.rq.allocator.PreferredLeaseholders(rebalanceCtx.conf, targetVoterRepls)
+		if len(leaseCandidates) == 0 {
+			leaseCandidates = targetVoterRepls
+		}
+
+		for i := 0; i < len(leaseCandidates); i++ {
 			// Ensure we don't transfer the lease to an existing replica that is behind
 			// in processing its raft log.
-			if replica, ok := rangeDesc.GetReplicaDescriptor(targetVoterRepls[i].StoreID); ok {
+			if replica, ok := rangeDesc.GetReplicaDescriptor(leaseCandidates[i].StoreID); ok {
 				if raftStatus == nil {
 					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
 				}
@@ -654,13 +667,20 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				}
 			}
 
-			storeDesc, ok := storeDescMap[targetVoterRepls[i].StoreID]
+			storeDesc, ok := storeDescMap[leaseCandidates[i].StoreID]
 			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
 				newLeaseIdx = i
 				newLeaseQPS = storeDesc.Capacity.QueriesPerSecond
 			}
 		}
-		targetVoterRepls[0], targetVoterRepls[newLeaseIdx] = targetVoterRepls[newLeaseIdx], targetVoterRepls[0]
+
+		for i := 0; i < len(targetVoterRepls); i++ {
+			if targetVoterRepls[i].StoreID == leaseCandidates[newLeaseIdx].StoreID {
+				targetVoterRepls[0], targetVoterRepls[i] = targetVoterRepls[i], targetVoterRepls[0]
+				break
+			}
+		}
+
 		return replWithStats,
 			roachpb.MakeReplicaSet(targetVoterRepls).ReplicationTargets(),
 			roachpb.MakeReplicaSet(targetNonVoterRepls).ReplicationTargets()
