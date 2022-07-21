@@ -378,7 +378,7 @@ func (p *planner) maybeLogStatementInternal(
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
 	}
 
-	if telemetryLoggingEnabled {
+	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
 		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
