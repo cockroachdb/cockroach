@@ -338,6 +338,44 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaWriteEvaluationServerSideRetrySuccess = metric.Metadata{
+		Name:        "txn.server_side_retry.write_evaluation.success",
+		Help:        "Number of write batches that were successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaWriteEvaluationServerSideRetryFailure = metric.Metadata{
+		Name:        "txn.server_side_retry.write_evaluation.failure",
+		Help:        "Number of write batches that were not successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReadEvaluationServerSideRetrySuccess = metric.Metadata{
+		Name:        "txn.server_side_retry.read_evaluation.success",
+		Help:        "Number of read batches that were successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReadEvaluationServerSideRetryFailure = metric.Metadata{
+		Name:        "txn.server_side_retry.read_evaluation.failure",
+		Help:        "Number of read batches that were not successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess = metric.Metadata{
+		Name: "txn.server_side_retry.uncertainty_interval_error.success",
+		Help: "Number of batches that ran into uncertainty interval errors that were " +
+			"successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure = metric.Metadata{
+		Name: "txn.server_side_retry.uncertainty_interval_error.failure",
+		Help: "Number of batches that ran into uncertainty interval errors that were not " +
+			"successfully refreshed server side",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// RocksDB/Pebble metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
@@ -1548,7 +1586,13 @@ type StoreMetrics struct {
 	FollowerReadsCount *metric.Counter
 
 	// Server-side transaction metrics.
-	CommitWaitsBeforeCommitTrigger *metric.Counter
+	CommitWaitsBeforeCommitTrigger                           *metric.Counter
+	WriteEvaluationServerSideRetrySuccess                    *metric.Counter
+	WriteEvaluationServerSideRetryFailure                    *metric.Counter
+	ReadEvaluationServerSideRetrySuccess                     *metric.Counter
+	ReadEvaluationServerSideRetryFailure                     *metric.Counter
+	ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess *metric.Counter
+	ReadWithinUncertaintyIntervalErrorServerSideRetryFailure *metric.Counter
 
 	// Storage (pebble) metrics. Some are named RocksDB which is what we used
 	// before pebble, and this name is kept for backwards compatibility despite
@@ -2026,7 +2070,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
 
 		// Server-side transaction metrics.
-		CommitWaitsBeforeCommitTrigger: metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
+		CommitWaitsBeforeCommitTrigger:                           metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
+		WriteEvaluationServerSideRetrySuccess:                    metric.NewCounter(metaWriteEvaluationServerSideRetrySuccess),
+		WriteEvaluationServerSideRetryFailure:                    metric.NewCounter(metaWriteEvaluationServerSideRetryFailure),
+		ReadEvaluationServerSideRetrySuccess:                     metric.NewCounter(metaReadEvaluationServerSideRetrySuccess),
+		ReadEvaluationServerSideRetryFailure:                     metric.NewCounter(metaReadEvaluationServerSideRetryFailure),
+		ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess),
+		ReadWithinUncertaintyIntervalErrorServerSideRetryFailure: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure),
 
 		// RocksDB/Pebble metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),

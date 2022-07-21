@@ -629,11 +629,17 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			success = false
 		}
 
-		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, g, deadline) {
+		if success || retries > 0 {
 			break
+		}
+		// If we can retry, set a higher batch timestamp and continue.
+		if !canDoServersideRetry(ctx, pErr, ba, br, g, deadline) {
+			r.store.Metrics().WriteEvaluationServerSideRetryFailure.Inc(1)
+			break
+		} else {
+			r.store.Metrics().WriteEvaluationServerSideRetrySuccess.Inc(1)
 		}
 	}
 	return batch, br, res, pErr
