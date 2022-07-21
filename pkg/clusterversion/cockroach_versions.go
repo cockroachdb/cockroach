@@ -289,6 +289,10 @@ const (
 
 	// LocalTimestamps enables the use of local timestamps in MVCC values.
 	LocalTimestamps
+	// PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
+	// version that recombines all user keys that may be split across multiple
+	// files into a single table.
+	PebbleFormatSplitUserKeysMarkedCompacted
 	// EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
 	// migration that bumps Pebble's format major version to a version that
 	// supports range keys.
@@ -517,52 +521,56 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 	{
-		Key:     EnsurePebbleFormatVersionRangeKeys,
+		Key:     PebbleFormatSplitUserKeysMarkedCompacted,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
 	},
 	{
-		Key:     EnablePebbleFormatVersionRangeKeys,
+		Key:     EnsurePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
 	},
 	{
-		Key:     TrigramInvertedIndexes,
+		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 	{
-		Key:     RemoveGrantPrivilege,
+		Key:     TrigramInvertedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 	{
-		Key:     MVCCRangeTombstones,
+		Key:     RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     UpgradeSequenceToBeReferencedByID,
+		Key:     MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 	{
-		Key:     SampledStmtDiagReqs,
+		Key:     UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 	{
-		Key:     AddSSTableTombstones,
+		Key:     SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 	{
-		Key:     SystemPrivilegesTable,
+		Key:     AddSSTableTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
-		Key:     EnablePredicateProjectionChangefeed,
+		Key:     SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
 	},
 	{
-		Key:     AlterSystemSQLInstancesAddLocality,
+		Key:     EnablePredicateProjectionChangefeed,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
 	},
 	{
-		Key:     SystemExternalConnectionsTable,
+		Key:     AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
+	},
+	{
+		Key:     SystemExternalConnectionsTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
 
 	// *************************************************
