@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -227,6 +228,48 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 				); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	return nil
+}
+
+// hydrateCatalog installs type metadata in the types present for all
+// table descriptors in a catalog.
+func hydrateCatalog(ctx context.Context, cat nstree.Catalog) error {
+	// Since we have a catalog, we already have everything we need to hydrate our
+	// types. Set up an accessor for the type hydration method to look into the
+	// catalog.
+	typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+		typDesc := cat.LookupDescriptorEntry(id)
+		if typDesc == nil {
+			n := tree.MakeUnresolvedName(fmt.Sprintf("[%d]", id))
+			return tree.TypeName{}, nil, sqlerrors.NewUndefinedObjectError(&n,
+				tree.TypeObject)
+		}
+		dbDesc := cat.LookupDescriptorEntry(typDesc.GetParentID())
+		if dbDesc == nil {
+			n := fmt.Sprintf("[%d]", typDesc.GetParentID())
+			return tree.TypeName{}, nil, sqlerrors.NewUndefinedDatabaseError(n)
+		}
+		scDesc := cat.LookupDescriptorEntry(typDesc.GetParentSchemaID())
+		name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), typDesc.GetName())
+		return name, typDesc.(catalog.TypeDescriptor), nil
+	}
+	// Now hydrate all table descriptors.
+	for _, desc := range cat.OrderedDescriptors() {
+		// Never hydrate dropped descriptors.
+		if desc.Dropped() {
+			continue
+		}
+		tblDesc, ok := desc.(catalog.TableDescriptor)
+		if ok {
+			if err := typedesc.HydrateTypesInTableDescriptor(
+				ctx,
+				tblDesc.TableDesc(),
+				typedesc.TypeLookupFunc(typeLookup),
+			); err != nil {
+				return err
 			}
 		}
 	}
