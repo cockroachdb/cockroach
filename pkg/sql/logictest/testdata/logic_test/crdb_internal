@@ -1057,6 +1057,7 @@ postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
 system         admin     CONNECT         YES
+system         node      ALL             YES
 system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
@@ -1084,6 +1085,7 @@ postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
 system         admin     CONNECT         YES
+system         node      ALL             YES
 system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
