@@ -285,7 +285,7 @@ func FindLatestFile(
 
 	// We name files such that the most recent latest file will always
 	// be at the top, so just grab the first filename.
-	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
+	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory+"/", "", func(p string) error {
 		p = strings.TrimPrefix(p, "/")
 		latestFile = p
 		latestFileFound = true

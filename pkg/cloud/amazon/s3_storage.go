@@ -623,7 +623,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	}
 
 	if err := client.ListObjectsPagesWithContext(
-		ctx, &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}, pageFn,
+		ctx, &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim), Marker: aws.String(dest)}, pageFn,
 	); err != nil {
 		return errors.Wrap(err, `failed to list s3 bucket`)
 	}
