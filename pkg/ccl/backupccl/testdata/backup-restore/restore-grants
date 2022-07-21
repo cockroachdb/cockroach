@@ -68,7 +68,7 @@ SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
 testuser
 
 # Check the expected grants on each of the schema objects created above.
-query-sql
+query-sql save-to-var=testdb
 SHOW GRANTS ON DATABASE testdb;
 ----
 testdb admin ALL true
@@ -159,14 +159,9 @@ exec-sql
 USE testdb
 ----
 
-query-sql
+query-sql equals-var=testdb
 SHOW GRANTS ON DATABASE testdb;
 ----
-testdb admin ALL true
-testdb public CONNECT false
-testdb root ALL true
-testdb testuser ALL true
-testdb user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA public;

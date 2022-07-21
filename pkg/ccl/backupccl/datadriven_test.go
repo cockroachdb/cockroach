@@ -86,6 +86,7 @@ type datadrivenTestState struct {
 	sqlDBs                   map[sqlDBKey]*gosql.DB
 	jobTags                  map[string]jobspb.JobID
 	clusterTimestamps        map[string]string
+	queryVars                map[string]string
 	noticeBuffer             []string
 	cleanupFns               []func()
 }
@@ -98,6 +99,7 @@ func newDatadrivenTestState() datadrivenTestState {
 		sqlDBs:                   make(map[sqlDBKey]*gosql.DB),
 		jobTags:                  make(map[string]jobspb.JobID),
 		clusterTimestamps:        make(map[string]string),
+		queryVars:                make(map[string]string),
 	}
 }
 
@@ -277,7 +279,15 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   query execution.
 //
 // - "query-sql [server=<name>] [user=<name>]"
-//   Executes the input SQL query and print the results.
+//   Executes the input SQL query and prints the results.
+//
+//   Supported arguments:
+//
+//   + save-to-var=<var>: cache the results at the given var to compare to a future
+//   query.
+//
+//   + equals-var=<var>: compare the query results to a previously cached query.
+//   fail if results do not match.
 //
 // - "reset"
 //    Clear all state associated with the test.
@@ -488,6 +498,18 @@ func TestDataDriven(t *testing.T) {
 				}
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
+
+				if d.HasArg("save-to-var") {
+					saveQuery(t, output, ds, d)
+				}
+
+				if d.HasArg("equals-var") {
+					var equalsTag string
+					d.ScanArgs(t, "equals-var", &equalsTag)
+					require.Equal(t, ds.queryVars[equalsTag], output)
+					return ""
+				}
+
 				return output
 
 			case "backup":
@@ -760,4 +782,14 @@ func tagJob(
 		t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
 	}
 	ds.jobTags[jobTag] = findMostRecentJobWithType(t, ds, server, user, jobType)
+}
+
+// saveQuery stores the query results. Users can compare the cached results in a future query
+func saveQuery(t *testing.T, output string, ds datadrivenTestState, d *datadriven.TestData) {
+	var queryVar string
+	d.ScanArgs(t, "save-to-var", &queryVar)
+	if _, exists := ds.queryVars[queryVar]; exists {
+		t.Fatalf("failed to `save-to-var`, query var %s already exists", queryVar)
+	}
+	ds.queryVars[queryVar] = output
 }
