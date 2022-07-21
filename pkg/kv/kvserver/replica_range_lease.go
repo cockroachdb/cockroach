@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -355,11 +354,10 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// command, which can take a couple of Raft election timeouts.
 	timeout := 2 * p.repl.store.cfg.RaftElectionTimeout()
 
-	const taskName = "pendingLeaseRequest: requesting lease"
 	err := p.repl.store.Stopper().RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName: taskName,
+			TaskName: "pendingLeaseRequest: requesting lease",
 			// Trace the lease acquisition as a child even though it might outlive the
 			// parent in case the parent's ctx is canceled. Other requests might
 			// later block on this lease acquisition too, and we can't include the
@@ -374,9 +372,12 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// return a NotLeaseHolderError rather than hanging, otherwise we could
 			// prevent the caller from nudging a different replica into acquiring the
 			// lease.
-			err := contextutil.RunWithTimeout(ctx, taskName, timeout, func(ctx context.Context) error {
-				return p.requestLease(ctx, nextLeaseHolder, reqLease, status, leaseReq)
-			})
+			//
+			// Does not use RunWithTimeout(), because we do not want to mask the
+			// NotLeaseHolderError on context cancellation.
+			requestLeaseCtx, requestLeaseCancel := context.WithTimeout(ctx, timeout) // nolint:context
+			defer requestLeaseCancel()
+			err := p.requestLease(requestLeaseCtx, nextLeaseHolder, reqLease, status, leaseReq)
 			// Error will be handled below.
 
 			// We reset our state below regardless of whether we've gotten an error or
@@ -526,6 +527,14 @@ func (p *pendingLeaseRequest) requestLease(
 	// up on the lease and thus worsening the situation.
 	ba.Add(leaseReq)
 	_, pErr := p.repl.Send(ctx, ba)
+	// If the lease request failed and the context was cancelled, return a
+	// NotLeaseHolderError. We expect asyncRequestLease to pass a new context with
+	// a timeout, disconnected from the caller's context. The DistSender will
+	// check for client context cancellation when handling the error too.
+	if pErr != nil && ctx.Err() != nil {
+		return newNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
+			fmt.Sprintf("lease acquisition cancelled: %s", ctx.Err()))
+	}
 	return pErr.GoError()
 }
 
@@ -1228,15 +1237,12 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// We may need to hold a Raft election and repropose the lease acquisition
 	// command, which can take a couple of Raft election timeouts.
 	timeout := 2 * r.store.cfg.RaftElectionTimeout()
-	if err := contextutil.RunWithTimeout(ctx, "acquire-lease", timeout,
-		func(ctx context.Context) error {
-			status, pErr = r.redirectOnOrAcquireLeaseForRequestWithoutTimeout(ctx, reqTS, brSig)
-			return nil
-		},
-	); err != nil {
-		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
-	}
-	return status, pErr
+
+	// Does not use RunWithTimeout(), because we do not want to mask the
+	// NotLeaseHolderError on context cancellation.
+	ctx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
+	defer cancel()
+	return r.redirectOnOrAcquireLeaseForRequestWithoutTimeout(ctx, reqTS, brSig)
 }
 
 // redirectOnOrAcquireLeaseForRequestWithoutTimeout is like
