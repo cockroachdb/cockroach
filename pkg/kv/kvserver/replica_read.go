@@ -306,10 +306,16 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		now := timeutil.Now()
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
-		// If we can retry, set a higher batch timestamp and continue.
-		// Allow one retry only.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, g, nil /* deadline */) {
+		// Allow only one retry.
+		if pErr == nil || retries > 0 {
 			break
+		}
+		// If we can retry, set a higher batch timestamp and continue.
+		if !canDoServersideRetry(ctx, pErr, ba, br, g, nil /* deadline */) {
+			r.store.Metrics().ReadEvaluationServerSideRetryFailure.Inc(1)
+			break
+		} else {
+			r.store.Metrics().ReadEvaluationServerSideRetrySuccess.Inc(1)
 		}
 	}
 
