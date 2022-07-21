@@ -34,7 +34,7 @@ type selectQueryBuilder struct {
 	pkColumns       []string
 	selectOpName    string
 	startPK, endPK  tree.Datums
-	selectBatchSize int
+	selectBatchSize int64
 	aost            tree.DTimestampTZ
 	ttlExpression   string
 
@@ -59,7 +59,7 @@ func makeSelectQueryBuilder(
 	relationName string,
 	startPK, endPK tree.Datums,
 	aost tree.DTimestampTZ,
-	selectBatchSize int,
+	selectBatchSize int64,
 	ttlExpression string,
 ) selectQueryBuilder {
 	// We will have a maximum of 1 + len(pkColumns)*2 columns, where one
@@ -212,7 +212,7 @@ func (b *selectQueryBuilder) moveCursor(rows []tree.Datums) error {
 type deleteQueryBuilder struct {
 	tableID         descpb.ID
 	pkColumns       []string
-	deleteBatchSize int
+	deleteBatchSize int64
 	deleteOpName    string
 	ttlExpression   string
 
@@ -229,10 +229,10 @@ func makeDeleteQueryBuilder(
 	cutoff time.Time,
 	pkColumns []string,
 	relationName string,
-	deleteBatchSize int,
+	deleteBatchSize int64,
 	ttlExpression string,
 ) deleteQueryBuilder {
-	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
+	cachedArgs := make([]interface{}, 0, 1+int64(len(pkColumns))*deleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
 
 	return deleteQueryBuilder{
@@ -273,7 +273,7 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 
 func (b *deleteQueryBuilder) buildQueryAndArgs(rows []tree.Datums) (string, []interface{}) {
 	var q string
-	if len(rows) == b.deleteBatchSize {
+	if int64(len(rows)) == b.deleteBatchSize {
 		if b.cachedQuery == "" {
 			b.cachedQuery = b.buildQuery(len(rows))
 		}
