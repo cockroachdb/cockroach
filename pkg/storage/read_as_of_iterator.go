@@ -16,15 +16,21 @@ import (
 )
 
 // ReadAsOfIterator wraps a SimpleMVCCIterator and only surfaces the latest
-// valid key of a given MVCC key that is also below the asOf timestamp, if set.
-// Further, the iterator does not surface delete tombstones, nor any MVCC keys
-// shadowed by delete tombstones below the asOf timestamp, if set. The iterator
-// assumes that it will not encounter any write intents.
+// valid point key of a given MVCC key that is also below the asOf timestamp, if
+// set. Further, the iterator does not surface point or range tombstones, nor
+// any MVCC keys shadowed by tombstones below the asOf timestamp, if set. The
+// iterator assumes that it will not encounter any write intents.
 type ReadAsOfIterator struct {
 	iter SimpleMVCCIterator
 
 	// asOf is the latest timestamp of a key surfaced by the iterator.
 	asOf hlc.Timestamp
+
+	// valid tracks if the current key is valid
+	valid bool
+
+	// err tracks if iterating to the current key returned an error
+	err error
 }
 
 var _ SimpleMVCCIterator = &ReadAsOfIterator{}
@@ -45,7 +51,7 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: f.asOf}
 	f.iter.SeekGE(synthetic)
 
-	if ok := f.advance(); ok && f.UnsafeKey().Less(originalKey) {
+	if f.advance(); f.valid && f.UnsafeKey().Less(originalKey) {
 		// The following is true:
 		// originalKey.Key == f.UnsafeKey &&
 		// f.asOf timestamp (if set) >= current timestamp > originalKey timestamp.
@@ -59,7 +65,7 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 
 // Valid implements the simpleMVCCIterator.
 func (f *ReadAsOfIterator) Valid() (bool, error) {
-	return f.iter.Valid()
+	return f.valid, f.err
 }
 
 // Next advances the iterator to the next valid MVCC key obeying the iterator's
@@ -94,40 +100,85 @@ func (f *ReadAsOfIterator) UnsafeValue() []byte {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (f *ReadAsOfIterator) HasPointAndRange() (bool, bool) {
-	panic("not implemented")
+	// the ReadAsOfIterator only surfaces point keys; therefore hasPoint is always
+	// true, unless the iterator is invalid, and hasRange is always false.
+	return f.valid, false
 }
 
-// RangeBounds implements SimpleMVCCIterator.
+// RangeBounds always returns an empty span, since the iterator never surfaces
+// rangekeys.
 func (f *ReadAsOfIterator) RangeBounds() roachpb.Span {
-	panic("not implemented")
+	return roachpb.Span{}
 }
 
-// RangeKeys implements SimpleMVCCIterator.
+// RangeKeys is always empty since this iterator never surfaces rangeKeys.
 func (f *ReadAsOfIterator) RangeKeys() []MVCCRangeKeyValue {
-	panic("not implemented")
+	return []MVCCRangeKeyValue{}
+}
+
+// updateValid updates i.valid and i.err based on the underlying iterator, and
+// returns true if valid.
+func (f *ReadAsOfIterator) updateValid() bool {
+	f.valid, f.err = f.iter.Valid()
+	return f.valid
 }
 
 // advance moves past keys with timestamps later than f.asOf and skips MVCC keys
-// whose latest value (subject to f.asOF) has been deleted. Note that advance
-// moves past keys above asOF before evaluating tombstones, implying the
-// iterator will never call f.iter.NextKey() on a tombstone with a timestamp
-// later than f.asOF.
-func (f *ReadAsOfIterator) advance() bool {
+// whose latest value (subject to f.asOF) has been deleted by a point or range
+// tombstone.
+func (f *ReadAsOfIterator) advance() {
 	for {
-		if ok, err := f.Valid(); err != nil || !ok {
-			// No valid keys found.
-			return false
-		} else if !f.asOf.IsEmpty() && f.asOf.Less(f.iter.UnsafeKey().Timestamp) {
-			// Skip keys above the asOf timestamp.
+		if ok := f.updateValid(); !ok {
+			return
+		}
+
+		if !f.asOf.IsEmpty() && f.asOf.Less(f.iter.UnsafeKey().Timestamp) {
+			// Skip keys above the asOf timestamp, regardless of type of key (e.g. point or range)
+			f.iter.Next()
+		} else if hasPoint, hasRange := f.iter.HasPointAndRange(); !hasPoint && hasRange {
+			// Bare range keys get surfaced before the point key, even though the
+			// point key shadows it; thus, because we can infer range key information
+			// when the point key surfaces, skip over the bare range key, and reason
+			// about shadowed keys at the surfaced point key.
+			//
+			// E.g. Scanning the keys below:
+			//  2  a2
+			//  1  o---o
+			//     a   b
+			//
+			//  would result in two surfaced keys:
+			//   {a-b}@1;
+			//   a2, {a-b}@1
+
 			f.iter.Next()
 		} else if len(f.iter.UnsafeValue()) == 0 {
-			// Skip to the next MVCC key if we find a tombstone.
+			// Skip to the next MVCC key if we find a point tombstone.
+			f.iter.NextKey()
+		} else if !hasRange {
+			// On a valid key without a range key
+			return
+		} else if f.asOfRangeKeyShadows() {
+			// The latest range key, as of system time, shadows the latest point key.
+			// This key is therefore deleted as of system time.
 			f.iter.NextKey()
 		} else {
-			// On a valid key.
-			return true
+			// On a valid key that potentially shadows range key(s)
+			return
 		}
 	}
+}
+
+// asOfRangeKeyShadows returns true if there exists a range key at or below the asOf timestamp
+// that shadows the latest point key
+//
+// TODO (msbutler): ensure this function caches range key values (#84379) before
+// the 22.2 branch cut, else we face a steep perf cliff for RESTORE with range keys.
+func (f *ReadAsOfIterator) asOfRangeKeyShadows() (shadows bool) {
+	rangeKeys := f.iter.RangeKeys()
+	if f.asOf.IsEmpty() {
+		return f.iter.UnsafeKey().Timestamp.LessEq(rangeKeys[0].RangeKey.Timestamp)
+	}
+	return HasRangeKeyBetween(rangeKeys, f.asOf, f.iter.UnsafeKey().Timestamp)
 }
 
 // NewReadAsOfIterator constructs a ReadAsOfIterator.
