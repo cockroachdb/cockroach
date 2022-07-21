@@ -111,48 +111,21 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 	// The number of schema change under test. These will be the ones that are
 	// synthesized in database restore.
 	var expNumSCJobs int
-	var numBackgroundSCJobs int
 
 	// Some test cases may have more than 1 background schema change job.
 	switch scName {
 	case "midmany":
-		numBackgroundSCJobs = 1 // the create table
-		// This test runs 3 schema changes on a single table.
 		expNumSCJobs = 3
 	case "midmultitable":
-		numBackgroundSCJobs = 2 // this test creates 2 tables
-		expNumSCJobs = 2        // this test perform a schema change for each table
+		expNumSCJobs = 2 // this test perform a schema change for each table
 	case "midprimarykeyswap":
-		// Create table + alter column is done in the prep stage of this test.
-		numBackgroundSCJobs = 2
 		// PK change + PK cleanup
 		expNumSCJobs = 2
-		if isClusterRestore && after {
-			expNumSCJobs = 1
-		}
 	case "midprimarykeyswapcleanup":
-		// This test performs an ALTER COLUMN, and the original ALTER PRIMARY
-		// KEY that is being cleaned up.
-		numBackgroundSCJobs = 3
 		expNumSCJobs = 1
 	default:
 		// Most test cases only have 1 schema change under test.
 		expNumSCJobs = 1
-		// Most test cases have just a CREATE TABLE job that created the table
-		// under test.
-		numBackgroundSCJobs = 1
-	}
-
-	// We drop defaultdb and postgres for full cluster restores
-	numBackgroundDropDatabaseSCJobs := 2
-	// Since we're doing a cluster restore, we need to account for all of
-	// the schema change jobs that existed in the backup.
-	if isClusterRestore {
-		expNumSCJobs += numBackgroundSCJobs + numBackgroundDropDatabaseSCJobs
-
-		// If we're performing a cluster restore, we also need to include the drop
-		// crdb_temp_system job.
-		expNumSCJobs++
 	}
 
 	return expNumSCJobs
@@ -196,25 +169,11 @@ func verifyMidSchemaChange(
 
 	// Check that we are left with the expected number of schema change jobs.
 	expNumSchemaChangeJobs := expectedSCJobCount(scName, isClusterRestore, after)
-	schemaChangeJobs := sqlDB.QueryStr(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'")
-	require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
-		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
-	if isClusterRestore {
-		// Cluster restores should be restoring the exact job entries that were
-		// backed up, and therefore should not create jobs that contains "RESTORING"
-		// in the description.
-		schemaChangeJobs := sqlDB.QueryStr(t,
-			"SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description NOT LIKE '%RESTORING%'")
-		require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
-			"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
-	} else {
-		// Non-cluster restores should create jobs with "RESTORE" in the job
-		// description.
-		schemaChangeJobs := sqlDB.QueryStr(t,
-			"SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%RESTORING%'")
-		require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
-			"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
-	}
+
+	synthesizedSchemaChangeJobs := sqlDB.QueryStr(t,
+		"SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%RESTORING%'")
+	require.Equal(t, expNumSchemaChangeJobs, len(synthesizedSchemaChangeJobs),
+		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, synthesizedSchemaChangeJobs)
 
 	for _, tableName := range tables {
 		validateTable(t, kvDB, sqlDB, "defaultdb", tableName)
