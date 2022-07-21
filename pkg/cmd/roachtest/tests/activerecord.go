@@ -27,8 +27,8 @@ import (
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
-var supportedRailsVersion = "6.1.6"
-var activerecordAdapterVersion = "v6.1.10"
+var supportedRailsVersion = "7.0.3"
+var activerecordAdapterVersion = "v7.0.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
