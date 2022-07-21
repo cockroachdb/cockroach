@@ -1051,11 +1051,11 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.CheckQueryResults(t,
 		"SHOW INDEXES FROM t.test",
 		[][]string{
-			{"test", "test_pkey", "false", "1", "a", "ASC", "false", "false"},
-			{"test", "test_pkey", "false", "2", "b", "N/A", "true", "false"},
-			{"test", "test_pkey", "false", "3", "d", "N/A", "true", "false"},
-			{"test", "ufo", "true", "1", "d", "ASC", "false", "false"},
-			{"test", "ufo", "true", "2", "a", "ASC", "false", "true"},
+			{"test", "test_pkey", "false", "1", "a", "ASC", "false", "false", "true"},
+			{"test", "test_pkey", "false", "2", "b", "N/A", "true", "false", "true"},
+			{"test", "test_pkey", "false", "3", "d", "N/A", "true", "false", "true"},
+			{"test", "ufo", "true", "1", "d", "ASC", "false", "false", "true"},
+			{"test", "ufo", "true", "2", "a", "ASC", "false", "true", "true"},
 		},
 	)
 
