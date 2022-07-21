@@ -56,9 +56,10 @@ func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable)
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
-	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[desc.ID]
+	r, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[desc.ID]
 	if recordExists {
 		// Update it.
+		record := r.(*jobs.Record)
 		record.AppendDescription(jobDesc)
 		log.Infof(ctx, "job %d: updated job's specification for change on schema %d", record.JobID, desc.ID)
 	} else {

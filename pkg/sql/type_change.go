@@ -104,9 +104,10 @@ func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
 	// Check if there is a cached specification for this type, otherwise create one.
-	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
+	r, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
 	if recordExists {
+		record := r.(*jobs.Record)
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
 			TypeID:               typeDesc.ID,
