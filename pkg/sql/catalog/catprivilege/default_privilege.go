@@ -335,6 +335,7 @@ func expandPrivileges(
 		return
 	}
 	if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, targetObject) {
+		// TODO (rafi): Figure out before merging: do we still want this here?
 		privileges.Grant(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL}, false /* withGrantOption */)
 		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, false, targetObject)
 	}
@@ -353,19 +354,6 @@ func GetUserPrivilegesForObject(
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  username.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
-		})
-	}
-	// If ForAllRoles is specified, we can return early.
-	// ForAllRoles is not a real role and does not have implicit default privileges
-	// for itself.
-	if !p.IsExplicitRole() {
-		return userPrivileges
-	}
-	userProto := p.GetExplicitRole().UserProto
-	if GetRoleHasAllPrivilegesOnTargetObject(&p, targetObject) {
-		return append(userPrivileges, catpb.UserPrivileges{
-			UserProto:  userProto,
-			Privileges: privilege.ALL.Mask(),
 		})
 	}
 	return userPrivileges

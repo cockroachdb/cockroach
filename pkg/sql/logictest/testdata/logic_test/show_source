@@ -202,6 +202,7 @@ SELECT * FROM [SHOW GRANTS ON system.descriptor]
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
+system         public       descriptor  node     ALL             true
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]

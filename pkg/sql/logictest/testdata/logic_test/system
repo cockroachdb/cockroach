@@ -306,6 +306,7 @@ query TTTB
 SHOW GRANTS ON DATABASE system
 ----
 system  admin  CONNECT  true
+system  node   ALL      true
 system  root   CONNECT  true
 
 # The test expectations are different on tenants because of
@@ -318,6 +319,7 @@ system  public  comments                         admin   DELETE  true
 system  public  comments                         admin   INSERT  true
 system  public  comments                         admin   SELECT  true
 system  public  comments                         admin   UPDATE  true
+system  public  comments                         node    ALL     true
 system  public  comments                         public  SELECT  false
 system  public  comments                         root    DELETE  true
 system  public  comments                         root    INSERT  true
@@ -327,16 +329,19 @@ system  public  database_role_settings           admin   DELETE  true
 system  public  database_role_settings           admin   INSERT  true
 system  public  database_role_settings           admin   SELECT  true
 system  public  database_role_settings           admin   UPDATE  true
+system  public  database_role_settings           node    ALL     true
 system  public  database_role_settings           root    DELETE  true
 system  public  database_role_settings           root    INSERT  true
 system  public  database_role_settings           root    SELECT  true
 system  public  database_role_settings           root    UPDATE  true
 system  public  descriptor                       admin   SELECT  true
+system  public  descriptor                       node    ALL     true
 system  public  descriptor                       root    SELECT  true
 system  public  eventlog                         admin   DELETE  true
 system  public  eventlog                         admin   INSERT  true
 system  public  eventlog                         admin   SELECT  true
 system  public  eventlog                         admin   UPDATE  true
+system  public  eventlog                         node    ALL     true
 system  public  eventlog                         root    DELETE  true
 system  public  eventlog                         root    INSERT  true
 system  public  eventlog                         root    SELECT  true
@@ -345,6 +350,7 @@ system  public  external_connections             admin   DELETE  true
 system  public  external_connections             admin   INSERT  true
 system  public  external_connections             admin   SELECT  true
 system  public  external_connections             admin   UPDATE  true
+system  public  external_connections             node    ALL     true
 system  public  external_connections             root    DELETE  true
 system  public  external_connections             root    INSERT  true
 system  public  external_connections             root    SELECT  true
@@ -353,6 +359,7 @@ system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true
 system  public  jobs                             admin   UPDATE  true
+system  public  jobs                             node    ALL     true
 system  public  jobs                             root    DELETE  true
 system  public  jobs                             root    INSERT  true
 system  public  jobs                             root    SELECT  true
@@ -361,6 +368,7 @@ system  public  join_tokens                      admin   DELETE  true
 system  public  join_tokens                      admin   INSERT  true
 system  public  join_tokens                      admin   SELECT  true
 system  public  join_tokens                      admin   UPDATE  true
+system  public  join_tokens                      node    ALL     true
 system  public  join_tokens                      root    DELETE  true
 system  public  join_tokens                      root    INSERT  true
 system  public  join_tokens                      root    SELECT  true
@@ -369,6 +377,7 @@ system  public  lease                            admin   DELETE  true
 system  public  lease                            admin   INSERT  true
 system  public  lease                            admin   SELECT  true
 system  public  lease                            admin   UPDATE  true
+system  public  lease                            node    ALL     true
 system  public  lease                            root    DELETE  true
 system  public  lease                            root    INSERT  true
 system  public  lease                            root    SELECT  true
@@ -377,6 +386,7 @@ system  public  locations                        admin   DELETE  true
 system  public  locations                        admin   INSERT  true
 system  public  locations                        admin   SELECT  true
 system  public  locations                        admin   UPDATE  true
+system  public  locations                        node    ALL     true
 system  public  locations                        root    DELETE  true
 system  public  locations                        root    INSERT  true
 system  public  locations                        root    SELECT  true
@@ -385,28 +395,34 @@ system  public  migrations                       admin   DELETE  true
 system  public  migrations                       admin   INSERT  true
 system  public  migrations                       admin   SELECT  true
 system  public  migrations                       admin   UPDATE  true
+system  public  migrations                       node    ALL     true
 system  public  migrations                       root    DELETE  true
 system  public  migrations                       root    INSERT  true
 system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
+system  public  namespace                        node    ALL     true
 system  public  namespace                        root    SELECT  true
 system  public  privileges                       admin   DELETE  true
 system  public  privileges                       admin   INSERT  true
 system  public  privileges                       admin   SELECT  true
 system  public  privileges                       admin   UPDATE  true
+system  public  privileges                       node    ALL     true
 system  public  privileges                       root    DELETE  true
 system  public  privileges                       root    INSERT  true
 system  public  privileges                       root    SELECT  true
 system  public  privileges                       root    UPDATE  true
 system  public  protected_ts_meta                admin   SELECT  true
+system  public  protected_ts_meta                node    ALL     true
 system  public  protected_ts_meta                root    SELECT  true
 system  public  protected_ts_records             admin   SELECT  true
+system  public  protected_ts_records             node    ALL     true
 system  public  protected_ts_records             root    SELECT  true
 system  public  rangelog                         admin   DELETE  true
 system  public  rangelog                         admin   INSERT  true
 system  public  rangelog                         admin   SELECT  true
 system  public  rangelog                         admin   UPDATE  true
+system  public  rangelog                         node    ALL     true
 system  public  rangelog                         root    DELETE  true
 system  public  rangelog                         root    INSERT  true
 system  public  rangelog                         root    SELECT  true
@@ -415,6 +431,7 @@ system  public  replication_constraint_stats     admin   DELETE  true
 system  public  replication_constraint_stats     admin   INSERT  true
 system  public  replication_constraint_stats     admin   SELECT  true
 system  public  replication_constraint_stats     admin   UPDATE  true
+system  public  replication_constraint_stats     node    ALL     true
 system  public  replication_constraint_stats     root    DELETE  true
 system  public  replication_constraint_stats     root    INSERT  true
 system  public  replication_constraint_stats     root    SELECT  true
@@ -423,6 +440,7 @@ system  public  replication_critical_localities  admin   DELETE  true
 system  public  replication_critical_localities  admin   INSERT  true
 system  public  replication_critical_localities  admin   SELECT  true
 system  public  replication_critical_localities  admin   UPDATE  true
+system  public  replication_critical_localities  node    ALL     true
 system  public  replication_critical_localities  root    DELETE  true
 system  public  replication_critical_localities  root    INSERT  true
 system  public  replication_critical_localities  root    SELECT  true
@@ -431,6 +449,7 @@ system  public  replication_stats                admin   DELETE  true
 system  public  replication_stats                admin   INSERT  true
 system  public  replication_stats                admin   SELECT  true
 system  public  replication_stats                admin   UPDATE  true
+system  public  replication_stats                node    ALL     true
 system  public  replication_stats                root    DELETE  true
 system  public  replication_stats                root    INSERT  true
 system  public  replication_stats                root    SELECT  true
@@ -439,6 +458,7 @@ system  public  reports_meta                     admin   DELETE  true
 system  public  reports_meta                     admin   INSERT  true
 system  public  reports_meta                     admin   SELECT  true
 system  public  reports_meta                     admin   UPDATE  true
+system  public  reports_meta                     node    ALL     true
 system  public  reports_meta                     root    DELETE  true
 system  public  reports_meta                     root    INSERT  true
 system  public  reports_meta                     root    SELECT  true
@@ -447,6 +467,7 @@ system  public  role_members                     admin   DELETE  true
 system  public  role_members                     admin   INSERT  true
 system  public  role_members                     admin   SELECT  true
 system  public  role_members                     admin   UPDATE  true
+system  public  role_members                     node    ALL     true
 system  public  role_members                     root    DELETE  true
 system  public  role_members                     root    INSERT  true
 system  public  role_members                     root    SELECT  true
@@ -455,6 +476,7 @@ system  public  role_options                     admin   DELETE  true
 system  public  role_options                     admin   INSERT  true
 system  public  role_options                     admin   SELECT  true
 system  public  role_options                     admin   UPDATE  true
+system  public  role_options                     node    ALL     true
 system  public  role_options                     root    DELETE  true
 system  public  role_options                     root    INSERT  true
 system  public  role_options                     root    SELECT  true
@@ -463,6 +485,7 @@ system  public  scheduled_jobs                   admin   DELETE  true
 system  public  scheduled_jobs                   admin   INSERT  true
 system  public  scheduled_jobs                   admin   SELECT  true
 system  public  scheduled_jobs                   admin   UPDATE  true
+system  public  scheduled_jobs                   node    ALL     true
 system  public  scheduled_jobs                   root    DELETE  true
 system  public  scheduled_jobs                   root    INSERT  true
 system  public  scheduled_jobs                   root    SELECT  true
@@ -471,6 +494,7 @@ system  public  settings                         admin   DELETE  true
 system  public  settings                         admin   INSERT  true
 system  public  settings                         admin   SELECT  true
 system  public  settings                         admin   UPDATE  true
+system  public  settings                         node    ALL     true
 system  public  settings                         root    DELETE  true
 system  public  settings                         root    INSERT  true
 system  public  settings                         root    SELECT  true
@@ -479,6 +503,7 @@ system  public  span_configurations              admin   DELETE  true
 system  public  span_configurations              admin   INSERT  true
 system  public  span_configurations              admin   SELECT  true
 system  public  span_configurations              admin   UPDATE  true
+system  public  span_configurations              node    ALL     true
 system  public  span_configurations              root    DELETE  true
 system  public  span_configurations              root    INSERT  true
 system  public  span_configurations              root    SELECT  true
@@ -487,6 +512,7 @@ system  public  sql_instances                    admin   DELETE  true
 system  public  sql_instances                    admin   INSERT  true
 system  public  sql_instances                    admin   SELECT  true
 system  public  sql_instances                    admin   UPDATE  true
+system  public  sql_instances                    node    ALL     true
 system  public  sql_instances                    root    DELETE  true
 system  public  sql_instances                    root    INSERT  true
 system  public  sql_instances                    root    SELECT  true
@@ -495,6 +521,7 @@ system  public  sqlliveness                      admin   DELETE  true
 system  public  sqlliveness                      admin   INSERT  true
 system  public  sqlliveness                      admin   SELECT  true
 system  public  sqlliveness                      admin   UPDATE  true
+system  public  sqlliveness                      node    ALL     true
 system  public  sqlliveness                      root    DELETE  true
 system  public  sqlliveness                      root    INSERT  true
 system  public  sqlliveness                      root    SELECT  true
@@ -503,6 +530,7 @@ system  public  statement_bundle_chunks          admin   DELETE  true
 system  public  statement_bundle_chunks          admin   INSERT  true
 system  public  statement_bundle_chunks          admin   SELECT  true
 system  public  statement_bundle_chunks          admin   UPDATE  true
+system  public  statement_bundle_chunks          node    ALL     true
 system  public  statement_bundle_chunks          root    DELETE  true
 system  public  statement_bundle_chunks          root    INSERT  true
 system  public  statement_bundle_chunks          root    SELECT  true
@@ -511,6 +539,7 @@ system  public  statement_diagnostics            admin   DELETE  true
 system  public  statement_diagnostics            admin   INSERT  true
 system  public  statement_diagnostics            admin   SELECT  true
 system  public  statement_diagnostics            admin   UPDATE  true
+system  public  statement_diagnostics            node    ALL     true
 system  public  statement_diagnostics            root    DELETE  true
 system  public  statement_diagnostics            root    INSERT  true
 system  public  statement_diagnostics            root    SELECT  true
@@ -519,16 +548,19 @@ system  public  statement_diagnostics_requests   admin   DELETE  true
 system  public  statement_diagnostics_requests   admin   INSERT  true
 system  public  statement_diagnostics_requests   admin   SELECT  true
 system  public  statement_diagnostics_requests   admin   UPDATE  true
+system  public  statement_diagnostics_requests   node    ALL     true
 system  public  statement_diagnostics_requests   root    DELETE  true
 system  public  statement_diagnostics_requests   root    INSERT  true
 system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
+system  public  statement_statistics             node    ALL     true
 system  public  statement_statistics             root    SELECT  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
 system  public  table_statistics                 admin   UPDATE  true
+system  public  table_statistics                 node    ALL     true
 system  public  table_statistics                 root    DELETE  true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
@@ -537,6 +569,7 @@ system  public  tenant_settings                  admin   DELETE  true
 system  public  tenant_settings                  admin   INSERT  true
 system  public  tenant_settings                  admin   SELECT  true
 system  public  tenant_settings                  admin   UPDATE  true
+system  public  tenant_settings                  node    ALL     true
 system  public  tenant_settings                  root    DELETE  true
 system  public  tenant_settings                  root    INSERT  true
 system  public  tenant_settings                  root    SELECT  true
@@ -545,18 +578,22 @@ system  public  tenant_usage                     admin   DELETE  true
 system  public  tenant_usage                     admin   INSERT  true
 system  public  tenant_usage                     admin   SELECT  true
 system  public  tenant_usage                     admin   UPDATE  true
+system  public  tenant_usage                     node    ALL     true
 system  public  tenant_usage                     root    DELETE  true
 system  public  tenant_usage                     root    INSERT  true
 system  public  tenant_usage                     root    SELECT  true
 system  public  tenant_usage                     root    UPDATE  true
 system  public  tenants                          admin   SELECT  true
+system  public  tenants                          node    ALL     true
 system  public  tenants                          root    SELECT  true
 system  public  transaction_statistics           admin   SELECT  true
+system  public  transaction_statistics           node    ALL     true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true
 system  public  ui                               admin   INSERT  true
 system  public  ui                               admin   SELECT  true
 system  public  ui                               admin   UPDATE  true
+system  public  ui                               node    ALL     true
 system  public  ui                               root    DELETE  true
 system  public  ui                               root    INSERT  true
 system  public  ui                               root    SELECT  true
@@ -565,6 +602,7 @@ system  public  users                            admin   DELETE  true
 system  public  users                            admin   INSERT  true
 system  public  users                            admin   SELECT  true
 system  public  users                            admin   UPDATE  true
+system  public  users                            node    ALL     true
 system  public  users                            root    DELETE  true
 system  public  users                            root    INSERT  true
 system  public  users                            root    SELECT  true
@@ -573,6 +611,7 @@ system  public  web_sessions                     admin   DELETE  true
 system  public  web_sessions                     admin   INSERT  true
 system  public  web_sessions                     admin   SELECT  true
 system  public  web_sessions                     admin   UPDATE  true
+system  public  web_sessions                     node    ALL     true
 system  public  web_sessions                     root    DELETE  true
 system  public  web_sessions                     root    INSERT  true
 system  public  web_sessions                     root    SELECT  true
@@ -581,6 +620,7 @@ system  public  zones                            admin   DELETE  true
 system  public  zones                            admin   INSERT  true
 system  public  zones                            admin   SELECT  true
 system  public  zones                            admin   UPDATE  true
+system  public  zones                            node    ALL     true
 system  public  zones                            root    DELETE  true
 system  public  zones                            root    INSERT  true
 system  public  zones                            root    SELECT  true
@@ -594,6 +634,7 @@ system  public  comments                         admin   DELETE  true
 system  public  comments                         admin   INSERT  true
 system  public  comments                         admin   SELECT  true
 system  public  comments                         admin   UPDATE  true
+system  public  comments                         node    ALL     true
 system  public  comments                         public  SELECT  false
 system  public  comments                         root    DELETE  true
 system  public  comments                         root    INSERT  true
@@ -603,18 +644,22 @@ system  public  database_role_settings           admin   DELETE  true
 system  public  database_role_settings           admin   INSERT  true
 system  public  database_role_settings           admin   SELECT  true
 system  public  database_role_settings           admin   UPDATE  true
+system  public  database_role_settings           node    ALL     true
 system  public  database_role_settings           root    DELETE  true
 system  public  database_role_settings           root    INSERT  true
 system  public  database_role_settings           root    SELECT  true
 system  public  database_role_settings           root    UPDATE  true
 system  public  descriptor                       admin   SELECT  true
+system  public  descriptor                       node    ALL     true
 system  public  descriptor                       root    SELECT  true
 system  public  descriptor_id_seq                admin   SELECT  true
+system  public  descriptor_id_seq                node    ALL     true
 system  public  descriptor_id_seq                root    SELECT  true
 system  public  eventlog                         admin   DELETE  true
 system  public  eventlog                         admin   INSERT  true
 system  public  eventlog                         admin   SELECT  true
 system  public  eventlog                         admin   UPDATE  true
+system  public  eventlog                         node    ALL     true
 system  public  eventlog                         root    DELETE  true
 system  public  eventlog                         root    INSERT  true
 system  public  eventlog                         root    SELECT  true
@@ -623,6 +668,7 @@ system  public  external_connections             admin   DELETE  true
 system  public  external_connections             admin   INSERT  true
 system  public  external_connections             admin   SELECT  true
 system  public  external_connections             admin   UPDATE  true
+system  public  external_connections             node    ALL     true
 system  public  external_connections             root    DELETE  true
 system  public  external_connections             root    INSERT  true
 system  public  external_connections             root    SELECT  true
@@ -631,6 +677,7 @@ system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true
 system  public  jobs                             admin   UPDATE  true
+system  public  jobs                             node    ALL     true
 system  public  jobs                             root    DELETE  true
 system  public  jobs                             root    INSERT  true
 system  public  jobs                             root    SELECT  true
@@ -639,6 +686,7 @@ system  public  join_tokens                      admin   DELETE  true
 system  public  join_tokens                      admin   INSERT  true
 system  public  join_tokens                      admin   SELECT  true
 system  public  join_tokens                      admin   UPDATE  true
+system  public  join_tokens                      node    ALL     true
 system  public  join_tokens                      root    DELETE  true
 system  public  join_tokens                      root    INSERT  true
 system  public  join_tokens                      root    SELECT  true
@@ -647,6 +695,7 @@ system  public  lease                            admin   DELETE  true
 system  public  lease                            admin   INSERT  true
 system  public  lease                            admin   SELECT  true
 system  public  lease                            admin   UPDATE  true
+system  public  lease                            node    ALL     true
 system  public  lease                            root    DELETE  true
 system  public  lease                            root    INSERT  true
 system  public  lease                            root    SELECT  true
@@ -655,6 +704,7 @@ system  public  locations                        admin   DELETE  true
 system  public  locations                        admin   INSERT  true
 system  public  locations                        admin   SELECT  true
 system  public  locations                        admin   UPDATE  true
+system  public  locations                        node    ALL     true
 system  public  locations                        root    DELETE  true
 system  public  locations                        root    INSERT  true
 system  public  locations                        root    SELECT  true
@@ -663,28 +713,34 @@ system  public  migrations                       admin   DELETE  true
 system  public  migrations                       admin   INSERT  true
 system  public  migrations                       admin   SELECT  true
 system  public  migrations                       admin   UPDATE  true
+system  public  migrations                       node    ALL     true
 system  public  migrations                       root    DELETE  true
 system  public  migrations                       root    INSERT  true
 system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
+system  public  namespace                        node    ALL     true
 system  public  namespace                        root    SELECT  true
 system  public  privileges                       admin   DELETE  true
 system  public  privileges                       admin   INSERT  true
 system  public  privileges                       admin   SELECT  true
 system  public  privileges                       admin   UPDATE  true
+system  public  privileges                       node    ALL     true
 system  public  privileges                       root    DELETE  true
 system  public  privileges                       root    INSERT  true
 system  public  privileges                       root    SELECT  true
 system  public  privileges                       root    UPDATE  true
 system  public  protected_ts_meta                admin   SELECT  true
+system  public  protected_ts_meta                node    ALL     true
 system  public  protected_ts_meta                root    SELECT  true
 system  public  protected_ts_records             admin   SELECT  true
+system  public  protected_ts_records             node    ALL     true
 system  public  protected_ts_records             root    SELECT  true
 system  public  rangelog                         admin   DELETE  true
 system  public  rangelog                         admin   INSERT  true
 system  public  rangelog                         admin   SELECT  true
 system  public  rangelog                         admin   UPDATE  true
+system  public  rangelog                         node    ALL     true
 system  public  rangelog                         root    DELETE  true
 system  public  rangelog                         root    INSERT  true
 system  public  rangelog                         root    SELECT  true
@@ -693,6 +749,7 @@ system  public  replication_constraint_stats     admin   DELETE  true
 system  public  replication_constraint_stats     admin   INSERT  true
 system  public  replication_constraint_stats     admin   SELECT  true
 system  public  replication_constraint_stats     admin   UPDATE  true
+system  public  replication_constraint_stats     node    ALL     true
 system  public  replication_constraint_stats     root    DELETE  true
 system  public  replication_constraint_stats     root    INSERT  true
 system  public  replication_constraint_stats     root    SELECT  true
@@ -701,6 +758,7 @@ system  public  replication_critical_localities  admin   DELETE  true
 system  public  replication_critical_localities  admin   INSERT  true
 system  public  replication_critical_localities  admin   SELECT  true
 system  public  replication_critical_localities  admin   UPDATE  true
+system  public  replication_critical_localities  node    ALL     true
 system  public  replication_critical_localities  root    DELETE  true
 system  public  replication_critical_localities  root    INSERT  true
 system  public  replication_critical_localities  root    SELECT  true
@@ -709,6 +767,7 @@ system  public  replication_stats                admin   DELETE  true
 system  public  replication_stats                admin   INSERT  true
 system  public  replication_stats                admin   SELECT  true
 system  public  replication_stats                admin   UPDATE  true
+system  public  replication_stats                node    ALL     true
 system  public  replication_stats                root    DELETE  true
 system  public  replication_stats                root    INSERT  true
 system  public  replication_stats                root    SELECT  true
@@ -717,6 +776,7 @@ system  public  reports_meta                     admin   DELETE  true
 system  public  reports_meta                     admin   INSERT  true
 system  public  reports_meta                     admin   SELECT  true
 system  public  reports_meta                     admin   UPDATE  true
+system  public  reports_meta                     node    ALL     true
 system  public  reports_meta                     root    DELETE  true
 system  public  reports_meta                     root    INSERT  true
 system  public  reports_meta                     root    SELECT  true
@@ -725,6 +785,7 @@ system  public  role_members                     admin   DELETE  true
 system  public  role_members                     admin   INSERT  true
 system  public  role_members                     admin   SELECT  true
 system  public  role_members                     admin   UPDATE  true
+system  public  role_members                     node    ALL     true
 system  public  role_members                     root    DELETE  true
 system  public  role_members                     root    INSERT  true
 system  public  role_members                     root    SELECT  true
@@ -733,6 +794,7 @@ system  public  role_options                     admin   DELETE  true
 system  public  role_options                     admin   INSERT  true
 system  public  role_options                     admin   SELECT  true
 system  public  role_options                     admin   UPDATE  true
+system  public  role_options                     node    ALL     true
 system  public  role_options                     root    DELETE  true
 system  public  role_options                     root    INSERT  true
 system  public  role_options                     root    SELECT  true
@@ -741,6 +803,7 @@ system  public  scheduled_jobs                   admin   DELETE  true
 system  public  scheduled_jobs                   admin   INSERT  true
 system  public  scheduled_jobs                   admin   SELECT  true
 system  public  scheduled_jobs                   admin   UPDATE  true
+system  public  scheduled_jobs                   node    ALL     true
 system  public  scheduled_jobs                   root    DELETE  true
 system  public  scheduled_jobs                   root    INSERT  true
 system  public  scheduled_jobs                   root    SELECT  true
@@ -749,6 +812,7 @@ system  public  settings                         admin   DELETE  true
 system  public  settings                         admin   INSERT  true
 system  public  settings                         admin   SELECT  true
 system  public  settings                         admin   UPDATE  true
+system  public  settings                         node    ALL     true
 system  public  settings                         root    DELETE  true
 system  public  settings                         root    INSERT  true
 system  public  settings                         root    SELECT  true
@@ -757,6 +821,7 @@ system  public  span_count                       admin   DELETE  true
 system  public  span_count                       admin   INSERT  true
 system  public  span_count                       admin   SELECT  true
 system  public  span_count                       admin   UPDATE  true
+system  public  span_count                       node    ALL     true
 system  public  span_count                       root    DELETE  true
 system  public  span_count                       root    INSERT  true
 system  public  span_count                       root    SELECT  true
@@ -765,6 +830,7 @@ system  public  sql_instances                    admin   DELETE  true
 system  public  sql_instances                    admin   INSERT  true
 system  public  sql_instances                    admin   SELECT  true
 system  public  sql_instances                    admin   UPDATE  true
+system  public  sql_instances                    node    ALL     true
 system  public  sql_instances                    root    DELETE  true
 system  public  sql_instances                    root    INSERT  true
 system  public  sql_instances                    root    SELECT  true
@@ -773,6 +839,7 @@ system  public  sqlliveness                      admin   DELETE  true
 system  public  sqlliveness                      admin   INSERT  true
 system  public  sqlliveness                      admin   SELECT  true
 system  public  sqlliveness                      admin   UPDATE  true
+system  public  sqlliveness                      node    ALL     true
 system  public  sqlliveness                      root    DELETE  true
 system  public  sqlliveness                      root    INSERT  true
 system  public  sqlliveness                      root    SELECT  true
@@ -781,6 +848,7 @@ system  public  statement_bundle_chunks          admin   DELETE  true
 system  public  statement_bundle_chunks          admin   INSERT  true
 system  public  statement_bundle_chunks          admin   SELECT  true
 system  public  statement_bundle_chunks          admin   UPDATE  true
+system  public  statement_bundle_chunks          node    ALL     true
 system  public  statement_bundle_chunks          root    DELETE  true
 system  public  statement_bundle_chunks          root    INSERT  true
 system  public  statement_bundle_chunks          root    SELECT  true
@@ -789,6 +857,7 @@ system  public  statement_diagnostics            admin   DELETE  true
 system  public  statement_diagnostics            admin   INSERT  true
 system  public  statement_diagnostics            admin   SELECT  true
 system  public  statement_diagnostics            admin   UPDATE  true
+system  public  statement_diagnostics            node    ALL     true
 system  public  statement_diagnostics            root    DELETE  true
 system  public  statement_diagnostics            root    INSERT  true
 system  public  statement_diagnostics            root    SELECT  true
@@ -797,26 +866,31 @@ system  public  statement_diagnostics_requests   admin   DELETE  true
 system  public  statement_diagnostics_requests   admin   INSERT  true
 system  public  statement_diagnostics_requests   admin   SELECT  true
 system  public  statement_diagnostics_requests   admin   UPDATE  true
+system  public  statement_diagnostics_requests   node    ALL     true
 system  public  statement_diagnostics_requests   root    DELETE  true
 system  public  statement_diagnostics_requests   root    INSERT  true
 system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
+system  public  statement_statistics             node    ALL     true
 system  public  statement_statistics             root    SELECT  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
 system  public  table_statistics                 admin   UPDATE  true
+system  public  table_statistics                 node    ALL     true
 system  public  table_statistics                 root    DELETE  true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
 system  public  transaction_statistics           admin   SELECT  true
+system  public  transaction_statistics           node    ALL     true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true
 system  public  ui                               admin   INSERT  true
 system  public  ui                               admin   SELECT  true
 system  public  ui                               admin   UPDATE  true
+system  public  ui                               node    ALL     true
 system  public  ui                               root    DELETE  true
 system  public  ui                               root    INSERT  true
 system  public  ui                               root    SELECT  true
@@ -825,6 +899,7 @@ system  public  users                            admin   DELETE  true
 system  public  users                            admin   INSERT  true
 system  public  users                            admin   SELECT  true
 system  public  users                            admin   UPDATE  true
+system  public  users                            node    ALL     true
 system  public  users                            root    DELETE  true
 system  public  users                            root    INSERT  true
 system  public  users                            root    SELECT  true
@@ -833,6 +908,7 @@ system  public  web_sessions                     admin   DELETE  true
 system  public  web_sessions                     admin   INSERT  true
 system  public  web_sessions                     admin   SELECT  true
 system  public  web_sessions                     admin   UPDATE  true
+system  public  web_sessions                     node    ALL     true
 system  public  web_sessions                     root    DELETE  true
 system  public  web_sessions                     root    INSERT  true
 system  public  web_sessions                     root    SELECT  true
@@ -841,6 +917,7 @@ system  public  zones                            admin   DELETE  true
 system  public  zones                            admin   INSERT  true
 system  public  zones                            admin   SELECT  true
 system  public  zones                            admin   UPDATE  true
+system  public  zones                            node    ALL     true
 system  public  zones                            root    DELETE  true
 system  public  zones                            root    INSERT  true
 system  public  zones                            root    SELECT  true

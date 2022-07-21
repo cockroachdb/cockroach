@@ -106,3 +106,23 @@ test           public       owner_grant_option  owner_grant_option_child  USAGE 
 test           public       owner_grant_option  public                    USAGE           false
 test           public       owner_grant_option  root                      ALL             true
 test           public       owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER TYPE owner_grant_option OWNER TO other_owner
+
+query TTTTTB colnames
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  other_owner               ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           false
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true
