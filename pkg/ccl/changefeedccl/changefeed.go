@@ -89,7 +89,7 @@ const (
 // emitResolvedTimestamp emits a changefeed-level resolved timestamp to the
 // sink.
 func emitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, sink Sink, resolved hlc.Timestamp,
+	ctx context.Context, encoder Encoder, sink ResolvedTimestampSink, resolved hlc.Timestamp,
 ) error {
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
