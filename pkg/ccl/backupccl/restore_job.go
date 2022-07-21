@@ -1825,18 +1825,15 @@ func (r *restoreResumer) publishDescriptors(
 			mutTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 		}
 		newTables = append(newTables, mutTable.TableDesc())
-		// For cluster restores, all the jobs are restored directly from the jobs
-		// table, so there is no need to re-create ongoing schema change jobs,
-		// otherwise we'll create duplicate jobs.
-		if details.DescriptorCoverage != tree.AllDescriptors || len(badIndexes) > 0 {
-			// Convert any mutations that were in progress on the table descriptor
-			// when the backup was taken, and convert them to schema change jobs.
-			if err := createSchemaChangeJobsFromMutations(ctx,
-				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
-			); err != nil {
-				return err
-			}
+
+		// Convert any mutations that were in progress on the table descriptor
+		// when the backup was taken, and convert them to schema change jobs.
+		if err := createSchemaChangeJobsFromMutations(ctx,
+			r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
+		); err != nil {
+			return err
 		}
+
 	}
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
