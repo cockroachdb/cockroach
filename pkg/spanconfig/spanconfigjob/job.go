@@ -56,7 +56,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	}()
 
 	execCtx := execCtxI.(sql.JobExecContext)
-	if !execCtx.ExecCfg().LogicalClusterID().Equal(r.job.Payload().CreationClusterID) {
+	if !execCtx.ExecCfg().NodeInfo.LogicalClusterID().Equal(r.job.Payload().CreationClusterID) {
 		// When restoring a cluster, we don't want to end up with two instances of
 		// the singleton reconciliation job.
 		//
@@ -64,7 +64,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		// ID; comparing cluster IDs during restore doesn't help when we're
 		// restoring into the same cluster the backup was run from.
 		log.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
-			r.job.Payload().CreationClusterID, execCtx.ExecCfg().LogicalClusterID())
+			r.job.Payload().CreationClusterID, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
 		return nil
 	}
 

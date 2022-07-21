@@ -116,9 +116,9 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
-	evalCtx.ClusterID = execCfg.LogicalClusterID()
+	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
-	evalCtx.NodeID = execCfg.NodeID
+	evalCtx.NodeID = execCfg.NodeInfo.NodeID
 	evalCtx.Locality = execCfg.Locality
 	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
 	evalCtx.RegionsServer = execCfg.RegionsServer
@@ -383,9 +383,9 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
-	p.extendedEvalCtx.ClusterID = execCfg.LogicalClusterID()
+	p.extendedEvalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
-	p.extendedEvalCtx.NodeID = execCfg.NodeID
+	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
 	p.sessionDataMutatorIterator = smi

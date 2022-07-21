@@ -62,7 +62,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
 		distribution := getPlanDistribution(
-			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeInfo.NodeID,
 			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
 		)
 

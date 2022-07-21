@@ -86,7 +86,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 			}
 			return base.CheckEnterpriseEnabled(
 				execCfg.Settings,
-				execCfg.LogicalClusterID(),
+				execCfg.NodeInfo.LogicalClusterID(),
 				execCfg.Organization(),
 				"global_reads",
 			)
@@ -1071,7 +1071,7 @@ func prepareZoneConfigWrites(
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.LogicalClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
+			st, execCfg.NodeInfo.LogicalClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
 		if err != nil {
 			return nil, err
 		}
