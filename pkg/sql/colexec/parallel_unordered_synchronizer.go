@@ -486,16 +486,18 @@ func (s *ParallelUnorderedSynchronizer) Close(ctx context.Context) error {
 	// Note that at this point we know that the input goroutines won't be
 	// spawned up (our consumer won't call Next/DrainMeta after calling Close),
 	// so it is safe to close all closers from this goroutine.
-	for i, span := range s.tracingSpans {
-		if span != nil {
-			span.Finish()
-			s.tracingSpans[i] = nil
-		}
-	}
 	var lastErr error
 	for _, input := range s.inputs {
 		if err := input.ToClose.Close(ctx); err != nil {
 			lastErr = err
+		}
+	}
+	// Finish the spans after closing the Closers since Close() implementations
+	// might log some stuff.
+	for i, span := range s.tracingSpans {
+		if span != nil {
+			span.Finish()
+			s.tracingSpans[i] = nil
 		}
 	}
 	return lastErr
