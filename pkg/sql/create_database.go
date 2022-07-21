@@ -98,7 +98,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	if n.Placement != tree.DataPlacementUnspecified {
 		if !p.EvalContext().SessionData().PlacementEnabled {
 			return nil, errors.WithHint(pgerror.New(
-				pgcode.FeatureNotSupported,
+				pgcode.ExperimentalFeature,
 				"PLACEMENT requires that the session setting enable_multiregion_placement_policy "+
 					"is enabled",
 			),

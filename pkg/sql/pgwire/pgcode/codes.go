@@ -386,4 +386,8 @@ var (
 	// UnsatisfiableBoundedStaleness signals that the bounded staleness query
 	// cannot be satisfied.
 	UnsatisfiableBoundedStaleness = MakeCode("XCUBS")
+
+	// ExperimentalFeature signals that a feature we supported experimentally is being
+	// used without the session variable being enabled.
+	ExperimentalFeature = MakeCode("XCEXF")
 )
