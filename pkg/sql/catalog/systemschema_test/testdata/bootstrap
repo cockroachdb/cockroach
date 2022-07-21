@@ -381,3 +381,10 @@ CREATE TABLE public.external_connections (
 	connection_details BYTES NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name ASC)
 );
+CREATE TABLE public.job_info (
+	job_id INT8 NOT NULL,
+	info_key BYTES NOT NULL,
+	written TIMESTAMPTZ NOT NULL,
+	value BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (job_id ASC, info_key ASC, written DESC)
+);
