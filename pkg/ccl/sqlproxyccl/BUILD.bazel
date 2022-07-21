@@ -95,6 +95,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/stop",

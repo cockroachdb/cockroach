@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -333,7 +334,10 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		ctx, cancel := context.WithTimeout(bgCtx, 2*time.Second)
 		defer cancel()
 
-		c := &connector{}
+		c := &connector{
+			DialTenantLatency: metric.NewLatency(metaDialTenantLatency, time.Millisecond),
+			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
+		}
 		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			return "", errors.New("baz")
 		}
@@ -341,6 +345,9 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "baz")
 		require.Nil(t, conn)
+
+		require.Equal(t, c.DialTenantLatency.TotalCount(), int64(1))
+		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
 	})
 
 	t.Run("successful", func(t *testing.T) {
@@ -356,7 +363,9 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		var reportFailureFnCount int
 		c := &connector{
-			TenantID: roachpb.MakeTenantID(42),
+			TenantID:          roachpb.MakeTenantID(42),
+			DialTenantLatency: metric.NewLatency(metaDialTenantLatency, time.Millisecond),
+			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			reportFailureFn: func(fnCtx context.Context, tenantID roachpb.TenantID, addr string) error {
@@ -404,6 +413,8 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Equal(t, 3, addrLookupFnCount)
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
+		require.Equal(t, c.DialTenantLatency.TotalCount(), int64(1))
+		require.Equal(t, c.DialTenantRetries.Count(), int64(2))
 	})
 
 	t.Run("load balancing", func(t *testing.T) {
