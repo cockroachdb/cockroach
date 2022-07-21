@@ -445,7 +445,8 @@ CREATE TABLE information_schema.statistics (
 	CARDINALITY   INT,
 	DIRECTION     STRING NOT NULL,
 	STORING       STRING NOT NULL,
-	IMPLICIT      STRING NOT NULL
+	IMPLICIT      STRING NOT NULL,
+	IS_VISIBLE    STRING NOT NULL
 )`
 
 // InformationSchemaTableConstraint describes the schema of the
