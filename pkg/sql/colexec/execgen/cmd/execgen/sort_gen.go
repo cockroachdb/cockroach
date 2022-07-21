@@ -63,9 +63,9 @@ func genSortOps(inputFileContents string, wr io.Writer) error {
 	return tmpl.Execute(wr, sortOverloads)
 }
 
-const quickSortTmpl = "pkg/sql/colexec/quicksort_tmpl.go"
+const pdqSortTmpl = "pkg/sql/colexec/pdqsort_tmpl.go"
 
-func genQuickSortOps(inputFileContents string, wr io.Writer) error {
+func genPDQSortOps(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_TYPE", "{{.VecMethod}}",
 		"_DIR", "{{$dir}}",
@@ -74,7 +74,7 @@ func genQuickSortOps(inputFileContents string, wr io.Writer) error {
 	s := r.Replace(inputFileContents)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("quicksort").Parse(s)
+	tmpl, err := template.New("pdqsort").Parse(s)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func genQuickSortOps(inputFileContents string, wr io.Writer) error {
 
 func init() {
 	registerGenerator(genSortOps, "sort.eg.go", sortOpsTmpl)
-	registerGenerator(genQuickSortOps, "quicksort.eg.go", quickSortTmpl)
+	registerGenerator(genPDQSortOps, "pdqsort.eg.go", pdqSortTmpl)
 	for _, nulls := range []bool{true, false} {
 		nullsOverload := &sortDirNullsOverload{
 			Nulls: nulls,
