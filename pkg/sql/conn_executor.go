@@ -1353,7 +1353,6 @@ type connExecutor struct {
 			savepoints       savepointStack
 			sessionDataStack *sessiondata.Stack
 		}
-
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
 		// cluster setting.

@@ -116,7 +116,7 @@ func (ex *connExecutor) recordStatementSummary(
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
-) {
+) roachpb.StmtFingerprintID {
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
 	// Collect the statistics.
@@ -233,6 +233,7 @@ func (ex *connExecutor) recordStatementSummary(
 			sessionAge,
 		)
 	}
+	return stmtFingerprintID
 }
 
 func (ex *connExecutor) updateOptCounters(planFlags planFlags) {

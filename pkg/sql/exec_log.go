@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -155,8 +156,9 @@ func (p *planner) maybeLogStatement(
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
+	stmtFingerprintID roachpb.StmtFingerprintID,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -167,6 +169,7 @@ func (p *planner) maybeLogStatementInternal(
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
+	stmtFingerprintID roachpb.StmtFingerprintID,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -386,15 +389,16 @@ func (p *planner) maybeLogStatementInternal(
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			databaseName := p.CurrentDatabase()
 			sampledQuery := eventpb.SampledQuery{
-				CommonSQLExecDetails: execDetails,
-				SkippedQueries:       skippedQueries,
-				CostEstimate:         p.curPlan.instrumentation.costEstimate,
-				Distribution:         p.curPlan.instrumentation.distribution.String(),
-				PlanGist:             p.curPlan.instrumentation.planGist.String(),
-				SessionID:            p.extendedEvalCtx.SessionID.String(),
-				Database:             p.CurrentDatabase(),
-				StatementID:          p.stmt.QueryID.String(),
-				TransactionID:        p.txn.ID().String(),
+				CommonSQLExecDetails:   execDetails,
+				SkippedQueries:         skippedQueries,
+				CostEstimate:           p.curPlan.instrumentation.costEstimate,
+				Distribution:           p.curPlan.instrumentation.distribution.String(),
+				PlanGist:               p.curPlan.instrumentation.planGist.String(),
+				SessionID:              p.extendedEvalCtx.SessionID.String(),
+				Database:               databaseName,
+				StatementID:            p.stmt.QueryID.String(),
+				TransactionID:          p.txn.ID().String(),
+				StatementFingerprintID: uint64(stmtFingerprintID),
 			}
 			db, _ := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, databaseName, tree.DatabaseLookupFlags{Required: true})
 			if db != nil {
