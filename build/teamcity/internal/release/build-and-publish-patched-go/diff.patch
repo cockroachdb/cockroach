@@ -1,0 +1,98 @@
+diff --git c/src/runtime/proc.go i/src/runtime/proc.go
+index b997a467ba..2619239dc8 100644
+--- c/src/runtime/proc.go
++++ i/src/runtime/proc.go
+@@ -990,8 +990,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 		}
+ 	}
+ 
+-	// Handle tracking for scheduling latencies.
++	// Handle tracking for scheduling and running latencies.
++	now := nanotime()
++	if newval == _Grunning {
++		// We're transitioning into the running state, record the timestamp for
++		// subsequent use.
++		gp.lastsched = now
++	}
+ 	if oldval == _Grunning {
++		// We're transitioning out of running, record how long we were in the
++		// state.
++		gp.runningnanos += now - gp.lastsched
++
+ 		// Track every 8th time a goroutine transitions out of running.
+ 		if gp.trackingSeq%gTrackingPeriod == 0 {
+ 			gp.tracking = true
+@@ -1003,14 +1013,12 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 			// We transitioned out of runnable, so measure how much
+ 			// time we spent in this state and add it to
+ 			// runnableTime.
+-			now := nanotime()
+ 			gp.runnableTime += now - gp.runnableStamp
+ 			gp.runnableStamp = 0
+ 		}
+ 		if newval == _Grunnable {
+ 			// We just transitioned into runnable, so record what
+ 			// time that happened.
+-			now := nanotime()
+ 			gp.runnableStamp = now
+ 		} else if newval == _Grunning {
+ 			// We're transitioning into running, so turn off
+@@ -3240,6 +3248,14 @@ func dropg() {
+ 	setGNoWB(&_g_.m.curg, nil)
+ }
+ 
++// grunningnanos returns the wall time spent by current g in the running state.
++// A goroutine may be running on an OS thread that's descheduled by the OS
++// scheduler, this time still counts towards the metric.
++func grunningnanos() int64 {
++	gp := getg()
++	return gp.runningnanos + nanotime() - gp.lastsched
++}
++
+ // checkTimers runs any timers for the P that are ready.
+ // If now is not 0 it is the current time.
+ // It returns the passed time or the current time if now was passed as 0.
+@@ -3472,6 +3488,8 @@ func goexit0(gp *g) {
+ 	gp.param = nil
+ 	gp.labels = nil
+ 	gp.timer = nil
++	gp.lastsched = 0
++	gp.runningnanos = 0
+ 
+ 	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
+ 		// Flush assist credit to the global pool. This gives
+diff --git c/src/runtime/runtime2.go i/src/runtime/runtime2.go
+index b40045e4a5..1196c41136 100644
+--- c/src/runtime/runtime2.go
++++ i/src/runtime/runtime2.go
+@@ -472,7 +472,6 @@ type g struct {
+ 	traceseq       uint64   // trace event sequencer
+ 	tracelastp     puintptr // last P emitted an event for this goroutine
+ 	lockedm        muintptr
+-	sig            uint32
+ 	writebuf       []byte
+ 	sigcode0       uintptr
+ 	sigcode1       uintptr
+@@ -486,6 +485,9 @@ type g struct {
+ 	labels         unsafe.Pointer // profiler labels
+ 	timer          *timer         // cached timer for time.Sleep
+ 	selectDone     uint32         // are we participating in a select and did someone win the race?
++	sig            uint32
++	lastsched      int64 // timestamp when the G last started running
++	runningnanos   int64 // wall time spent in the running state
+ 
+ 	// Per-G GC state
+ 
+diff --git c/src/runtime/sizeof_test.go i/src/runtime/sizeof_test.go
+index ebf544ad3b..1e1cf1be9c 100644
+--- c/src/runtime/sizeof_test.go
++++ i/src/runtime/sizeof_test.go
+@@ -21,7 +21,7 @@ func TestSizeof(t *testing.T) {
+ 		_32bit uintptr // size on 32bit platforms
+ 		_64bit uintptr // size on 64bit platforms
+ 	}{
+-		{runtime.G{}, 236, 392},   // g, but exported for testing
++		{runtime.G{}, 244, 400},   // g, but exported for testing
+ 		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
+ 	}
+
