@@ -355,7 +355,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 
 			isLocal := !getPlanDistribution(
-				ctx, localPlanner, localPlanner.execCfg.NodeID,
+				ctx, localPlanner, localPlanner.execCfg.NodeInfo.NodeID,
 				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
 				localPlanner.curPlan.main,
 			).WillDistribute()
@@ -2487,9 +2487,9 @@ func createSchemaChangeEvalCtx(
 			Regions:            &faketreeeval.DummyRegionOperator{},
 			Settings:           execCfg.Settings,
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
-			ClusterID:          execCfg.LogicalClusterID(),
+			ClusterID:          execCfg.NodeInfo.LogicalClusterID(),
 			ClusterName:        execCfg.RPCContext.ClusterName(),
-			NodeID:             execCfg.NodeID,
+			NodeID:             execCfg.NodeInfo.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
 			Tracer:             execCfg.AmbientCtx.Tracer,
@@ -2560,7 +2560,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			descID:               descID,
 			mutationID:           mutationID,
 			droppedDatabaseID:    droppedDatabaseID,
-			sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
+			sqlInstanceID:        p.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),
 			db:                   p.ExecCfg().DB,
 			leaseMgr:             p.ExecCfg().LeaseManager,
 			testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,
@@ -2748,7 +2748,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	sc := SchemaChanger{
 		descID:               details.DescID,
 		mutationID:           details.TableMutationID,
-		sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
+		sqlInstanceID:        p.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),
 		db:                   p.ExecCfg().DB,
 		leaseMgr:             p.ExecCfg().LeaseManager,
 		testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,

@@ -692,7 +692,7 @@ func (p *planner) preparePlannerForCopy(
 	stmtTs := txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID()
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
 		// The session data stack in the planner is not set up at this point, so use
 		// the default Normal QoSLevel.
 		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)

@@ -1275,7 +1275,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	defer subqueryMemAccount.Close(ctx)
 
 	distributeSubquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
+		ctx, planner, planner.execCfg.NodeInfo.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributeSubquery {
@@ -1628,7 +1628,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	defer postqueryMemAccount.Close(ctx)
 
 	distributePostquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
+		ctx, planner, planner.execCfg.NodeInfo.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributePostquery {

@@ -730,7 +730,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	defer onCloseFn()
 
 	connDetails := eventpb.CommonConnectionDetails{
-		InstanceID:    int32(s.execCfg.NodeID.SQLInstanceID()),
+		InstanceID:    int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
 		Network:       conn.RemoteAddr().Network(),
 		RemoteAddress: conn.RemoteAddr().String(),
 	}
