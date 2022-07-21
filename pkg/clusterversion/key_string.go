@@ -46,23 +46,24 @@ func _() {
 	_ = x[V22_1-35]
 	_ = x[Start22_2-36]
 	_ = x[LocalTimestamps-37]
-	_ = x[EnsurePebbleFormatVersionRangeKeys-38]
-	_ = x[EnablePebbleFormatVersionRangeKeys-39]
-	_ = x[TrigramInvertedIndexes-40]
-	_ = x[RemoveGrantPrivilege-41]
-	_ = x[MVCCRangeTombstones-42]
-	_ = x[UpgradeSequenceToBeReferencedByID-43]
-	_ = x[SampledStmtDiagReqs-44]
-	_ = x[AddSSTableTombstones-45]
-	_ = x[SystemPrivilegesTable-46]
-	_ = x[EnablePredicateProjectionChangefeed-47]
-	_ = x[AlterSystemSQLInstancesAddLocality-48]
-	_ = x[SystemExternalConnectionsTable-49]
+	_ = x[PebbleFormatSplitUserKeysMarkedCompacted-38]
+	_ = x[EnsurePebbleFormatVersionRangeKeys-39]
+	_ = x[EnablePebbleFormatVersionRangeKeys-40]
+	_ = x[TrigramInvertedIndexes-41]
+	_ = x[RemoveGrantPrivilege-42]
+	_ = x[MVCCRangeTombstones-43]
+	_ = x[UpgradeSequenceToBeReferencedByID-44]
+	_ = x[SampledStmtDiagReqs-45]
+	_ = x[AddSSTableTombstones-46]
+	_ = x[SystemPrivilegesTable-47]
+	_ = x[EnablePredicateProjectionChangefeed-48]
+	_ = x[AlterSystemSQLInstancesAddLocality-49]
+	_ = x[SystemExternalConnectionsTable-50]
 }
 
-const _Key_name = "V21_2Start22_1PebbleFormatBlockPropertyCollectorProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLogAlterSystemProtectedTimestampAddColumnEnableProtectedTimestampsForTenantDeleteCommentsWithDroppedIndexesRemoveIncompatibleDatabasePrivilegesAddRaftAppliedIndexTermMigrationPostAddRaftAppliedIndexTermMigrationDontProposeWriteTimestampForLeaseTransfersEnablePebbleFormatVersionBlockPropertiesMVCCIndexBackfillerEnableLeaseHolderRemovalLooselyCoupledRaftLogTruncationChangefeedIdlenessBackupDoesNotOverwriteLatestAndCheckpointEnableDeclarativeSchemaChangerRowLevelTTLPebbleFormatSplitUserKeysMarkedIncrementalBackupSubdirEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsSpanCountTablePreSeedSpanCountTableSeedSpanCountTableV22_1Start22_2LocalTimestampsEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTable"
+const _Key_name = "V21_2Start22_1PebbleFormatBlockPropertyCollectorProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLogAlterSystemProtectedTimestampAddColumnEnableProtectedTimestampsForTenantDeleteCommentsWithDroppedIndexesRemoveIncompatibleDatabasePrivilegesAddRaftAppliedIndexTermMigrationPostAddRaftAppliedIndexTermMigrationDontProposeWriteTimestampForLeaseTransfersEnablePebbleFormatVersionBlockPropertiesMVCCIndexBackfillerEnableLeaseHolderRemovalLooselyCoupledRaftLogTruncationChangefeedIdlenessBackupDoesNotOverwriteLatestAndCheckpointEnableDeclarativeSchemaChangerRowLevelTTLPebbleFormatSplitUserKeysMarkedIncrementalBackupSubdirEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsSpanCountTablePreSeedSpanCountTableSeedSpanCountTableV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTable"
 
-var _Key_index = [...]uint16{0, 5, 14, 48, 60, 88, 118, 146, 167, 186, 220, 258, 292, 324, 360, 392, 428, 470, 510, 529, 553, 584, 602, 643, 673, 684, 715, 738, 762, 786, 808, 820, 846, 860, 881, 899, 904, 913, 928, 962, 996, 1018, 1038, 1057, 1090, 1109, 1129, 1150, 1185, 1219, 1249}
+var _Key_index = [...]uint16{0, 5, 14, 48, 60, 88, 118, 146, 167, 186, 220, 258, 292, 324, 360, 392, 428, 470, 510, 529, 553, 584, 602, 643, 673, 684, 715, 738, 762, 786, 808, 820, 846, 860, 881, 899, 904, 913, 928, 968, 1002, 1036, 1058, 1078, 1097, 1130, 1149, 1169, 1190, 1225, 1259, 1289}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
