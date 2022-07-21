@@ -164,7 +164,7 @@ func (cf *CollectionFactory) TxnWithExecutor(
 			deletedDescs = catalog.DescriptorIDSet{}
 			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
 
-			schemaChangeJobRecords := make(map[sqlutil.DescpbId]sqlutil.JobRecords)
+			schemaChangeJobRecords := make(map[sqlutil.DescpbID]sqlutil.JobRecords)
 			defer func() {
 				descsCol.ReleaseAll(ctx)
 				for k := range schemaChangeJobRecords {

@@ -307,7 +307,7 @@ type InternalExecutorFactoryWithTxn func(
 	ctx context.Context,
 	data *sessiondata.SessionData,
 	collection DescsCollection,
-	records SchemaChangeJobRecords,
+	records map[DescpbID]JobRecords,
 ) InternalExecutor
 
 // WithoutTxn is to run SQL statements without a txn context.
@@ -353,19 +353,14 @@ type DescsCollection interface {
 type JobsCollection interface {
 }
 
-// DescpbId is an interface for descpb.ID.
+// DescpbID is an interface for descpb.ID.
 // It is created to avoid cyclic dependency.
-type DescpbId interface {
+type DescpbID interface {
 }
 
 // JobRecords is an interface for jobs.Record.
 // It is created to avoid cyclic dependency.
 type JobRecords interface {
-}
-
-// SchemaChangeJobRecords is an interface for map[descpb.ID]*jobs.Record.
-// It is created to avoid cyclic dependency.
-type SchemaChangeJobRecords interface {
 }
 
 // ExtraTxnStateArgs is to pass txn related information from the caller of
@@ -374,5 +369,5 @@ type ExtraTxnStateArgs struct {
 	Txn                    *kv.Txn
 	DescCollection         DescsCollection
 	Jobs                   JobsCollection
-	SchemaChangeJobRecords SchemaChangeJobRecords
+	SchemaChangeJobRecords map[DescpbID]JobRecords
 }

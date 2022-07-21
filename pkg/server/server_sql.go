@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -950,7 +949,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	ieFactoryWithTxn := func(
-		ctx context.Context, sessionData *sessiondata.SessionData, descCol sqlutil.DescsCollection, schemaChangeJobRecords sqlutil.SchemaChangeJobRecords,
+		ctx context.Context, sessionData *sessiondata.SessionData, descCol sqlutil.DescsCollection, schemaChangeJobRecords map[sqlutil.DescpbID]sqlutil.JobRecords,
 	) sqlutil.InternalExecutor {
 		// TODO (janexing): is the type conversion safe?
 		ie := sql.MakeInternalExecutorWithTxn(
@@ -958,7 +957,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			internalMemMetrics,
 			ieFactoryMonitor,
 			descCol.(*descs.Collection),
-			schemaChangeJobRecords.(map[descpb.ID]*jobs.Record),
+			schemaChangeJobRecords,
 		)
 		ie.SetSessionData(sessionData)
 		return &ie

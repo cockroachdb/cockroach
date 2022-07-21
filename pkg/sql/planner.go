@@ -98,7 +98,7 @@ type extendedEvalContext struct {
 	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState of
 	// in sql.connExecutor. sql.connExecutor.createJobs() enqueues jobs with these
 	// records when transaction is committed.
-	SchemaChangeJobRecords map[descpb.ID]*jobs.Record
+	SchemaChangeJobRecords map[sqlutil.DescpbID]sqlutil.JobRecords
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 
@@ -963,5 +963,5 @@ type extraTxnState struct {
 	txn                    *kv.Txn
 	descCollection         *descs.Collection
 	jobs                   *jobsCollection
-	schemaChangeJobRecords map[descpb.ID]*jobs.Record
+	schemaChangeJobRecords map[sqlutil.DescpbID]sqlutil.JobRecords
 }

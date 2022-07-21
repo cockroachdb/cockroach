@@ -17,14 +17,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -124,7 +122,7 @@ func MakeInternalExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	monitor *mon.BytesMonitor,
 	descCol *descs.Collection,
-	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
+	schemaChangeJobRecords map[sqlutil.DescpbID]sqlutil.JobRecords,
 ) InternalExecutor {
 	return InternalExecutor{
 		s:          s,
@@ -1029,7 +1027,7 @@ func (ie *InternalExecutor) SetExtraTxnState(exTxnState *sqlutil.ExtraTxnStateAr
 	}
 	if exTxnState.SchemaChangeJobRecords != nil {
 		// TODO(janexing): this looks ugly, any better solution?
-		ie.extraTxnState.schemaChangeJobRecords = interface{}(exTxnState.SchemaChangeJobRecords).(map[descpb.ID]*jobs.Record)
+		ie.extraTxnState.schemaChangeJobRecords = exTxnState.SchemaChangeJobRecords
 	}
 	if exTxnState.Jobs != nil {
 		ie.extraTxnState.jobs = exTxnState.Jobs.(*jobsCollection)
