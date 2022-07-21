@@ -851,6 +851,8 @@ func (r *Replica) requestLeaseLocked(
 // blocks until the transfer is done. If a transfer is already in progress, this
 // method joins in waiting for it to complete if it's transferring to the same
 // replica. Otherwise, a NotLeaseHolderError is returned.
+//
+// AdminTransferLease implements the ReplicaLeaseMover interface.
 func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
