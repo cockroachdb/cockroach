@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package outliers
+package insights
 
 import (
 	"bytes"
@@ -42,16 +42,16 @@ func TestRegistry(t *testing.T) {
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
-		expected := []*Outlier{{
+		expected := []*Insight{{
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
 		}}
-		var actual []*Outlier
+		var actual []*Insight
 
-		registry.IterateOutliers(
+		registry.IterateInsights(
 			context.Background(),
-			func(ctx context.Context, o *Outlier) {
+			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
 			},
 		)
@@ -66,10 +66,10 @@ func TestRegistry(t *testing.T) {
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
-		var actual []*Outlier
-		registry.IterateOutliers(
+		var actual []*Insight
+		registry.IterateInsights(
 			context.Background(),
-			func(ctx context.Context, o *Outlier) {
+			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
 			},
 		)
@@ -88,10 +88,10 @@ func TestRegistry(t *testing.T) {
 		registry.ObserveStatement(session.ID, statement2)
 		registry.ObserveTransaction(session.ID, transaction)
 
-		var actual []*Outlier
-		registry.IterateOutliers(
+		var actual []*Insight
+		registry.IterateInsights(
 			context.Background(),
-			func(ctx context.Context, o *Outlier) {
+			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
 			},
 		)
@@ -115,7 +115,7 @@ func TestRegistry(t *testing.T) {
 		registry.ObserveTransaction(session.ID, transaction)
 		registry.ObserveTransaction(otherSession.ID, otherTransaction)
 
-		expected := []*Outlier{{
+		expected := []*Insight{{
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
@@ -124,15 +124,15 @@ func TestRegistry(t *testing.T) {
 			Transaction: otherTransaction,
 			Statement:   otherStatement,
 		}}
-		var actual []*Outlier
-		registry.IterateOutliers(
+		var actual []*Insight
+		registry.IterateInsights(
 			context.Background(),
-			func(ctx context.Context, o *Outlier) {
+			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
 			},
 		)
 
-		// IterateOutliers doesn't specify its iteration order, so we sort here for a stable test.
+		// IterateInsights doesn't specify its iteration order, so we sort here for a stable test.
 		sort.Slice(actual, func(i, j int) bool {
 			return bytes.Compare(actual[i].Session.ID.GetBytes(), actual[j].Session.ID.GetBytes()) < 0
 		})

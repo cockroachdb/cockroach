@@ -889,12 +889,12 @@ CREATE TABLE crdb_internal.node_distsql_flows (
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
-CREATE TABLE crdb_internal.node_execution_outliers (
+CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
    transaction_id UUID NOT NULL,
    statement_id STRING NOT NULL,
    statement_fingerprint_id BYTES NOT NULL
-)  CREATE TABLE crdb_internal.node_execution_outliers (
+)  CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
    transaction_id UUID NOT NULL,
    statement_id STRING NOT NULL,

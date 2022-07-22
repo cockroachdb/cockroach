@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package outliers
+package insights
 
 import (
 	"context"
@@ -93,7 +93,7 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 
 	if hasOutlier {
 		for _, s := range statements {
-			r.mu.outliers.Add(s.ID, &Outlier{
+			r.mu.outliers.Add(s.ID, &Insight{
 				Session:     &Session{ID: sessionID},
 				Transaction: transaction,
 				Statement:   s,
@@ -102,11 +102,11 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 	}
 }
 
-func (r *registry) IterateOutliers(ctx context.Context, visitor func(context.Context, *Outlier)) {
+func (r *registry) IterateInsights(ctx context.Context, visitor func(context.Context, *Insight)) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	r.mu.outliers.Do(func(e *cache.Entry) {
-		visitor(ctx, e.Value.(*Outlier))
+		visitor(ctx, e.Value.(*Insight))
 	})
 }
 

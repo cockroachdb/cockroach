@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package outliers
+package insights
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 // more statistically interesting, see #79451.
 var LatencyThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"sql.stats.outliers.experimental.latency_threshold",
+	"sql.stats.insights.experimental.latency_threshold",
 	"amount of time after which an executing statement is considered an outlier. Use 0 to disable.",
 	0,
 )
@@ -40,7 +40,7 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 // 100ms.
 var LatencyQuantileDetectorEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	"sql.stats.outliers.experimental.latency_quantile_detection.enabled",
+	"sql.stats.insights.experimental.latency_quantile_detection.enabled",
 	"enable per-fingerprint latency recording and outlier detection",
 	false,
 )
@@ -53,7 +53,7 @@ var LatencyQuantileDetectorEnabled = settings.RegisterBoolSetting(
 // threshold to be reported (this is a UX optimization, removing noise).
 var LatencyQuantileDetectorInterestingThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"sql.stats.outliers.experimental.latency_quantile_detection.interesting_threshold",
+	"sql.stats.insights.experimental.latency_quantile_detection.interesting_threshold",
 	"statements must surpass this threshold to trigger outlier detection and identification",
 	100*time.Millisecond,
 	settings.NonNegativeDuration,
@@ -65,7 +65,7 @@ var LatencyQuantileDetectorInterestingThreshold = settings.RegisterDurationSetti
 // churn.
 var LatencyQuantileDetectorMemoryCap = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
-	"sql.stats.outliers.experimental.latency_quantile_detection.memory_limit",
+	"sql.stats.insights.experimental.latency_quantile_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
 	settings.NonNegativeInt,
@@ -94,21 +94,21 @@ var _ metric.Struct = Metrics{}
 func NewMetrics() Metrics {
 	return Metrics{
 		Fingerprints: metric.NewGauge(metric.Metadata{
-			Name:        "sql.stats.outliers.latency_quantile_detector.fingerprints",
+			Name:        "sql.stats.insights.latency_quantile_detector.fingerprints",
 			Help:        "Current number of statement fingerprints being monitored for outlier detection",
 			Measurement: "Fingerprints",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_GAUGE,
 		}),
 		Memory: metric.NewGauge(metric.Metadata{
-			Name:        "sql.stats.outliers.latency_quantile_detector.memory",
+			Name:        "sql.stats.insights.latency_quantile_detector.memory",
 			Help:        "Current memory used to support outlier detection",
 			Measurement: "Memory",
 			Unit:        metric.Unit_BYTES,
 			MetricType:  prometheus.MetricType_GAUGE,
 		}),
 		Evictions: metric.NewCounter(metric.Metadata{
-			Name:        "sql.stats.outliers.latency_quantile_detector.evictions",
+			Name:        "sql.stats.insights.latency_quantile_detector.evictions",
 			Help:        "Evictions of fingerprint latency summaries due to memory pressure",
 			Measurement: "Evictions",
 			Unit:        metric.Unit_COUNT,
@@ -117,15 +117,14 @@ func NewMetrics() Metrics {
 	}
 }
 
-// Reader offers read-only access to the currently retained set of outliers.
+// Reader offers read-only access to the currently retained set of insights.
 type Reader interface {
-	// IterateOutliers calls visitor with each of the currently retained set of outliers.
-	IterateOutliers(context.Context, func(context.Context, *Outlier))
+	// IterateInsights calls visitor with each of the currently retained set of insights.
+	IterateInsights(context.Context, func(context.Context, *Insight))
 }
 
-// Registry is the central object in the outliers subsystem. It observes
-// statement execution to determine which statements are outliers and
-// exposes the set of currently retained outliers.
+// Registry is the central object in the insights subsystem. It observes
+// statement execution, looking for suggestions we may expose to the user.
 type Registry interface {
 	Start(ctx context.Context, stopper *stop.Stopper)
 

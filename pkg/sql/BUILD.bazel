@@ -417,7 +417,7 @@ go_library(
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
-        "//pkg/sql/sqlstats/outliers",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
