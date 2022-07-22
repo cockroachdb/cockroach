@@ -1567,24 +1567,71 @@ func (rq *replicateQueue) shedLease(
 	if qpsMeasurementDur < replicastats.MinStatsDuration {
 		avgQPS = 0
 	}
-	if err := rq.transferLease(ctx, repl, target, avgQPS); err != nil {
+	if err := rq.TransferLease(ctx, repl, repl.store.StoreID(), target.StoreID, avgQPS); err != nil {
 		return allocator.TransferErr, err
 	}
 	return allocator.TransferOK, nil
 }
 
-func (rq *replicateQueue) transferLease(
-	ctx context.Context, repl *Replica, target roachpb.ReplicaDescriptor, rangeQPS float64,
+// ReplicaLeaseMover handles lease transfers for a single range.
+type ReplicaLeaseMover interface {
+	// AdminTransferLease moves the lease to the requested store.
+	AdminTransferLease(ctx context.Context, target roachpb.StoreID) error
+
+	// String returns info about the replica.
+	String() string
+}
+
+// RangeRebalancer handles replica moves and lease transfers.
+type RangeRebalancer interface {
+	// TransferLease uses a LeaseMover interface to move a lease between stores.
+	// The QPS is used to update stats for the stores.
+	TransferLease(
+		ctx context.Context,
+		rlm ReplicaLeaseMover,
+		source, target roachpb.StoreID,
+		rangeQPS float64,
+	) error
+
+	// RelocateRange relocates replicas to the requested stores, and can transfer
+	// the lease for the range to the first target voter.
+	RelocateRange(
+		ctx context.Context,
+		key interface{},
+		voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+		transferLeaseToFirstVoter bool,
+	) error
+}
+
+// TransferLease implements the RangeRebalancer interface.
+func (rq *replicateQueue) TransferLease(
+	ctx context.Context, rlm ReplicaLeaseMover, source, target roachpb.StoreID, rangeQPS float64,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
-	log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-	if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
-		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+	log.VEventf(ctx, 1, "transferring lease to s%d", target)
+	if err := rlm.AdminTransferLease(ctx, target); err != nil {
+		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 	rq.lastLeaseTransfer.Store(timeutil.Now())
 	rq.store.cfg.StorePool.UpdateLocalStoresAfterLeaseTransfer(
-		repl.store.StoreID(), target.StoreID, rangeQPS)
+		source, target, rangeQPS)
 	return nil
+}
+
+// RelocateRange implements the RangeRebalancer interface.
+func (rq *replicateQueue) RelocateRange(
+	ctx context.Context,
+	key interface{},
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
+) error {
+	return rq.store.DB().AdminRelocateRange(
+		ctx,
+		key,
+		voterTargets,
+		nonVoterTargets,
+		transferLeaseToFirstVoter,
+	)
 }
 
 func (rq *replicateQueue) changeReplicas(
