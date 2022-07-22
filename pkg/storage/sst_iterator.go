@@ -132,15 +132,15 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	}
 	r.keyBuf = EncodeMVCCKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	trySeekUsingNext := false
-	if r.seekGELastOp {
+	var flags sstable.SeekGEFlags
+	if r.seekGELastOp && !key.Less(r.prevSeekKey) {
 		// trySeekUsingNext = r.prevSeekKey <= key
-		trySeekUsingNext = !key.Less(r.prevSeekKey)
+		flags = flags.EnableTrySeekUsingNext()
 	}
 	// NB: seekGELastOp may still be true, and we haven't updated prevSeekKey.
 	// So be careful not to return before the end of the function that sets these
 	// fields up for the next SeekGE.
-	iKey, r.value = r.iter.SeekGE(r.keyBuf, trySeekUsingNext)
+	iKey, r.value = r.iter.SeekGE(r.keyBuf, flags)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
