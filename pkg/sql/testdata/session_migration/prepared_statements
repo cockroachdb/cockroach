@@ -33,6 +33,13 @@ wire_prepare s4
 INSERT INTO t2 VALUES($1, $2)
 ----
 
+wire_prepare s_empty
+;
+----
+
+wire_exec s_empty
+----
+
 wire_exec s2 1 cat 2022-02-10
 ----
 ERROR: relation "t" does not exist (SQLSTATE 42P01)
@@ -73,6 +80,9 @@ query
 EXECUTE s1
 ----
 1
+
+wire_exec s_empty
+----
 
 # The s2 and s3 statements should experience the same errors that they did
 # before the session migration.
