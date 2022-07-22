@@ -1,0 +1,73 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package insights_test
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+)
+
+// Here we benchmark the entire insights stack, so that we can include in our
+// measurements the effects of any backpressure on the ingester applied by
+// the registry.
+func BenchmarkInsights(b *testing.B) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Enable the insights detectors, so that we can get some meaningful
+	// backpressure from the registry.
+	settings := cluster.MakeTestingClusterSettings()
+	insights.LatencyThreshold.Override(ctx, &settings.SV, 100*time.Millisecond)
+	insights.LatencyQuantileDetectorEnabled.Override(ctx, &settings.SV, true)
+
+	// Run these benchmarks with an increasing number of concurrent (simulated)
+	// SQL sessions, to gauge where our runtime performance starts to break
+	// down, guiding us as we tune buffer sizes, etc.
+	for _, numSessions := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("numSessions=%d", numSessions), func(b *testing.B) {
+			registry := insights.New(settings, insights.NewMetrics())
+			registry.Start(ctx, stopper)
+
+			// Spread the b.N work across the simulated SQL sessions, so that we
+			// can make apples-to-apples comparisons in the benchmark reports:
+			// each N is an "op," which for our measurement purposes is a
+			// statement in an implicit transaction.
+			numTransactionsPerSession := b.N / numSessions
+			var sessions sync.WaitGroup
+			sessions.Add(numSessions)
+
+			for i := 0; i < numSessions; i++ {
+				sessionID := clusterunique.ID{Uint128: uint128.FromInts(0, uint64(i))}
+				statement := &insights.Statement{}
+				transaction := &insights.Transaction{}
+				go func() {
+					for j := 0; j < numTransactionsPerSession; j++ {
+						registry.ObserveStatement(sessionID, statement)
+						registry.ObserveTransaction(sessionID, transaction)
+					}
+					sessions.Done()
+				}()
+			}
+
+			sessions.Wait()
+		})
+	}
+}
