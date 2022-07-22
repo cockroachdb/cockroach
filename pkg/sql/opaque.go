@@ -156,6 +156,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateExtension(ctx, n)
 	case *tree.CreateExternalConnection:
 		return p.CreateExternalConnection(ctx, n)
+	case *tree.DropExternalConnection:
+		return p.DropExternalConnection(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
 	case *tree.DeclareCursor:
@@ -297,6 +299,7 @@ func init() {
 		&tree.DeclareCursor{},
 		&tree.Discard{},
 		&tree.DropDatabase{},
+		&tree.DropExternalConnection{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},

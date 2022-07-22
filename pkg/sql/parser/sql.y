@@ -1094,6 +1094,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> drop_stmt
 %type <tree.Statement> drop_ddl_stmt
 %type <tree.Statement> drop_database_stmt
+%type <tree.Statement> drop_external_connection_stmt
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_schema_stmt
@@ -3170,6 +3171,22 @@ create_external_connection_stmt:
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
 
+// %Help: DROP EXTERNAL CONNECTION - drop an existing external connection
+// %Category: Misc
+// %Text:
+// DROP EXTERNAL CONNECTION <name>
+//
+// Name:
+//   Unique name for this external connection.
+drop_external_connection_stmt:
+	DROP EXTERNAL CONNECTION string_or_placeholder
+	{
+      $$.val = &tree.DropExternalConnection{
+            ConnectionLabel: $4.expr(),
+      }
+	}
+	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
+
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
 // %Text:
@@ -4422,6 +4439,7 @@ drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
 | drop_schedule_stmt // EXTEND WITH HELP: DROP SCHEDULES
+| drop_external_connection_stmt // EXTEND WITH HELP: DROP EXTERNAL CONNECTION
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
