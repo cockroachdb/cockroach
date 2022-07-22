@@ -249,12 +249,12 @@ func (desc *immutable) ValidateCrossReferences(
 
 func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescriptor) error {
 	// Check that parent Schema contains the matching function signature.
-	if ok, _ := scDesc.GetFunction(desc.GetName()); !ok {
+	if _, ok := scDesc.GetFunction(desc.GetName()); !ok {
 		return errors.AssertionFailedf("function does not exist in schema %q (%d)",
 			scDesc.GetName(), scDesc.GetID())
 	}
 
-	_, function := scDesc.GetFunction(desc.GetName())
+	function, _ := scDesc.GetFunction(desc.GetName())
 	for _, overload := range function.Overloads {
 		// TODO (Chengxiong) maybe a overkill, but we could also validate function
 		// signature matches.
