@@ -294,8 +294,7 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 		if err := c.RepeatRun(ctx, l,
 			os.Stdout,
 			os.Stderr, cfg.PrometheusNode, "permissions",
-			`sudo chmod 777 /etc/grafana/provisioning/dashboards/cockroach.yaml /etc/grafana/provisioning/datasources/prometheus.yaml 
-/etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
+			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
 		); err != nil {
 			return nil, err
 		}
