@@ -45,6 +45,9 @@ const (
 
 	// Schema is for schema descriptors.
 	Schema = "schema"
+
+	// Function is for function descriptors.
+	Function = "function"
 )
 
 // MutationPublicationFilter is used by MakeFirstMutationPublic to filter the

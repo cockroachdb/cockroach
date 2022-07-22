@@ -1266,6 +1266,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					c = "T"
 				case privilege.Schemas:
 					c = "n"
+				case privilege.Functions:
+					c = "f"
 				}
 				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 				arr := tree.NewDArray(types.String)

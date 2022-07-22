@@ -32,6 +32,7 @@ var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.Obj
 	privilege.Sequences: privilege.Table,
 	privilege.Types:     privilege.Type,
 	privilege.Schemas:   privilege.Schema,
+	privilege.Functions: privilege.Function,
 }
 
 type alterDefaultPrivilegesNode struct {

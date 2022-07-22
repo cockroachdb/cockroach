@@ -66,6 +66,7 @@ message DefaultPrivilegesForRole {
     optional bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_functions = 9 [(gogoproto.nullable) = false];
   }
   // ForAllRoles represents when default privileges are defined
   // using FOR ALL ROLES.
