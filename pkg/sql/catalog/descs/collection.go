@@ -256,7 +256,7 @@ func (tc *Collection) WriteDesc(
 
 // GetDescriptorsWithNewVersion returns all the IDVersion pairs that have
 // undergone a schema change. Returns nil for no schema changes. The version
-// returned for each schema change is ClusterVersion - 1, because that's the one
+// returned for each schema change is clusterVersion - 1, because that's the one
 // that will be used when checking for table descriptor two version invariance.
 func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
 	_ = tc.stored.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {

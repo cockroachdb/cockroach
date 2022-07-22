@@ -338,6 +338,9 @@ func (v TableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 // GetReferencingDescriptorID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
+// GetReferencingDescriptorIDs implements the TypeDescriptorInterface.
+func (v TableImplicitRecordType) GetReferencingDescriptorIDs() []descpb.ID { return nil }
+
 // GetPostDeserializationChanges implements the Descriptor interface.
 func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
 	return catalog.PostDeserializationChanges{}

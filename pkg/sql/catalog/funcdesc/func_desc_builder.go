@@ -109,7 +109,7 @@ func (f functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
 			isUncommittedVersion: f.isUncommittedVersion,
 			changes:              f.changes,
 		},
-		ClusterVersion: &immutable{FunctionDescriptor: *f.original},
+		clusterVersion: &immutable{FunctionDescriptor: *f.original},
 	}
 }
 

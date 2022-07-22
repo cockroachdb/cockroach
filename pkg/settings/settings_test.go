@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// dummyVersion mocks out the dependency on the ClusterVersion type. It has a
+// dummyVersion mocks out the dependency on the clusterVersion type. It has a
 // msg1 prefix, and a growsbyone component that grows by one character on each
 // update (which is internally validated and asserted against). They're
 // separated by a '.' in string form. Neither component can contain a '.'

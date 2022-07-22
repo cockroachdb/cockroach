@@ -49,7 +49,7 @@ func (dt *Map) Upsert(d catalog.NameEntry, skipNameMap bool) {
 		if replaced := dt.byID.upsert(d); replaced != nil {
 			dt.byName.delete(replaced)
 		}
-		//delete(dt.nameSkipped, d.GetID())
+		delete(dt.nameSkipped, d.GetID())
 	}
 }
 

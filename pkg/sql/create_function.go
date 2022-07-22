@@ -51,7 +51,7 @@ func (n *createFunctionNode) ReadingOwnWrites() {}
 
 func (n *createFunctionNode) startExec(params runParams) error {
 	if n.routineBody != nil {
-		return unimplemented.New("create function sql_body", "CREATE FUNCTION...sql_body unimplemented")
+		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
 	scDesc := n.scDesc.NewBuilder().BuildExistingMutable().(*schemadesc.Mutable)

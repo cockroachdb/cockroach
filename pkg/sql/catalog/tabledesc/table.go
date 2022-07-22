@@ -326,7 +326,8 @@ func (desc *wrapper) FindConstraintWithID(
 			return &info, nil
 		}
 	}
-	return nil, nil
+
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
 }
 
 // GetConstraintInfoWithLookup implements the TableDescriptor interface.

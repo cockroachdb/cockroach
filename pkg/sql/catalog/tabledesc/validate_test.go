@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -288,6 +289,7 @@ var validationMap = []struct {
 			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+			"Functions":                     {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -296,6 +298,31 @@ var validationMap = []struct {
 			"Enabled":           {status: iSolemnlySwearThisFieldIsValidated},
 			"MinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
 			"FractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
+	{
+		obj: descpb.FunctionDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
+			"ParentID":                      {status: iSolemnlySwearThisFieldIsValidated},
+			"ParentSchemaID":                {status: iSolemnlySwearThisFieldIsValidated},
+			"Args":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"ReturnType":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"Lang":                          {status: thisFieldReferencesNoObjects},
+			"FunctionBody":                  {status: thisFieldReferencesNoObjects},
+			"Volatility":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"LeakProof":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"NullInputBehavior":             {status: thisFieldReferencesNoObjects},
+			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOn":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnTypes":                {status: iSolemnlySwearThisFieldIsValidated},
+			"DependedOnBy":                  {status: iSolemnlySwearThisFieldIsValidated},
+			"State":                         {status: thisFieldReferencesNoObjects},
+			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
+			"ModificationTime":              {status: thisFieldReferencesNoObjects},
+			"Version":                       {status: thisFieldReferencesNoObjects},
+			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
@@ -2552,6 +2579,28 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				DependsOn: []descpb.ID{51},
 			}},
 		},
+		{
+			err: `depended-on-by function "f" (100) has no corresponding depends-on forward reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 100},
+				},
+			},
+		},
+		{
+			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOn:               []descpb.ID{100},
+			},
+		},
 	}
 
 	for i, test := range tests {
@@ -2563,6 +2612,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 			}
 			desc := NewBuilder(&test.desc).BuildImmutable()
+			cb.UpsertDescriptorEntry(funcdesc.NewBuilder(&descpb.FunctionDescriptor{ID: 100, Name: "f"}).BuildImmutable())
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
 			results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
