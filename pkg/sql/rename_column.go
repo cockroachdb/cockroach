@@ -101,6 +101,9 @@ func (p *planner) findColumnToRename(
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
+		if err := p.maybeFailOnDroppingFunction(ctx, tableRef.ID); err != nil {
+			return nil, err
+		}
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
 			if colID == col.GetID() {

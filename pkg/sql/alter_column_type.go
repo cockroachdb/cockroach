@@ -66,6 +66,9 @@ func AlterColumnType(
 	tn *tree.TableName,
 ) error {
 	for _, tableRef := range tableDesc.DependedOnBy {
+		if err := params.p.maybeFailOnDroppingFunction(ctx, tableRef.ID); err != nil {
+			return err
+		}
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
 			if colID == col.GetID() {

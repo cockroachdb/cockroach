@@ -1,2 +1,245 @@
-statement error pq: unimplemented: CREATE FUNCTION unimplemented
-CREATE OR REPLACE FUNCTION f(a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
+statement error pq: unimplemented: replacing function
+CREATE OR REPLACE FUNCTION f(a int) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pq: cannot create leakproof function with non-immutable volatility: STABLE
+CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
+
+statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
+
+# Make sure using table name as tuple type name works properly.
+# It should pass the return type validation and stored as a tuple type.
+statement ok
+CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
+
+statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement error pq: unimplemented: functions do not currently support \* expressions\nHINT: You have attempted to use a feature that is not yet implemented\.\nSee: https://go\.crdb\.dev/issue-v/10028/v22\.2
+CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
+
+# statement ok
+# CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+# let $max_desc_id
+# SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
+
+# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
+# function resolution in place.
+#query T
+#SELECT jsonb_pretty(
+#  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
+#)::string
+#FROM system.descriptor
+#WHERE id = $max_desc_id;
+#----
+#{
+#    "function": {
+#        "dependsOn": [
+#            107
+#        ],
+#        "functionBody": "SELECT a, b FROM test.public.t_implicit_type;",
+#        "id": 108,
+#        "leakProof": true,
+#        "modificationTime": {},
+#        "name": "f",
+#        "parentId": 104,
+#        "parentSchemaId": 105,
+#        "privileges": {
+#            "ownerProto": "root",
+#            "users": [
+#                {
+#                    "privileges": 2,
+#                    "userProto": "admin",
+#                    "withGrantOption": 2
+#                },
+#                {
+#                    "privileges": 2,
+#                    "userProto": "root",
+#                    "withGrantOption": 2
+#                }
+#            ],
+#            "version": 2
+#        },
+#        "returnType": {
+#            "type": {
+#                "family": "TupleFamily",
+#                "oid": 100107,
+#                "tupleContents": [
+#                    {
+#                        "family": "IntFamily",
+#                        "oid": 20,
+#                        "width": 64
+#                    },
+#                    {
+#                        "family": "StringFamily",
+#                        "oid": 25
+#                    }
+#                ],
+#                "tupleLabels": [
+#                    "a",
+#                    "b"
+#                ]
+#            }
+#        },
+#        "version": "1",
+#        "volatility": "Immutable"
+#    }
+#}
+
+# Create function with no references.
+# statement ok
+# CREATE FUNCTION f(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
+
+# let $max_desc_id
+# SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
+
+# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
+# function resolution in place.
+#query T
+#SELECT jsonb_pretty(
+#  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
+#)::string
+#FROM system.descriptor
+#WHERE id = $max_desc_id;
+#----
+#{
+#    "function": {
+#        "args": [
+#            {
+#                "name": "a",
+#                "type": {
+#                    "family": "IntFamily",
+#                    "oid": 20,
+#                    "width": 64
+#                }
+#            }
+#        ],
+#        "functionBody": "SELECT 1;",
+#        "id": 109,
+#        "leakProof": true,
+#        "modificationTime": {},
+#        "name": "f",
+#        "parentId": 104,
+#        "parentSchemaId": 105,
+#        "privileges": {
+#            "ownerProto": "root",
+#            "users": [
+#                {
+#                    "privileges": 2,
+#                    "userProto": "admin",
+#                    "withGrantOption": 2
+#                },
+#                {
+#                    "privileges": 2,
+#                    "userProto": "root",
+#                    "withGrantOption": 2
+#                }
+#            ],
+#            "version": 2
+#        },
+#        "returnType": {
+#            "type": {
+#                "family": "IntFamily",
+#                "oid": 20,
+#                "width": 64
+#            }
+#        },
+#        "version": "1",
+#        "volatility": "Immutable"
+#    }
+#}
+
+# Make sure that names are qualified, references are tracked and sequence
+# expression is rewritten.
+statement ok
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+
+statement ok
+CREATE SEQUENCE sq1;
+
+statement ok
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+
+#statement ok
+#CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+#  SELECT a FROM t;
+#  SELECT b FROM t@t_idx_b;
+#  SELECT c FROM t@t_idx_c;
+#  SELECT nextval('sq1');
+#$$
+
+#let $max_desc_id
+#SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
+
+# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
+# function resolution in place.
+#query T
+#SELECT jsonb_pretty(
+#  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
+#)::string
+#FROM system.descriptor
+#WHERE id = $max_desc_id;
+#----
+#{
+#    "function": {
+#        "args": [
+#            {
+#                "name": "a",
+#                "type": {
+#                    "family": "EnumFamily",
+#                    "oid": 100112,
+#                    "udtMetadata": {
+#                        "arrayTypeOid": 100113
+#                    }
+#                }
+#            }
+#        ],
+#        "dependsOn": [
+#            111,
+#            110
+#        ],
+#        "dependsOnTypes": [
+#            113,
+#            112
+#        ],
+#        "functionBody": "SELECT a FROM test.public.t;\nSELECT b FROM test.public.t@t_idx_b;\nSELECT c FROM test.public.t@t_idx_c;\nSELECT nextval(111:::REGCLASS);",
+#        "id": 114,
+#        "leakProof": true,
+#        "modificationTime": {},
+#        "name": "f",
+#        "parentId": 104,
+#        "parentSchemaId": 105,
+#        "privileges": {
+#            "ownerProto": "root",
+#            "users": [
+#                {
+#                    "privileges": 2,
+#                    "userProto": "admin",
+#                    "withGrantOption": 2
+#                },
+#                {
+#                    "privileges": 2,
+#                    "userProto": "root",
+#                    "withGrantOption": 2
+#                }
+#            ],
+#            "version": 2
+#        },
+#        "returnType": {
+#            "type": {
+#                "family": "IntFamily",
+#                "oid": 20,
+#                "width": 64
+#            }
+#        },
+#        "version": "1",
+#        "volatility": "Immutable"
+#    }
+#}

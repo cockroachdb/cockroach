@@ -444,6 +444,9 @@ func (p *planner) dropIndexByName(
 	var droppedViews []string
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
+			if err := p.maybeFailOnDroppingFunction(ctx, tableRef.ID); err != nil {
+				return err
+			}
 			// Ensure that we have DROP privilege on all dependent views
 			err := p.canRemoveDependentViewGeneric(
 				ctx, "index", idx.GetName(), tableDesc.ParentID, tableRef, behavior)
