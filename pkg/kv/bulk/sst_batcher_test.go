@@ -72,7 +72,12 @@ func TestDuplicateHandling(t *testing.T) {
 		require.NoError(t, err.GoError())
 		keyCount := 0
 		for _, file := range resp.(*roachpb.ExportResponse).Files {
-			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
+			iterOpts := storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: keys.LocalMax,
+				UpperBound: keys.MaxKey,
+			}
+			it, err := storage.NewPebbleMemSSTIterator(file.SST, false /* verify */, iterOpts)
 			require.NoError(t, err)
 			defer it.Close()
 			for it.SeekGE(storage.NilKey); ; it.Next() {
