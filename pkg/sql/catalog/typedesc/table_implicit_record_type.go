@@ -348,6 +348,12 @@ func (v TableImplicitRecordType) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// SkipNamespace implements catalog.Descriptor. We never store table implicit
+// record type which is always constructed in memory.
+func (v TableImplicitRecordType) SkipNamespace() bool {
+	return true
+}
+
 func (v TableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
 }

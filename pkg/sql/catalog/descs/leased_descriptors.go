@@ -173,7 +173,7 @@ func (ld *leasedDescriptors) getResult(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	ld.cache.Upsert(ldesc)
+	ld.cache.Upsert(ldesc, ldesc.Underlying().SkipNamespace())
 	if log.V(2) {
 		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", ldesc.GetName(), ldesc.Underlying())
 	}

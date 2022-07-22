@@ -507,6 +507,11 @@ func (desc *immutable) GetPrivilegeDescriptor(
 	return desc.GetPrivileges(), nil
 }
 
+// SkipNamespace implements the descriptor interface.
+func (desc *immutable) SkipNamespace() bool {
+	return false
+}
+
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the
 // database itself which was added due to a bug in prior versions when dropping any user-defined schema.
 // The bug inserted an entry for the database rather than the schema being dropped. This function fixes the

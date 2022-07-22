@@ -95,7 +95,7 @@ func (c *nameCache) insert(desc *descriptorVersionState) {
 	if ok && desc.getExpiration().Less(got.getExpiration()) {
 		return
 	}
-	c.descriptors.Upsert(desc)
+	c.descriptors.Upsert(desc, desc.SkipNamespace())
 }
 
 func (c *nameCache) remove(desc *descriptorVersionState) {

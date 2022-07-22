@@ -51,7 +51,7 @@ func get(t *btree.BTree, k item) interface{} {
 	return nil
 }
 
-func delete(t *btree.BTree, k item) interface{} {
+func remove(t *btree.BTree, k item) interface{} {
 	defer k.put()
 	if deleted, ok := t.Delete(k).(item); ok {
 		defer deleted.put()

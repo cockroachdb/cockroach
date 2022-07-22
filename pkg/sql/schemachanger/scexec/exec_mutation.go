@@ -486,7 +486,7 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 		return nil, err
 	}
 	mut.MaybeIncrementVersion()
-	mvs.modifiedDescriptors.Upsert(mut)
+	mvs.modifiedDescriptors.Upsert(mut, mut.SkipNamespace())
 	return mut, nil
 }
 
