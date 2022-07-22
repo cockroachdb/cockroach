@@ -676,3 +676,34 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 		return nil
 	})
 }
+
+// TestDistSQLRunnerCoordinator verifies that the runnerCoordinator correctly
+// reacts to the changes of the corresponding setting.
+func TestDistSQLRunnerCoordinator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := &s.ExecutorConfig().(ExecutorConfig).DistSQLPlanner.runnerCoordinator
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	checkNumRunners := func(newNumRunners int64) {
+		sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.distsql.num_runners = %d", newNumRunners))
+		testutils.SucceedsSoon(t, func() error {
+			numWorkers := atomic.LoadInt64(&runner.atomics.numWorkers)
+			if numWorkers != newNumRunners {
+				return errors.Newf("%d workers are up, want %d", numWorkers, newNumRunners)
+			}
+			return nil
+		})
+	}
+
+	// Lower the setting to 0 and make sure that all runners exit.
+	checkNumRunners(0)
+
+	// Now bump it up to 100.
+	checkNumRunners(100)
+}

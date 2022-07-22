@@ -91,9 +91,9 @@ type DistSQLPlanner struct {
 	distSQLSrv           *distsql.ServerImpl
 	spanResolver         physicalplan.SpanResolver
 
-	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
-	// pool of workers.
-	runnerChan chan runnerRequest
+	// runnerCoordinator is used to send out requests (for running SetupFlow
+	// RPCs) to a pool of workers.
+	runnerCoordinator runnerCoordinator
 
 	// cancelFlowsCoordinator is responsible for batching up the requests to
 	// cancel remote flows initiated on the behalf of the current node when the
@@ -211,7 +211,7 @@ func NewDistSQLPlanner(
 		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
 	}
 
-	dsp.initRunners(ctx)
+	dsp.runnerCoordinator.init(ctx, stopper, &st.SV)
 	dsp.initCancelingWorkers(ctx)
 	return dsp
 }
