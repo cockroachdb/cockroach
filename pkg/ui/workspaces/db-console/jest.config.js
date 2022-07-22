@@ -15,12 +15,6 @@ const { pathsToModuleNameMapper } = require("ts-jest");
 const { compilerOptions } = require("./tsconfig.json");
 const isBazel = !!process.env.BAZEL_TARGET;
 
-const v8 = require("v8");
-console.log(
-  "maxoldspace (MB) = ",
-  v8.getHeapStatistics().total_available_size / 1024 / 1024,
-);
-
 const bazelOnlySettings = {
   haste: {
     // Platforms that include a POSIX-compatible `find` binary default to using it for test file
@@ -117,23 +111,22 @@ module.exports = {
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
 
   // A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
-  moduleNameMapper: (function(){
-    const map = Object.assign(
-      {},
-      pathsToModuleNameMapper(
-        Object.fromEntries(
-          Object.entries(compilerOptions.paths).filter(([name, _paths]) => !name.includes("@cockroachlabs"))
-        ), { prefix: "<rootDir>/" }),
-      {
-        "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
-          "<rootDir>/src/test-utils/file.mock.js",
-        "\\.(css|scss|less|styl)$": "identity-obj-proxy",
-        "^react($|/.+)": "<rootDir>/node_modules/react$1",
-      },
-    );
-    console.log(map);
-    return map;
-  })(),
+  moduleNameMapper: Object.assign(
+    {},
+    pathsToModuleNameMapper(
+      // The TypeScript compiler needs to know how to find Bazel-produced .d.ts
+      // files, but those overrides break Jest's module loader. Remove the
+      // @cockroachlabs entries from tsconfig.json's 'paths' object.
+      Object.fromEntries(
+        Object.entries(compilerOptions.paths).filter(([name, _paths]) => !name.includes("@cockroachlabs"))
+      ), { prefix: "<rootDir>/" }),
+    {
+      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
+        "<rootDir>/src/test-utils/file.mock.js",
+      "\\.(css|scss|less|styl)$": "identity-obj-proxy",
+      "^react($|/.+)": "<rootDir>/node_modules/react$1",
+    },
+  ),
 
   // An alternative API to setting the NODE_PATH env variable, modulePaths is an array of absolute paths to additional locations to search when resolving modules.
   modulePaths: ["<rootDir>/", ...module.paths],
