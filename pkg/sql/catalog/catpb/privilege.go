@@ -358,9 +358,9 @@ func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
 // allowed privilege set for the object.
-// It requires the ID of the descriptor it is applied on to determine whether
-// it is is a system descriptor, because superusers do not always have full
-// privileges for those.
+// It requires the ID of the descriptor it is applied on to determine whether it
+// is a system descriptor, because superusers do not always have full privileges
+// for those.
 // It requires the objectType to determine the superset of privileges allowed
 // for regular users.
 func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(

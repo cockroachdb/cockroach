@@ -79,6 +79,11 @@ type systemBackupConfiguration struct {
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
 	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string) error
+
+	// The following fields are for testing.
+
+	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
+	expectMissingInSystemTenant bool
 }
 
 // defaultSystemTableRestoreFunc is how system table data is restored. This can
@@ -401,6 +406,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.SpanCountTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		expectMissingInSystemTenant:  true,
 	},
 }
 

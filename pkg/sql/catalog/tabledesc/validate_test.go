@@ -2037,7 +2037,6 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			},
 		},
 		{
@@ -2120,7 +2119,6 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			},
 		},
 	}
