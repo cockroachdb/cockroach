@@ -279,3 +279,112 @@ func TestTelemetryLogging(t *testing.T) {
 		}
 	}
 }
+
+func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := installTelemetryLogFileSink(sc, t)
+	defer cleanup()
+
+	st := stubTime{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow: st.TimeNow,
+			},
+		},
+	})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, "CREATE TABLE t();")
+
+	stubMaxEventFrequency := int64(1)
+	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+
+	/*
+		Testing Cases:
+			- run query when troubleshoot mode is enabled
+				- ensure no log appears
+			- run another query when troubleshoot mode is disabled
+				- ensure log appears
+	*/
+	testData := []struct {
+		name                      string
+		query                     string
+		expectedLogStatement      string
+		enableTroubleshootingMode bool
+		expectedNumLogs           int
+	}{
+		{
+			"select-troubleshooting-enabled",
+			"SELECT * FROM t LIMIT 1;",
+			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+			true,
+			0,
+		},
+		{
+			"select-troubleshooting-disabled",
+			"SELECT * FROM t LIMIT 2;",
+			`SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
+			false,
+			1,
+		},
+	}
+
+	for idx, tc := range testData {
+		// Set the time for when we issue a query to enable/disable
+		// troubleshooting mode.
+		setTroubleshootModeTime := timeutil.FromUnixMicros(int64(idx * 1e6))
+		st.setTime(setTroubleshootModeTime)
+		if tc.enableTroubleshootingMode {
+			db.Exec(t, `SET troubleshooting_mode = true;`)
+		} else {
+			db.Exec(t, `SET troubleshooting_mode = false;`)
+		}
+		// Advance time 1 second from previous query. Ensure enough time has passed
+		// from when we set troubleshooting mode for this query to be sampled.
+		setQueryTime := timeutil.FromUnixMicros(int64((idx + 1) * 1e6))
+		st.setTime(setQueryTime)
+		db.Exec(t, tc.query)
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, tc := range testData {
+		numLogsFound := 0
+		for i := len(entries) - 1; i >= 0; i-- {
+			e := entries[i]
+			if strings.Contains(e.Message, tc.expectedLogStatement) {
+				if tc.enableTroubleshootingMode {
+					t.Errorf("%s: unexpected log entry when troubleshooting mode enabled:\n%s", tc.name, entries[0].Message)
+				} else {
+					numLogsFound++
+				}
+			}
+		}
+		if numLogsFound != tc.expectedNumLogs {
+			t.Errorf("%s: expected %d log entries, found %d", tc.name, tc.expectedNumLogs, numLogsFound)
+		}
+	}
+}

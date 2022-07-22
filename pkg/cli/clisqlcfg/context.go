@@ -204,6 +204,18 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 		}
 	}
 
+	if err := c.maybeSetTroubleshootingMode(conn); err != nil {
+		return err
+	}
+
 	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
 	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
+}
+
+func (c *Context) maybeSetTroubleshootingMode(conn clisqlclient.Conn) error {
+	if !c.ConnCtx.DebugMode {
+		return nil
+	}
+	// If we are in debug mode, enable "troubleshooting mode".
+	return conn.Exec("SET troubleshooting_mode = on", nil)
 }
