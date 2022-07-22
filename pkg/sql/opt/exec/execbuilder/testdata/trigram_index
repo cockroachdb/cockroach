@@ -270,3 +270,31 @@ vectorized: true
           missing stats
           table: a@a_b_idx
           spans: 1 span
+
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+statement ok
+CREATE TABLE b (a) AS SELECT 'foo';
+ANALYZE b;
+CREATE INVERTED INDEX ON b(a gin_trgm_ops)
+
+query T
+EXPLAIN SELECT * FROM b WHERE a LIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 0
+│ filter: a LIKE '%foo%'
+│
+└── • index join
+    │ estimated row count: 1
+    │ table: b@b_pkey
+    │
+    └── • scan
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: b@b_a_idx
+          spans: 1 span

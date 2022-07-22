@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -863,9 +864,20 @@ func (sb *statisticsBuilder) constrainScan(
 				// estimate 0 rows.)
 				s.RowCount = max(inputHist.ValuesCount(), 1)
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
-					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
-					histCols.Add(invertedConstrainedCol)
-					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+					// If we have a histogram that doesn't contain DBytes, we know we're
+					// looking at a forward histogram, since inverted histograms always
+					// are of type DBytes. We cannot use the histogram if this is the
+					// case.
+					// Note that this is a sketchy situation (no pun intended), because
+					// if we one day supported inverted indexes on bytes types, this check
+					// wouldn't properly reject the histogram. The proper fix, tracked
+					// in #50655, is to add a type field onto the persisted histogram.
+					if inputHist.BucketCount() == 0 ||
+						inputHist.Bucket(0).UpperBound.ResolvedType().Family() == types.BytesFamily {
+						colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
+						histCols.Add(invertedConstrainedCol)
+						sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+					}
 				}
 			} else {
 				// Just assume a single closed span such as ["\xfd", "\xfe").

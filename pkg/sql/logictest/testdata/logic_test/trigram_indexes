@@ -143,3 +143,17 @@ INSERT INTO pkt VALUES (1, 'abcd'), (2, 'bcde')
 
 statement error primary key column b cannot be present in an inverted index
 ALTER TABLE pkt ALTER PRIMARY KEY USING COLUMNS (b)
+
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+statement ok
+CREATE TABLE b (a) AS SELECT 'foo';
+ANALYZE b;
+CREATE INVERTED INDEX ON b(a gin_trgm_ops)
+
+query T
+SELECT * FROM b WHERE a LIKE '%foo%'
+----
+foo
