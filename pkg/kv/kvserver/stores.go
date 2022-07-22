@@ -408,7 +408,7 @@ func SynthesizeClusterVersionFromEngines(
 	cv := clusterversion.ClusterVersion{
 		Version: minStoreVersion.Version,
 	}
-	log.Eventf(ctx, "read ClusterVersion %+v", cv)
+	log.Eventf(ctx, "read clusterVersion %+v", cv)
 
 	// Avoid running a binary too new for this store. This is what you'd catch
 	// if, say, you restarted directly from 1.0 into 1.2 (bumping the min

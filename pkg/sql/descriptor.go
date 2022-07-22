@@ -244,6 +244,13 @@ func (p *planner) createDescriptorWithID(
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
 
+	if len(idKey) == 0 && !descriptor.SkipNamespace() {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("cannot insert namespace entry with zero id key"))
+	}
+	if len(idKey) > 0 && descriptor.SkipNamespace() {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("id key must be zero for descriptors skipping namespace"))
+	}
+
 	b := &kv.Batch{}
 	descID := descriptor.GetID()
 

@@ -110,4 +110,54 @@ type ValidationDescGetter interface {
 
 	// GetTypeDescriptor returns the corresponding TypeDescriptor or an error instead.
 	GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error)
+
+	// GetFunctionDescriptor returns the corresponding FunctionDescriptor or an error instead.
+	GetFunctionDescriptor(id descpb.ID) (FunctionDescriptor, error)
+
+	// GetDescriptor returns the corresponding descriptor type or an error instead.
+	GetDescriptor(id descpb.ID) (Descriptor, error)
+}
+
+// ValidateOutboundTableRef validates outbound reference to relation descriptor
+// depID from descriptor selfID.
+func ValidateOutboundTableRef(selfID descpb.ID, depID descpb.ID, vdg ValidationDescGetter) error {
+	referencedTable, err := vdg.GetTableDescriptor(depID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
+	}
+	if referencedTable.Dropped() {
+		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
+			referencedTable.GetName(), referencedTable.GetID())
+	}
+	for _, by := range referencedTable.TableDesc().DependedOnBy {
+		if by.ID == selfID {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
+		referencedTable.GetName(), referencedTable.GetID())
+}
+
+// ValidateOutboundTypeRef validates outbound reference to type descriptor
+// depTypeID from descriptor selfID.
+func ValidateOutboundTypeRef(
+	selfID descpb.ID, depTypeID descpb.ID, vdg ValidationDescGetter,
+) error {
+	typ, err := vdg.GetTypeDescriptor(depTypeID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on type reference")
+	}
+	if typ.Dropped() {
+		return errors.AssertionFailedf("depends-on type %q (%d) is dropped",
+			typ.GetName(), typ.GetID())
+	}
+
+	for ord := 0; ord < typ.NumReferencingDescriptors(); ord++ {
+		if typ.GetReferencingDescriptorID(ord) == selfID {
+			return nil
+		}
+	}
+
+	return errors.AssertionFailedf("depends-on type %q (%d) has no corresponding referencing-descriptor back references",
+		typ.GetName(), typ.GetID())
 }

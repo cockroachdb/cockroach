@@ -176,16 +176,43 @@ func (desc *wrapper) ValidateCrossReferences(
 
 	// For views, check dependent relations.
 	if desc.IsView() {
-		for _, id := range desc.DependsOn {
-			vea.Report(desc.validateOutboundTableRef(id, vdg))
-		}
 		for _, id := range desc.DependsOnTypes {
 			vea.Report(desc.validateOutboundTypeRef(id, vdg))
 		}
 	}
 
+	for _, id := range desc.DependsOn {
+		depDesc, err := vdg.GetDescriptor(id)
+		if err != nil {
+			vea.Report(errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on forward reference"))
+			continue
+		}
+		switch depDesc.DescriptorType() {
+		case catalog.Table:
+			vea.Report(desc.validateOutboundTableRef(id, vdg))
+		case catalog.Function:
+			vea.Report(desc.validateOutboundFuncRef(id, vdg))
+		default:
+			vea.Report(errors.AssertionFailedf("depends on unexpected %s %s (%d)",
+				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		}
+	}
+
 	for _, by := range desc.DependedOnBy {
-		vea.Report(desc.validateInboundTableRef(by, vdg))
+		depDesc, err := vdg.GetDescriptor(by.ID)
+		if err != nil {
+			vea.Report(errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference"))
+			continue
+		}
+		switch depDesc.DescriptorType() {
+		case catalog.Table:
+			vea.Report(desc.validateInboundTableRef(by, vdg))
+		case catalog.Function:
+			vea.Report(desc.validateInboundFunctionRef(by, vdg))
+		default:
+			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
+				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		}
 	}
 
 	// For row-level TTL, only ascending PKs are permitted.
@@ -270,21 +297,7 @@ func (desc *wrapper) ValidateCrossReferences(
 func (desc *wrapper) validateOutboundTableRef(
 	id descpb.ID, vdg catalog.ValidationDescGetter,
 ) error {
-	referencedTable, err := vdg.GetTableDescriptor(id)
-	if err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
-	}
-	if referencedTable.Dropped() {
-		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
-			referencedTable.GetName(), referencedTable.GetID())
-	}
-	for _, by := range referencedTable.TableDesc().DependedOnBy {
-		if by.ID == desc.GetID() {
-			return nil
-		}
-	}
-	return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
-		referencedTable.GetName(), id)
+	return catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg)
 }
 
 func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
@@ -297,7 +310,46 @@ func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.Validatio
 			typ.GetName(), typ.GetID())
 	}
 	// TODO(postamar): maintain back-references in type, and validate these.
+	//                 use catalog.ValidateOutboundTypeRef function.
 	return nil
+}
+
+func (desc *wrapper) validateOutboundFuncRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
+	refFunc, err := vdg.GetFunctionDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on function back reference")
+	}
+
+	for _, dep := range refFunc.GetDependedOnBy() {
+		if dep.ID == id {
+			return nil
+		}
+	}
+
+	return errors.AssertionFailedf("depends-on function %q (%d) has no corresponding depended-on-by back reference",
+		refFunc.GetName(), refFunc.GetID())
+}
+
+func (desc *wrapper) validateInboundFunctionRef(
+	by descpb.TableDescriptor_Reference, vdg catalog.ValidationDescGetter,
+) error {
+	backRefFunc, err := vdg.GetFunctionDescriptor(by.ID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by function back reference")
+	}
+	if backRefFunc.Dropped() {
+		return errors.AssertionFailedf("depended-on-by function %q (%d) is dropped",
+			backRefFunc.GetName(), backRefFunc.GetID())
+	}
+
+	for _, id := range backRefFunc.GetDependsOn() {
+		if id == desc.GetID() {
+			return nil
+		}
+	}
+
+	return errors.AssertionFailedf("depended-on-by function %q (%d) has no corresponding depends-on forward reference",
+		backRefFunc.GetName(), by.ID)
 }
 
 func (desc *wrapper) validateInboundTableRef(

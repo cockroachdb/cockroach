@@ -47,6 +47,7 @@ go_test(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/nstree",
+        "//pkg/sql/privilege",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

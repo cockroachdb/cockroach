@@ -149,6 +149,25 @@ func AsTypeDescriptor(desc Descriptor) (TypeDescriptor, error) {
 	return typ, nil
 }
 
+// AsFunctionDescriptor tries to case a descriptor to a FunctionDescriptor.
+// Returns a
+func AsFunctionDescriptor(desc Descriptor) (FunctionDescriptor, error) {
+	typ, ok := desc.(FunctionDescriptor)
+	if !ok {
+		if desc == nil {
+			return nil, NewDescriptorTypeError(desc)
+		}
+		return nil, WrapFunctionDescRefErr(desc.GetID(), NewDescriptorTypeError(desc))
+	}
+	return typ, nil
+}
+
+// WrapDescRefErr wraps an error pertaining to a descriptor id.
+func WrapDescRefErr(id descpb.ID, err error) error {
+	return errors.Wrapf(err, "referenced descriptor ID %d", errors.Safe(id))
+
+}
+
 // WrapDatabaseDescRefErr wraps an error pertaining to a database descriptor id.
 func WrapDatabaseDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced database ID %d", errors.Safe(id))
@@ -167,6 +186,11 @@ func WrapTableDescRefErr(id descpb.ID, err error) error {
 // WrapTypeDescRefErr wraps an error pertaining to a type descriptor id.
 func WrapTypeDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced type ID %d", errors.Safe(id))
+}
+
+// WrapFunctionDescRefErr wraps an error pertaining to a function descriptor id.
+func WrapFunctionDescRefErr(id descpb.ID, err error) error {
+	return errors.Wrapf(err, "referenced function ID %d", errors.Safe(id))
 }
 
 // NewMutableAccessToVirtualSchemaError is returned when trying to mutably

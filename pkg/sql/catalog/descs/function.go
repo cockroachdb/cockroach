@@ -50,6 +50,6 @@ func (tc *Collection) getFunctionByID(
 		return nil, sqlerrors.NewUndefinedFunctionError(strconv.Itoa(int(fnID)))
 	}
 
-	// TODO (Chengxiong): #83232 UDF hydration for user defined types.
+	// TODO(#83232): UDF hydration for user defined types.
 	return fn, nil
 }
