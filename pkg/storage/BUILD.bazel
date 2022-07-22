@@ -120,6 +120,7 @@ go_test(
         "mvcc_test.go",
         "mvcc_value_test.go",
         "pebble_file_registry_test.go",
+        "pebble_iterator_test.go",
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
         "read_as_of_iterator_test.go",
