@@ -1,7 +1,11 @@
 CREATE USER craig;
+
 CREATE DATABASE data;
-CREATE TABLE data.bank (a INT);
-INSERT INTO TABLE data.bank VALUES (1);
+USE data;
+CREATE SCHEMA foo;
+CREATE TYPE data.foo.bat AS ENUM ('a', 'b', 'c');
+CREATE TABLE data.bank (a INT, b data.foo.bat);
+INSERT INTO data.bank VALUES (1, 'a'), (2, 'b'), (3, 'c');
 
 COMMENT ON TABLE data.bank IS 'table comment string';
 COMMENT ON DATABASE data IS 'database comment string';
