@@ -662,14 +662,20 @@ func (desc *immutable) ValidateCrossReferences(
 
 	// Validate that all of the referencing descriptors exist.
 	for _, id := range desc.GetReferencingDescriptorIDs() {
-		tableDesc, err := vdg.GetTableDescriptor(id)
+		depDesc, err := vdg.GetDescriptor(id)
 		if err != nil {
 			vea.Report(err)
 			continue
 		}
-		if tableDesc.Dropped() {
-			vea.Report(errors.AssertionFailedf(
-				"referencing table %d was dropped without dependency unlinking", id))
+		switch depDesc.DescriptorType() {
+		case catalog.Table, catalog.Function:
+			if depDesc.Dropped() {
+				vea.Report(errors.AssertionFailedf(
+					"referencing %s %d was dropped without dependency unlinking", depDesc.DescriptorType(), id))
+			}
+		default:
+			vea.Report(errors.AssertionFailedf("type %s (%d) is depended on by unexpected %s %s (%d)",
+				desc.GetName(), desc.GetID(), depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
 		}
 	}
 }
