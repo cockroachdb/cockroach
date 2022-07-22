@@ -34,10 +34,12 @@ type EntryIterator func(entry catalog.NameEntry) error
 
 // Upsert adds the descriptor to the tree. If any descriptor exists in the
 // tree with the same name or id, it will be removed.
-func (dt *Map) Upsert(d catalog.NameEntry) {
+func (dt *Map) Upsert(d catalog.NameEntry, skipNameMap bool) {
 	dt.maybeInitialize()
-	if replaced := dt.byName.upsert(d); replaced != nil {
-		dt.byID.delete(replaced.GetID())
+	if !skipNameMap {
+		if replaced := dt.byName.upsert(d); replaced != nil {
+			dt.byID.delete(replaced.GetID())
+		}
 	}
 	if replaced := dt.byID.upsert(d); replaced != nil {
 		dt.byName.delete(replaced)
