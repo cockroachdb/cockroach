@@ -425,6 +425,10 @@ func validateNamespace(
 		return
 	}
 
+	if desc.SkipNamespace() {
+		return
+	}
+
 	key := descpb.NameInfo{
 		ParentID:       desc.GetParentID(),
 		ParentSchemaID: desc.GetParentSchemaID(),

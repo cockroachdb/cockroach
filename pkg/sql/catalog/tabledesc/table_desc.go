@@ -70,6 +70,11 @@ func (desc *wrapper) HasConcurrentSchemaChanges() bool {
 		(len(desc.Mutations) > 0 && len(desc.MutationJobs) > 0)
 }
 
+// SkipNamespace implements the descriptor interface.
+func (desc *wrapper) SkipNamespace() bool {
+	return false
+}
+
 // ActiveChecks implements the TableDescriptor interface.
 func (desc *wrapper) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 	checks := make([]descpb.TableDescriptor_CheckConstraint, len(desc.Checks))

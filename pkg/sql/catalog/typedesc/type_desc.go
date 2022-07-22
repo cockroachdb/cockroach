@@ -979,6 +979,11 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// SkipNamespace implements the descriptor interface.
+func (desc *immutable) SkipNamespace() bool {
+	return false
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})

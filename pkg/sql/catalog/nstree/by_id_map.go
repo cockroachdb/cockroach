@@ -31,7 +31,7 @@ func (t byIDMap) get(id descpb.ID) catalog.NameEntry {
 }
 
 func (t byIDMap) delete(id descpb.ID) (removed catalog.NameEntry) {
-	removed, _ = delete(t.t, byIDItem{id: id}.get()).(catalog.NameEntry)
+	removed, _ = remove(t.t, byIDItem{id: id}.get()).(catalog.NameEntry)
 	return removed
 }
 
