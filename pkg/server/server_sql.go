@@ -1440,7 +1440,7 @@ func (s *SQLServer) startServeSQL(
 			}
 		}
 
-		log.Ops.Infof(ctx, "starting postgres server at unix:%s", socketFile)
+		log.Ops.Infof(ctx, "starting postgres server at unix: %s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.
 		unixLn, err := net.Listen("unix", socketFile)
