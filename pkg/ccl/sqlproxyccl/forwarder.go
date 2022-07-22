@@ -356,7 +356,10 @@ func wrapClientToServerError(err error) error {
 		errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
 		return nil
 	}
-	return newErrorf(codeClientDisconnected, "copying from client to target server: %v", err)
+	if err := wrapConnectionError(err); err != nil {
+		return err
+	}
+	return newErrorf(codeClientDisconnected, "unexpected error copying from client to target server: %v", err)
 }
 
 // wrapServerToClientError overrides server to client errors for external
@@ -371,7 +374,10 @@ func wrapServerToClientError(err error) error {
 		errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
 		return nil
 	}
-	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
+	if err := wrapConnectionError(err); err != nil {
+		return err
+	}
+	return newErrorf(codeBackendDisconnected, "unexpected error copying from target server to client: %s", err)
 }
 
 // makeLogicalClockFn returns a function that implements a simple logical clock.

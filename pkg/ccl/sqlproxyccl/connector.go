@@ -362,10 +362,22 @@ func (c *connector) dialSQLServer(
 		return nil, err
 	}
 
-	return &onConnectionClose{
+	// Add a connection wrapper that annotates errors as belonging to the sql
+	// server.
+	conn = &errorSourceConn{
+		Conn:           conn,
+		readErrMarker:  errServerRead,
+		writeErrMarker: errServerWrite,
+	}
+
+	// Add a connection wrapper that lets the balancer know the connection is
+	// closed.
+	conn = &onConnectionClose{
 		Conn:     conn,
 		closerFn: serverAssignment.Close,
-	}, nil
+	}
+
+	return conn, nil
 }
 
 // onConnectionClose is a net.Conn wrapper to ensure that our custom closerFn
