@@ -230,6 +230,30 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 	return b.nextIndexID(view.ViewID)
 }
 
+func (b *builderState) NextConstraintID(table *scpb.Table) (ret catid.ConstraintID) {
+	{
+		b.ensureDescriptor(table.TableID)
+		desc := b.descCache[table.TableID].desc
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+				desc.GetID(), desc.DescriptorType()))
+		}
+		ret = tbl.GetNextConstraintID()
+	}
+	// We assume that every constraint comes with a ConstraintName element,
+	// so it suffices to iterate all constraint names to figure out the max
+	// constraint ID used so far.
+	scpb.ForEachConstraintName(b.QueryByID(table.TableID), func(
+		_ scpb.Status, _ scpb.TargetStatus, constraintName *scpb.ConstraintName,
+	) {
+		if constraintName.ConstraintID >= ret {
+			ret = constraintName.ConstraintID + 1
+		}
+	})
+	return ret
+}
+
 func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	// Scan the table for any rows, if they exist the lack of a default value
 	// should lead to an error.
