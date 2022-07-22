@@ -124,7 +124,7 @@ const (
 	CrdbInternalLeasesTableID
 	CrdbInternalLocalContentionEventsTableID
 	CrdbInternalLocalDistSQLFlowsTableID
-	CrdbInternalNodeExecutionOutliersTableID
+	CrdbInternalNodeExecutionInsightsTableID
 	CrdbInternalLocalQueriesTableID
 	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID

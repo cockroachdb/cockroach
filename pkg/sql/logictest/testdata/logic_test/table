@@ -593,7 +593,7 @@ lost_descriptors_with_data             NULL
 node_build_info                        NULL
 node_contention_events                 NULL
 node_distsql_flows                     NULL
-node_execution_outliers                NULL
+node_execution_insights                NULL
 node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL

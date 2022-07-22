@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -160,7 +160,7 @@ func (s *Container) RecordStatement(
 		}
 	}
 
-	s.outliersRegistry.ObserveStatement(value.SessionID, &outliers.Statement{
+	s.outliersRegistry.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:               value.StatementID,
 		FingerprintID:    stmtFingerprintID,
 		LatencyInSeconds: value.ServiceLatency,
@@ -274,7 +274,7 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 	}
 
-	s.outliersRegistry.ObserveTransaction(value.SessionID, &outliers.Transaction{ID: value.TransactionID})
+	s.outliersRegistry.ObserveTransaction(value.SessionID, &insights.Transaction{ID: value.TransactionID})
 
 	return nil
 }

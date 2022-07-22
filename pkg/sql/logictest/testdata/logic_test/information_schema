@@ -439,7 +439,7 @@ crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
 crdb_internal       node_distsql_flows
-crdb_internal       node_execution_outliers
+crdb_internal       node_execution_insights
 crdb_internal       node_inflight_trace_spans
 crdb_internal       node_metrics
 crdb_internal       node_queries
@@ -763,7 +763,7 @@ lost_descriptors_with_data
 node_build_info
 node_contention_events
 node_distsql_flows
-node_execution_outliers
+node_execution_insights
 node_inflight_trace_spans
 node_metrics
 node_queries
@@ -1126,7 +1126,7 @@ system         crdb_internal       lost_descriptors_with_data             SYSTEM
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                 SYSTEM VIEW  NO                  1
 system         crdb_internal       node_distsql_flows                     SYSTEM VIEW  NO                  1
-system         crdb_internal       node_execution_outliers                SYSTEM VIEW  NO                  1
+system         crdb_internal       node_execution_insights                SYSTEM VIEW  NO                  1
 system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
 system         crdb_internal       node_metrics                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_queries                           SYSTEM VIEW  NO                  1
@@ -2766,7 +2766,7 @@ NULL     public   system         crdb_internal       lost_descriptors_with_data 
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NO            YES
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
-NULL     public   system         crdb_internal       node_execution_outliers                SELECT          NO            YES
+NULL     public   system         crdb_internal       node_execution_insights                SELECT          NO            YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NO            YES
@@ -3330,7 +3330,7 @@ NULL     public   system         crdb_internal       lost_descriptors_with_data 
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NO            YES
 NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NO            YES
-NULL     public   system         crdb_internal       node_execution_outliers                SELECT          NO            YES
+NULL     public   system         crdb_internal       node_execution_insights                SELECT          NO            YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NO            YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NO            YES

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestOutliersIntegration(t *testing.T) {
+func TestInsightsIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -49,13 +49,13 @@ func TestOutliersIntegration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
-	// Enable outlier detection by setting a latencyThreshold > 0.
+	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 250 * time.Millisecond
-	outliers.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
 
-	// See no recorded outliers.
+	// See no recorded insights.
 	var count int
-	row := conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_outliers")
+	row := conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_insights")
 	err := row.Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
@@ -64,9 +64,9 @@ func TestOutliersIntegration(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", 2*latencyThreshold.Seconds())
 	require.NoError(t, err)
 
-	// Eventually see one recorded outlier.
+	// Eventually see one recorded insight.
 	testutils.SucceedsWithin(t, func() error {
-		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_outliers")
+		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_insights")
 		if err = row.Scan(&count); err != nil {
 			return err
 		}
