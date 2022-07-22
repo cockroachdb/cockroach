@@ -159,7 +159,7 @@ func backup(
 
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
-		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
+		if t, _, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
 	}
@@ -322,7 +322,7 @@ func backup(
 	}
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
-		if tbl, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); tbl != nil {
+		if tbl, _, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); tbl != nil {
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc)
