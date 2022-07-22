@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -28,7 +29,7 @@ import (
 func NewBuilderWithMVCCTimestamp(
 	desc *descpb.Descriptor, mvccTimestamp hlc.Timestamp,
 ) catalog.DescriptorBuilder {
-	table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(desc, mvccTimestamp)
+	table, database, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(desc, mvccTimestamp)
 	switch {
 	case table != nil:
 		return tabledesc.NewBuilder(table)
@@ -38,6 +39,8 @@ func NewBuilderWithMVCCTimestamp(
 		return typedesc.NewBuilder(typ)
 	case schema != nil:
 		return schemadesc.NewBuilder(schema)
+	case function != nil:
+		return funcdesc.NewBuilder(function)
 	default:
 		return nil
 	}

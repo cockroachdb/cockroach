@@ -89,7 +89,7 @@ func TestRemoveGrantMigration(t *testing.T) {
 				require.NoError(t, err)
 				var desc descpb.Descriptor
 				require.NoError(t, protoutil.Unmarshal(encoded, &desc))
-				tableDescriptor, databaseDescriptor, typeDescriptor, schemaDescriptor := descpb.FromDescriptorWithMVCCTimestamp(
+				tableDescriptor, databaseDescriptor, typeDescriptor, schemaDescriptor, fnDescriptor := descpb.FromDescriptorWithMVCCTimestamp(
 					&desc,
 					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 				)
@@ -111,6 +111,9 @@ func TestRemoveGrantMigration(t *testing.T) {
 				}
 				if typeDescriptor != nil {
 					requireGrant(typeDescriptor.Privileges)
+				}
+				if fnDescriptor != nil {
+					requireGrant(fnDescriptor.Privileges)
 				}
 				descriptorsToInject = append(descriptorsToInject, &desc)
 			}

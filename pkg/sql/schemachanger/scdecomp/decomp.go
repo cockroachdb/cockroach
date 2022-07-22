@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -101,6 +102,10 @@ func (w *walkCtx) walkRoot() {
 		w.walkType(d)
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
+	case catalog.FunctionDescriptor:
+		// TODO (Chengxiong) #83235 implement DROP FUNCTION
+		panic(unimplemented.NewWithIssue(
+			83235, "function descriptor not supported in declarative schema changer"))
 	default:
 		panic(errors.AssertionFailedf("unexpected descriptor type %T: %+v",
 			w.desc, w.desc))

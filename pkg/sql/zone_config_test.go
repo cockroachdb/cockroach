@@ -74,7 +74,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 				if err := val.GetProto(&foundDesc); err != nil {
 					t.Fatal(err)
 				}
-				_, db, _, _ := descpb.FromDescriptor(&foundDesc)
+				_, db, _, _, _ := descpb.FromDescriptor(&foundDesc)
 				if db.ID != configID {
 					return errors.Errorf("expected database id %d; got %d", configID, db.ID)
 				}
