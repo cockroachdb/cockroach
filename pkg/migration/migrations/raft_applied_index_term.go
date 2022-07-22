@@ -14,14 +14,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // defaultPageSize controls how many ranges are paged in by default when
@@ -38,11 +42,25 @@ import (
 const defaultPageSize = 200
 
 func raftAppliedIndexTermMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, job *jobs.Job,
 ) error {
+	// Fetch the migration's watermark (latest migrated range's end key), in case
+	// we're resuming a previous migration.
+	var watermark roachpb.RKey
+	if progress, ok := job.Progress().Details.(*jobspb.Progress_Migration); ok {
+		watermark = append(watermark[:0], progress.Migration.Watermark...)
+		log.Infof(ctx, "loaded migration watermark %s, resuming", watermark)
+	}
+
+	retryOpts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxRetries:     5,
+	}
+
 	var batchIdx, numMigratedRanges int
 	init := func() { batchIdx, numMigratedRanges = 1, 0 }
 	if err := deps.Cluster.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+		var progress jobspb.MigrationProgress
 		for _, desc := range descriptors {
 			// NB: This is a bit of a wart. We want to reach the first range,
 			// but we can't address the (local) StartKey. However, keys.LocalMax
@@ -51,8 +69,31 @@ func raftAppliedIndexTermMigration(
 			if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
 				start, _ = keys.Addr(keys.LocalMax)
 			}
-			if err := deps.DB.Migrate(ctx, start, end, cv.Version); err != nil {
+
+			// Skip any ranges below the watermark.
+			if bytes.Compare(end, watermark) <= 0 {
+				continue
+			}
+
+			// Migrate the range, with a few retries.
+			if err := retryOpts.Do(ctx, func(ctx context.Context) error {
+				err := deps.DB.Migrate(ctx, start, end, cv.Version)
+				if err != nil {
+					log.Errorf(ctx, "range %d migration failed, retrying: %s", desc.RangeID, err)
+				}
 				return err
+			}); err != nil {
+				return err
+			}
+
+			// Raise the watermark.
+			progress.Watermark = end
+		}
+
+		// Persist the migration's progress.
+		if len(progress.Watermark) > 0 {
+			if err := job.SetProgress(ctx, nil, progress); err != nil {
+				return errors.Wrap(err, "failed to record migration progress")
 			}
 		}
 
