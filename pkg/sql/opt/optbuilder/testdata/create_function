@@ -1,0 +1,70 @@
+# This table has ID 53.
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX idx(b))
+----
+
+exec-ddl
+CREATE SEQUENCE s
+----
+
+exec-ddl
+CREATE TYPE workday AS ENUM ('MON', 'TUE')
+----
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── return_type: INT8
+ └── SELECT 1;
+
+build
+CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── arguments: workday
+ ├── return_type: INT8
+ └── SELECT 1;
+
+build
+CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
+----
+create-function
+ ├── arguments: INT8
+ ├── return_type: INT8
+ ├── SELECT a FROM t.public.ab;
+ └── dependencies
+      └── ab [columns: a]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT b FROM ab@idx $$
+----
+create-function
+ ├── return_type: INT8
+ ├── SELECT b FROM t.public.ab@idx;
+ └── dependencies
+      └── ab@idx [columns: b]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM ab;
+  SELECT nextval('s');
+$$
+----
+create-function
+ ├── return_type: INT8
+ ├── SELECT a FROM t.public.ab;
+ │   SELECT nextval('s');
+ └── dependencies
+      ├── ab [columns: a]
+      └── s
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM ab $$
+----
+error (0A000): unimplemented: functions do not currently support * expressions
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
+----
+error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented
