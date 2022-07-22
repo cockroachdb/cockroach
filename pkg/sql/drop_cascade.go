@@ -131,6 +131,9 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			// Recursively check permissions on all dependent views, since some may
 			// be in different databases.
 			for _, ref := range tbDesc.DependedOnBy {
+				if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
+					return err
+				}
 				if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
 					return err
 				}
