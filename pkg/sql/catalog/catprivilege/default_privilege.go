@@ -334,11 +334,6 @@ func expandPrivileges(
 	if role.ForAllRoles {
 		return
 	}
-	if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, targetObject) {
-		// TODO (rafi): Figure out before merging: do we still want this here?
-		privileges.Grant(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL}, false /* withGrantOption */)
-		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, false, targetObject)
-	}
 }
 
 // GetUserPrivilegesForObject returns the set of []UserPrivileges constructed
