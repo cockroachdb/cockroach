@@ -1221,6 +1221,15 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	return histogram
 }
 
+// HistogramType is part of the cat.TableStatistic interface.
+func (ts *TableStat) HistogramType() *types.T {
+	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(ts.js.HistogramColumnType)
+	if err != nil {
+		panic(err)
+	}
+	return tree.MustBeStaticallyKnownType(colTypeRef)
+}
+
 // TableStats is a slice of TableStat pointers.
 type TableStats []*TableStat
 
