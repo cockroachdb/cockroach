@@ -2039,6 +2039,10 @@ var builtinOidsArray = []string{
 	2061: `crdb_internal.job_payload_type(data: bytes) -> string`,
 	2062: `crdb_internal.tenant_span(tenant_name: string) -> bytes[]`,
 	2063: `crdb_internal.system_jobs -> tuple{int AS id, string AS status, timestamp AS created, bytes AS payload, bytes AS progress, string AS created_by_type, int AS created_by_id, bytes AS claim_session_id, int AS claim_instance_id, int AS num_runs, timestamp AS last_run}`,
+	2064: `to_tsquery(config: string, text: string) -> tsquery`,
+	2065: `to_tsvector(config: string, text: string) -> tsvector`,
+	2066: `phraseto_tsquery(config: string, text: string) -> tsquery`,
+	2067: `plainto_tsquery(config: string, text: string) -> tsquery`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

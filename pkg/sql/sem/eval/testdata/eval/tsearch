@@ -60,3 +60,43 @@ eval
 'bar:3 baz:5'::tsvector @@ 'baz <2> bar'::tsquery
 ----
 false
+
+eval
+to_tsvector('simple', 'You have power over your mind – not outside events. Realize this, and you will find strength.')
+----
+'and':12 'events':9 'find':15 'have':2 'mind':6 'not':7 'outside':8 'over':4 'power':3 'realize':10 'strength':16 'this':11 'will':14 'you':1,13 'your':5
+
+eval
+to_tsquery('simple', 'hello')
+----
+'hello'
+
+eval
+to_tsquery('simple', 'hello | there')
+----
+'hello' | 'there'
+
+eval
+to_tsquery('simple', 'hello | the#re')
+----
+'hello' | 'the' <-> 're'
+
+eval
+plainto_tsquery('simple', 'hello there')
+----
+'hello' & 'there'
+
+eval
+plainto_tsquery('simple', 'hello the#re')
+----
+'hello' & 'the' & 're'
+
+eval
+phraseto_tsquery('simple', 'hello there')
+----
+'hello' <-> 'there'
+
+eval
+phraseto_tsquery('simple', 'hello the#re')
+----
+'hello' <-> 'the' <-> 're'

@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -256,6 +257,10 @@ func ParseTSVector(input string) (TSVector, error) {
 		return ret, err
 	}
 
+	return normalizeTSVector(ret)
+}
+
+func normalizeTSVector(ret TSVector) (TSVector, error) {
 	if len(ret) > 1 {
 		// Sort and de-duplicate the resultant TSVector.
 		sort.Slice(ret, func(i, j int) bool {
@@ -288,4 +293,50 @@ func ParseTSVector(input string) (TSVector, error) {
 		ret[lastIdx].positions = sortAndUniqTSPositions(ret[lastIdx].positions)
 	}
 	return ret, nil
+}
+
+var validCharTables = []*unicode.RangeTable{unicode.Letter, unicode.Number}
+
+// parseForTextSearch is the function that splits an input text into a list of
+// tokens. For now, the parser that we use is very simple: it merely lowercases
+// the input and splits it into tokens based on assuming that non-letter,
+// non-number characters are whitespace.
+//
+// The Postgres text search parser is much, much more sophisticated. The
+// documentation (https://www.postgresql.org/docs/current/textsearch-parsers.html)
+// gives more information, but roughly, each token is categorized into one of
+// about 20 different buckets, such as asciiword, url, email, host, float, int,
+// version, tag, etc. It uses very specific rules to produce these outputs.
+// Another interesting transformation is returning multiple tokens for a
+// hyphenated word, including a token that represents the entire hyphenated word,
+// as well as one for each of the hyphenated components.
+//
+// It's not clear whether we need to exactly mimic this functionality. Likely,
+// we will eventually want to do this.
+func parseForTextSearch(input string) []string {
+	lower := strings.ToLower(input)
+	return strings.FieldsFunc(lower, func(r rune) bool {
+		return !unicode.IsOneOf(validCharTables, r)
+	})
+}
+
+// DocumentToTSVector parses an input document into lexemes, removes stop words,
+// stems and normalizes the lexemes, and returns a TSVector annotated with
+// lexeme positions according to a text search configuration passed by name.
+func DocumentToTSVector(config string, input string) (TSVector, error) {
+	if config != "simple" {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
+	}
+
+	tokens := parseForTextSearch(input)
+	vector := make(TSVector, len(tokens))
+	for i := range tokens {
+		vector[i].lexeme = tokens[i]
+		pos := i + 1
+		if i > maxTSVectorPosition {
+			pos = maxTSVectorPosition
+		}
+		vector[i].positions = []tsPosition{{position: uint16(pos)}}
+	}
+	return normalizeTSVector(vector)
 }
