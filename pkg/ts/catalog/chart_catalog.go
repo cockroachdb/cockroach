@@ -609,6 +609,17 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Snapshot Queues",
+				Metrics: []string{
+					"range.snapshots.send-queue",
+					"range.snapshots.recv-queue",
+					"range.snapshots.send-in-progress",
+					"range.snapshots.recv-in-progress",
+					"range.snapshots.send-total-in-progress",
+					"range.snapshots.recv-total-in-progress",
+				},
+			},
+			{
 				Title: "Snapshot Bytes",
 				Metrics: []string{
 					"range.snapshots.rcvd-bytes",
