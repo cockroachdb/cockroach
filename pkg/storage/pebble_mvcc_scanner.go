@@ -82,8 +82,11 @@ func (p *pebbleResults) clear() {
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
+// - maxNewSize, if positive, indicates the maximum capacity for a new repr that
+// can be allocated. It is assumed that maxNewSize (when positive) is sufficient
+// for the new key-value pair.
 func (p *pebbleResults) put(
-	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount,
+	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, maxNewSize int,
 ) error {
 	const minSize = 16
 	const maxSize = 128 << 20 // 128 MB
@@ -97,19 +100,38 @@ func (p *pebbleResults) put(
 	lenValue := len(value)
 	lenToAdd := p.sizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
+		// Exponential increase by default, while ensuring that we respect
+		// - a hard lower bound of lenToAdd
+		// - a soft upper bound of maxSize
+		// - a hard upper bound of maxNewSize (if set).
+		if maxNewSize > 0 && maxNewSize < lenToAdd {
+			// Hard upper bound is greater than hard lower bound - this is a
+			// violation of our assumptions.
+			return errors.AssertionFailedf("maxNewSize %dB is not sufficient, %dB required", maxNewSize, lenToAdd)
+		}
+		// Exponential growth to ensure newSize >= lenToAdd.
 		newSize := 2 * cap(p.repr)
 		if newSize == 0 || newSize > maxSize {
-			// If the previous buffer exceeded maxSize, we don't double its capacity
-			// for next allocation, and instead reset the exponential increase, in
-			// case we had a stray huge key-value.
+			// If the previous buffer exceeded maxSize, we don't double its
+			// capacity for next allocation, and instead reset the exponential
+			// increase, in case we had a stray huge key-value.
 			newSize = minSize
 		}
-		if lenToAdd >= maxSize {
+		for newSize < lenToAdd {
+			newSize *= 2
+		}
+		// Respect soft upper-bound before hard lower-bound, since it could be
+		// lower than hard lower-bound.
+		if newSize > maxSize {
+			newSize = maxSize
+		}
+		// Respect hard upper-bound.
+		if maxNewSize > 0 && newSize > maxNewSize {
+			newSize = maxNewSize
+		}
+		// Now respect hard lower-bound.
+		if newSize < lenToAdd {
 			newSize = lenToAdd
-		} else {
-			for newSize < lenToAdd && newSize < maxSize {
-				newSize *= 2
-			}
 		}
 		if len(p.repr) > 0 {
 			p.bufs = append(p.bufs, p.repr)
@@ -974,6 +996,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		p.resumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
+	var mustPutKey bool
 	if p.resumeReason != 0 {
 		// If we exceeded a limit, but we're not allowed to return an empty result,
 		// then make sure we include the first key in the result. If wholeRows is
@@ -982,6 +1005,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 			(p.results.count == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
 			p.resumeReason = 0
 			p.resumeNextBytes = 0
+			mustPutKey = true
 		} else {
 			p.resumeKey = key
 
@@ -1000,7 +1024,21 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		}
 	}
 
-	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount); err != nil {
+	// We are here due to one of the following cases:
+	// A. No limits were exceeded
+	// B. Limits were exceeded, but we need to put a key, so mustPutKey = true.
+	//
+	// For B we will never set maxNewSize.
+	// For A, we may set maxNewSize, but we already know that
+	//   p.targetBytes >= p.results.bytes + lenToAdd
+	// so maxNewSize will be sufficient.
+	var maxNewSize int
+	if p.targetBytes > 0 && p.targetBytes > p.results.bytes && !mustPutKey {
+		// INVARIANT: !mustPutKey => maxNewSize is sufficient for key-value
+		// pair.
+		maxNewSize = int(p.targetBytes - p.results.bytes)
+	}
+	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount, maxNewSize); err != nil {
 		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 		return false
 	}
