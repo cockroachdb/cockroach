@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -107,6 +108,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1202,7 +1204,6 @@ func (s *SQLServer) preStart(
 	knobs base.TestingKnobs,
 	connManager netutil.Server,
 	pgL net.Listener,
-	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// The sqlliveness and sqlinstance subsystem should be started first to ensure
@@ -1389,7 +1390,7 @@ func (s *SQLServer) startServeSQL(
 	stopper *stop.Stopper,
 	connManager netutil.Server,
 	pgL net.Listener,
-	socketFile string,
+	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
@@ -1412,7 +1413,30 @@ func (s *SQLServer) startServeSQL(
 		})
 
 	// If a unix socket was requested, start serving there too.
+	socketFile := ""
+	if socketFileCfg != nil {
+		socketFile = *socketFileCfg
+	}
 	if len(socketFile) != 0 {
+		if strings.HasSuffix(socketFile, ".0") {
+			// Either a test explicitly set the SocketFile parameter to "xxx.0", or
+			// the top-level 'start'  command was given a port number 0 to --listen-addr
+			// (means: auto-allocate TCP port number).
+			// In either case, this is an instruction for us to generate
+			// a socket name after the TCP port automatically.
+			tcpAddr := pgL.Addr()
+			_, port, err := addr.SplitHostPort(tcpAddr.String(), "")
+			if err != nil {
+				return errors.Wrapf(err, "extracting port from SQL addr %q", tcpAddr)
+			}
+			socketFile = socketFile[:len(socketFile)-1] + port
+			if socketFileCfg != nil {
+				// Remember the computed value for reporting in the top-level
+				// start command.
+				*socketFileCfg = socketFile
+			}
+		}
+
 		log.Ops.Infof(ctx, "starting postgres server at unix:%s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.

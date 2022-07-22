@@ -1566,7 +1566,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.TestingKnobs,
 		connManager,
 		pgL,
-		s.cfg.SocketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
@@ -1619,7 +1618,7 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 		s.stopper,
 		s.sqlServer.connManager,
 		s.sqlServer.pgL,
-		s.cfg.SocketFile,
+		&s.cfg.SocketFile,
 	); err != nil {
 		return err
 	}

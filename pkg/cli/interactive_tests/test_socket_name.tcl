@@ -11,6 +11,22 @@ eexpect ":/# "
 send "mkdir -p $longname\r"
 eexpect ":/# "
 
+start_test "Check derived Unix socket name is printed in server output"
+send "$argv start-single-node --insecure --listen-addr=:0 --socket-dir=.\r"
+eexpect "CockroachDB node starting"
+expect {
+    -re "sql:.*@\[^:\]*:(\[^/\]*)/" { set sql_port $expect_out(1,string) }
+    timeout { handle_timeout "sql port number" }
+}
+expect {
+    -re "socket: *\\.s\\.PGSQL\\.$sql_port" { }
+    timeout { handle_timeout "socket name" }
+}
+system "test -S .s.PGSQL.$sql_port"
+interrupt
+eexpect ":/# "
+end_test
+
 start_test "Check that the socket-dir flag checks the length of the directory."
 send "$argv start-single-node --insecure --socket-dir=$longname\r"
 eexpect "value of --socket-dir is too long"
