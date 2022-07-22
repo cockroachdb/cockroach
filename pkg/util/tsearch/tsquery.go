@@ -12,6 +12,7 @@ package tsearch
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -221,4 +222,70 @@ func (p *tsQueryParser) parseTSOperator() (*tsTerm, error) {
 
 func (p *tsQueryParser) syntaxError() (*tsNode, error) {
 	return nil, pgerror.Newf(pgcode.Syntax, "syntax error in TSQuery: %s", p.input)
+}
+
+// ToTSQuery implements the to_tsquery builtin, which lexes an input, performs
+// stopwording and normalization on the tokens, and returns a parsed query.
+func ToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, invalid, input)
+}
+
+// PlainToTSQuery implements the plainto_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query, interposing the & operator between each token.
+func PlainToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, and, input)
+}
+
+// PhraseToTSQuery implements the phraseto_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query, interposing the <-> operator between each token.
+func PhraseToTSQuery(config string, input string) (TSQuery, error) {
+	return toTSQuery(config, followedby, input)
+}
+
+// toTSQuery implements the to_tsquery builtin, which lexes an input,
+// performs stopwording and normalization on the tokens, and returns a parsed
+// query. If the interpose operator is not invalid, it's interposed between each
+// token in the input.
+func toTSQuery(config string, interpose tsoperator, input string) (TSQuery, error) {
+	switch config {
+	case "simple":
+	default:
+		return TSQuery{}, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist")
+	}
+	vector, err := lexTSQuery(input)
+	if err != nil {
+		return TSQuery{}, err
+	}
+	tokens := make(TSVector, 0, len(vector))
+	for i := range vector {
+		tok := vector[i]
+		if interpose != invalid {
+			// Remove all operator tokens.
+			if tok.operator != invalid {
+				continue
+			}
+			if i > 0 {
+				term := tsTerm{operator: interpose}
+				if interpose == followedby {
+					term.followedN = 1
+				}
+				tokens = append(tokens, term)
+			}
+		}
+		// When we support more than just the simple configuration, we'll also
+		// want to remove stopwords, which will affect the interposing, but we can
+		// worry about that later.
+		// Additionally, if we're doing phraseto_tsquery, if we remove a stopword,
+		// we need to make sure to increase the "followedN" of the followedby
+		// operator. For example, phraseto_tsquery('hello a deer') will return
+		// 'hello <2> deer', since the a stopword would be removed.
+		tok.lexeme = strings.ToLower(tok.lexeme)
+		tokens = append(tokens, tok)
+	}
+
+	// Now create the operator tree.
+	queryParser := tsQueryParser{terms: tokens, input: input}
+	return queryParser.parse()
 }

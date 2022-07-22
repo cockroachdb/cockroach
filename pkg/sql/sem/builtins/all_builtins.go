@@ -41,6 +41,7 @@ func init() {
 	initGeneratorBuiltins()
 	initGeoBuiltins()
 	initTrigramBuiltins()
+	initTsearchBuiltins()
 	initPGBuiltins()
 	initMathBuiltins()
 	initOverlapsBuiltins()

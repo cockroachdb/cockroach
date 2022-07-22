@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -215,6 +217,10 @@ func ParseTSVector(input string) (TSVector, error) {
 		return ret, err
 	}
 
+	return normalizeTSVector(ret)
+}
+
+func normalizeTSVector(ret TSVector) (TSVector, error) {
 	if len(ret) > 1 {
 		// Sort and de-duplicate the resultant TSVector.
 		sort.Slice(ret, func(i, j int) bool {
@@ -247,4 +253,22 @@ func ParseTSVector(input string) (TSVector, error) {
 		ret[latsIdx].positions = sortAndUniqTSPositions(ret[latsIdx].positions)
 	}
 	return ret, nil
+}
+
+// DocumentToTSVector parses an input document into lexemes, removes stop words,
+// stems and normalizes the lexemes, and returns a TSVector annotated with
+// lexeme positions according to a text search configuration passed by name.
+func DocumentToTSVector(config string, input string) (TSVector, error) {
+	if config != "simple" {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
+	}
+
+	lower := strings.ToLower(input)
+	tokens := strings.Fields(lower)
+	vector := make(TSVector, len(tokens))
+	for i := range tokens {
+		vector[i].lexeme = tokens[i]
+		vector[i].positions = []tsposition{{position: i + 1}}
+	}
+	return normalizeTSVector(vector)
 }
