@@ -145,3 +145,7 @@ func (p synthetic) GetPrivilegeDescriptor(
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
 }
+
+func (p synthetic) GetFunction(name string) (bool, descpb.SchemaDescriptor_Function) {
+	return false, descpb.SchemaDescriptor_Function{}
+}

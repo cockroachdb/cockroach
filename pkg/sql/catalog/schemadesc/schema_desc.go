@@ -187,12 +187,26 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		// Validate the default privilege descriptor.
 		vea.Report(catprivilege.ValidateDefaultPrivileges(*desc.GetDefaultPrivileges()))
 	}
+
+	for _, f := range desc.Functions {
+		for _, o := range f.Overloads {
+			if o.ID == descpb.InvalidID {
+				vea.Report(fmt.Errorf("invalid function ID %d", o.ID))
+			}
+		}
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
 func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
-	return catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID()), nil
+	ret := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
+	for _, f := range desc.Functions {
+		for _, o := range f.Overloads {
+			ret.Add(o.ID)
+		}
+	}
+	return ret, nil
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.
@@ -208,6 +222,17 @@ func (desc *immutable) ValidateCrossReferences(
 	if db.Dropped() {
 		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
 			db.GetName(), db.GetID()))
+	}
+
+	// Check that all functions exist
+	for _, function := range desc.Functions {
+		for _, overload := range function.Overloads {
+			_, err := vdg.GetFunctionDescriptor(overload.ID)
+			if err != nil {
+				vea.Report(errors.AssertionFailedf("invalid function %d in schema %q (%d)",
+					overload.ID, desc.GetName(), desc.GetID()))
+			}
+		}
 	}
 
 	// Check that parent has correct entry in schemas mapping.
