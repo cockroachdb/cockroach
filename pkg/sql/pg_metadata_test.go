@@ -120,6 +120,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1532,6 +1533,7 @@ func TestInformationSchemaPostgres(t *testing.T) {
 // NOTE: --catalog or --rdbms flags won't take effect on this test.
 func TestInformationSchemaMySQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 84915, "mismatch between MySQL version and CRDB")
 	defer log.Scope(t).Close(t)
 
 	NewDiffTool(t).Catalog("information_schema").RDBMS(MySQL).Run()
