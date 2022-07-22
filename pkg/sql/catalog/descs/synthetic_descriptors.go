@@ -23,10 +23,10 @@ type syntheticDescriptors struct {
 func (sd *syntheticDescriptors) add(desc catalog.Descriptor) {
 	if mut, ok := desc.(catalog.MutableDescriptor); ok {
 		desc = mut.ImmutableCopy()
-		sd.descs.Upsert(desc)
+		sd.descs.Upsert(desc, desc.SkipNamespace())
 	} else {
 		// Already an immutable object.
-		sd.descs.Upsert(desc)
+		sd.descs.Upsert(desc, desc.SkipNamespace())
 	}
 }
 
