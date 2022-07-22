@@ -19,23 +19,23 @@ import (
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	sch, resName := b.resolveSchemaForCreate(&cv.Name)
+	sch, resName := b.resolveSchemaForCreateTable(&cv.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	viewName := tree.MakeTableNameFromPrefix(resName, tree.Name(cv.Name.Object()))
 
 	// We build the select statement to:
 	//  - check the statement semantically,
 	//  - get the fully resolved names into the AST, and
-	//  - collect the view dependencies in b.viewDeps.
+	//  - collect the view dependencies in b.schemaDeps.
 	// The result is not otherwise used.
 	b.insideViewDef = true
-	b.trackViewDeps = true
+	b.trackSchemaDeps = true
 	b.qualifyDataSourceNamesInAST = true
 	defer func() {
 		b.insideViewDef = false
-		b.trackViewDeps = false
-		b.viewDeps = nil
-		b.viewTypeDeps = util.FastIntSet{}
+		b.trackSchemaDeps = false
+		b.schemaDeps = nil
+		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
 	}()
 
@@ -58,8 +58,8 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 
 	// If the type of any column that this view references is user
 	// defined, add a type dependency between this view and the UDT.
-	if b.trackViewDeps {
-		for _, d := range b.viewDeps {
+	if b.trackSchemaDeps {
+		for _, d := range b.schemaDeps {
 			if !d.ColumnOrdinals.Empty() {
 				d.ColumnOrdinals.ForEach(func(ord int) {
 					ids, err := d.DataSource.CollectTypes(ord)
@@ -67,7 +67,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 						panic(err)
 					}
 					for _, id := range ids {
-						b.viewTypeDeps.Add(int(id))
+						b.schemaTypeDeps.Add(int(id))
 					}
 				})
 			}
@@ -85,8 +85,8 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Materialized: cv.Materialized,
 			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
-			Deps:         b.viewDeps,
-			TypeDeps:     b.viewTypeDeps,
+			Deps:         b.schemaDeps,
+			TypeDeps:     b.schemaTypeDeps,
 			WithData:     cv.WithData,
 		},
 	)

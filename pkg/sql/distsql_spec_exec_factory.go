@@ -1028,11 +1028,25 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	materialized bool,
 	viewQuery string,
 	columns colinfo.ResultColumns,
-	deps opt.ViewDeps,
-	typeDeps opt.ViewTypeDeps,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
 	withData bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create view")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCreateFunction(
+	schema cat.Schema,
+	funcName *tree.FunctionName,
+	Replace bool,
+	funArgs tree.FuncArgs,
+	returnType tree.FuncReturnType,
+	options tree.FunctionOptions,
+	body tree.FunctionBodyStr,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {

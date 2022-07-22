@@ -13,9 +13,9 @@ go_library(
         "operator.go",
         "ordering.go",
         "rule_name.go",
+        "schema_dependencies.go",
         "table_meta.go",
         "telemetry.go",
-        "view_dependencies.go",
         ":gen-operator",  # keep
         ":gen-rulenames",  # keep
         ":gen-rulenames-stringer",  # keep
