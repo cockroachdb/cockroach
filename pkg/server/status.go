@@ -376,28 +376,17 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 
 	nodeIDOrZero, _ := b.sqlServer.sqlIDContainer.OptionalNodeID()
 
-	running, queued := b.flowScheduler.Serialize()
+	flows := b.flowScheduler.Serialize()
 	response := &serverpb.ListDistSQLFlowsResponse{
-		Flows: make([]serverpb.DistSQLRemoteFlows, 0, len(running)+len(queued)),
+		Flows: make([]serverpb.DistSQLRemoteFlows, 0, len(flows)),
 	}
-	for _, f := range running {
+	for _, f := range flows {
 		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
 			FlowID: f.FlowID,
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
 				NodeID:    nodeIDOrZero,
 				Timestamp: f.Timestamp,
 				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
-				Stmt:      f.StatementSQL,
-			}},
-		})
-	}
-	for _, f := range queued {
-		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
-			FlowID: f.FlowID,
-			Infos: []serverpb.DistSQLRemoteFlows_Info{{
-				NodeID:    nodeIDOrZero,
-				Timestamp: f.Timestamp,
-				Status:    serverpb.DistSQLRemoteFlows_QUEUED,
 				Stmt:      f.StatementSQL,
 			}},
 		})

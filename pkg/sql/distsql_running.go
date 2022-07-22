@@ -603,7 +603,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
-	flow.Run(ctx, func() {})
+	flow.Run(ctx)
 
 	// TODO(yuzefovich): it feels like this closing should happen after
 	// PlanAndRun. We should refactor this and get rid off ignoreClose field.

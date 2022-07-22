@@ -2292,6 +2292,7 @@ func populateContentionEventsTable(
 	return nil
 }
 
+// TODO(yuzefovich): remove 'status' column in 23.1.
 const distSQLFlowsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   flow_id UUID NOT NULL,

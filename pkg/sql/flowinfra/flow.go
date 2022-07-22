@@ -91,7 +91,7 @@ type Flow interface {
 	// See Run() for a synchronous version.
 	//
 	// If errors are encountered during the setup part, they're returned.
-	Start(_ context.Context, doneFn func()) error
+	Start(context.Context) error
 
 	// Run runs the flow to completion. The last processor is run in the current
 	// goroutine; others may run in different goroutines depending on how the
@@ -104,7 +104,7 @@ type Flow interface {
 	// when running this flow are sent to it.
 	//
 	// The caller needs to call f.Cleanup().
-	Run(_ context.Context, doneFn func())
+	Run(context.Context)
 
 	// Wait waits for all the goroutines for this flow to exit. If the context gets
 	// canceled before all goroutines exit, it calls f.cancel().
@@ -194,8 +194,6 @@ type FlowBase struct {
 	onFlowCleanup func()
 
 	statementSQL string
-
-	doneFn func()
 
 	status flowStatus
 
@@ -384,10 +382,7 @@ func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 // StartInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
-func (f *FlowBase) StartInternal(
-	ctx context.Context, processors []execinfra.Processor, doneFn func(),
-) error {
-	f.doneFn = doneFn
+func (f *FlowBase) StartInternal(ctx context.Context, processors []execinfra.Processor) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
@@ -447,12 +442,12 @@ func (f *FlowBase) IsVectorized() bool {
 }
 
 // Start is part of the Flow interface.
-func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	return f.StartInternal(ctx, f.processors, doneFn)
+func (f *FlowBase) Start(ctx context.Context) error {
+	return f.StartInternal(ctx, f.processors)
 }
 
 // Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context, doneFn func()) {
+func (f *FlowBase) Run(ctx context.Context) {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
@@ -466,7 +461,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) {
 	otherProcs := f.processors[:len(f.processors)-1]
 
 	var err error
-	if err = f.StartInternal(ctx, otherProcs, doneFn); err != nil {
+	if err = f.StartInternal(ctx, otherProcs); err != nil {
 		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.rowSyncFlowConsumer.ProducerDone()
 		return
@@ -556,9 +551,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	f.ctxCancel()
 	if f.onFlowCleanup != nil {
 		f.onFlowCleanup()
-	}
-	if f.doneFn != nil {
-		f.doneFn()
 	}
 }
 

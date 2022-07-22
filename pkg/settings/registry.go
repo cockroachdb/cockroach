@@ -143,6 +143,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.refresh_range.time_bound_iterators.enabled":             {},
 	"sql.defaults.datestyle.enabled":                            {},
 	"sql.defaults.intervalstyle.enabled":                        {},
+	"sql.distsql.max_running_flows":                             {},
 }
 
 var sqlDefaultSettings = map[string]struct{}{

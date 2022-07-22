@@ -1107,6 +1107,7 @@ message ListDistSQLFlowsRequest {}
 message DistSQLRemoteFlows {
   enum Status {
     RUNNING = 0;
+    // TODO(yuzefovich): remove this in 23.1.
     QUEUED = 1;
   }
 

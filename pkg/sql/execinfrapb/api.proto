@@ -136,6 +136,7 @@ message ConsumerHandshake {
 // scheduled to run on the receiving node but haven't been started yet (i.e.
 // they are in the queue to be run). This request originates on the node that
 // performed SetupFlow RPC in order to setup flows mentioned in the request.
+// TODO(yuzefovich): remove this in 23.1.
 message CancelDeadFlowsRequest {
   // FlowIDs is a list of IDs of flows to be canceled if they are currently in
   // the queue to be scheduled. If a particular flow is not found for any reason
@@ -158,6 +159,7 @@ service DistSQL {
   //
   // This RPC is performed on a best effort basis, so any errors returned from
   // it should be ignored.
+  // TODO(yuzefovich): remove this in 23.1.
   rpc CancelDeadFlows(CancelDeadFlowsRequest) returns (SimpleResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
