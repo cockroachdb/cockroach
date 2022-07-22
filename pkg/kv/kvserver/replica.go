@@ -1140,6 +1140,14 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.mu.state.Stats
 }
 
+// SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
+// not affect the on disk state and is only safe to use for testing purposes.
+func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.mu.state.Stats = stats
+}
+
 // GetMaxSplitQPS returns the Replica's maximum queries/s request rate over a
 // configured measurement period. If the Replica has not been recording QPS for
 // at least an entire measurement period, the method will return false.
