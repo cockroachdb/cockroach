@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -523,13 +524,15 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
-// reserveSnapshot throttles incoming snapshots.
-func (s *Store) reserveSnapshot(
+// reserveReceiveSnapshot throttles incoming snapshots.
+func (s *Store) reserveReceiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
 	return s.throttleSnapshot(
 		ctx, s.snapshotApplySem, header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
+		s.metrics.RangeSnapshotRecvQueueLength,
+		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,
 	)
 }
 
@@ -546,6 +549,8 @@ func (s *Store) reserveSendSnapshot(
 	}
 	return s.throttleSnapshot(ctx, sem, rangeSize,
 		req.RangeID, req.DelegatedSender.ReplicaID,
+		s.metrics.RangeSnapshotSendQueueLength,
+		s.metrics.RangeSnapshotSendInProgress, s.metrics.RangeSnapshotSendTotalInProgress,
 	)
 }
 
@@ -558,6 +563,7 @@ func (s *Store) throttleSnapshot(
 	rangeSize int64,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
+	waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge,
 ) (_cleanup func(), _err error) {
 	tBegin := timeutil.Now()
 	// Empty snapshots are exempt from rate limits because they're so cheap to
@@ -565,6 +571,8 @@ func (s *Store) throttleSnapshot(
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+		waitingSnapshotMetric.Inc(1)
+		defer waitingSnapshotMetric.Dec(1)
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -595,7 +603,12 @@ func (s *Store) throttleSnapshot(
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
+
+		// Counts non-empty in-progress snapshots.
+		inProgressSnapshotMetric.Inc(1)
 	}
+	// Counts all in-progress snapshots.
+	totalInProgressSnapshotMetric.Inc(1)
 
 	// The choice here is essentially arbitrary, but with a default range size of 128mb-512mb and the
 	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
@@ -619,8 +632,10 @@ func (s *Store) throttleSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(rangeSize)
+		totalInProgressSnapshotMetric.Dec(1)
 
 		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+			inProgressSnapshotMetric.Dec(1)
 			<-snapshotSem
 		}
 	}, nil
@@ -792,7 +807,7 @@ func (s *Store) receiveSnapshot(
 			header.Type, storeID, header.State.Desc.Replicas())
 	}
 
-	cleanup, err := s.reserveSnapshot(ctx, header)
+	cleanup, err := s.reserveReceiveSnapshot(ctx, header)
 	if err != nil {
 		return err
 	}
@@ -1027,7 +1042,7 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 //  120 |                         ok
 //  135 |
 //
-// In practice, the snapshot reservation logic (reserveSnapshot) doesn't know
+// In practice, the snapshot reservation logic (reserveReceiveSnapshot) doesn't know
 // how long sending the snapshot will actually take. But it knows the timeout it
 // has been given by the snapshotQueue/replicateQueue, which serves as an upper
 // bound, under the assumption that snapshots can make progress in the absence
