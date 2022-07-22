@@ -4231,6 +4231,7 @@ transaction_rows_read_log                             0                   NULL  
 transaction_rows_written_err                          0                   NULL      NULL        NULL        string
 transaction_rows_written_log                          0                   NULL      NULL        NULL        string
 transaction_status                                    NoTxn               NULL      NULL        NULL        string
+troubleshooting_mode                                  off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                        on                  NULL      NULL        NULL        string
 vectorize                                             on                  NULL      NULL        NULL        string
 xmloption                                             content             NULL      NULL        NULL        string
@@ -4353,6 +4354,7 @@ transaction_rows_read_log                             0                   NULL  
 transaction_rows_written_err                          0                   NULL  user     NULL      0                   0
 transaction_rows_written_log                          0                   NULL  user     NULL      0                   0
 transaction_status                                    NoTxn               NULL  user     NULL      NoTxn               NoTxn
+troubleshooting_mode                                  off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                        on                  NULL  user     NULL      on                  on
 vectorize                                             on                  NULL  user     NULL      on                  on
 xmloption                                             content             NULL  user     NULL      content             content
@@ -4472,6 +4474,7 @@ transaction_rows_read_log                             NULL    NULL     NULL     
 transaction_rows_written_err                          NULL    NULL     NULL     NULL        NULL
 transaction_rows_written_log                          NULL    NULL     NULL     NULL        NULL
 transaction_status                                    NULL    NULL     NULL     NULL        NULL
+troubleshooting_mode                                  NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                        NULL    NULL     NULL     NULL        NULL
 vectorize                                             NULL    NULL     NULL     NULL        NULL
 xmloption                                             NULL    NULL     NULL     NULL        NULL

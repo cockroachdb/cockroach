@@ -200,6 +200,9 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 	if err := c.maybeSetReadOnly(conn); err != nil {
 		return err
 	}
+	if err := c.maybeSetTroubleshootingMode(conn); err != nil {
+		return err
+	}
 
 	if c.ConnCtx.DebugMode {
 		fmt.Fprintln(c.CmdOut,
@@ -239,4 +242,14 @@ func (c *Context) maybeSetReadOnly(conn clisqlclient.Conn) error {
 	}
 	return conn.Exec(context.Background(),
 		"SET default_transaction_read_only = TRUE")
+}
+
+func (c *Context) maybeSetTroubleshootingMode(conn clisqlclient.Conn) error {
+	if !c.ConnCtx.DebugMode {
+		return nil
+	}
+	// If we are in debug mode, enable "troubleshooting mode".
+	return conn.Exec(
+		context.Background(),
+		"SET troubleshooting_mode = on")
 }
