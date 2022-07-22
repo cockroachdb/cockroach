@@ -303,9 +303,6 @@ func startTenantInternal(
 		baseCfg.SQLAdvertiseAddr,  // sql addr
 	)
 
-	const (
-		socketFile = "" // no unix socket
-	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
 
 	// TODO(tbg): the log dir is not configurable at this point
@@ -326,7 +323,6 @@ func startTenantInternal(
 		args.TestingKnobs,
 		connManager,
 		pgL,
-		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return nil, nil, nil, "", "", err
@@ -355,7 +351,7 @@ func startTenantInternal(
 		args.stopper,
 		s.connManager,
 		s.pgL,
-		socketFile); err != nil {
+		nil /* socketFile */); err != nil {
 		return nil, nil, nil, "", "", err
 	}
 

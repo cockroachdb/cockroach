@@ -205,6 +205,10 @@ type Config struct {
 	// This is computed from SQLAddr if specified otherwise Addr.
 	SQLAdvertiseAddr string
 
+	// SocketFile, if non-empty, sets up a TLS-free local listener using
+	// a unix datagram socket at the specified path for SQL clients.
+	SocketFile string
+
 	// HTTPAddr is the configured HTTP listen address.
 	HTTPAddr string
 
@@ -265,6 +269,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SplitListenSQL = false
 	cfg.SQLAddr = defaultSQLAddr
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
+	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
