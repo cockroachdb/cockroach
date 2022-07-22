@@ -6170,6 +6170,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_nightlyone_lockfile",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/nightlyone/lockfile",
+        sha256 = "0abd22d55b704c18426167732414806b2a70d99bce65fa9f943cb88c185689ad",
+        strip_prefix = "github.com/nightlyone/lockfile@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/nightlyone/lockfile/com_github_nightlyone_lockfile-v1.0.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_nishanths_predeclared",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/nishanths/predeclared",
