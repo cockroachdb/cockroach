@@ -270,3 +270,89 @@ vectorized: true
           missing stats
           table: a@a_b_idx
           spans: 1 span
+
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+statement ok
+CREATE TABLE b (a) AS SELECT encode(set_byte('foobar ',1,g), 'escape') || g::text FROM generate_series(1,1000) g(g)
+
+statement ok
+ANALYZE b
+
+statement ok
+CREATE INVERTED INDEX ON b(a gin_trgm_ops)
+
+query T
+EXPLAIN SELECT * FROM b WHERE a LIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 333
+│ filter: a LIKE '%foo%'
+│
+└── • scan
+      estimated row count: 1,000 (100% of the table; stats collected <hidden> ago)
+      table: b@b_pkey
+      spans: FULL SCAN
+
+# Ensure that scans still work after we re-analyze.
+
+statement ok
+ANALYZE b
+
+query T
+EXPLAIN SELECT * FROM b WHERE a LIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 333
+│ filter: a LIKE '%foo%'
+│
+└── • index join
+    │ estimated row count: 10
+    │ table: b@b_pkey
+    │
+    └── • scan
+          estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
+          table: b@b_a_idx
+          spans: 1 span
+
+statement ok
+CREATE INDEX on b(a);
+ANALYZE b
+
+query T
+EXPLAIN SELECT * FROM b WHERE a LIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 333
+│ filter: a LIKE '%foo%'
+│
+└── • index join
+    │ estimated row count: 0
+    │ table: b@b_pkey
+    │
+    └── • scan
+          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+          table: b@b_a_idx
+          spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM b WHERE a = 'foobar 367'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (0.10% of the table; stats collected <hidden> ago)
+  table: b@b_a_idx1
+  spans: [/'foobar 367' - /'foobar 367']
