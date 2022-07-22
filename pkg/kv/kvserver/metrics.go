@@ -607,6 +607,30 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotSendQueueLength = metric.Metadata{
+		Name:        "range.snapshots.send-queue",
+		Help:        "Number of snapshots queued to send",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecvQueueLength = metric.Metadata{
+		Name:        "range.snapshots.recv-queue",
+		Help:        "Number of snapshots queued to receive",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotSendInProgress = metric.Metadata{
+		Name:        "range.snapshots.send-in-progress",
+		Help:        "Number of non-empty snapshots being sent",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecvInProgress = metric.Metadata{
+		Name:        "range.snapshots.recv-in-progress",
+		Help:        "Number of non-empty snapshots being received",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -1607,6 +1631,12 @@ type StoreMetrics struct {
 	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
 
+	// Range snapshot queue metrics.
+	RangeSnapshotSendQueueLength *metric.Gauge
+	RangeSnapshotRecvQueueLength *metric.Gauge
+	RangeSnapshotSendInProgress  *metric.Gauge
+	RangeSnapshotRecvInProgress  *metric.Gauge
+
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
 	RaftQuotaPoolPercentUsed  *metric.Histogram
@@ -2068,6 +2098,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotRecoverySentBytes:               metric.NewCounter(metaRangeSnapshotRecoverySentBytes),
 		RangeSnapshotRebalancingRcvdBytes:            metric.NewCounter(metaRangeSnapshotRebalancingRcvdBytes),
 		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
+		RangeSnapshotSendQueueLength:                 metric.NewGauge(metaRangeSnapshotSendQueueLength),
+		RangeSnapshotRecvQueueLength:                 metric.NewGauge(metaRangeSnapshotRecvQueueLength),
+		RangeSnapshotSendInProgress:                  metric.NewGauge(metaRangeSnapshotSendInProgress),
+		RangeSnapshotRecvInProgress:                  metric.NewGauge(metaRangeSnapshotRecvInProgress),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
