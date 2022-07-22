@@ -161,6 +161,12 @@ func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))
 }
 
+// NewUndefinedFunctionError creates an error that represents a missing user
+// defined function.
+func NewUndefinedFunctionError(fn string) error {
+	return pgerror.Newf(pgcode.UndefinedFunction, "function %q does not exist", fn)
+}
+
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedTable,
