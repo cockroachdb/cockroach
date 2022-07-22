@@ -11,6 +11,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
