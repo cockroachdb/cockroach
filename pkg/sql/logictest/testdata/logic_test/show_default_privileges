@@ -3,6 +3,7 @@
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root    ALL    true
 root  false  schemas    root    ALL    true
 root  false  sequences  root    ALL    true
 root  false  tables     root    ALL    true
@@ -18,6 +19,7 @@ ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root  ALL  true
 root  false  schemas    root  ALL  true
 root  false  sequences  root  ALL  true
 root  false  types      root  ALL  true
@@ -31,6 +33,7 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root    ALL     true
 root  false  schemas    public  USAGE   false
 root  false  schemas    root    ALL     true
 root  false  sequences  public  SELECT  false
@@ -48,6 +51,7 @@ CREATE USER bar
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root    ALL     true
 root  false  schemas    public  USAGE   false
 root  false  schemas    root    ALL     true
 root  false  sequences  public  SELECT  false
@@ -65,16 +69,19 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar, root
 ----
+bar   false  functions  bar     ALL     true
 bar   false  schemas    bar     ALL     true
 bar   false  sequences  bar     ALL     true
 bar   false  tables     bar     ALL     true
 bar   false  types      bar     ALL     true
 bar   false  types      public  USAGE   false
+foo   false  functions  foo     ALL     true
 foo   false  schemas    foo     ALL     true
 foo   false  sequences  foo     ALL     true
 foo   false  tables     foo     ALL     true
 foo   false  types      foo     ALL     true
 foo   false  types      public  USAGE   false
+root  false  functions  root    ALL     true
 root  false  schemas    bar     ALL     false
 root  false  schemas    foo     ALL     false
 root  false  schemas    public  USAGE   false
@@ -103,6 +110,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root    ALL     true
 root  false  schemas    bar     ALL     false
 root  false  schemas    foo     ALL     false
 root  false  schemas    public  USAGE   false
@@ -128,6 +136,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root    ALL     true
 root  false  schemas    bar     ALL     false
 root  false  schemas    foo     ALL     false
 root  false  schemas    public  USAGE   false
@@ -153,6 +162,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root  ALL         true
 root  false  schemas    root  ALL         true
 root  false  sequences  root  ALL         true
 root  false  tables     bar   CREATE      false
@@ -176,6 +186,7 @@ ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTI
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+root  false  functions  root  ALL         true
 root  false  schemas    root  ALL         true
 root  false  sequences  root  ALL         true
 root  false  tables     foo   DROP        true
@@ -195,6 +206,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT DROP, ZONECONFIG ON TABLES TO f
 query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
+testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
 testuser  false  tables     foo       DROP        true
@@ -208,6 +220,7 @@ user testuser
 query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
+testuser  false  functions  testuser  ALL    true
 testuser  false  schemas    testuser  ALL    true
 testuser  false  sequences  testuser  ALL    true
 testuser  false  tables     testuser  ALL    true
@@ -219,6 +232,7 @@ user root
 query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
+testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
 testuser  false  tables     foo       DROP        true
@@ -233,6 +247,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT DROP, ZONECONFIG ON TABLES TO foo W
 query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE root, testuser
 ----
+root      false  functions  root      ALL         true
 root      false  schemas    root      ALL         true
 root      false  sequences  root      ALL         true
 root      false  tables     foo       DROP        true
@@ -240,6 +255,7 @@ root      false  tables     foo       ZONECONFIG  true
 root      false  tables     root      ALL         true
 root      false  types      public    USAGE       false
 root      false  types      root      ALL         true
+testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
 testuser  false  tables     foo       DROP        true

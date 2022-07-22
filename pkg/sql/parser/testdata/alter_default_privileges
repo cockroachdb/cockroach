@@ -46,47 +46,21 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT, UPDATE ON SEQUENCES TO foo, bar -- fully 
 ALTER DEFAULT PRIVILEGES GRANT SELECT, UPDATE ON SEQUENCES TO foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES GRANT SELECT, UPDATE ON SEQUENCES TO _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo
 ----
-----
-at or near "to": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo
-                                                ^
-HINT: You have attempted to use a feature that is not yet implemented.
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo -- literals removed
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO _ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-error
+parse
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar
 ----
-----
-at or near "to": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar
-                                                ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar -- fully parenthesized
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar -- literals removed
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO _, _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo
@@ -184,26 +158,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT SELECT, UPDATE ON SEQUENCES TO foo, 
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT SELECT, UPDATE ON SEQUENCES TO foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES FOR ROLE _ GRANT SELECT, UPDATE ON SEQUENCES TO _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo
 ----
-----
-at or near "to": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo
-                                                             ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo -- literals removed
+ALTER DEFAULT PRIVILEGES FOR ROLE _ GRANT ALL ON FUNCTIONS TO _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TYPES TO foo
@@ -301,26 +262,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT SELECT, UPDATE ON SEQUENCES TO foo, b
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT SELECT, UPDATE ON SEQUENCES TO foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES IN SCHEMA _ GRANT SELECT, UPDATE ON SEQUENCES TO _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
 ----
-----
-at or near "to": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
-                                                            ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo -- literals removed
+ALTER DEFAULT PRIVILEGES IN SCHEMA _ GRANT ALL ON FUNCTIONS TO _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON TYPES TO foo
@@ -418,26 +366,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT SELECT, UPDATE ON SEQUEN
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT SELECT, UPDATE ON SEQUENCES TO foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES FOR ROLE _ IN SCHEMA _ GRANT SELECT, UPDATE ON SEQUENCES TO _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
 ----
-----
-at or near "to": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
-                                                                         ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo -- literals removed
+ALTER DEFAULT PRIVILEGES FOR ROLE _ IN SCHEMA _ GRANT ALL ON FUNCTIONS TO _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON TYPES TO foo
@@ -551,47 +486,21 @@ ALTER DEFAULT PRIVILEGES REVOKE SELECT, UPDATE ON SEQUENCES  FROM foo, bar -- fu
 ALTER DEFAULT PRIVILEGES REVOKE SELECT, UPDATE ON SEQUENCES  FROM foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES REVOKE SELECT, UPDATE ON SEQUENCES  FROM _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo
 ----
-----
-at or near "from": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo
-                                                 ^
-HINT: You have attempted to use a feature that is not yet implemented.
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo -- normalized!
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo -- literals removed
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM _ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-error
+parse
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo, bar
 ----
-----
-at or near "from": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo, bar
-                                                 ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo, bar -- normalized!
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo, bar -- fully parenthesized
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM foo, bar -- literals removed
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS  FROM _, _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo
@@ -689,26 +598,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE SELECT, UPDATE ON SEQUENCES  FROM f
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE SELECT, UPDATE ON SEQUENCES  FROM foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES FOR ROLE _ REVOKE SELECT, UPDATE ON SEQUENCES  FROM _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS FROM foo
 ----
-----
-at or near "from": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS FROM foo
-                                                              ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS  FROM foo -- normalized!
+ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS  FROM foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS  FROM foo -- literals removed
+ALTER DEFAULT PRIVILEGES FOR ROLE _ REVOKE ALL ON FUNCTIONS  FROM _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON TYPES FROM foo
@@ -806,26 +702,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE SELECT, UPDATE ON SEQUENCES  FROM fo
 ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE SELECT, UPDATE ON SEQUENCES  FROM foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES IN SCHEMA _ REVOKE SELECT, UPDATE ON SEQUENCES  FROM _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
 ----
-----
-at or near "from": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
-                                                             ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- normalized!
+ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- literals removed
+ALTER DEFAULT PRIVILEGES IN SCHEMA _ REVOKE ALL ON FUNCTIONS  FROM _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON TYPES FROM foo
@@ -923,26 +806,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE SELECT, UPDATE ON SEQUE
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE SELECT, UPDATE ON SEQUENCES  FROM foo, bar -- literals removed
 ALTER DEFAULT PRIVILEGES FOR ROLE _ IN SCHEMA _ REVOKE SELECT, UPDATE ON SEQUENCES  FROM _, _ -- identifiers removed
 
-error
+parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
 ----
-----
-at or near "from": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
-                                                                          ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- normalized!
+ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- fully parenthesized
+ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS  FROM foo -- literals removed
+ALTER DEFAULT PRIVILEGES FOR ROLE _ IN SCHEMA _ REVOKE ALL ON FUNCTIONS  FROM _ -- identifiers removed
 
 parse
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON TYPES FROM foo

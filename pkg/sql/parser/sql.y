@@ -9622,7 +9622,7 @@ target_object_type:
   }
 | FUNCTIONS error
   {
-    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
+    $$.val = privilege.Functions
   }
 | ROUTINES error
   {
