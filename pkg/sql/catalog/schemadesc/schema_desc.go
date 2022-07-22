@@ -362,6 +362,19 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
+// AddFunction adds a UDF overload signature to the schema descriptor.
+func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_FunctionOverload) {
+	if desc.Functions == nil {
+		desc.Functions = make(map[string]descpb.SchemaDescriptor_Function)
+	}
+	if overloads, ok := desc.Functions[name]; !ok {
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: []descpb.SchemaDescriptor_FunctionOverload{f}}
+	} else {
+		newOverloads := append(overloads.Overloads, f)
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: newOverloads}
+	}
+}
+
 // GetObjectType implements the PrivilegeObject interface.
 func (desc *immutable) GetObjectType() string {
 	return string(desc.DescriptorType())
