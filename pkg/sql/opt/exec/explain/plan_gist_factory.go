@@ -591,6 +591,10 @@ func (u *unknownIndex) IsInverted() bool {
 	return false
 }
 
+func (u *unknownIndex) IsNotVisible() bool {
+	return false
+}
+
 func (u *unknownIndex) ColumnCount() int {
 	return 0
 }
