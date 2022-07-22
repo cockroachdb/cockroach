@@ -1,0 +1,53 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "funcdesc",
+    srcs = [
+        "func_desc.go",
+        "func_desc_builder.go",
+        "helpers.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "funcdesc_test",
+    srcs = ["func_desc_test.go"],
+    deps = [
+        ":funcdesc",
+        "//pkg/clusterversion",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/privilege",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+    ],
+)
+
+get_x_data(name = "get_x_data")

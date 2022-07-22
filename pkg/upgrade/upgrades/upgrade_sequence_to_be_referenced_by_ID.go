@@ -82,7 +82,7 @@ func findNextTableOrViewToUpgrade(
 				"failed to unmarshal descriptor with ID %d", id)
 		}
 		// Return this descriptor if it's a non-dropped table or view.
-		tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
+		tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
 		if tableDesc != nil && !tableDesc.Dropped() && (tableDesc.IsTable() || tableDesc.IsView()) {
 			return false, id, nil
 		}

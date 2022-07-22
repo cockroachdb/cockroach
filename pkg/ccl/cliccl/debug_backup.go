@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -766,6 +767,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		TableDescriptors    map[descpb.ID]string
 		TypeDescriptors     map[descpb.ID]string
 		SchemaDescriptors   map[descpb.ID]string
+		FunctionDescriptors map[descpb.ID]string
 	}{
 		StartTime:           timeutil.Unix(0, b.StartTime.WallTime).Format(time.RFC3339),
 		EndTime:             timeutil.Unix(0, b.EndTime.WallTime).Format(time.RFC3339),
@@ -782,6 +784,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		TableDescriptors:    make(map[descpb.ID]string),
 		TypeDescriptors:     make(map[descpb.ID]string),
 		SchemaDescriptors:   make(map[descpb.ID]string),
+		FunctionDescriptors: make(map[descpb.ID]string),
 	}
 
 	dbIDToName := make(map[descpb.ID]string)
@@ -789,11 +792,12 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 	schemaIDToFullyQualifiedName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
 	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
+	funcIDToFullyQualifiedName := make(map[descpb.ID]string)
 
 	for i := range b.Descriptors {
 		d := &b.Descriptors[i]
 		id := descpb.GetDescriptorID(d)
-		tableDesc, databaseDesc, typeDesc, schemaDesc := descpb.FromDescriptor(d)
+		tableDesc, databaseDesc, typeDesc, schemaDesc, functionDesc := descpb.FromDescriptor(d)
 		if databaseDesc != nil {
 			dbIDToName[id] = descpb.GetDescriptorName(d)
 		} else if schemaDesc != nil {
@@ -815,12 +819,21 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 			}
 			tableName := descpb.GetDescriptorName(d)
 			tableIDToFullyQualifiedName[id] = parentSchema + "." + tableName
+		} else if functionDesc != nil {
+			fnDesc := funcdesc.NewBuilder(functionDesc).BuildImmutable()
+			parentSchema := schemaIDToFullyQualifiedName[fnDesc.GetParentSchemaID()]
+			if parentSchema == catconstants.PublicSchemaName {
+				parentSchema = dbIDToName[functionDesc.GetParentID()] + "." + parentSchema
+			}
+			fnName := descpb.GetDescriptorName(d)
+			funcIDToFullyQualifiedName[id] = parentSchema + "." + fnName
 		}
 	}
 	displayMsg.DatabaseDescriptors = dbIDToName
 	displayMsg.TableDescriptors = tableIDToFullyQualifiedName
 	displayMsg.SchemaDescriptors = schemaIDToFullyQualifiedName
 	displayMsg.TypeDescriptors = typeIDToFullyQualifiedName
+	displayMsg.FunctionDescriptors = funcIDToFullyQualifiedName
 
 	return json.Marshal(displayMsg)
 }

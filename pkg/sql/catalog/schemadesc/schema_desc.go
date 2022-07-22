@@ -57,6 +57,16 @@ func (desc *immutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.immutable", desc)
 }
 
+func (desc *immutable) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
+	fn, found := desc.Functions[name]
+	return fn, found
+}
+
+// SkipNamespace implements the descriptor interface.
+func (desc *immutable) SkipNamespace() bool {
+	return false
+}
+
 // SafeMessage makes Mutable a SafeMessager.
 func (desc *Mutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.Mutable", desc)

@@ -114,7 +114,7 @@ func MakeKeyRewriterFromRekeys(
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
-		table, _, _, _ := descpb.FromDescriptor(&desc)
+		table, _, _, _, _ := descpb.FromDescriptor(&desc)
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}

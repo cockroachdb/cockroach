@@ -26,6 +26,9 @@ type SchemaDescriptor interface {
 	// GetDefaultPrivilegeDescriptor returns the default privileges for this
 	// database.
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
+
+	// GetFunction returns a list of function overloads given a name.
+	GetFunction(name string) (descpb.SchemaDescriptor_Function, bool)
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema
