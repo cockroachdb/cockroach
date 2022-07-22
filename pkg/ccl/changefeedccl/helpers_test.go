@@ -379,7 +379,7 @@ func startTestFullServer(
 	args := base.TestServerArgs{
 		Knobs: knobs,
 		// This test suite is already probabilistically running with
-		// tenants. No need for the test tenant.
+		// tenants. No need for the default test tenant.
 		DisableDefaultTestTenant: true,
 		UseDatabase:              `d`,
 		ExternalIODir:            options.externalIODir,

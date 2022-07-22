@@ -456,6 +456,9 @@ func TestChangefeedTenants(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	kvServer, kvSQLdb, cleanup := startTestFullServer(t, feedTestOptions{argsFn: func(args *base.TestServerArgs) {
+		// This test leverages a test tenant explicitly. No need to do so
+		// probabilistically.
+		args.DisableDefaultTestTenant = true
 		args.ExternalIODirConfig.DisableOutbound = true
 	}})
 	defer cleanup()
@@ -1432,7 +1435,11 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rnd, _ := randutil.NewPseudoRand()
 
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{argsFn: func(args *base.TestServerArgs) {
+		// This test uses SPLIT AT which isn't currently supported within
+		// tenants. Tracked with #76378.
+		args.DisableDefaultTestTenant = true
+	}})
 	defer stopServer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
