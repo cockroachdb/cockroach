@@ -770,6 +770,8 @@ project
       │    ├── scan t62289
       │    │    ├── columns: b:2(geography)
       │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      │    │        histogram(2)=  0                                                                                            4.9994e-05                                                                                            0.99988                                                           7.4991e-05
+      │    │                     <--- '0107000020E6100000010000000103000020E610000001000000040000008C7D4198BD2B574080A6FD3A111E4D40F0DF86928AA12BC03A59212197A35140CEA3CEE206B863C0FC7649EB60BA53408C7D4198BD2B574080A6FD3A111E4D40' --------- '0102000020E61000000300000005D8E086BB6365C03F9E5737DD1A53C0C04ECDED673B55C06711C00C7C0240C0B8EABD96072856404A9D2C529FC74EC0'
       │    └── filters
       │         └── _st_dwithinexclusive(b:2, b:2, -0.38) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── aggregations
