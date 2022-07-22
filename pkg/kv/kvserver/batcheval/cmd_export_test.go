@@ -77,8 +77,12 @@ func TestExportCmd(t *testing.T) {
 		var kvs []storage.MVCCKeyValue
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
-
-			sst, err := storage.NewMemSSTIterator(file.SST, false)
+			iterOpts := storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: keys.LocalMax,
+				UpperBound: keys.MaxKey,
+			}
+			sst, err := storage.NewPebbleMemSSTIterator(file.SST, true, iterOpts)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -501,7 +505,12 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 		return nil
 	}
 
-	sst, err := storage.NewMemSSTIterator(data, false)
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: start,
+		UpperBound: end,
+	}
+	sst, err := storage.NewPebbleMemSSTIterator(data, true, iterOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
