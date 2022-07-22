@@ -219,6 +219,9 @@ type Descriptor interface {
 	// HasConcurrentSchemaChanges returns true if declarative schema
 	// changes are currently in progress.
 	HasConcurrentSchemaChanges() bool
+
+	// SkipNamespace is true when a descriptor should not have a namespace record.
+	SkipNamespace() bool
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
