@@ -92,6 +92,8 @@ func MakeAndRegisterConcurrencyLimiter(sv *settings.Values) limit.ConcurrentRequ
 // bytes, etc. If configured with a non-nil, populated range cache, it will use
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
+//
+// Note: the SSTBatcher currently cannot bulk add range keys.
 type SSTBatcher struct {
 	name     string
 	db       *kv.DB
@@ -644,7 +646,15 @@ func (b *SSTBatcher) addSSTable(
 	updatesLastRange bool,
 ) error {
 	sendStart := timeutil.Now()
-	iter, err := storage.NewMemSSTIterator(sstBytes, true)
+
+	// Currently, the SSTBatcher cannot ingest range keys, so it is safe to
+	// ComputeStatsForRange with an iterator that only surfaces point keys.
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: start,
+		UpperBound: end,
+	}
+	iter, err := storage.NewPebbleMemSSTIterator(sstBytes, true, iterOpts)
 	if err != nil {
 		return err
 	}
