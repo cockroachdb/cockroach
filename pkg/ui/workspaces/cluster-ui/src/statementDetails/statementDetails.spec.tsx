@@ -59,7 +59,7 @@ describe("StatementDetails page", () => {
   });
 
   it("calls onTabChanged prop when selected tab is changed", () => {
-    const onTabChangeSpy = sandbox.spy();
+    const onTabChangeSpy = jest.fn();
     const wrapper = mount(
       <Router>
         <StatementDetails
@@ -75,7 +75,7 @@ describe("StatementDetails page", () => {
       .last()
       .simulate("click");
 
-    onTabChangeSpy.calledWith("execution-stats");
+    expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
   });
 
   describe("Diagnostics tab", () => {
@@ -87,6 +87,7 @@ describe("StatementDetails page", () => {
 
     it("calls createStatementDiagnosticsReport callback on Activate button click", () => {
       const onDiagnosticsActivateClickSpy = sandbox.spy();
+
       const wrapper = mount(
         <Router>
           <StatementDetails

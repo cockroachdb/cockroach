@@ -9,22 +9,15 @@
 // licenses/APL.txt.
 
 import { expectSaga } from "redux-saga-test-plan";
-import sinon from "sinon";
 import Analytics from "analytics-node";
 
 import { signUpEmailSubscription } from "./customAnalyticsSagas";
 import { signUpForEmailSubscription } from "./customAnanlyticsActions";
 
-const sandbox = sinon.createSandbox();
-
 describe("customAnalyticsSagas", () => {
   describe("signUpEmailSubscription generator", () => {
-    afterEach(() => {
-      sandbox.reset();
-    });
-
     it("calls analytics#identify with user email in args ", () => {
-      const analyticsIdentifyFn = sandbox.stub(Analytics.prototype, "identify");
+      const analyticsIdentifyFn = jest.spyOn(Analytics.prototype, "identify");
       const clusterId = "cluster-1";
       const email = "foo@bar.com";
       const action = signUpForEmailSubscription(clusterId, email);
@@ -33,13 +26,14 @@ describe("customAnalyticsSagas", () => {
         .dispatch(action)
         .run()
         .then(() => {
-          const expectedAnalyticsMessage = {
-            userId: clusterId,
-            traits: {
-              email,
-            },
-          };
-          analyticsIdentifyFn.calledOnceWith(expectedAnalyticsMessage);
+          expect(analyticsIdentifyFn).toHaveBeenCalledWith(
+            expect.objectContaining({
+              userId: clusterId,
+              traits: expect.objectContaining({
+                email,
+              }),
+            }),
+          );
         });
     });
   });
