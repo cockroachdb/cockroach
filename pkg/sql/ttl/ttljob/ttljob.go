@@ -97,11 +97,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	db := p.ExecCfg().DB
 	descsCol := p.ExtendedEvalContext().Descs
 
-	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
-		return errors.Newf(
-			"ttl jobs are currently disabled by CLUSTER SETTING %s",
-			jobEnabled.Key(),
-		)
+	if err := checkEnabled(p.ExecCfg().SV()); err != nil {
+		return err
 	}
 
 	telemetry.Inc(sqltelemetry.RowLevelTTLExecuted)
@@ -247,9 +244,22 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	}
 
 	if ttlSettings.RowStatsPollInterval != 0 {
+
 		g.GoCtx(func(ctx context.Context) error {
+
+			handleError := func(err error) error {
+				if knobs.ReturnStatsError {
+					return err
+				}
+				log.Warningf(ctx, "failed to get statistics for table id %d: %s", details.TableID, err)
+				return nil
+			}
+
 			// Do once initially to ensure we have some base statistics.
-			fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration, ttlExpression)
+			err := fetchStatistics(ctx, p.ExecCfg(), relationName, details, metrics, aostDuration, ttlExpression)
+			if err := handleError(err); err != nil {
+				return err
+			}
 			// Wait until poll interval is reached, or early exit when we are done
 			// with the TTL job.
 			for {
@@ -257,7 +267,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				case <-statsCloseCh:
 					return nil
 				case <-time.After(ttlSettings.RowStatsPollInterval):
-					fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration, ttlExpression)
+					err := fetchStatistics(ctx, p.ExecCfg(), relationName, details, metrics, aostDuration, ttlExpression)
+					if err := handleError(err); err != nil {
+						return err
+					}
 				}
 			}
 		})
@@ -329,6 +342,16 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	return nil
 }
 
+func checkEnabled(settingsValues *settings.Values) error {
+	if enabled := jobEnabled.Get(settingsValues); !enabled {
+		return errors.Newf(
+			"ttl jobs are currently disabled by CLUSTER SETTING %s",
+			jobEnabled.Key(),
+		)
+	}
+	return nil
+}
+
 func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 	bs := ttl.SelectBatchSize
 	if bs == 0 {
@@ -368,64 +391,56 @@ func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 func fetchStatistics(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	knobs sql.TTLTestingKnobs,
 	relationName string,
 	details jobspb.RowLevelTTLDetails,
 	metrics rowLevelTTLMetrics,
 	aostDuration time.Duration,
 	ttlExpression string,
-) {
-	if err := func() error {
-		aost, err := tree.MakeDTimestampTZ(timeutil.Now().Add(aostDuration), time.Microsecond)
+) error {
+	aost, err := tree.MakeDTimestampTZ(timeutil.Now().Add(aostDuration), time.Microsecond)
+	if err != nil {
+		return err
+	}
+
+	for _, c := range []struct {
+		opName string
+		query  string
+		args   []interface{}
+		gauge  *aggmetric.Gauge
+	}{
+		{
+			opName: fmt.Sprintf("ttl num rows stats %s", relationName),
+			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+			gauge:  metrics.TotalRows,
+		},
+		{
+			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
+			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + ttlExpression + ` < $1`,
+			args:   []interface{}{details.Cutoff},
+			gauge:  metrics.TotalExpiredRows,
+		},
+	} {
+		// User a super low quality of service (lower than TTL low), as we don't
+		// really care if statistics gets left behind and prefer the TTL job to
+		// have priority.
+		qosLevel := sessiondatapb.SystemLow
+		datums, err := execCfg.InternalExecutor.QueryRowEx(
+			ctx,
+			c.opName,
+			nil,
+			sessiondata.InternalExecutorOverride{
+				User:             username.RootUserName(),
+				QualityOfService: &qosLevel,
+			},
+			fmt.Sprintf(c.query, details.TableID, aost.String()),
+			c.args...,
+		)
 		if err != nil {
 			return err
 		}
-
-		for _, c := range []struct {
-			opName string
-			query  string
-			args   []interface{}
-			gauge  *aggmetric.Gauge
-		}{
-			{
-				opName: fmt.Sprintf("ttl num rows stats %s", relationName),
-				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
-				gauge:  metrics.TotalRows,
-			},
-			{
-				opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
-				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + ttlExpression + ` < $1`,
-				args:   []interface{}{details.Cutoff},
-				gauge:  metrics.TotalExpiredRows,
-			},
-		} {
-			// User a super low quality of service (lower than TTL low), as we don't
-			// really care if statistics gets left behind and prefer the TTL job to
-			// have priority.
-			qosLevel := sessiondatapb.SystemLow
-			datums, err := execCfg.InternalExecutor.QueryRowEx(
-				ctx,
-				c.opName,
-				nil,
-				sessiondata.InternalExecutorOverride{
-					User:             username.RootUserName(),
-					QualityOfService: &qosLevel,
-				},
-				fmt.Sprintf(c.query, details.TableID, aost.String()),
-				c.args...,
-			)
-			if err != nil {
-				return err
-			}
-			c.gauge.Update(int64(tree.MustBeDInt(datums[0])))
-		}
-		return nil
-	}(); err != nil {
-		if onStatisticsError := knobs.OnStatisticsError; onStatisticsError != nil {
-			onStatisticsError(err)
-		}
-		log.Warningf(ctx, "failed to get statistics for table id %d: %s", details.TableID, err)
+		c.gauge.Update(int64(tree.MustBeDInt(datums[0])))
 	}
+	return nil
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
@@ -475,19 +490,24 @@ func runTTLOnRange(
 		ttlExpression,
 	)
 
-	for {
-		if f := knobs.OnDeleteLoopStart; f != nil {
-			if err := f(); err != nil {
-				return rangeRowCount, err
-			}
+	if preSelectDeleteStatement := knobs.PreSelectDeleteStatement; preSelectDeleteStatement != "" {
+		if _, err := ie.ExecEx(
+			ctx,
+			"pre-select-delete-statement",
+			nil, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User: username.RootUserName(),
+			},
+			preSelectDeleteStatement,
+		); err != nil {
+			return rangeRowCount, err
 		}
+	}
 
+	for {
 		// Check the job is enabled on every iteration.
-		if enabled := jobEnabled.Get(execCfg.SV()); !enabled {
-			return rangeRowCount, errors.Newf(
-				"ttl jobs are currently disabled by CLUSTER SETTING %s",
-				jobEnabled.Key(),
-			)
+		if err := checkEnabled(execCfg.SV()); err != nil {
+			return rangeRowCount, err
 		}
 
 		// Step 1. Fetch some rows we want to delete using a historical
@@ -522,7 +542,7 @@ func runTTLOnRange(
 					return err
 				}
 				version := desc.GetVersion()
-				if mockVersion := knobs.MockDescriptorVersionDuringDelete; mockVersion != nil {
+				if mockVersion := knobs.MockTableDescriptorVersionDuringDelete; mockVersion != nil {
 					version = *mockVersion
 				}
 				if version != tableVersion {
