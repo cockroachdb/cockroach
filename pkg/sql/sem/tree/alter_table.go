@@ -274,6 +274,11 @@ func (node *AlterTableAlterPrimaryKey) Format(ctx *FmtCtx) {
 	if node.Sharded != nil {
 		ctx.FormatNode(node.Sharded)
 	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
+	}
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.
