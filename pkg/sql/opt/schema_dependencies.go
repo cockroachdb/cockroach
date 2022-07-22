@@ -17,22 +17,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// ViewDeps contains information about the dependencies of a view.
-type ViewDeps []ViewDep
+// SchemaDeps contains information about the dependencies of objects in a
+// schema, like a view or function.
+type SchemaDeps []SchemaDep
 
-// ViewDep contains information about a view dependency.
-type ViewDep struct {
+// SchemaDep contains information about a dependency from a schema object
+// (typically view and function) to a datasource.
+type SchemaDep struct {
 	DataSource cat.DataSource
 
-	// ColumnOrdinals is the set of column ordinals that are referenced by the
-	// view for this table.
+	// ColumnOrdinals is the set of column ordinals that are referenced for this
+	// table.
 	ColumnOrdinals util.FastIntSet
 
-	// ColumnIDToOrd maps a scopeColumn's ColumnID to its ColumnOrdinal.
-	// This helps us add only the columns that are actually referenced
-	// by the view's query into the view dependencies. We add a
-	// dependency on a column only when the column is referenced by the view
-	// and created as a scopeColumn.
+	// ColumnIDToOrd maps a scopeColumn's ColumnID to its ColumnOrdinal. This
+	// helps us add only the columns that are actually referenced by the object's
+	// query into the dependencies. We add a dependency on a column only when the
+	// column is referenced and created as a scopeColumn.
 	ColumnIDToOrd map[ColumnID]int
 
 	// If an index is referenced specifically (via an index hint), SpecificIndex
@@ -41,14 +42,14 @@ type ViewDep struct {
 	Index         cat.IndexOrdinal
 }
 
-// ViewTypeDeps contains a set of the IDs of types that
-// this view depends on.
-type ViewTypeDeps = util.FastIntSet
+// SchemaTypeDeps contains a set of the IDs of types that
+// this object depends on.
+type SchemaTypeDeps = util.FastIntSet
 
 // GetColumnNames returns a sorted list of the names of the column dependencies
 // and a boolean to determine if the dependency was a table.
 // We only track column dependencies on tables.
-func (dep ViewDep) GetColumnNames() ([]string, bool) {
+func (dep SchemaDep) GetColumnNames() ([]string, bool) {
 	colNames := make([]string, 0)
 	if table, ok := dep.DataSource.(cat.Table); ok {
 		dep.ColumnOrdinals.ForEach(func(i int) {
