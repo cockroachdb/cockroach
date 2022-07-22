@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
-	"gopkg.in/yaml.v2"
+	humanize "github.com/dustin/go-humanize"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DefaultFileFormat is the entry format for file sinks when not
