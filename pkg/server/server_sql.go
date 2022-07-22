@@ -116,7 +116,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/marusama/semaphore"
+	"github.com/nightlyone/lockfile"
 	"google.golang.org/grpc"
 )
 
@@ -1435,11 +1437,47 @@ func (s *SQLServer) startServeSQL(
 			}
 		}
 
+		// Use a socket lock mechanism to ensure we reuse the socket only
+		// if it's safe to do so (there's no owner any more).
+		lockPath := socketFile + ".lock"
+		// The lockfile package wants an absolute path.
+		absLockPath, err := filepath.Abs(lockPath)
+		if err != nil {
+			return errors.Wrap(err, "computing absolute path for unix socket")
+		}
+		socketLock, err := lockfile.New(absLockPath)
+		if err != nil {
+			// This should only fail on non-absolute paths, but we
+			// just made it absolute above.
+			return errors.NewAssertionErrorWithWrappedErrf(err, "creating lock")
+		}
+		if err := socketLock.TryLock(); err != nil {
+			if owner, ownerErr := socketLock.GetOwner(); ownerErr == nil {
+				err = errors.WithHintf(err, "Socket appears locked by process %d.", owner.Pid)
+			}
+			return errors.Wrapf(err, "locking unix socket %q", socketFile)
+		}
+		// Now the lock has succeeded, we can delete the previous socket
+		// if it exists.
+		if _, err := os.Stat(socketFile); err != nil {
+			if !oserror.IsNotExist(err) {
+				// Socket exists but there's some file access error.
+				// we probably can't remove it.
+				return err
+			}
+		} else {
+			// Socket file existed already.
+			if err := os.Remove(socketFile); err != nil {
+				return errors.Wrap(err, "removing previous socket file")
+			}
+		}
+
 		log.Ops.Infof(ctx, "starting postgres server at unix: %s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.
 		unixLn, err := net.Listen("unix", socketFile)
 		if err != nil {
+			err = errors.CombineErrors(err, socketLock.Unlock())
 			return err
 		}
 
@@ -1450,7 +1488,10 @@ func (s *SQLServer) startServeSQL(
 			// only when the listener closes. In other words, the listener needs
 			// to close when quiescing starts to allow that worker to shut down.
 			if err := unixLn.Close(); err != nil {
-				log.Ops.Fatalf(ctx, "%v", err)
+				log.Ops.Warningf(ctx, "closing unix socket: %v", err)
+			}
+			if err := socketLock.Unlock(); err != nil {
+				log.Ops.Warningf(ctx, "removing unix socket lock: %v", err)
 			}
 		}
 		if err := stopper.RunAsyncTaskEx(ctx,
