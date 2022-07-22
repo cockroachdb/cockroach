@@ -1674,6 +1674,11 @@ func (os *optTableStat) Histogram() []cat.HistogramBucket {
 	return os.stat.Histogram
 }
 
+// HistogramType is part of the cat.TableStatistic interface.
+func (os *optTableStat) HistogramType() *types.T {
+	return os.stat.HistogramData.ColumnType
+}
+
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a
 // reference to the table wrapper.
 type optFamily struct {

@@ -1,0 +1,351 @@
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+exec-ddl
+CREATE TABLE a (a TEXT)
+----
+
+exec-ddl
+CREATE INDEX ON a(a)
+----
+
+exec-ddl
+CREATE INVERTED INDEX ON a(a gin_trgm_ops)
+----
+
+# First, check both plans without stats.
+opt
+SELECT * FROM a WHERE a = 'foo'
+----
+scan a@a_a_idx
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foo' - /'foo']
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ └── fd: ()-->(1)
+
+opt
+SELECT * FROM a WHERE a LIKE '%foo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=330, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=111.1111]
+ │    └── scan a@a_a_idx1
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted constraint: /5/2
+ │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0, avgsize(5)=4]
+ │         └── key: (2)
+ └── filters
+      └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Inject forward statistics.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  }
+]'
+----
+
+# Check the plan for a forward scan.
+opt
+SELECT * FROM a WHERE a = 'foo'
+----
+scan a@a_a_idx
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foo' - /'foo']
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, avgsize(1)=4]
+ │   histogram(1)=  0    0
+ │                <--- 'foo'
+ └── fd: ()-->(1)
+
+# Make sure that this query doesn't have a problem, even though the inverted
+# scan could see "forward histogram" data.
+
+opt
+SELECT * FROM a WHERE a LIKE '%foo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.3333, distinct(1)=10, null(1)=0, avgsize(1)=4]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=111.1111]
+ │    └── scan a@a_a_idx1
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted constraint: /5/2
+ │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0, avgsize(5)=4]
+ │         └── key: (2)
+ └── filters
+      └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Now, inject inverted statistics with forward statistics also.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 9,
+        "num_range": 0,
+        "upper_bound": "\\x122020310001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 8,
+        "num_range": 0,
+        "upper_bound": "\\x122020320001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x122020330001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x127973200001"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  }
+]'
+----
+
+# Test that we get a plan that uses the inverted index now that there are stats.
+opt
+SELECT * FROM a WHERE a LIKE '%foo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=5.8e-09]
+ │    └── scan a@a_a_idx1
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted constraint: /5/2
+ │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0, avgsize(5)=4]
+ │         │   histogram(5)=  0         0
+ │         │                <--- '\x12666f6f0002'
+ │         └── key: (2)
+ └── filters
+      └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Now, check what happens with a forward scan now that we have an inverted histogram.
+opt
+SELECT * FROM a WHERE a = 'foobarbaz'
+----
+scan a@a_a_idx
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, avgsize(1)=4]
+ │   histogram(1)=  0       0
+ │                <--- 'foobarbaz'
+ └── fd: ()-->(1)
+
+# Finally, check what happens when there are only inverted stats.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 9,
+        "num_range": 0,
+        "upper_bound": "\\x122020310001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 8,
+        "num_range": 0,
+        "upper_bound": "\\x122020320001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x122020330001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x127973200001"
+      }
+    ]
+  }
+]'
+----
+
+opt
+SELECT * FROM a WHERE a LIKE '%foo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=5.8e-09]
+ │    └── scan a@a_a_idx1
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted constraint: /5/2
+ │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0, avgsize(5)=4]
+ │         │   histogram(5)=  0         0
+ │         │                <--- '\x12666f6f0002'
+ │         └── key: (2)
+ └── filters
+      └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+opt
+SELECT * FROM a WHERE a = 'foobarbaz'
+----
+scan a@a_a_idx
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ └── fd: ()-->(1)
+
+# Simulate truncate on an inverted column to ensure that the optimizer doesn't
+# use stale stats.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 9,
+        "num_range": 0,
+        "upper_bound": "\\x122020310001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 8,
+        "num_range": 0,
+        "upper_bound": "\\x122020320001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x122020330001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "\\x127973200001"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0,
+    "null_count": 0
+  }
+]'
+----
+
+# This explain should have no histogram, since the most recent statistic has no
+# histogram, even though the column in question is inverted and older stats
+# exist with histograms.
+
+opt
+SELECT * FROM a WHERE a = 'foobarbaz'
+----
+scan a@a_a_idx
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ └── fd: ()-->(1)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Table is an interface to a database table, exposing only the information
@@ -196,6 +197,10 @@ type TableStatistic interface {
 	// and it represents the distribution of values for that column.
 	// See HistogramBucket for more details.
 	Histogram() []HistogramBucket
+
+	// HistogramType returns the type that the histogram was created on. For
+	// inverted index histograms, this will always return types.Bytes.
+	HistogramType() *types.T
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note

@@ -3084,3 +3084,59 @@ top-k
       │                <---- 3 -------- 5 ----
       ├── key: (6,7)
       └── fd: ()-->(2,3,5), (6,7)-->(1,4)
+
+# Test that a statistic with a histogram followed in time by a statistic
+# without a histogram does not cause the optimizer to use the old statistic
+# incorrectly just because it has a histogram.
+
+exec-ddl
+CREATE TABLE trunc (x INT PRIMARY KEY)
+----
+
+exec-ddl
+ALTER TABLE trunc INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "40"}
+    ]
+  },
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0,
+    "avg_size": 0
+  }
+]'
+----
+
+# The following explain should have no histogram in it.
+build
+SELECT * FROM trunc WHERE x < 10
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=1]
+ ├── key: (1)
+ └── select
+      ├── columns: x:1(int!null) crdb_internal_mvcc_timestamp:2(decimal) tableoid:3(oid)
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan trunc
+      │    ├── columns: x:1(int!null) crdb_internal_mvcc_timestamp:2(decimal) tableoid:3(oid)
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── x:1 < 10 [type=bool, outer=(1), constraints=(/1: (/NULL - /9]; tight)]
