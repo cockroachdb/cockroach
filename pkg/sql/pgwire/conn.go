@@ -1319,31 +1319,21 @@ func cookTag(
 	return tag
 }
 
-// bufferRow serializes a row and adds it to the buffer.
-//
-// formatCodes describes the desired encoding for each column. It can be nil, in
-// which case all columns are encoded using the text encoding. Otherwise, it
-// needs to contain an entry for every column.
-func (c *conn) bufferRow(
-	ctx context.Context,
-	row tree.Datums,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondatapb.DataConversionConfig,
-	sessionLoc *time.Location,
-	types []*types.T,
-) {
+// bufferRow serializes a row and adds it to the buffer. Depending on the buffer
+// size limit, bufferRow may flush the buffered data to the connection.
+func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
 	for i, col := range row {
 		fmtCode := pgwirebase.FormatText
-		if formatCodes != nil {
-			fmtCode = formatCodes[i]
+		if r.formatCodes != nil {
+			fmtCode = r.formatCodes[i]
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, conv, sessionLoc, types[i])
+			c.msgBuilder.writeTextDatum(ctx, col, r.conv, r.location, r.types[i])
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, sessionLoc, types[i])
+			c.msgBuilder.writeBinaryDatum(ctx, col, r.location, r.types[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
@@ -1351,21 +1341,13 @@ func (c *conn) bufferRow(
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
+	return c.maybeFlush(r.pos, r.bufferingDisabled)
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
-// It is a noop for zero-length batch.
-//
-// formatCodes describes the desired encoding for each column. It can be nil, in
-// which case all columns are encoded using the text encoding. Otherwise, it
-// needs to contain an entry for every column.
-func (c *conn) bufferBatch(
-	ctx context.Context,
-	batch coldata.Batch,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondatapb.DataConversionConfig,
-	sessionLoc *time.Location,
-) {
+// It is a noop for zero-length batch. Depending on the buffer size limit,
+// bufferBatch may flush the buffered data to the connection.
+func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandResult) error {
 	sel := batch.Selection()
 	n := batch.Length()
 	if n > 0 {
@@ -1382,14 +1364,14 @@ func (c *conn) bufferBatch(
 			c.msgBuilder.putInt16(width)
 			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
 				fmtCode := pgwirebase.FormatText
-				if formatCodes != nil {
-					fmtCode = formatCodes[vecIdx]
+				if r.formatCodes != nil {
+					fmtCode = r.formatCodes[vecIdx]
 				}
 				switch fmtCode {
 				case pgwirebase.FormatText:
-					c.msgBuilder.writeTextColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, conv, sessionLoc)
+					c.msgBuilder.writeTextColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, r.conv, r.location)
 				case pgwirebase.FormatBinary:
-					c.msgBuilder.writeBinaryColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, sessionLoc)
+					c.msgBuilder.writeBinaryColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, r.location)
 				default:
 					c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 				}
@@ -1397,8 +1379,12 @@ func (c *conn) bufferBatch(
 			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 			}
+			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
@@ -1604,12 +1590,12 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 }
 
 // maybeFlush flushes the buffer to the network connection if it exceeded
-// sessionArgs.ConnResultsBufferSize.
-func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
-		return false, nil
+// sessionArgs.ConnResultsBufferSize or if buffering is disabled.
+func (c *conn) maybeFlush(pos sql.CmdPos, bufferingDisabled bool) error {
+	if !bufferingDisabled && int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
+		return nil
 	}
-	return true, c.Flush(pos)
+	return c.Flush(pos)
 }
 
 // LockCommunication is part of the ClientComm interface.
