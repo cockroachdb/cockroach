@@ -121,6 +121,7 @@ ElementState:
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
+    isNotVisible: false
     isUnique: true
     sharding: null
     sourceIndexId: 0
@@ -368,6 +369,7 @@ ElementState:
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
+    isNotVisible: false
     isUnique: true
     sharding: null
     sourceIndexId: 0
@@ -627,6 +629,7 @@ ElementState:
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
+    isNotVisible: false
     isUnique: true
     sharding: null
     sourceIndexId: 0

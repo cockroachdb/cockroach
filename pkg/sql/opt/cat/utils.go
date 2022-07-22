@@ -129,7 +129,13 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 	if IsMutationIndex(tab, ord) {
 		mutation = " (mutation)"
 	}
-	child := tp.Childf("%sINDEX %s%s", idxType, idx.Name(), mutation)
+
+	isNotVisible := ""
+	if idx.IsNotVisible() {
+		isNotVisible = " NOT VISIBLE"
+	}
+
+	child := tp.Childf("%sINDEX %s%s%s", idxType, idx.Name(), mutation, isNotVisible)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()

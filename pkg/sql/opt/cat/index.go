@@ -56,6 +56,9 @@ type Index interface {
 	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
 
+	// IsNotVisible returns true if this index is not visible.
+	IsNotVisible() bool
+
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
 	// clause), as well as implicitly added primary key columns. It also contains
