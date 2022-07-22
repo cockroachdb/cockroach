@@ -365,10 +365,6 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
-	// SocketFile, if non-empty, sets up a TLS-free local listener using
-	// a unix datagram socket at the specified path.
-	SocketFile string
-
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
