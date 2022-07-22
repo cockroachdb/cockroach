@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -63,6 +64,74 @@ func TestSafeMessage(t *testing.T) {
 				require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m))
 			}
 		})
+	}
+}
+
+func TestValidateSchemaSelf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	defaultPrivilege := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
+	invalidPrivilege := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
+	invalidPrivilege.Grant(username.TestUserName(), privilege.List{privilege.SELECT}, false)
+
+	tests := []struct {
+		err  string
+		desc descpb.SchemaDescriptor
+	}{
+		{ // 0
+			err:  `empty descriptor name`,
+			desc: descpb.SchemaDescriptor{},
+		},
+		{ // 1
+			err: `invalid schema ID 0`,
+			desc: descpb.SchemaDescriptor{
+				Name: "schema1",
+			},
+		},
+		{ // 2
+			err: `privileges not set`,
+			desc: descpb.SchemaDescriptor{
+				ID:         52,
+				Name:       "schema1",
+				Privileges: nil,
+			},
+		},
+		{ // 3
+			err: `user testuser must not have SELECT privileges on schema "schema1"`,
+			desc: descpb.SchemaDescriptor{
+				ID:         52,
+				ParentID:   51,
+				Name:       "schema1",
+				Privileges: invalidPrivilege,
+			},
+		},
+		{ // 4
+			err: `invalid function ID 0`,
+			desc: descpb.SchemaDescriptor{
+				ID:         52,
+				ParentID:   51,
+				Name:       "schema1",
+				Privileges: defaultPrivilege,
+				Functions: map[string]descpb.SchemaDescriptor_Function{
+					"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: 0}}},
+				},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		var cb nstree.MutableCatalog
+		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelSelfOnly, desc)
+		if err := results.CombinedError(); err == nil {
+			if test.err != "" {
+				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+			}
+		} else if expectedErr != err.Error() {
+			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
+		}
 	}
 }
 
@@ -132,6 +201,23 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				ID: 51,
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
 					"schema1": {ID: 500},
+				},
+			},
+		},
+		{ // 5
+			err: `invalid function 500 in schema "schema1" (52)`,
+			desc: descpb.SchemaDescriptor{
+				ID:       52,
+				ParentID: 51,
+				Name:     "schema1",
+				Functions: map[string]descpb.SchemaDescriptor_Function{
+					"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: 500}}},
+				},
+			},
+			dbDesc: descpb.DatabaseDescriptor{
+				ID: 51,
+				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+					"schema1": {ID: 52},
 				},
 			},
 		},
