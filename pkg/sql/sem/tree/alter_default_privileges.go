@@ -83,6 +83,8 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 		ctx.WriteString("TYPES ")
 	case privilege.Schemas:
 		ctx.WriteString("SCHEMAS ")
+	case privilege.Functions:
+		ctx.WriteString("FUNCTIONS ")
 	}
 	ctx.WriteString("TO ")
 	n.Grantees.Format(ctx)
@@ -117,6 +119,8 @@ func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 		ctx.WriteString("TYPES ")
 	case privilege.Schemas:
 		ctx.WriteString("SCHEMAS ")
+	case privilege.Functions:
+		ctx.WriteString("FUNCTIONS ")
 	}
 	ctx.WriteString(" FROM ")
 	n.Grantees.Format(ctx)
