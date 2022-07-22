@@ -883,6 +883,21 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Full Text Search functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="phraseto_tsquery"></a><code>phraseto_tsquery(config: <a href="string.html">string</a>, text: <a href="string.html">string</a>) &rarr; tsquery</code></td><td><span class="funcdesc"><p>Converts text to a tsquery, normalizing words according to the specified or default configuration. The &lt;-&gt; operator inserted between each token in the input.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="plainto_tsquery"></a><code>plainto_tsquery(config: <a href="string.html">string</a>, text: <a href="string.html">string</a>) &rarr; tsquery</code></td><td><span class="funcdesc"><p>Converts text to a tsquery, normalizing words according to the specified or default configuration. The &amp; operator inserted between each token in the input.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_tsquery"></a><code>to_tsquery(config: <a href="string.html">string</a>, text: <a href="string.html">string</a>) &rarr; tsquery</code></td><td><span class="funcdesc"><p>Converts the input text into a tsquery by normalizing each word in the input according to the specified or default configuration. The input must already be formatted like a tsquery, in other words, subsequent tokens must be connected by a tsquery operator (&amp;, |, &lt;-&gt;, !).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_tsvector"></a><code>to_tsvector(config: <a href="string.html">string</a>, text: <a href="string.html">string</a>) &rarr; tsvector</code></td><td><span class="funcdesc"><p>Converts text to a tsvector, normalizing words according to the specified or default configuration. Position information is included in the result.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### Fuzzy String Matching functions
 
 <table>
