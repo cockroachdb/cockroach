@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -214,41 +212,8 @@ func (*localFileStorage) Close() error {
 	return nil
 }
 
-var _ externalconn.ConnectionDetails = &localFileConnectionDetails{}
-
-type localFileConnectionDetails struct {
-	connectionpb.ConnectionDetails
-}
-
-// ConnectionType implements the external.ConnectionDetails interface.
-func (l *localFileConnectionDetails) ConnectionType() connectionpb.ConnectionType {
-	return connectionpb.TypeStorage
-}
-
-// ConnectionProto implements the external.ConnectionDetails interface.
-func (l *localFileConnectionDetails) ConnectionProto() *connectionpb.ConnectionDetails {
-	return &connectionpb.ConnectionDetails{
-		Details: l.Details,
-	}
-}
-
-func makeLocalFileConnectionDetails(
-	_ context.Context, uri *url.URL,
-) (externalconn.ConnectionDetails, error) {
-	connDetails := connectionpb.ConnectionDetails{
-		Details: &connectionpb.ConnectionDetails_Nodelocal{
-			Nodelocal: &connectionpb.NodelocalConnectionDetails{},
-		},
-	}
-	var err error
-	connDetails.GetNodelocal().Cfg, err = makeLocalFileConfig(uri)
-	return &localFileConnectionDetails{ConnectionDetails: connDetails}, err
-}
-
 func init() {
-	scheme := "nodelocal"
+	const scheme = "nodelocal"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
 		makeLocalFileExternalStorageConf, makeLocalFileStorage, cloud.RedactedParams(), scheme)
-
-	externalconn.RegisterConnectionDetailsFromURIFactory(scheme, makeLocalFileConnectionDetails)
 }

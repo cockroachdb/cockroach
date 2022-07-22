@@ -15,22 +15,35 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/errors"
 )
 
-// implementations maps an ExternalStorageProvider enum value to a constructor
-// of instances of that external storage.
-var implementations = map[string]ConnectionDetailsFromURIFactory{}
+// parseFns maps a URI scheme to a constructor of instances of that external
+// connection.
+var parseFns = map[string]connectionParserFactory{}
+
+// constructFns maps a connectionpb.ConnectionProvider to a constructor of
+// instances of that external connection.
+var constructFns = map[connectionpb.ConnectionProvider]connectionDetailsFactory{}
 
 // RegisterConnectionDetailsFromURIFactory is used by every concrete
 // implementation to register its factory method.
 func RegisterConnectionDetailsFromURIFactory(
-	providerScheme string, factoryFn ConnectionDetailsFromURIFactory,
+	provider connectionpb.ConnectionProvider,
+	providerScheme string,
+	parseFn connectionParserFactory,
+	constructFn connectionDetailsFactory,
 ) {
-	if _, ok := implementations[providerScheme]; ok {
-		panic(fmt.Sprintf("external connection provider already registered for %s", providerScheme))
+	if _, ok := parseFns[providerScheme]; ok {
+		panic(fmt.Sprintf("parse function already registered for %s", providerScheme))
 	}
-	implementations[providerScheme] = factoryFn
+	parseFns[providerScheme] = parseFn
+
+	if _, ok := constructFns[provider]; ok {
+		panic(fmt.Sprintf("construct function already registered for %s", provider.String()))
+	}
+	constructFns[provider] = constructFn
 }
 
 // ConnectionDetailsFromURI returns a ConnectionDetails for the given URI.
@@ -40,11 +53,29 @@ func ConnectionDetailsFromURI(ctx context.Context, uri string) (ConnectionDetail
 		return nil, err
 	}
 
-	// Find the factory method for the ExternalConnection provider.
-	factory, registered := implementations[externalConnectionURI.Scheme]
+	// Find the parseFn method for the ExternalConnection provider.
+	parseFn, registered := parseFns[externalConnectionURI.Scheme]
 	if !registered {
-		return nil, errors.Newf("no factory method found for external connection provider %s", externalConnectionURI.Scheme)
+		return nil, errors.Newf("no parseFn found for external connection provider %s", externalConnectionURI.Scheme)
 	}
 
-	return factory(ctx, externalConnectionURI)
+	conn, err := parseFn(ctx, externalConnectionURI)
+	if err != nil {
+		return nil, err
+	}
+	return MakeConnectionDetails(ctx, conn)
+}
+
+// MakeConnectionDetails constructs a ConnectionDetails from the passed in
+// config.
+func MakeConnectionDetails(
+	ctx context.Context, details connectionpb.ConnectionDetails,
+) (ConnectionDetails, error) {
+	// Find the factory method for the ExternalConnection provider.
+	factory, registered := constructFns[details.Provider]
+	if !registered {
+		return nil, errors.Newf("no factory method found for external connection provider %s", details.Provider.String())
+	}
+
+	return factory(ctx, details), nil
 }

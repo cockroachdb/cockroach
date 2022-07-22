@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "nodelocal",
-    srcs = ["nodelocal_storage.go"],
+    srcs = [
+        "nodelocal_connection.go",
+        "nodelocal_storage.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal",
     visibility = ["//visibility:public"],
     deps = [

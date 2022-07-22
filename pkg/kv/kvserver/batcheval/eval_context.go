@@ -114,10 +114,6 @@ type EvalContext interface {
 	// requests on the range.
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
-	GetExternalStorage(ctx context.Context, dest cloudpb.ExternalStorage) (cloud.ExternalStorage, error)
-	GetExternalStorageFromURI(ctx context.Context, uri string, user username.SQLUsername) (cloud.ExternalStorage,
-		error)
-
 	// RevokeLease stops the replica from using its current lease, if that lease
 	// matches the provided lease sequence. All future calls to leaseStatus on
 	// this node with the current lease will now return a PROSCRIBED status.

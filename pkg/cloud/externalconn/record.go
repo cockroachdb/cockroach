@@ -62,6 +62,44 @@ func NewExternalConnection() *ExternalConnection {
 	}
 }
 
+// externalConnectionNotFoundError is returned from load when the external
+// connection does not exist.
+type externalConnectionNotFoundError struct {
+	connectionName string
+}
+
+// Error makes scheduledJobNotFoundError an error.
+func (e *externalConnectionNotFoundError) Error() string {
+	return fmt.Sprintf("external connection with name %s does not exist", e.connectionName)
+}
+
+// LoadExternalConnection loads an external connection record from the
+// `system.external_connections` table.
+func LoadExternalConnection(
+	ctx context.Context,
+	name string,
+	ex sqlutil.InternalExecutor,
+	user username.SQLUsername,
+	txn *kv.Txn,
+) (*ExternalConnection, error) {
+	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
+		sessiondata.InternalExecutorOverride{User: user},
+		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
+
+	if err != nil {
+		return nil, errors.CombineErrors(err, &externalConnectionNotFoundError{connectionName: name})
+	}
+	if row == nil {
+		return nil, &externalConnectionNotFoundError{connectionName: name}
+	}
+
+	ec := NewExternalConnection()
+	if err := ec.InitFromDatums(row, cols); err != nil {
+		return nil, err
+	}
+	return ec, nil
+}
+
 // SetConnectionName updates the connection name.
 func (e *ExternalConnection) SetConnectionName(name string) {
 	e.rec.ConnectionName = name
@@ -72,6 +110,11 @@ func (e *ExternalConnection) SetConnectionName(name string) {
 func (e *ExternalConnection) SetConnectionType(connectionType string) {
 	e.rec.ConnectionType = connectionType
 	e.markDirty("connection_type")
+}
+
+// ConnectionDetails returns the connection_details.
+func (e *ExternalConnection) ConnectionDetails() *connectionpb.ConnectionDetails {
+	return &e.rec.ConnectionDetails
 }
 
 // SetConnectionDetails updates the connection_details.
@@ -92,6 +135,8 @@ func datumToNative(datum tree.Datum) (interface{}, error) {
 		return string(*d), nil
 	case *tree.DBytes:
 		return []byte(*d), nil
+	case *tree.DTimestamp:
+		return d.Time, nil
 	}
 	return nil, errors.Newf("cannot handle type %T", datum)
 }

@@ -15,6 +15,11 @@ option go_package = "connectionpb";
 import "gogoproto/gogo.proto";
 import "cloud/cloudpb/external_storage.proto";
 
+enum ConnectionProvider {
+  Unknown = 0;
+  nodelocal = 1;
+}
+
 enum ConnectionType {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -23,6 +28,8 @@ enum ConnectionType {
 }
 
 message ConnectionDetails {
+  ConnectionProvider provider = 1;
+
   oneof details {
     NodelocalConnectionDetails nodelocal = 2;
   }

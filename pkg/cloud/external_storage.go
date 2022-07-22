@@ -154,6 +154,8 @@ type ExternalStorageContext struct {
 	BlobClientFactory blobs.BlobClientFactory
 	InternalExecutor  sqlutil.InternalExecutor
 	DB                *kv.DB
+	Options           []ExternalStorageOption
+	Limiters          Limiters
 }
 
 // ExternalStorageOptions holds dependencies and values that can be

@@ -57,29 +57,10 @@ type readAndWriteSettings struct {
 
 var limiterSettings = map[cloudpb.ExternalStorageProvider]readAndWriteSettings{}
 
-// RegisterExternalStorageProvider registers an external storage provider for a
-// given URI scheme and provider type.
-func RegisterExternalStorageProvider(
-	providerType cloudpb.ExternalStorageProvider,
-	parseFn ExternalStorageURIParser,
-	constructFn ExternalStorageConstructor,
-	redactedParams map[string]struct{},
-	schemes ...string,
-) {
-	for _, scheme := range schemes {
-		if _, ok := confParsers[scheme]; ok {
-			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
-		}
-		confParsers[scheme] = parseFn
-		for param := range redactedParams {
-			redactedQueryParams[param] = struct{}{}
-		}
-	}
-	if _, ok := implementations[providerType]; ok {
-		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
-	}
-	implementations[providerType] = constructFn
-
+// registerLimiterSettings registers provider specific settings that allow
+// limiting the number of bytes read/written to the provider specific
+// ExternalStorage.
+func registerLimiterSettings(providerType cloudpb.ExternalStorageProvider) {
 	sinkName := strings.ToLower(providerType.String())
 	if sinkName == "null" {
 		sinkName = "nullsink" // keep the settings name pieces free of reserved keywords.
@@ -111,6 +92,37 @@ func RegisterExternalStorageProvider(
 				0, settings.NonNegativeInt,
 			),
 		},
+	}
+}
+
+// RegisterExternalStorageProvider registers an external storage provider for a
+// given URI scheme and provider type.
+func RegisterExternalStorageProvider(
+	providerType cloudpb.ExternalStorageProvider,
+	parseFn ExternalStorageURIParser,
+	constructFn ExternalStorageConstructor,
+	redactedParams map[string]struct{},
+	schemes ...string,
+) {
+	for _, scheme := range schemes {
+		if _, ok := confParsers[scheme]; ok {
+			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
+		}
+		confParsers[scheme] = parseFn
+		for param := range redactedParams {
+			redactedQueryParams[param] = struct{}{}
+		}
+	}
+	if _, ok := implementations[providerType]; ok {
+		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
+	}
+	implementations[providerType] = constructFn
+
+	// We do not register limiter settings for the `external` provider. An
+	// external connection object represents an underlying external resource that
+	// will have its own registered limiters.
+	if providerType != cloudpb.ExternalStorageProvider_external {
+		registerLimiterSettings(providerType)
 	}
 }
 
@@ -202,6 +214,8 @@ func MakeExternalStorage(
 		BlobClientFactory: blobClientFactory,
 		InternalExecutor:  ie,
 		DB:                kvDB,
+		Options:           opts,
+		Limiters:          limiters,
 	}
 	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
@@ -215,6 +229,14 @@ func MakeExternalStorage(
 		if err != nil {
 			return nil, err
 		}
+
+		// We do not wrap the ExternalStorage for the `external` provider. An
+		// external connection object represents an underlying external resource
+		// that will have its own `esWrapper`.
+		if dest.Provider == cloudpb.ExternalStorageProvider_external {
+			return e, nil
+		}
+
 		return &esWrapper{
 			ExternalStorage: e,
 			lim:             limiters[dest.Provider],
