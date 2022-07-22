@@ -143,7 +143,7 @@ CREATE INDEX ON a((a + (((1,'a')::b).a)))
 statement error value type tuple{int AS a, e AS e} cannot be used for table columns
 CREATE VIEW v AS SELECT (1,'a')::b
 
-statement error cannot modify table record type
+statement error cannot modify table record type "b"
 CREATE VIEW v AS SELECT ((1,'a')::b).a
 
 # Test parsing/casting of record types from string literals.
