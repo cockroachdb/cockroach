@@ -228,6 +228,10 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 // This is called when the DropBehavior is DropCascade.
 func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
 	for _, dependent := range seqDesc.DependedOnBy {
+		if err := p.maybeFailOnDroppingFunction(ctx, dependent.ID); err != nil {
+			return err
+		}
+
 		tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, dependent.ID,
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
