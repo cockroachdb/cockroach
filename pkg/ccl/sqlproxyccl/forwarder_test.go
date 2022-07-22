@@ -438,7 +438,11 @@ func TestWrapClientToServerError(t *testing.T) {
 		// Forwarding errors.
 		{errors.New("foo"), newErrorf(
 			codeClientDisconnected,
-			"copying from client to target server: foo",
+			"unexpected error copying from client to target server: foo",
+		)},
+		{errors.Mark(errors.New("some write error"), errClientWrite), newErrorf(
+			codeClientWriteFailed,
+			"unable to write to client: some write error",
 		)},
 	} {
 		err := wrapClientToServerError(tc.input)
@@ -466,7 +470,11 @@ func TestWrapServerToClientError(t *testing.T) {
 		// Forwarding errors.
 		{errors.New("foo"), newErrorf(
 			codeBackendDisconnected,
-			"copying from target server to client: foo",
+			"unexpected error copying from target server to client: foo",
+		)},
+		{errors.Mark(errors.New("some read error"), errServerRead), newErrorf(
+			codeBackendReadFailed,
+			"unable to read from sql server: some read error",
 		)},
 	} {
 		err := wrapServerToClientError(tc.input)
