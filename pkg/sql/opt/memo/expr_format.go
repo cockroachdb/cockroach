@@ -672,6 +672,50 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			n.Child(f.Buffer.String())
 		}
+	case *CreateFunctionExpr:
+		// Arguments.
+		if len(t.Args) > 0 {
+			f.Buffer.Reset()
+			f.Buffer.WriteString("arguments:")
+			for _, arg := range t.Args {
+				fmt.Fprintf(f.Buffer, " %s", arg.Type.SQLString())
+			}
+			tp.Child(f.Buffer.String())
+		}
+		// Return type.
+		f.Buffer.Reset()
+		f.Buffer.WriteString("return_type: ")
+		if t.ReturnType.IsSet {
+			f.Buffer.WriteString("setof ")
+		}
+		f.Buffer.WriteString(t.ReturnType.Type.SQLString())
+		tp.Child(f.Buffer.String())
+		// Function body.
+		tp.Child(string(t.Body))
+		// Dependencies.
+		if len(t.Deps) == 0 {
+			return
+		}
+		n := tp.Child("dependencies")
+		for _, dep := range t.Deps {
+			f.Buffer.Reset()
+			name := dep.DataSource.Name()
+			f.Buffer.WriteString(name.String())
+			if dep.SpecificIndex {
+				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
+			}
+			colNames, isTable := dep.GetColumnNames()
+			if len(colNames) > 0 {
+				fmt.Fprintf(f.Buffer, " [columns:")
+				for _, colName := range colNames {
+					fmt.Fprintf(f.Buffer, " %s", colName)
+				}
+				fmt.Fprintf(f.Buffer, "]")
+			} else if isTable {
+				fmt.Fprintf(f.Buffer, " [no columns]")
+			}
+			n.Child(f.Buffer.String())
+		}
 
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())

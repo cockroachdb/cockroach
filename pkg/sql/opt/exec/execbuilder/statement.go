@@ -74,6 +74,23 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 	return execPlan{root: root}, err
 }
 
+func (b *Builder) buildCreateFunction(cf *memo.CreateFunctionExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	schema := md.Schema(cf.Schema)
+	root, err := b.factory.ConstructCreateFunction(
+		schema,
+		cf.FunctionName,
+		cf.Replace,
+		cf.Args,
+		cf.ReturnType,
+		cf.Options,
+		cf.Body,
+		cf.Deps,
+		cf.TypeDeps,
+	)
+	return execPlan{root: root}, err
+}
+
 func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	fmtFlags := memo.ExprFmtHideAll
 	switch {

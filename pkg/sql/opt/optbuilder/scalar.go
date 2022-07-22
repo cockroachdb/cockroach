@@ -555,7 +555,7 @@ func (b *Builder) buildFunction(
 	}
 
 	// Add a dependency on sequences that are used as a string argument.
-	if b.trackViewDeps {
+	if b.trackSchemaDeps {
 		seqIdentifier, err := seqexpr.GetSequenceFromFunc(f, builtinsregistry.GetBuiltinProperties)
 		if err != nil {
 			panic(err)
@@ -564,7 +564,7 @@ func (b *Builder) buildFunction(
 			var ds cat.DataSource
 			if seqIdentifier.IsByID() {
 				flags := cat.Flags{
-					AvoidDescriptorCaches: b.insideViewDef,
+					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef,
 				}
 				ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(seqIdentifier.SeqID))
 				if err != nil {
@@ -574,7 +574,7 @@ func (b *Builder) buildFunction(
 				tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
 				ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
 			}
-			b.viewDeps = append(b.viewDeps, opt.ViewDep{
+			b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 				DataSource: ds,
 			})
 		}
