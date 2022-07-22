@@ -32,7 +32,7 @@ go_library(
 
 go_test(
     name = "gc_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "data_distribution_test.go",
         "gc_iterator_test.go",
