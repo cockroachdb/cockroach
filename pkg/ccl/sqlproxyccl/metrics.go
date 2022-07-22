@@ -229,9 +229,9 @@ func (metrics *metrics) updateForError(err error) {
 		switch codeErr.code {
 		case codeExpiredClientConnection:
 			metrics.ExpiredClientConnCount.Inc(1)
-		case codeBackendDisconnected:
+		case codeBackendDisconnected, codeBackendReadFailed, codeBackendWriteFailed:
 			metrics.BackendDisconnectCount.Inc(1)
-		case codeClientDisconnected:
+		case codeClientDisconnected, codeClientWriteFailed, codeClientReadFailed:
 			metrics.ClientDisconnectCount.Inc(1)
 		case codeProxyRefusedConnection:
 			metrics.RefusedConnCount.Inc(1)
