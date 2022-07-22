@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/errors"
 )
 
 // Constraint is used to constrain a lookup join. There are two types of
@@ -154,6 +153,12 @@ func (b *ConstraintBuilder) Build(
 
 	allFilters := append(onFilters, optionalFilters...)
 
+	// isOptionalFilter returns true if the given ordinal of a filter in
+	// allFilters originated from optionalFilters.
+	isOptionalFilter := func(ord int) bool {
+		return ord >= len(onFilters)
+	}
+
 	// Check if the first column in the index either:
 	//
 	//   1. Has an equality constraint.
@@ -182,39 +187,18 @@ func (b *ConstraintBuilder) Build(
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
-	foundEqualityCols := false
-	lookupExprRequired := false
+	foundNonConstEqualityCols := false
+	var lastMultiValIndexColOrd, lastMultiValAllIdx int
 
-	// addEqualityColumns adds the given columns as an equality in keyCols if
-	// lookupExprRequired is false. Otherwise, the equality is added as an
-	// expression in lookupExpr. In both cases, rightCol is added to
-	// rightSideCols so the caller of Build can determine if the right equality
-	// columns form a key.
-	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
-		if !lookupExprRequired {
-			keyCols = append(keyCols, leftCol)
-		} else {
-			lookupExpr = append(lookupExpr, b.constructColEquality(leftCol, rightCol))
-		}
+	// addEqualityColumns adds the given columns as an equality in keyCols and
+	// rightSideCols. It also sets foundNonConstEqualityCols to true if
+	// constant=false.
+	addEqualityColumns := func(leftCol, rightCol opt.ColumnID, constant bool) {
+		keyCols = append(keyCols, leftCol)
 		rightSideCols = append(rightSideCols, rightCol)
-	}
-
-	// convertToLookupExpr converts previously collected keyCols and
-	// rightSideCols to equality expressions in lookupExpr. It is used when it
-	// is discovered that a lookup expression is required to build a constraint,
-	// and keyCols and rightSideCols have already been collected. After building
-	// expressions, keyCols is reset to nil.
-	convertToLookupExpr := func() {
-		if lookupExprRequired {
-			// Return early if we've already converted the key columns to a
-			// lookup expression.
-			return
+		if !constant {
+			foundNonConstEqualityCols = true
 		}
-		lookupExprRequired = true
-		for i := range keyCols {
-			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
-		}
-		keyCols = nil
 	}
 
 	// All the lookup conditions must apply to the prefix of the index and so
@@ -222,9 +206,8 @@ func (b *ConstraintBuilder) Build(
 	for j := 0; j < numIndexKeyCols; j++ {
 		idxCol := b.table.IndexColumnID(index, j)
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			addEqualityColumns(leftEq[eqIdx], idxCol)
+			addEqualityColumns(leftEq[eqIdx], idxCol, false /* constant */)
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
-			foundEqualityCols = true
 			continue
 		}
 
@@ -249,8 +232,7 @@ func (b *ConstraintBuilder) Build(
 			// in rightEq to corresponding columns in leftEq.
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
-			addEqualityColumns(compEqCol, idxCol)
-			foundEqualityCols = true
+			addEqualityColumns(compEqCol, idxCol, false /* constant */)
 			continue
 		}
 
@@ -273,7 +255,7 @@ func (b *ConstraintBuilder) Build(
 				constColID,
 			))
 			constFilters = append(constFilters, allFilters[allIdx])
-			addEqualityColumns(constColID, idxCol)
+			addEqualityColumns(constColID, idxCol, true /* constant */)
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
@@ -281,10 +263,6 @@ func (b *ConstraintBuilder) Build(
 		// If multiple constant values were found, we must use a lookup
 		// expression.
 		if ok {
-			// Convert previously collected keyCols and rightSideCols to
-			// expressions in lookupExpr and clear keyCols.
-			convertToLookupExpr()
-
 			valsFilter := allFilters[allIdx]
 			if !isCanonicalFilter(valsFilter) {
 				// Disable normalization rules when constructing the lookup
@@ -297,16 +275,29 @@ func (b *ConstraintBuilder) Build(
 			lookupExpr = append(lookupExpr, valsFilter)
 			constFilters = append(constFilters, valsFilter)
 			filterOrdsToExclude.Add(allIdx)
+
+			// If the values were found in an optional filter then we do not
+			// want to use these values to constrain the last column in the
+			// constraint. They will only increase the number of lookup spans
+			// without making the constraint more selective. We keep track of
+			// the position of the expressions within lookupExpr so that we can
+			// recognize this case after the loop, and we keep track of allIdx
+			// so that after the loop we can remove it from filterOrdsToExclude.
+			lastMultiValIndexColOrd = j
+			lastMultiValAllIdx = allIdx
+
 			continue
 		}
 
 		// If constant values were not found, try to find a filter that
 		// constrains this index column to a range.
 		if allIdx, foundRange := b.findJoinFilterRange(allFilters, idxCol); foundRange {
-			// Convert previously collected keyCols and rightSideCols to
-			// expressions in lookupExpr and clear keyCols.
-			convertToLookupExpr()
-
+			// If the range was found in an optional filter then the range
+			// filter will not make a lookup more selective, so there is no need
+			// to use it in the constraint.
+			if isOptionalFilter(allIdx) {
+				break
+			}
 			lookupExpr = append(lookupExpr, allFilters[allIdx])
 			constFilters = append(constFilters, allFilters[allIdx])
 			filterOrdsToExclude.Add(allIdx)
@@ -318,14 +309,31 @@ func (b *ConstraintBuilder) Build(
 		break
 	}
 
-	// Lookup join constraints that contain no equality columns (e.g., a lookup
-	// expression x=1) are not useful.
-	if !foundEqualityCols {
+	// Lookup join constraints that do not contain non-constant equality columns
+	// (e.g., a lookup expression x=1) are not useful.
+	if !foundNonConstEqualityCols {
 		return Constraint{}
 	}
 
-	if len(keyCols) > 0 && len(lookupExpr) > 0 {
-		panic(errors.AssertionFailedf("expected lookup constraint to have either KeyCols or LookupExpr, not both"))
+	// Remove the last expression in lookupExpr if it constrains the column to
+	// multiple values and it was derived from an optional filter. Also remove
+	// the corresponding constant filter from constFilters and the origin filter
+	// index from filterOrdsToRemove.
+	numConstrainedIndexCols := len(keyCols) + len(lookupExpr)
+	lastConstrainedColIsMultiVal := lastMultiValIndexColOrd == numConstrainedIndexCols-1
+	if lookupExpr != nil && lastConstrainedColIsMultiVal && isOptionalFilter(lastMultiValAllIdx) {
+		lookupExpr = lookupExpr[:len(lookupExpr)-1]
+		constFilters = constFilters[:len(constFilters)-1]
+		filterOrdsToExclude.Remove(lastMultiValAllIdx)
+	}
+
+	// If a lookup expression is required, convert the equality columns to
+	// equalities in the lookup expression.
+	if len(lookupExpr) > 0 {
+		for i := range keyCols {
+			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
+		}
+		keyCols = nil
 	}
 
 	c := Constraint{
