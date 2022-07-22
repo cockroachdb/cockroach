@@ -433,7 +433,7 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.InternalMetrics.GuardrailMetrics,
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
-		&s.SQLServer.ServerMetrics.OutliersMetrics,
+		&s.SQLServer.ServerMetrics.InsightsMetrics,
 	}
 }
 

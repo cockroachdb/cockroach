@@ -75,7 +75,7 @@ crdb_internal  lost_descriptors_with_data       table  NULL  NULL  NULL
 crdb_internal  node_build_info                  table  NULL  NULL  NULL
 crdb_internal  node_contention_events           table  NULL  NULL  NULL
 crdb_internal  node_distsql_flows               table  NULL  NULL  NULL
-crdb_internal  node_execution_outliers          table  NULL  NULL  NULL
+crdb_internal  node_execution_insights          table  NULL  NULL  NULL
 crdb_internal  node_inflight_trace_spans        table  NULL  NULL  NULL
 crdb_internal  node_metrics                     table  NULL  NULL  NULL
 crdb_internal  node_queries                     table  NULL  NULL  NULL

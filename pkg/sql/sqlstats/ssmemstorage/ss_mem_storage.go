@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -120,7 +120,7 @@ type Container struct {
 	mon       *mon.BytesMonitor
 
 	knobs            *sqlstats.TestingKnobs
-	outliersRegistry outliers.Registry
+	outliersRegistry insights.Registry
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -135,7 +135,7 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	outliersRegistry outliers.Registry,
+	outliersRegistry insights.Registry,
 ) *Container {
 	s := &Container{
 		st:                         st,

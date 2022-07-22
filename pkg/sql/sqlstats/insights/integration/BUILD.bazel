@@ -3,14 +3,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "integration_test",
-    srcs = ["outliers_test.go"],
+    srcs = ["insights_test.go"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
-        "//pkg/sql/sqlstats/outliers",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",

@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.sql.outliers;
-option go_package = "outliers";
+package cockroach.sql.insights;
+option go_package = "insights";
 
 import "gogoproto/gogo.proto";
 
@@ -35,7 +35,7 @@ message Statement {
   double latency_in_seconds = 3;
 }
 
-message Outlier {
+message Insight {
   Session session = 1;
   Transaction transaction = 2;
   Statement statement = 3;

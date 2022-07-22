@@ -4,14 +4,14 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "outliers",
+    name = "insights",
     srcs = [
         "detector.go",
-        "outliers.go",
+        "insights.go",
         "registry.go",
     ],
-    embed = [":outliers_go_proto"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
+    embed = [":insights_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
@@ -28,12 +28,12 @@ go_library(
 )
 
 go_test(
-    name = "outliers_test",
+    name = "insights_test",
     srcs = [
         "detector_test.go",
         "registry_test.go",
     ],
-    embed = [":outliers"],
+    embed = [":insights"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -44,18 +44,18 @@ go_test(
 )
 
 proto_library(
-    name = "outliers_proto",
-    srcs = ["outliers.proto"],
+    name = "insights_proto",
+    srcs = ["insights.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
-    name = "outliers_go_proto",
+    name = "insights_go_proto",
     compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
-    proto = ":outliers_proto",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",
+    proto = ":insights_proto",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/uuid",  # keep
