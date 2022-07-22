@@ -143,47 +143,76 @@ SELECT nextval(105:::REGCLASS);`,
 	// Test drop/rename behavior in legacy schema changer.
 	tDB.Exec(t, "SET use_declarative_schema_changer = off")
 
-	_, err = sqlDB.Exec("DROP SEQUENCE sq1")
-	require.Equal(t, "pq: cannot drop sequence sq1 because other objects depend on it", err.Error())
+	testCases := []struct {
+		stmt        string
+		expectedErr string
+	}{
+		{
+			stmt:        "DROP SEQUENCE sq1",
+			expectedErr: "pq: cannot drop sequence sq1 because other objects depend on it",
+		},
+		{
+			stmt:        "DROP SEQUENCE sq1 CASCADE",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER SEQUENCE sq1 RENAME TO sq1_new",
+			expectedErr: "",
+		},
+		{
+			stmt:        "DROP TABLE t",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "DROP TABLE t CASCADE",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t RENAME TO t_new",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t SET SCHEMA test_sc",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t DROP COLUMN b",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t DROP COLUMN b CASCADE",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t RENAME COLUMN b TO bb",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER TABLE t ALTER COLUMN b TYPE STRING",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "DROP INDEX t@t_idx_b",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "DROP INDEX t@t_idx_b CASCADE",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+		{
+			stmt:        "ALTER INDEX t@t_idx_b RENAME TO t_idx_b_new",
+			expectedErr: "pq: unimplemented: drop function not supported",
+		},
+	}
 
-	_, err = sqlDB.Exec("DROP SEQUENCE sq1 CASCADE")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER SEQUENCE sq1 RENAME TO sq1_new")
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec("DROP TABLE t")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("DROP TABLE t CASCADE")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t RENAME TO t_new")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t SET SCHEMA test_sc")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t DROP COLUMN b")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t DROP COLUMN b CASCADE")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t RENAME COLUMN b TO bb")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER TABLE t ALTER COLUMN b TYPE STRING")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("DROP INDEX t@t_idx_b")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("DROP INDEX t@t_idx_b CASCADE")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
-
-	_, err = sqlDB.Exec("ALTER INDEX t@t_idx_b RENAME TO t_idx_b_new")
-	require.Equal(t, "pq: unimplemented: drop function not supported", err.Error())
+	for _, tc := range testCases {
+		_, err = sqlDB.Exec(tc.stmt)
+		if tc.expectedErr == "" {
+			require.NoError(t, err)
+			continue
+		}
+		require.Equal(t, tc.expectedErr, err.Error())
+	}
 
 	// Test drop/rename behavior in declarative schema changer.
 	tDB.Exec(t, "SET use_declarative_schema_changer = on")
