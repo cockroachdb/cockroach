@@ -729,7 +729,7 @@ ALTER TABLE t62289 INJECT STATISTICS e'[
         "upper_bound": "0102000020E61000000300000005D8E086BB6365C03F9E5737DD1A53C0C04ECDED673B55C06711C00C7C0240C0B8EABD96072856404A9D2C529FC74EC0"
       }
     ],
-    "histo_col_type": "GEOGRAPHY",
+    "histo_col_type": "BYTES",
     "name": "__auto__",
     "null_count": 0,
     "row_count": 0

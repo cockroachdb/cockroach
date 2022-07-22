@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -656,48 +657,35 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				cols.Add(tabID.ColumnID(stat.ColumnOrdinal(i)))
 			}
 
-			if colStat, ok := stats.ColStats.Add(cols); ok {
+			needHistogram := cols.Len() == 1 && stat.Histogram() != nil &&
+				sb.evalCtx.SessionData().OptimizerUseHistograms
+			invertedStatistic := false
+			var invertedColOrds []int
+			if needHistogram {
+				invertedColOrds = invertedIndexCols[stat.ColumnOrdinal(0)]
+				invertedStatistic = len(invertedColOrds) > 0 && stat.HistogramType().Family() == types.BytesFamily
+			}
+
+			colStat, ok := stats.ColStats.Add(cols)
+			if ok || (colStat.Histogram == nil && needHistogram && !invertedStatistic) {
+				// Set the statistic if either:
+				// 1. We have no statistic for the current col set at all
+				// 2. The most recent statistic we already found for the current colset
+				//    had no histogram even though we're configured to use histograms,
+				//    and the statistic we just found has a (non-inverted) histogram.
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
 				colStat.AvgSize = float64(stat.AvgSize())
-				if cols.Len() == 1 && stat.Histogram() != nil &&
-					sb.evalCtx.SessionData().OptimizerUseHistograms {
-					col, _ := cols.Next(0)
-
-					// If this column is invertable, the histogram describes the inverted index
-					// entries, and we need to create a new stat for it, and not apply a histogram
-					// to the source column.
-					invertedColOrds := invertedIndexCols[stat.ColumnOrdinal(0)]
-					if len(invertedColOrds) == 0 {
-						colStat.Histogram = &props.Histogram{}
-						colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
-					} else {
-						for _, invertedColOrd := range invertedColOrds {
-							invCol := tabID.ColumnID(invertedColOrd)
-							invCols := opt.MakeColSet(invCol)
-							if invColStat, ok := stats.ColStats.Add(invCols); ok {
-								invColStat.Histogram = &props.Histogram{}
-								invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
-								// Set inverted entry counts from the histogram. Make sure the
-								// distinct count is at least 1, for the same reason as the row
-								// count above.
-								invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
-								// Inverted indexes don't have nulls.
-								invColStat.NullCount = 0
-								if stat.AvgSize() == 0 {
-									invColStat.AvgSize = defaultColSize
-								} else {
-									invColStat.AvgSize = float64(stat.AvgSize())
-								}
-							}
-						}
-					}
+				if needHistogram && !invertedStatistic {
+					// A statistic is inverted if the column is invertible and its
+					// histogram contains buckets of types BYTES.
+					// NOTE: this leaves an ambiguity which would surface if we ever
+					// permitted an inverted index on BYTES-type columns. A deeper fix
+					// is tracked here: https://github.com/cockroachdb/cockroach/issues/50655
+					col := cols.SingleColumn()
+					colStat.Histogram = &props.Histogram{}
+					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
 				}
-
-				// Fetch the colStat again since it may now have a different address due
-				// to calling stats.ColStats.Add() on any inverted column statistics
-				// created above.
-				colStat, _ = stats.ColStats.Lookup(cols)
 
 				// Make sure the distinct count is at least 1, for the same reason as
 				// the row count above.
@@ -707,6 +695,29 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				// were added at different times (and therefore have a different row
 				// count).
 				sb.finalizeFromRowCountAndDistinctCounts(colStat, stats)
+			}
+
+			// Add inverted histograms if necessary.
+			if needHistogram && invertedStatistic {
+				for _, invertedColOrd := range invertedColOrds {
+					invCol := tabID.ColumnID(invertedColOrd)
+					invCols := opt.MakeColSet(invCol)
+					if invColStat, ok := stats.ColStats.Add(invCols); ok {
+						invColStat.Histogram = &props.Histogram{}
+						invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
+						// Set inverted entry counts from the histogram. Make sure the
+						// distinct count is at least 1, for the same reason as the row
+						// count above.
+						invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
+						// Inverted indexes don't have nulls.
+						invColStat.NullCount = 0
+						if stat.AvgSize() == 0 {
+							invColStat.AvgSize = defaultColSize
+						} else {
+							invColStat.AvgSize = float64(stat.AvgSize())
+						}
+					}
+				}
 			}
 		}
 	}
@@ -919,6 +930,23 @@ func (sb *statisticsBuilder) constrainScan(
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, scan, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
+}
+
+// histogramIsNonBytes returns true if the input histogram is for a type that
+// isn't BytesFamily.
+func histogramIsNonBytes(hist []cat.HistogramBucket) bool {
+	for i := range hist {
+		bound := hist[i].UpperBound
+		switch bound.ResolvedType().Family() {
+		case types.UnknownFamily:
+			continue
+		case types.BytesFamily:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
