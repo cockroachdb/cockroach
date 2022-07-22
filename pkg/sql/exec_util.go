@@ -1520,14 +1520,13 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
-	// OnStatisticsError is a hook that takes in an error if gathering statistics
-	// generates an error.
-	OnStatisticsError func(err error)
-	// MockDescriptorVersionDuringDelete is a version to mock the delete descriptor
+	// ReturnStatsError causes stats errors to be returned instead of logged as warnings.
+	ReturnStatsError bool
+	// MockTableDescriptorVersionDuringDelete is a version to mock the table descriptor
 	// as during delete.
-	MockDescriptorVersionDuringDelete *descpb.DescriptorVersion
-	// OnDeleteLoopStart is a hook that executes before the loop for TTL deletes begin.
-	OnDeleteLoopStart func() error
+	MockTableDescriptorVersionDuringDelete *descpb.DescriptorVersion
+	// PreSelectDeleteStatement runs before the start of the TTL select-delete loop
+	PreSelectDeleteStatement string
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
