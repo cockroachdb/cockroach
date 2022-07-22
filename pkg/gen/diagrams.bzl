@@ -101,6 +101,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:drop_constraint.html",
   "//docs/generated/sql/bnf:drop_database.html",
   "//docs/generated/sql/bnf:drop_ddl.html",
+  "//docs/generated/sql/bnf:drop_external_connection.html",
   "//docs/generated/sql/bnf:drop_index.html",
   "//docs/generated/sql/bnf:drop_owned_by.html",
   "//docs/generated/sql/bnf:drop_role.html",
