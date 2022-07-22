@@ -1407,11 +1407,29 @@ enum ExternalStorageProvider {
   reserved 6;
   userfile = 7;
   null = 8;
+  external = 9;
 }
 
+// LocalFileConfig is the ExternalStorage configuration for the `nodelocal`
+// provider.
 message LocalFileConfig {
   string path = 1;
   uint32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+}
+
+// ExternalConnectionConfig is the ExternalStorage configuration for the
+// `external` provider.
+message ExternalConnectionConfig {
+  // Name identifies the External Connection object.
+  string name = 1;
+  // User interacting with the external storage. This is used to check access
+  // privileges of the external connection object.
+  string user = 2;
+
+  // Path will be appended to the endpoint of the resource represented by the
+  // external connection object. It is used to access subdirectories/buckets of
+  // the external resource.
+  string path = 3;
 }
 
 message ExternalStorage {
@@ -1501,6 +1519,7 @@ message ExternalStorage {
   Azure AzureConfig = 6;
   reserved 7;
   FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
+  ExternalConnectionConfig external_connection_config = 9 [(gogoproto.nullable) = false];
 }
 
 // RetryTracingEvent is the trace recording used to track retries.
