@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as sinon from "sinon";
-
 import Analytics from "analytics-node";
 import { Location, createLocation, createHashHistory } from "history";
 import _ from "lodash";
@@ -21,8 +19,6 @@ import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 import * as protos from "src/js/protos";
-
-const sandbox = sinon.createSandbox();
 
 describe("analytics listener", function () {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
@@ -45,11 +41,10 @@ describe("analytics listener", function () {
   describe("page method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
-    let pageSpy: sinon.SinonSpy;
+    const pageSpy = jest.fn();
 
     beforeEach(function () {
       store = createAdminUIStore(createHashHistory());
-      pageSpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
@@ -59,7 +54,7 @@ describe("analytics listener", function () {
     });
 
     afterEach(() => {
-      sandbox.reset();
+      pageSpy.mockRestore();
     });
 
     it("does nothing if cluster info is not available", function () {
@@ -69,7 +64,7 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      expect(pageSpy.notCalled).toBe(true);
+      expect(pageSpy).not.toHaveBeenCalled();
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
@@ -80,7 +75,7 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      expect(pageSpy.notCalled).toBe(true);
+      expect(pageSpy).not.toHaveBeenCalled();
     });
 
     it("correctly calls segment on a page call", function () {
@@ -91,8 +86,8 @@ describe("analytics listener", function () {
         pathname: "/test/path",
       } as Location);
 
-      expect(pageSpy.calledOnce).toBe(true);
-      expect(pageSpy.args[0][0]).toEqual({
+      expect(pageSpy).toHaveBeenCalledTimes(1);
+      expect(pageSpy.mock.lastCall[0]).toEqual({
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -110,14 +105,14 @@ describe("analytics listener", function () {
       } as Location);
 
       setClusterData(store);
-      expect(pageSpy.notCalled).toBe(true);
+      expect(pageSpy).not.toHaveBeenCalled();
 
       sync.page({
         pathname: "/test/path/2",
       } as Location);
 
-      expect(pageSpy.callCount).toBe(2);
-      expect(pageSpy.args[0][0]).toEqual({
+      expect(pageSpy.mock.calls.length).toBe(2);
+      expect(pageSpy.mock.calls[0][0]).toEqual({
         userId: clusterID,
         name: "/test/path",
         properties: {
@@ -125,7 +120,7 @@ describe("analytics listener", function () {
           search: "",
         },
       });
-      expect(pageSpy.args[1][0]).toEqual({
+      expect(pageSpy.mock.calls[1][0]).toEqual({
         userId: clusterID,
         name: "/test/path/2",
         properties: {
@@ -148,8 +143,8 @@ describe("analytics listener", function () {
         pathname: "/test/username/path",
       } as Location);
 
-      expect(pageSpy.calledOnce).toBe(true);
-      expect(pageSpy.args[0][0]).toEqual({
+      expect(pageSpy).toHaveBeenCalledTimes(1);
+      expect(pageSpy.mock.lastCall[0]).toEqual({
         userId: clusterID,
         name: "/test/[redacted]/path",
         properties: {
@@ -223,9 +218,9 @@ describe("analytics listener", function () {
 
         sync.page(createLocation(input));
 
-        expect(pageSpy.calledOnce).toBe(true);
+        expect(pageSpy).toHaveBeenCalledTimes(1);
 
-        const actualArgs = pageSpy.args[0][0];
+        const actualArgs = pageSpy.mock.lastCall[0];
         const expectedArgs = {
           userId: clusterID,
           name: expectedLocation.pathname,
@@ -242,11 +237,10 @@ describe("analytics listener", function () {
   describe("identify method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
-    let identifySpy: sinon.SinonSpy;
+    const identifySpy = jest.fn();
 
     beforeEach(function () {
       store = createAdminUIStore(createHashHistory());
-      identifySpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
@@ -256,7 +250,7 @@ describe("analytics listener", function () {
     });
 
     afterEach(() => {
-      sandbox.reset();
+      identifySpy.mockReset();
     });
 
     const setVersionData = function () {
@@ -277,7 +271,7 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      expect(identifySpy.notCalled).toBe(true);
+      expect(identifySpy).not.toHaveBeenCalled();
     });
 
     it("does nothing if version info is not available", function () {
@@ -286,7 +280,7 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      expect(identifySpy.notCalled).toBe(true);
+      expect(identifySpy).not.toHaveBeenCalled();
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
@@ -296,20 +290,20 @@ describe("analytics listener", function () {
 
       sync.identify();
 
-      expect(identifySpy.notCalled).toBe(true);
+      expect(identifySpy).not.toHaveBeenCalled();
     });
 
     it("sends the correct value of clusterID, version and enterprise", function () {
       setVersionData();
 
       _.each([false, true], enterpriseSetting => {
-        sandbox.reset();
+        identifySpy.mockReset();
         setClusterData(store, true, enterpriseSetting);
         const sync = new AnalyticsSync(analytics, store, []);
         sync.identify();
 
-        expect(identifySpy.calledOnce).toBe(true);
-        expect(identifySpy.args[0][0]).toEqual({
+        expect(identifySpy).toHaveBeenCalledTimes(1);
+        expect(identifySpy.mock.lastCall[0]).toEqual({
           userId: clusterID,
           traits: {
             version: "0.1",
@@ -328,18 +322,16 @@ describe("analytics listener", function () {
       sync.identify();
       sync.identify();
 
-      expect(identifySpy.calledOnce).toBe(true);
+      expect(identifySpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("track method", function () {
     const store: Store<AdminUIState> = createAdminUIStore(createHashHistory());
     let analytics: Analytics;
-    let trackSpy: sinon.SinonSpy;
+    const trackSpy = jest.fn();
 
     beforeEach(() => {
-      trackSpy = sandbox.spy();
-
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
       analytics = {
@@ -348,7 +340,7 @@ describe("analytics listener", function () {
     });
 
     afterEach(() => {
-      sandbox.reset();
+      trackSpy.mockReset();
     });
 
     it("does nothing if cluster info is not available", () => {
@@ -358,7 +350,7 @@ describe("analytics listener", function () {
         event: "test",
       });
 
-      expect(trackSpy.notCalled).toBe(true);
+      expect(trackSpy).not.toHaveBeenCalled();
     });
 
     it("add userId to track calls using the cluster_id", () => {
@@ -376,9 +368,9 @@ describe("analytics listener", function () {
         },
         event: "test",
       };
-      const message = trackSpy.args[0][0];
+      const message = trackSpy.mock.lastCall[0];
 
-      expect(trackSpy.calledOnce).toBe(true);
+      expect(trackSpy).toHaveBeenCalledTimes(1);
       expect(message).toEqual(expected);
     });
 
@@ -404,9 +396,9 @@ describe("analytics listener", function () {
         },
         event: "test",
       };
-      const message = trackSpy.args[0][0];
+      const message = trackSpy.mock.lastCall[0];
 
-      expect(trackSpy.calledOnce).toBe(true);
+      expect(trackSpy).toHaveBeenCalledTimes(1);
       expect(message).toEqual(expected);
     });
   });
