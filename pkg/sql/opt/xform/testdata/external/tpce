@@ -4024,9 +4024,10 @@ project
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,8,27,30,31,45-50), (47)==(31), (8)==(45), (45)==(8), (31)==(47)
- │    ├── inner-join (hash)
+ │    ├── inner-join (merge)
  │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
- │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── left ordering: +45
+ │    │    ├── right ordering: +8
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (31)==(47), (47)==(31), (8)==(45), (45)==(8)
  │    │    ├── limit hint: 1.00
@@ -4040,6 +4041,7 @@ project
  │    │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │    ├── key: (45,48)
  │    │    │    ├── fd: ()-->(27,30,31,46,47), (45,48)-->(49,50), (31)==(47), (47)==(31)
+ │    │    │    ├── ordering: +45 opt(27,30,31,46,47) [actual: +45]
  │    │    │    ├── project
  │    │    │    │    ├── columns: "lookup_join_const_col_@46":54!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -4061,8 +4063,7 @@ project
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(1,8)
- │    │    └── filters
- │    │         └── cr_c_tier:45 = c_tier:8 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
+ │    │    └── filters (true)
  │    └── 1
  └── projections
       └── commission_rate.cr_rate:50::FLOAT8 [as=cr_rate:53, outer=(50), immutable]

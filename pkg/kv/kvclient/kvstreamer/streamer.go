@@ -51,6 +51,9 @@ const (
 	// space for the results at the front of the line. This would occur when the
 	// budget limitBytes is reached and the size estimates that lead to too much
 	// concurrency in the execution were wrong.
+	//
+	// When there are multiple results associated with a given request, they are
+	// sorted in lookup order for that request (though not globally).
 	InOrder
 	// OutOfOrder is the mode of operation in which the results are delivered in
 	// the order in which they're produced. The caller will use the keys field
@@ -424,7 +427,12 @@ func (s *Streamer) Init(
 // The Streamer takes over the given requests, will perform the memory
 // accounting against its budget and might modify the requests in place.
 //
-// In InOrder operation mode, responses will be delivered in reqs order.
+// In InOrder operation mode, responses will be delivered in reqs order. When
+// more than one row is returned for a given request, the rows for that request
+// will be sorted in the order of the lookup index if the index contains only
+// ascending columns.
+// TODO(drewk): lift the restriction that index columns must be ASC in order to
+//  return results in lookup order.
 //
 // It is the caller's responsibility to ensure that the memory footprint of reqs
 // (i.e. roachpb.Spans inside of the requests) is reasonable. Enqueue will
