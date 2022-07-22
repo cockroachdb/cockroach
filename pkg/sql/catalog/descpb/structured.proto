@@ -18,6 +18,7 @@ import "util/hlc/timestamp.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/index.proto";
+import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
@@ -1485,7 +1486,125 @@ message SchemaDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
 
-  // Next field is 12.
+  // FunctionOverload represent a UDF signature and its descriptor ID.
+  message FunctionOverload {
+    option (gogoproto.equal) = true;
+
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+
+    repeated sql.sem.types.T arg_types = 2;
+
+    optional sql.sem.types.T return_type = 3;
+
+    optional bool return_set = 4 [(gogoproto.nullable) = false];
+  }
+
+  // Function contains a group of UDFs with the same name.
+  message Function {
+    option (gogoproto.equal) = true;
+    optional string name = 1 [(gogoproto.nullable) = false];
+    repeated FunctionOverload overloads = 2 [(gogoproto.nullable) = false];
+  }
+
+  // functions contains all UDFs created in this schema.
+  map<string, Function> functions = 13 [(gogoproto.nullable) = false];
+
+  // Next field is 14.
+}
+
+// FunctionDescriptor represent a User Defined Function (UDF).
+message FunctionDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  message Argument {
+    option (gogoproto.equal) = true;
+    optional cockroach.sql.catalog.catpb.Function.Arg.Class class = 1 [(gogoproto.nullable) = false];
+    optional string name = 2 [(gogoproto.nullable) = false];
+    optional sql.sem.types.T type = 3;
+    optional string default_expr = 4;
+  }
+
+  message ReturnType {
+    option (gogoproto.equal) = true;
+    optional sql.sem.types.T type = 1;
+    // Whether it is returning a set of values
+    optional bool return_set = 2 [(gogoproto.nullable) = false];
+  }
+
+  message Reference {
+    option (gogoproto.equal) = true;
+    // The ID of the relation that depends on this function.
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // If applicable, IDs of the inbound reference table's index.
+    repeated uint32 index_ids = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexIDs", (gogoproto.casttype) = "IndexID"];
+    // If applicable, IDs of the inbound reference table's column.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+    // If applicable, IDs of the inbound reference table's constraint.
+    repeated uint32 constraint_ids = 4 [(gogoproto.customname) = "ConstraintIDs",
+      (gogoproto.casttype) = "ConstraintID"];
+  }
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  // parent_id represents the ID of the database that this type resides in.
+  optional uint32 parent_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+  // parent_schema_id represents the ID of the schema that this type resides in.
+  optional uint32 parent_schema_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+
+  // args represents the list of arguments of the UDF signature.
+  repeated Argument args = 5 [(gogoproto.nullable) = false];
+
+  // return_type represents the return type of the UDF signature.
+  optional ReturnType return_type = 6 [(gogoproto.nullable) = false];
+
+  // lang represent the language of the function body.
+  optional cockroach.sql.catalog.catpb.Function.Language lang = 7 [(gogoproto.nullable) = false];
+
+  // function_body contains all statements/expression in specified languages in one string.
+  // SQL statements in this string are rewritten with fully qualified table names.
+  optional string function_body = 8 [(gogoproto.nullable) = false];
+
+  optional cockroach.sql.catalog.catpb.Function.Volatility volatility = 9 [(gogoproto.nullable) = false];
+  optional bool leak_proof = 10 [(gogoproto.nullable) = false];
+
+  // null_input_behavior indicates executor behavior on this UDF when called with `NULL` inputs.
+  optional cockroach.sql.catalog.catpb.Function.NullInputBehavior null_input_behavior = 11 [(gogoproto.nullable) = false];
+
+  optional PrivilegeDescriptor privileges = 12;
+
+  // The IDs of all relations that this function depends on.
+  // For example, in function body, there is a `SELECT` on table `t`, then table
+  // `t`'s descriptor id will be in this list.
+  repeated uint32 depends_on = 13 [(gogoproto.casttype) = "ID"];
+
+  // The IDs of all user defined types that this depends on.
+  // For example, in function's signature, a user defined enum `t` is used as an
+  // argument type, then type `T`'s descriptor id will be in this list.
+  repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
+
+  // All references to this UDF.
+  repeated Reference depended_on_by = 15 [(gogoproto.nullable) = false];
+
+  optional DescriptorState state = 16 [(gogoproto.nullable) = false];
+  optional string offline_reason = 17 [(gogoproto.nullable) = false];
+  optional uint32 version = 18 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional util.hlc.Timestamp modification_time = 19 [(gogoproto.nullable) = false];
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 20;
+
+  // Next field id is 21
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,
@@ -1497,5 +1616,6 @@ message Descriptor {
     DatabaseDescriptor database = 2;
     TypeDescriptor type = 3;
     SchemaDescriptor schema = 4;
+    FunctionDescriptor function = 5;
   }
 }

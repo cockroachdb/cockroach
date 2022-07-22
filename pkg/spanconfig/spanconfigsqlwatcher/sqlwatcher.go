@@ -218,7 +218,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			return
 		}
 
-		table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, ev.Value.Timestamp)
+		table, database, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, ev.Value.Timestamp)
 
 		var id descpb.ID
 		var descType catalog.DescriptorType
@@ -235,6 +235,9 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		case schema != nil:
 			id = schema.GetID()
 			descType = catalog.Schema
+		case function != nil:
+			id = function.GetID()
+			descType = catalog.Function
 		default:
 			logcrash.ReportOrPanic(ctx, &s.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
 		}
