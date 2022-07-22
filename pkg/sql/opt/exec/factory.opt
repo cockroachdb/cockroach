@@ -615,8 +615,8 @@ define CreateView {
     Materialized bool
     ViewQuery string
     Columns colinfo.ResultColumns
-    deps opt.ViewDeps
-    typeDeps opt.ViewTypeDeps
+    deps opt.SchemaDeps
+    typeDeps opt.SchemaTypeDeps
     withData bool
 }
 
@@ -750,4 +750,17 @@ define AlterRangeRelocate {
     subjectReplicas tree.RelocateSubject
     toStoreID tree.TypedExpr
     fromStoreID tree.TypedExpr
+}
+
+# CreateFunction implements CREATE FUNCTION.
+define CreateFunction {
+    Schema cat.Schema
+    FuncName *tree.FunctionName
+    Replace bool
+    FuncArgs tree.FuncArgs
+    ReturnType tree.FuncReturnType
+    Options tree.FunctionOptions
+    Body tree.FunctionBodyStr
+    Deps opt.SchemaDeps
+    TypeDeps opt.SchemaTypeDeps
 }

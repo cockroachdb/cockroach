@@ -280,12 +280,12 @@ func (b *Builder) buildView(
 		b.skipSelectPrivilegeChecks = true
 		defer func() { b.skipSelectPrivilegeChecks = false }()
 	}
-	trackDeps := b.trackViewDeps
+	trackDeps := b.trackSchemaDeps
 	if trackDeps {
 		// We are only interested in the direct dependency on this view descriptor.
 		// Any further dependency by the view's query should not be tracked.
-		b.trackViewDeps = false
-		defer func() { b.trackViewDeps = true }()
+		b.trackSchemaDeps = false
+		defer func() { b.trackSchemaDeps = true }()
 	}
 
 	// We don't want the view to be able to refer to any outer scopes in the
@@ -309,11 +309,11 @@ func (b *Builder) buildView(
 	}
 
 	if trackDeps && !view.IsSystemView() {
-		dep := opt.ViewDep{DataSource: view}
+		dep := opt.SchemaDep{DataSource: view}
 		for i := range outScope.cols {
 			dep.ColumnOrdinals.Add(i)
 		}
-		b.viewDeps = append(b.viewDeps, dep)
+		b.schemaDeps = append(b.schemaDeps, dep)
 	}
 
 	return outScope
@@ -620,8 +620,8 @@ func (b *Builder) buildScan(
 		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
 	}
 
-	if b.trackViewDeps {
-		dep := opt.ViewDep{DataSource: tab}
+	if b.trackSchemaDeps {
+		dep := opt.SchemaDep{DataSource: tab}
 		dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
 		// We will track the ColumnID to Ord mapping so Ords can be added
 		// when a column is referenced.
@@ -632,7 +632,7 @@ func (b *Builder) buildScan(
 			dep.SpecificIndex = true
 			dep.Index = private.Flags.Index
 		}
-		b.viewDeps = append(b.viewDeps, dep)
+		b.schemaDeps = append(b.schemaDeps, dep)
 	}
 	return outScope
 }
@@ -650,10 +650,10 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// track view deps here, or else a view depending on a table with a
 	// column that is a UDT will result in a type dependency being added
 	// between the view and the UDT, even if the view does not use that column.
-	if b.trackViewDeps {
-		b.trackViewDeps = false
+	if b.trackSchemaDeps {
+		b.trackSchemaDeps = false
 		defer func() {
-			b.trackViewDeps = true
+			b.trackSchemaDeps = true
 		}()
 	}
 	tab := tabMeta.Table
@@ -729,10 +729,10 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	// on a table with a computed column of a UDT will result in a
 	// type dependency being added between the view and the UDT,
 	// even if the view does not use that column.
-	if b.trackViewDeps {
-		b.trackViewDeps = false
+	if b.trackSchemaDeps {
+		b.trackSchemaDeps = false
 		defer func() {
-			b.trackViewDeps = true
+			b.trackSchemaDeps = true
 		}()
 	}
 	var tableScope *scope
@@ -802,8 +802,8 @@ func (b *Builder) buildSequenceSelect(
 	}
 	outScope.expr = b.factory.ConstructSequenceSelect(&private)
 
-	if b.trackViewDeps {
-		b.viewDeps = append(b.viewDeps, opt.ViewDep{DataSource: seq})
+	if b.trackSchemaDeps {
+		b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{DataSource: seq})
 	}
 	return outScope
 }

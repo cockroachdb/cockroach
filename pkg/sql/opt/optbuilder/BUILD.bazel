@@ -8,6 +8,7 @@ go_library(
         "alter_table.go",
         "arbiter_set.go",
         "builder.go",
+        "create_function.go",
         "create_table.go",
         "create_view.go",
         "delete.go",

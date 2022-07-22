@@ -1782,8 +1782,8 @@ func (ef *execFactory) ConstructCreateView(
 	materialized bool,
 	viewQuery string,
 	columns colinfo.ResultColumns,
-	deps opt.ViewDeps,
-	typeDeps opt.ViewTypeDeps,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
 	withData bool,
 ) (exec.Node, error) {
 
@@ -1795,11 +1795,74 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
+	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	if err != nil {
+		return nil, err
+	}
+
+	return &createViewNode{
+		viewName:     viewName,
+		ifNotExists:  ifNotExists,
+		replace:      replace,
+		materialized: materialized,
+		persistence:  persistence,
+		viewQuery:    viewQuery,
+		dbDesc:       schema.(*optSchema).database,
+		columns:      columns,
+		planDeps:     planDeps,
+		typeDeps:     typeDepSet,
+		withData:     withData,
+	}, nil
+}
+
+// ConstructCreateFunction is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateFunction(
+	schema cat.Schema,
+	funcName *tree.FunctionName,
+	replace bool,
+	funArgs tree.FuncArgs,
+	returnType tree.FuncReturnType,
+	options tree.FunctionOptions,
+	body tree.FunctionBodyStr,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+) (exec.Node, error) {
+
+	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
+		ef.planner.ExecCfg(),
+		"CREATE FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
+	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	if err != nil {
+		return nil, err
+	}
+
+	return &createFunctionNode{
+		funcName:   funcName,
+		replace:    replace,
+		args:       funArgs,
+		returnType: returnType,
+		options:    options,
+		funcBody:   body,
+		dbDesc:     schema.(*optSchema).database,
+		scDesc:     schema.(*optSchema).schema,
+		planDeps:   planDeps,
+		typeDeps:   typeDepSet,
+	}, nil
+}
+
+func toPlanDependencies(
+	deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+) (planDependencies, typeDependencies, error) {
 	planDeps := make(planDependencies, len(deps))
 	for _, d := range deps {
 		desc, err := getDescForDataSource(d.DataSource)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var ref descpb.TableDescriptor_Reference
 		if d.SpecificIndex {
@@ -1823,19 +1886,7 @@ func (ef *execFactory) ConstructCreateView(
 		typeDepSet[descpb.ID(id)] = struct{}{}
 	})
 
-	return &createViewNode{
-		viewName:     viewName,
-		ifNotExists:  ifNotExists,
-		replace:      replace,
-		materialized: materialized,
-		persistence:  persistence,
-		viewQuery:    viewQuery,
-		dbDesc:       schema.(*optSchema).database,
-		columns:      columns,
-		planDeps:     planDeps,
-		typeDeps:     typeDepSet,
-		withData:     withData,
-	}, nil
+	return planDeps, typeDepSet, nil
 }
 
 // ConstructSequenceSelect is part of the exec.Factory interface.
