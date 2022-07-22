@@ -858,6 +858,7 @@ type FunctionDescriptor interface {
 	// GetDependsOnTypes returns a list of IDs of the types this function depends on.
 	GetDependsOnTypes() []descpb.ID
 
+	// GetDependedOnBy returns a list of back-references of this function.
 	GetDependedOnBy() []descpb.FunctionDescriptor_Reference
 }
 

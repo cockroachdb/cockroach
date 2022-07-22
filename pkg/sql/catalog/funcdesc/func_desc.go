@@ -44,7 +44,7 @@ type immutable struct {
 // Mutable represents a mutable function descriptor.
 type Mutable struct {
 	immutable
-	ClusterVersion *immutable
+	clusterVersion *immutable
 }
 
 // NewMutableFunctionDescriptor is a mutable function descriptor constructor
@@ -249,12 +249,12 @@ func (desc *immutable) ValidateCrossReferences(
 
 func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescriptor) error {
 	// Check that parent Schema contains the matching function signature.
-	if ok, _ := scDesc.GetFunction(desc.GetName()); !ok {
+	if _, ok := scDesc.GetFunction(desc.GetName()); !ok {
 		return errors.AssertionFailedf("function does not exist in schema %q (%d)",
 			scDesc.GetName(), scDesc.GetID())
 	}
 
-	_, function := scDesc.GetFunction(desc.GetName())
+	function, _ := scDesc.GetFunction(desc.GetName())
 	for _, overload := range function.Overloads {
 		// TODO (Chengxiong) maybe a overkill, but we could also validate function
 		// signature matches.
@@ -336,13 +336,13 @@ func (desc *immutable) SkipNamespace() bool {
 
 // IsUncommittedVersion implements the catalog.LeasableDescriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
-	return desc.IsNew() || desc.ClusterVersion.GetVersion() != desc.GetVersion()
+	return desc.IsNew() || desc.clusterVersion.GetVersion() != desc.GetVersion()
 }
 
 // MaybeIncrementVersion implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.clusterVersion == nil || desc.Version == desc.clusterVersion.Version+1 {
 		return
 	}
 	desc.Version++
@@ -351,26 +351,26 @@ func (desc *Mutable) MaybeIncrementVersion() {
 
 // OriginalName implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) OriginalName() string {
-	if desc.ClusterVersion == nil {
+	if desc.clusterVersion == nil {
 		return ""
 	}
-	return desc.ClusterVersion.Name
+	return desc.clusterVersion.Name
 }
 
 // OriginalID implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) OriginalID() descpb.ID {
-	if desc.ClusterVersion == nil {
+	if desc.clusterVersion == nil {
 		return descpb.InvalidID
 	}
-	return desc.ClusterVersion.ID
+	return desc.clusterVersion.ID
 }
 
 // OriginalVersion implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
-	if desc.ClusterVersion == nil {
+	if desc.clusterVersion == nil {
 		return 0
 	}
-	return desc.ClusterVersion.Version
+	return desc.clusterVersion.Version
 }
 
 // ImmutableCopy implements the catalog.MutableDescriptor interface.
@@ -380,7 +380,7 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 
 // IsNew implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) IsNew() bool {
-	return desc.ClusterVersion == nil
+	return desc.clusterVersion == nil
 }
 
 // SetPublic implements the catalog.MutableDescriptor interface.
