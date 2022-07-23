@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -527,18 +528,18 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		convFunc       func(string) string
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
+		{sessionSetting: "enable_zigzag_join", clusterSetting: clustermode.ZigzagJoinClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_histograms", clusterSetting: clustermode.OptUseHistogramsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: clustermode.OptUseMultiColStatsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: clustermode.LocalityOptimizedSearchMode, convFunc: boolToOnOff},
 		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
 		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
 		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
 		{sessionSetting: "default_transaction_quality_of_service"},
-		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
-		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
+		{sessionSetting: "distsql", clusterSetting: clustermode.DistSQLClusterExecMode, convFunc: distsqlConv},
+		{sessionSetting: "vectorize", clusterSetting: clustermode.VectorizeClusterMode, convFunc: vectorizeConv},
 	}
 
 	for _, s := range relevantSettings {
