@@ -232,7 +232,7 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			}
 			defer func() { _ = iter.Close() }()
-			for k, v := iter.SeekGE(nil, false); k != nil; k, v = iter.Next() {
+			for k, v := iter.SeekGE(nil, sstable.SeekGEFlags(0)); k != nil; k, v = iter.Next() {
 				if err := iter.Error(); err != nil {
 					return err
 				}
