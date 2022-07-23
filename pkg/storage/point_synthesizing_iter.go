@@ -102,6 +102,12 @@ type pointSynthesizingIter struct {
 	// TODO(erikgrinaker): This could instead check for prefix iterators, or a
 	// separate SeekPrefixGE() method, but we don't currently have APIs for it.
 	emitOnSeekGE bool
+
+	// iterValid is true if the underlying iterator is valid.
+	iterValid bool
+
+	// iterErr contains the error from the underlying iterator, if any.
+	iterErr error
 }
 
 var _ MVCCIterator = new(pointSynthesizingIter)
@@ -139,10 +145,19 @@ func (i *pointSynthesizingIter) release() {
 	pointSynthesizingIterPool.Put(i)
 }
 
+// updateValid updates i.iterValid and i.iterErr based on the underlying
+// iterator position, and returns them.
+func (i *pointSynthesizingIter) updateValid() (bool, error) {
+	i.iterValid, i.iterErr = i.iter.Valid()
+	return i.iterValid, i.iterErr
+}
+
 // updateRangeKeys updates i.rangeKeys and related fields with range keys from
 // the underlying iterator. rangeKeysIdx is reset to the first/last range key.
 func (i *pointSynthesizingIter) updateRangeKeys() {
-	if _, hasRange := i.iter.HasPointAndRange(); hasRange {
+	if !i.iterValid {
+		i.clearRangeKeys()
+	} else if _, hasRange := i.iter.HasPointAndRange(); hasRange {
 		i.rangeKeysPos = append(i.rangeKeysPos[:0], i.iter.UnsafeKey().Key...)
 		if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
 			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
@@ -152,15 +167,13 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 				i.rangeKeys = append(i.rangeKeys, rk.Clone())
 			}
 		}
-	} else if len(i.rangeKeys) != 0 {
-		i.rangeKeys = i.rangeKeys[:0]
-		i.rangeKeysPos = i.rangeKeysPos[:0]
-		i.rangeKeysStart = i.rangeKeysStart[:0]
-	}
-	if !i.reverse {
-		i.rangeKeysIdx = 0
+		if !i.reverse {
+			i.rangeKeysIdx = 0
+		} else {
+			i.rangeKeysIdx = len(i.rangeKeys) - 1 // NB: -1 is correct with no range keys
+		}
 	} else {
-		i.rangeKeysIdx = len(i.rangeKeys) - 1 // NB: -1 is correct with no range keys
+		i.clearRangeKeys()
 	}
 }
 
@@ -183,7 +196,9 @@ func (i *pointSynthesizingIter) clearRangeKeys() {
 // iterator is positioned on the real point key in the underlying iterator.
 // Requires i.rangeKeys to have been positioned first.
 func (i *pointSynthesizingIter) updateAtPoint() {
-	if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
+	if !i.iterValid {
+		i.atPoint = false
+	} else if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
 		i.atPoint = false
 	} else if len(i.rangeKeys) == 0 {
 		i.atPoint = true
@@ -203,7 +218,11 @@ func (i *pointSynthesizingIter) updateAtPoint() {
 // underlying iterator. This may step the underlying iterator to position it
 // correctly relative to bare range keys.
 func (i *pointSynthesizingIter) updatePosition() {
-	if hasPoint, hasRange := i.iter.HasPointAndRange(); !hasRange {
+	if !i.iterValid {
+		i.atPoint = false
+		i.clearRangeKeys()
+
+	} else if hasPoint, hasRange := i.iter.HasPointAndRange(); !hasRange {
 		// Fast path: no range keys, so just clear range keys and bail out.
 		i.atPoint = hasPoint
 		i.clearRangeKeys()
@@ -216,6 +235,9 @@ func (i *pointSynthesizingIter) updatePosition() {
 		i.updateRangeKeys()
 		if hasRange && !hasPoint {
 			i.iter.Next()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 		i.updateAtPoint()
 
@@ -225,6 +247,9 @@ func (i *pointSynthesizingIter) updatePosition() {
 		// then we skip over the bare range key to avoid duplicates.
 		if hasRange && !hasPoint && i.iter.UnsafeKey().Key.Equal(i.rangeKeysPos) {
 			i.iter.Prev()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 		i.updateRangeKeys()
 		i.updateAtPoint()
@@ -235,6 +260,10 @@ func (i *pointSynthesizingIter) updatePosition() {
 func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 	i.reverse = false
 	i.iter.SeekGE(seekKey)
+	if ok, _ := i.updateValid(); !ok {
+		i.updatePosition()
+		return
+	}
 
 	// Fast path: no range key, so just reset the iterator and bail out.
 	hasPoint, hasRange := i.iter.HasPointAndRange()
@@ -266,15 +295,22 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 		!i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
 		i.iter.Next()
 
-		if seekKey.Timestamp.IsSet() {
-			ok, err := i.iter.Valid()
-			if err == nil && (!ok || !seekKey.Key.Equal(i.iter.UnsafeKey().Key)) {
-				i.iter.Prev()
+		if ok, err := i.updateValid(); err != nil {
+			return
+		} else if seekKey.Timestamp.IsSet() && (!ok || !seekKey.Key.Equal(i.iter.UnsafeKey().Key)) {
+			i.iter.Prev()
+			if ok, err = i.updateValid(); err != nil {
+				return
+			} else if ok {
 				if hasP, _ := i.iter.HasPointAndRange(); hasP && seekKey.Key.Equal(i.iter.UnsafeKey().Key) {
 					i.updateRangeKeys()
 					positioned = true
 				}
-				i.iter.Next()
+			}
+			i.iter.Next()
+			if ok, _ = i.updateValid(); !ok {
+				i.updatePosition()
+				return
 			}
 		}
 		hasPoint, hasRange = i.iter.HasPointAndRange()
@@ -289,6 +325,9 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 		// start/seek key in order to interleave it.
 		if hasRange && !hasPoint {
 			i.iter.Next()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 	}
 
@@ -312,6 +351,10 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 func (i *pointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
 	i.reverse = false
 	i.iter.SeekIntentGE(seekKey, txnUUID)
+	if ok, _ := i.updateValid(); !ok {
+		i.updatePosition()
+		return
+	}
 
 	// Fast path: no range key, so just reset the iterator and bail out.
 	hasPoint, hasRange := i.iter.HasPointAndRange()
@@ -338,18 +381,27 @@ func (i *pointSynthesizingIter) Next() {
 		i.reverse = false
 		if !i.atPoint && len(i.rangeKeys) == 0 { // iterator was exhausted
 			i.iter.Next()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 			i.updatePosition()
 			return
 		} else if i.atPoint {
 			i.rangeKeysIdx++
 		} else {
 			i.iter.Next()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 	}
 
 	// Step off the current point, either real or synthetic.
 	if i.atPoint {
 		i.iter.Next()
+		if _, err := i.updateValid(); err != nil {
+			return
+		}
 	} else {
 		i.rangeKeysIdx++
 	}
@@ -373,11 +425,17 @@ func (i *pointSynthesizingIter) NextKey() {
 		i.reverse = false
 		if !i.atPoint {
 			i.iter.Next()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 	}
 	// Don't call NextKey() if the underlying iterator is already on the next key.
 	if i.atPoint || i.rangeKeysPos.Equal(i.iter.UnsafeKey().Key) {
 		i.iter.NextKey()
+		if _, err := i.updateValid(); err != nil {
+			return
+		}
 	}
 	i.updatePosition()
 }
@@ -386,6 +444,10 @@ func (i *pointSynthesizingIter) NextKey() {
 func (i *pointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 	i.reverse = true
 	i.iter.SeekLT(seekKey)
+	if ok, _ := i.updateValid(); !ok {
+		i.updatePosition()
+		return
+	}
 
 	// Fast path: no range key, so just reset the iterator and bail out.
 	hasPoint, hasRange := i.iter.HasPointAndRange()
@@ -407,11 +469,19 @@ func (i *pointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 		(!hasPoint || !i.iter.UnsafeKey().Key.Equal(seekKey.Key)) &&
 		seekKey.Key.Compare(i.iter.RangeBounds().EndKey) < 0 {
 		i.iter.Next()
-		if hasP, _ := i.iter.HasPointAndRange(); hasP && i.iter.UnsafeKey().Key.Equal(seekKey.Key) {
-			i.updateRangeKeys()
-			positioned = true
+		if ok, err := i.updateValid(); err != nil {
+			return
+		} else if ok {
+			if hasP, _ := i.iter.HasPointAndRange(); hasP && i.iter.UnsafeKey().Key.Equal(seekKey.Key) {
+				i.updateRangeKeys()
+				positioned = true
+			}
 		}
 		i.iter.Prev()
+		if ok, _ := i.updateValid(); !ok {
+			i.updatePosition()
+			return
+		}
 	}
 
 	if !positioned {
@@ -441,18 +511,27 @@ func (i *pointSynthesizingIter) Prev() {
 		i.reverse = true
 		if !i.atPoint && len(i.rangeKeys) == 0 { // iterator was exhausted
 			i.iter.Prev()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 			i.updatePosition()
 			return
 		} else if i.atPoint {
 			i.rangeKeysIdx--
 		} else {
 			i.iter.Prev()
+			if _, err := i.updateValid(); err != nil {
+				return
+			}
 		}
 	}
 
 	// Step off the current point key (real or synthetic).
 	if i.atPoint {
 		i.iter.Prev()
+		if _, err := i.updateValid(); err != nil {
+			return
+		}
 	} else {
 		i.rangeKeysIdx--
 	}
@@ -473,10 +552,10 @@ func (i *pointSynthesizingIter) Valid() (bool, error) {
 			panic(err)
 		}
 	}
-	if !i.atPoint && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < len(i.rangeKeys) {
+	if i.iterErr == nil && !i.atPoint && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < len(i.rangeKeys) {
 		return true, nil // on synthetic point key
 	}
-	return i.iter.Valid()
+	return i.iterValid, i.iterErr
 }
 
 // Key implements MVCCIterator.
@@ -540,8 +619,7 @@ func (i *pointSynthesizingIter) ValueProto(msg protoutil.Message) error {
 
 // HasPointAndRange implements MVCCIterator.
 func (i *pointSynthesizingIter) HasPointAndRange() (bool, bool) {
-	ok, err := i.Valid()
-	return ok && err == nil, false
+	return true, false
 }
 
 // RangeBounds implements MVCCIterator.
