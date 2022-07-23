@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -191,7 +191,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 		mode := sessiondatapb.DistSQLOff
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
+		clustermode.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
 		// Disable automatic stats - they can interfere with the test shutdown.
 		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	}

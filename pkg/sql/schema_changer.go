@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -2525,11 +2526,11 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			// pre-evaluated).
 			Database:      "",
 			UserProto:     username.NodeUserName().EncodeProto(),
-			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
+			VectorizeMode: sessiondatapb.VectorizeExecMode(clustermode.VectorizeClusterMode.Get(sv)),
 			Internal:      true,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
+			DistSQLMode: sessiondatapb.DistSQLExecMode(clustermode.DistSQLClusterExecMode.Get(sv)),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -510,7 +511,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().DistSQLMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+			return sessiondatapb.DistSQLExecMode(clustermode.DistSQLClusterExecMode.Get(sv)).String()
 		},
 	},
 
@@ -551,7 +552,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().ExperimentalDistSQLPlanningMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.ExperimentalDistSQLPlanningMode(experimentalDistSQLPlanningClusterMode.Get(sv)).String()
+			return sessiondatapb.ExperimentalDistSQLPlanningMode(clustermode.ExperimentalDistSQLPlanningClusterMode.Get(sv)).String()
 		},
 	},
 
@@ -587,7 +588,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ZigzagJoinEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(zigzagJoinClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.ZigzagJoinClusterMode.Get(sv))
 		},
 	},
 
@@ -629,7 +630,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().RequireExplicitPrimaryKeys), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(requireExplicitPrimaryKeysClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.RequireExplicitPrimaryKeysClusterMode.Get(sv))
 		},
 	},
 
@@ -649,7 +650,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondatapb.VectorizeExecMode(
-				VectorizeClusterMode.Get(sv)).String()
+				clustermode.VectorizeClusterMode.Get(sv)).String()
 		},
 	},
 
@@ -725,7 +726,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseHistograms), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(optUseHistogramsClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.OptUseHistogramsClusterMode.Get(sv))
 		},
 	},
 
@@ -744,7 +745,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMultiColStats), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(optUseMultiColStatsClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.OptUseMultiColStatsClusterMode.Get(sv))
 		},
 	},
 
@@ -763,7 +764,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().LocalityOptimizedSearch), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(localityOptimizedSearchMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.LocalityOptimizedSearchMode.Get(sv))
 		},
 	},
 
@@ -782,7 +783,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ImplicitSelectForUpdate), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(implicitSelectForUpdateClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.ImplicitSelectForUpdateClusterMode.Get(sv))
 		},
 	},
 
@@ -801,7 +802,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().InsertFastPath), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(insertFastPathClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.InsertFastPathClusterMode.Get(sv))
 		},
 	},
 
@@ -821,7 +822,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondatapb.SerialNormalizationMode(
-				SerialNormalizationMode.Get(sv)).String()
+				clustermode.SerialNormalizationMode.Get(sv)).String()
 		},
 	},
 
@@ -976,7 +977,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return clusterLockTimeout.String(sv)
+			return clustermode.ClusterLockTimeout.String(sv)
 		},
 	},
 
@@ -1299,7 +1300,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return clusterStatementTimeout.String(sv)
+			return clustermode.ClusterStatementTimeout.String(sv)
 		},
 	},
 
@@ -1311,7 +1312,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return clusterIdleInSessionTimeout.String(sv)
+			return clustermode.ClusterIdleInSessionTimeout.String(sv)
 		},
 	},
 
@@ -1323,7 +1324,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return clusterIdleInTransactionSessionTimeout.String(sv)
+			return clustermode.ClusterIdleInTransactionSessionTimeout.String(sv)
 		},
 	},
 
@@ -1452,7 +1453,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().TempTablesEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(temporaryTablesEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.TemporaryTablesEnabledClusterMode.Get(sv))
 		},
 	},
 
@@ -1471,7 +1472,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PlacementEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(placementEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.PlacementEnabledClusterMode.Get(sv))
 		},
 	},
 
@@ -1490,7 +1491,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AutoRehomingEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(autoRehomingEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.AutoRehomingEnabledClusterMode.Get(sv))
 		},
 	},
 
@@ -1509,7 +1510,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OnUpdateRehomeRowEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(onUpdateRehomeRowEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.OnUpdateRehomeRowEnabledClusterMode.Get(sv))
 		},
 	},
 
@@ -1528,7 +1529,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ImplicitColumnPartitioningEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(implicitColumnPartitioningEnabledClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.ImplicitColumnPartitioningEnabledClusterMode.Get(sv))
 		},
 	},
 
@@ -1553,7 +1554,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OverrideMultiRegionZoneConfigEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(overrideMultiRegionZoneConfigClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.OverrideMultiRegionZoneConfigClusterMode.Get(sv))
 		},
 	},
 
@@ -1597,7 +1598,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AlterColumnTypeGeneralEnabled), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(experimentalAlterColumnTypeGeneralMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.ExperimentalAlterColumnTypeGeneralMode.Get(sv))
 		},
 	},
 
@@ -1617,7 +1618,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableUniqueWithoutIndexConstraints), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(experimentalUniqueWithoutIndexConstraintsMode.Get(sv))
+			return formatBoolAsPostgresSetting(clustermode.ExperimentalUniqueWithoutIndexConstraintsMode.Get(sv))
 		},
 	},
 

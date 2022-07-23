@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -158,7 +158,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		for _, server := range tc.Servers {
 			st := server.ClusterSettings()
 			st.Manual.Store(true)
-			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondatapb.DistSQLOff))
+			clustermode.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondatapb.DistSQLOff))
 		}
 
 		sqlDB := tc.Conns[0]

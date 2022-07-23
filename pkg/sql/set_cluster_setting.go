@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -270,7 +271,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			break
 		}
 		sqltelemetry.ReportJoinReorderLimit(int(val))
-	case VectorizeClusterSettingName:
+	case clustermode.VectorizeClusterSettingName:
 		val, err := strconv.Atoi(expectedEncodedValue)
 		if err != nil {
 			break
