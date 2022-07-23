@@ -137,6 +137,10 @@ type Collection struct {
 
 var _ catalog.Accessor = (*Collection)(nil)
 
+// ImplementsDescsCollection is to enable the declaration of the interface
+// txnbase.DescsCollection.
+func (tc *Collection) ImplementsDescsCollection() {}
+
 // MaybeUpdateDeadline updates the deadline in a given transaction
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.

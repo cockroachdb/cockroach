@@ -25,6 +25,10 @@ const InvalidDescID DescID = 0
 // SafeValue implements the redact.SafeValue interface.
 func (DescID) SafeValue() {}
 
+// ImplementsDescpbID is to enable the declaration of the interface
+// txnbase.DescpbID.
+func (DescID) ImplementsDescpbID() {}
+
 // TypeIDToOID converts a type descriptor ID into a type OID.
 func TypeIDToOID(id DescID) oid.Oid {
 	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
