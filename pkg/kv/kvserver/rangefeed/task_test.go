@@ -196,8 +196,7 @@ func (s *testIterator) curKV() storage.MVCCKeyValue {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (s *testIterator) HasPointAndRange() (bool, bool) {
-	ok, err := s.Valid()
-	return ok && err == nil, false
+	return true, false
 }
 
 // RangeBounds implements SimpleMVCCIterator.
