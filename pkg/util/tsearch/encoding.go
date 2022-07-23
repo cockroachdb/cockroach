@@ -203,3 +203,17 @@ func (e *tsNodeEncoder) encodeTSNode(node *tsNode, appendTo []byte) []byte {
 	}
 	return appendTo
 }
+
+// EncodeInvertedIndexKeys returns a slice of byte slices, one per inverted
+// index key for the terms in this tsvector.
+func EncodeInvertedIndexKeys(inKey []byte, vector TSVector) ([][]byte, error) {
+	outKeys := make([][]byte, 0, len(vector))
+	for i := range vector {
+		l := vector[i].lexeme
+		outKey := make([]byte, len(inKey), len(inKey)+len(l))
+		copy(outKey, inKey)
+		newKey := encoding.EncodeStringAscending(outKey, l)
+		outKeys = append(outKeys, newKey)
+	}
+	return outKeys, nil
+}

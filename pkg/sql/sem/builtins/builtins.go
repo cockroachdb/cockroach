@@ -5762,6 +5762,20 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:   volatility.Stable,
 			NullableArgs: true,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.TSVector},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := args[0].(*tree.DTSVector)
+				return tree.NewDInt(tree.DInt(len(val.TSVector))), nil
+			},
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
+		},
 	),
 
 	// Returns true iff the current user has admin role.
