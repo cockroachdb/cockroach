@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1114,7 +1115,7 @@ func writeZoneConfigUpdate(
 		descriptors,
 		execCfg.SV(),
 		txn,
-		NewFakeSessionData(execCfg.SV()))
+		sessiondatautil.NewFakeSessionData(execCfg.SV()))
 	if update.zoneConfig == nil {
 		return metaDataUpdater.DeleteZoneConfig(ctx, update.id)
 	}
