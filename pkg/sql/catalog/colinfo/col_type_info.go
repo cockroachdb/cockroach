@@ -165,6 +165,7 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	case types.JsonFamily:
 	case types.GeographyFamily:
 	case types.GeometryFamily:
+	case types.TSVectorFamily:
 	default:
 		return false
 	}
