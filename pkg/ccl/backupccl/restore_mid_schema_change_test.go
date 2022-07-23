@@ -223,5 +223,6 @@ func restoreMidSchemaChange(
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
 		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB)
+		sqlDB.CheckQueryResultsRetry(t, "SELECT * from crdb_internal.invalid_objects", [][]string{})
 	}
 }
