@@ -2202,7 +2202,7 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 					if keyType == IterKeyTypeRangesOnly {
 						// With RangesOnly, the iterator must be empty.
 						require.False(t, ok)
-						hasPoint, hasRange := iter.HasEnginePointAndRange()
+						hasPoint, hasRange := iter.HasPointAndRange()
 						require.False(t, hasPoint)
 						require.False(t, hasRange)
 						return
@@ -2214,7 +2214,7 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 					require.Equal(t, engineKey("a", 1), key)
 					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
 
-					hasPoint, hasRange := iter.HasEnginePointAndRange()
+					hasPoint, hasRange := iter.HasPointAndRange()
 					require.True(t, hasPoint)
 					require.False(t, hasRange)
 					rangeBounds, err := iter.EngineRangeBounds()

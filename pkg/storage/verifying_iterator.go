@@ -110,8 +110,5 @@ func (i *VerifyingMVCCIterator) Valid() (bool, error) {
 
 // HasPointAndRange implements MVCCIterator.
 func (i *VerifyingMVCCIterator) HasPointAndRange() (bool, bool) {
-	if !i.valid {
-		return false, false
-	}
 	return i.MVCCIterator.HasPointAndRange()
 }

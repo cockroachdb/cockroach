@@ -160,9 +160,9 @@ type SimpleMVCCIterator interface {
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
 	// HasPointAndRange returns whether the current iterator position has a point
-	// key and/or a range key. If Valid() returns true, one of these will be true,
-	// otherwise they are both false. For details on range keys, see comment on
-	// SimpleMVCCIterator.
+	// key and/or a range key. Must check Valid() first. At least one of these
+	// will always be true for a valid iterator. For details on range keys, see
+	// comment on SimpleMVCCIterator.
 	HasPointAndRange() (bool, bool)
 	// RangeBounds returns the range bounds for the current range key, or an
 	// empty span if there are none. The returned keys are only valid until the
@@ -309,16 +309,9 @@ type EngineIterator interface {
 	// the iteration. After this call, valid will be true if the iterator was
 	// not originally positioned at the first key.
 	PrevEngineKey() (valid bool, err error)
-	// HasEnginePointAndRange returns whether the iterator is positioned on a
-	// point or range key.
-	//
-	// TODO(erikgrinaker): Consider renaming this HasPointAndRange and merge with
-	// the SimpleMVCCIterator implementation. However, HasPointAndRange() needs to
-	// imply Valid() for MVCC iterators, which in turns prevents it from being
-	// used e.g. across the lock table. Once we revamp the MVCCIterator interface
-	// we can probably merge these:
-	// https://github.com/cockroachdb/cockroach/issues/82589
-	HasEnginePointAndRange() (bool, bool)
+	// HasPointAndRange returns whether the iterator is positioned on a point or
+	// range key (shared with MVCCIterator interface).
+	HasPointAndRange() (bool, bool)
 	// EngineRangeBounds returns the current range key bounds.
 	EngineRangeBounds() (roachpb.Span, error)
 	// EngineRangeKeys returns the engine range keys at the current position.

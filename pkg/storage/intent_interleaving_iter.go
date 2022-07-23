@@ -886,9 +886,6 @@ func (i *intentInterleavingIter) Value() []byte {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
-	if !i.valid {
-		return false, false
-	}
 	var hasPoint, hasRange bool
 	if i.iterValid {
 		hasPoint, hasRange = i.iter.HasPointAndRange()
