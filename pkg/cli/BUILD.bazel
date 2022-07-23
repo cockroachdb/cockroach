@@ -117,6 +117,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/cli/syncbench",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/userfile",
         "//pkg/clusterversion",

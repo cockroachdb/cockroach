@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -10003,7 +10004,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 				}
 
 				uri = amazon.S3URI(bucket, "backup-test-lexicographical",
-					&roachpb.ExternalStorage_S3{AccessKey: accessKeyID, Secret: secretAccessKey, Region: "us-east-1"},
+					&cloudpb.ExternalStorage_S3{AccessKey: accessKeyID, Secret: secretAccessKey, Region: "us-east-1"},
 				)
 			case "azure":
 				account := os.Getenv("AZURE_ACCOUNT_NAME")

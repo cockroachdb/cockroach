@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -259,13 +259,13 @@ func newCsvGenerator(startRow int, numRows int, columns ...valueGenerator) *csvG
 // generatorExternalStorage is an external storage implementation
 // that returns its data from the underlying generator.
 type generatorExternalStorage struct {
-	conf roachpb.ExternalStorage
+	conf cloudpb.ExternalStorage
 	gen  *csvGenerator
 }
 
 var _ cloud.ExternalStorage = &generatorExternalStorage{}
 
-func (es *generatorExternalStorage) Conf() roachpb.ExternalStorage {
+func (es *generatorExternalStorage) Conf() cloudpb.ExternalStorage {
 	return es.conf
 }
 

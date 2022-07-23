@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -42,7 +42,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	}
 	defer s.Close()
 
-	require.Equal(t, roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}, s.Conf())
+	require.Equal(t, cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_null}, s.Conf())
 	require.NoError(t, cloud.WriteFile(ctx, s, "", bytes.NewReader([]byte("abc"))))
 	sz, err := s.Size(ctx, "")
 	require.NoError(t, err)

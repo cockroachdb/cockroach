@@ -22,7 +22,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -43,10 +43,10 @@ const (
 
 func parseAzureURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_azure
-	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
 		Container:   uri.Host,
 		Prefix:      uri.Path,
 		AccountName: uri.Query().Get(AzureAccountNameParam),
@@ -68,7 +68,7 @@ func parseAzureURL(
 }
 
 type azureStorage struct {
-	conf      *roachpb.ExternalStorage_Azure
+	conf      *cloudpb.ExternalStorage_Azure
 	ioConf    base.ExternalIODirConfig
 	container azblob.ContainerURL
 	prefix    string
@@ -78,7 +78,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	_ context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig
@@ -113,9 +113,9 @@ func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
 	return s.container.NewBlockBlobURL(name)
 }
 
-func (s *azureStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:    roachpb.ExternalStorageProvider_azure,
+func (s *azureStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:    cloudpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
 	}
 }
@@ -255,6 +255,6 @@ func (s *azureStorage) Close() error {
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
 		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), "azure")
 }

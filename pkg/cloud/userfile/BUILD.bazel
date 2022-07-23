@@ -9,9 +9,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
-        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",

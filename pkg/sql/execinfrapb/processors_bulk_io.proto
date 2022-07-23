@@ -26,6 +26,7 @@ import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/api.proto";
+import "cloud/cloudpb/external_storage.proto";
 
 // BackfillerSpec is the specification for a "schema change backfiller".
 // The created backfill processor runs a backfill for the first mutations in
@@ -260,7 +261,7 @@ message BackupDataSpec {
 }
 
 message RestoreFileSpec {
-  optional roachpb.ExternalStorage dir = 1 [(gogoproto.nullable) = false];
+  optional cloud.cloudpb.ExternalStorage dir = 1 [(gogoproto.nullable) = false];
   optional string path = 2 [(gogoproto.nullable) = false];
   reserved 3;
   reserved 4;

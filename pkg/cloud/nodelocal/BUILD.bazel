@@ -10,6 +10,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/roachpb",

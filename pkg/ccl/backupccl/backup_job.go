@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -127,7 +128,7 @@ func backup(
 	db *kv.DB,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
-	storageByLocalityKV map[string]*roachpb.ExternalStorage,
+	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	job *jobs.Job,
 	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
@@ -519,7 +520,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
+	storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
