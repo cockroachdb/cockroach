@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
@@ -955,7 +956,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ieFactory,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
-		sql.NewFakeSessionData,
+		sessiondatautil.NewFakeSessionData,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
 

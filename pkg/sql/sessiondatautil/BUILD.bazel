@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sessiondatautil",
+    srcs = ["new_fake_session_data.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/settings",
+        "//pkg/sql/clustermode",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+    ],
+)
+
+get_x_data(name = "get_x_data")

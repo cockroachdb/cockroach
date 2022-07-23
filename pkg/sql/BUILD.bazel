@@ -410,6 +410,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sessiondatautil",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sessionphase",
         "//pkg/sql/span",
