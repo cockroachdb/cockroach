@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,7 +34,7 @@ func TestInternalExecutorClearsMonitorMemory(t *testing.T) {
 
 	mon := s.(*TestServer).sqlServer.internalExecutorFactoryMemMonitor
 	ief := s.ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory
-	sessionData := sql.NewFakeSessionData(&s.ClusterSettings().SV)
+	sessionData := sessiondatautil.NewFakeSessionData(&s.ClusterSettings().SV)
 	ie := ief(ctx, sessionData)
 	rows, err := ie.QueryIteratorEx(ctx, "test", nil, sessiondata.NodeUserSessionDataOverride, `SELECT 1`)
 	require.NoError(t, err)

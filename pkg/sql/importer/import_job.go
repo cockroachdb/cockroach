@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1119,7 +1120,7 @@ func (r *importResumer) checkVirtualConstraints(
 		}
 
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			ie := execCfg.InternalExecutorFactory(ctx, sql.NewFakeSessionData(execCfg.SV()))
+			ie := execCfg.InternalExecutorFactory(ctx, sessiondatautil.NewFakeSessionData(execCfg.SV()))
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
 				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, user, ie, desc)
 			})

@@ -105,6 +105,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatautil",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
