@@ -79,7 +79,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/sql",
+        "//pkg/sql/clustermode",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
         "//pkg/sql/tests",

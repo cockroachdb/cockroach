@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clustermode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -106,7 +106,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(distSQLMode))
+		clustermode.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(distSQLMode))
 		// Let transactions push immediately to detect deadlocks. The test creates a
 		// large amount of contention and dependency cycles, and could take a long
 		// time to complete without this.

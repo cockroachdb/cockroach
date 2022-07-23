@@ -81,6 +81,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/clustermode",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/randgen",
