@@ -535,12 +535,12 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) HasPointAndRange() (bool, bool) {
-	return i.hasPoint && i.valid, i.hasRange && i.valid
+	return i.hasPoint, i.hasRange
 }
 
 // RangeBounds implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
-	if !i.hasRange || !i.valid {
+	if !i.hasRange {
 		return roachpb.Span{}
 	}
 	return i.iter.RangeBounds()
@@ -548,7 +548,7 @@ func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
 
 // RangeKeys implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
-	if !i.hasRange || !i.valid {
+	if !i.hasRange {
 		return []MVCCRangeKeyValue{}
 	}
 

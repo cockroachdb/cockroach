@@ -100,9 +100,7 @@ func (f *ReadAsOfIterator) UnsafeValue() []byte {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (f *ReadAsOfIterator) HasPointAndRange() (bool, bool) {
-	// the ReadAsOfIterator only surfaces point keys; therefore hasPoint is always
-	// true, unless the iterator is invalid, and hasRange is always false.
-	return f.valid, false
+	return true, false
 }
 
 // RangeBounds always returns an empty span, since the iterator never surfaces

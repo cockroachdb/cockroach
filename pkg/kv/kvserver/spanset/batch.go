@@ -358,9 +358,9 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	return true, nil
 }
 
-// HasEnginePointAndRange is part of the storage.EngineIterator interface.
-func (i *EngineIterator) HasEnginePointAndRange() (bool, bool) {
-	return i.i.HasEnginePointAndRange()
+// HasPointAndRange is part of the storage.EngineIterator interface.
+func (i *EngineIterator) HasPointAndRange() (bool, bool) {
+	return i.i.HasPointAndRange()
 }
 
 // EngineRangeBounds is part of the storage.EngineIterator interface.

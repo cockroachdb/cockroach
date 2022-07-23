@@ -449,10 +449,6 @@ func (p *pebbleIterator) NextKey() {
 		// NB: We have to be careful to use p.iter methods below, rather than
 		// pebbleIterator methods, since seekKey is an already-encoded roachpb.Key
 		// in raw Pebble key form.
-		//
-		// TODO(erikgrinaker): It's possible for Pebble to return true from
-		// HasPointAndRange when Valid() returns false, so we check Valid first. We
-		// should make this part of the Pebble API contract.
 		if p.iter.Valid() {
 			if hasPoint, hasRange := p.iter.HasPointAndRange(); !hasPoint && hasRange {
 				if startKey, _ := p.iter.RangeBounds(); bytes.Compare(startKey, seekKey) < 0 {
@@ -619,17 +615,6 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 
 // HasPointAndRange implements the MVCCIterator interface.
 func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
-	// TODO(erikgrinaker): The MVCCIterator contract mandates returning false for
-	// an invalid iterator. We should improve pebbleIterator validity and error
-	// checking by doing it once per iterator operation and propagating errors.
-	if ok, err := p.Valid(); !ok || err != nil {
-		return false, false
-	}
-	return p.iter.HasPointAndRange()
-}
-
-// HasEnginePointAndRange implements the EngineIterator interface.
-func (p *pebbleIterator) HasEnginePointAndRange() (bool, bool) {
 	return p.iter.HasPointAndRange()
 }
 
