@@ -109,6 +109,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cloud/cloudpb:cloudpb_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
@@ -132,6 +133,7 @@ go_proto_library(
     proto = ":execinfrapb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/catpb",  # keep

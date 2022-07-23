@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -257,7 +257,7 @@ func TestHttpGet(t *testing.T) {
 				return nil
 			})
 
-			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+			conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: s.URL}}
 			store, err := MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
@@ -294,7 +294,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	defer s.Close()
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: s.URL}}
 	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
@@ -317,7 +317,7 @@ func TestCanDisableHttp(t *testing.T) {
 
 	s, err := cloud.MakeExternalStorage(
 		context.Background(),
-		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
+		cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_http},
 		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil, nil)
 	require.Nil(t, s)
 	require.Error(t, err)
@@ -330,15 +330,15 @@ func TestCanDisableOutbound(t *testing.T) {
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	for _, provider := range []roachpb.ExternalStorageProvider{
-		roachpb.ExternalStorageProvider_http,
-		roachpb.ExternalStorageProvider_s3,
-		roachpb.ExternalStorageProvider_gs,
-		roachpb.ExternalStorageProvider_nodelocal,
+	for _, provider := range []cloudpb.ExternalStorageProvider{
+		cloudpb.ExternalStorageProvider_http,
+		cloudpb.ExternalStorageProvider_s3,
+		cloudpb.ExternalStorageProvider_gs,
+		cloudpb.ExternalStorageProvider_nodelocal,
 	} {
 		s, err := cloud.MakeExternalStorage(
 			context.Background(),
-			roachpb.ExternalStorage{Provider: provider},
+			cloudpb.ExternalStorage{Provider: provider},
 			conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil, nil)
 		require.Nil(t, s)
 		require.Error(t, err)
@@ -419,7 +419,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
-	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
+	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
 	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {

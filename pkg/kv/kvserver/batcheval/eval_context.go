@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -113,7 +114,7 @@ type EvalContext interface {
 	// requests on the range.
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
-	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
+	GetExternalStorage(ctx context.Context, dest cloudpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user username.SQLUsername) (cloud.ExternalStorage,
 		error)
 
@@ -282,7 +283,7 @@ func (m *mockEvalCtxImpl) GetCurrentClosedTimestamp(ctx context.Context) hlc.Tim
 	return m.ClosedTimestamp
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
+	ctx context.Context, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }

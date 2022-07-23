@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -398,14 +398,14 @@ func constructUserfileListURI(glob string, user username.SQLUsername) string {
 
 func getUserfileConf(
 	ctx context.Context, conn clisqlclient.Conn, glob string,
-) (roachpb.ExternalStorage_FileTable, error) {
+) (cloudpb.ExternalStorage_FileTable, error) {
 	if err := conn.EnsureConn(ctx); err != nil {
-		return roachpb.ExternalStorage_FileTable{}, err
+		return cloudpb.ExternalStorage_FileTable{}, err
 	}
 
 	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
-		return roachpb.ExternalStorage_FileTable{}, err
+		return cloudpb.ExternalStorage_FileTable{}, err
 	}
 
 	reqUsername, _ := username.MakeSQLUsernameFromUserInput(connURL.User.Username(), username.PurposeValidation)
@@ -413,12 +413,12 @@ func getUserfileConf(
 	userfileListURI := constructUserfileListURI(glob, reqUsername)
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
 	if err != nil {
-		return roachpb.ExternalStorage_FileTable{}, err
+		return cloudpb.ExternalStorage_FileTable{}, err
 	}
 
 	userFileTableConf, err := cloud.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
-		return roachpb.ExternalStorage_FileTable{}, err
+		return cloudpb.ExternalStorage_FileTable{}, err
 	}
 	return userFileTableConf.FileTableConfig, nil
 

@@ -43,9 +43,9 @@ func ValidateUniqueConstraintParams(
 			)
 		default:
 			if ctx.IsPrimaryKey {
-				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", params[0].Key)
+				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", param.Key)
 			}
-			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", params[0].Key)
+			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", param.Key)
 		}
 	}
 	return nil
