@@ -405,6 +405,12 @@ func populateInvertedIndexDescriptor(
 			return newUndefinedOpclassError(invCol.OpClass)
 		}
 		indexDesc.InvertedColumnKinds[0] = catpb.InvertedIndexColumnKind_TRIGRAM
+	case types.TSVectorFamily:
+		switch invCol.OpClass {
+		case "tsvector_ops", "":
+		default:
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
 	default:
 		return tabledesc.NewInvalidInvertedColumnError(column.GetName(), column.GetType().Name())
 	}
