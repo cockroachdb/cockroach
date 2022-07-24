@@ -113,9 +113,10 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
+	nullableArgs := false
 	op, err := GetProjectionRConstOperator(
 		testAllocator, inputTypes, types.Float, types.Float, binOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, nullableArgs,
 	)
 	if err != nil {
 		t.Error(err)
@@ -126,6 +127,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 			allocator:      testAllocator,
 			colIdx:         colIdx,
 			outputIdx:      outputIdx,
+			nullableArgs:   nullableArgs,
 		},
 		constArg: constVal,
 	}
@@ -145,9 +147,10 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
+	nullableArgs := false
 	op, err := GetProjectionRConstOperator(
 		testAllocator, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, nullableArgs,
 	)
 	if err != nil {
 		t.Error(err)
@@ -158,6 +161,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 			allocator:      testAllocator,
 			colIdx:         colIdx,
 			outputIdx:      outputIdx,
+			nullableArgs:   nullableArgs,
 		},
 		constArg: constVal,
 	}
@@ -274,9 +278,10 @@ func TestGetProjectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = typ
 	inputTypes[col2Idx] = typ
 	outputIdx := 9
+	nullableArgs := false
 	op, err := GetProjectionOperator(
 		testAllocator, inputTypes, types.Int2, binOp, input, col1Idx, col2Idx,
-		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, nullableArgs,
 	)
 	if err != nil {
 		t.Error(err)
@@ -288,6 +293,7 @@ func TestGetProjectionOperator(t *testing.T) {
 			col1Idx:        col1Idx,
 			col2Idx:        col2Idx,
 			outputIdx:      outputIdx,
+			nullableArgs:   nullableArgs,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
