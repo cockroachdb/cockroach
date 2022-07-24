@@ -35,7 +35,6 @@ var tsearchBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"config", types.String}, {"text", types.String}},
 			ReturnType: tree.FixedReturnType(types.TSVector),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// Parse, stem, and stopword the input.
 				config := string(tree.MustBeDString(args[0]))
 				document := string(tree.MustBeDString(args[1]))
 				vector, err := tsearch.DocumentToTSVector(config, document)
@@ -44,9 +43,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSVector{TSVector: vector}, nil
 			},
-			Info: "Converts text to a tsvector, normalizing words according to the specified or default configuration. " +
+			Info: "Converts text to a tsvector, normalizing words according to the specified configuration. " +
 				"Position information is included in the result.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"text", types.String}},
+			ReturnType: tree.FixedReturnType(types.TSVector),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				document := string(tree.MustBeDString(args[0]))
+				vector, err := tsearch.DocumentToTSVector(config, document)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSVector{TSVector: vector}, nil
+			},
+			Info: "Converts text to a tsvector, normalizing words according to the default configuration. " +
+				"Position information is included in the result.",
+			Volatility: volatility.Stable,
 		},
 	),
 	"to_tsquery": makeBuiltin(
@@ -63,8 +78,23 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
-			Info:       "Converts text to a tsquery, normalizing words according to the specified or default configuration.",
+			Info:       "Converts text to a tsquery, normalizing words according to the specified configuration.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"text", types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.ToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info:       "Converts text to a tsquery, normalizing words according to the default configuration.",
+			Volatility: volatility.Stable,
 		},
 	),
 	"plainto_tsquery": makeBuiltin(
@@ -81,9 +111,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
-			Info: "Converts text to a tsvector, normalizing words according to the specified or default configuration. " +
+			Info: "Converts text to a tsvector, normalizing words according to the specified configuration. " +
 				"Position information is included in the result.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"text", types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.PlainToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info: "Converts text to a tsvector, normalizing words according to the default configuration. " +
+				"Position information is included in the result.",
+			Volatility: volatility.Stable,
 		},
 	),
 	"phraseto_tsquery": makeBuiltin(
@@ -100,9 +146,25 @@ var tsearchBuiltins = map[string]builtinDefinition{
 				}
 				return &tree.DTSQuery{TSQuery: query}, nil
 			},
-			Info: "Converts text to a tsvector, normalizing words according to the specified or default configuration. " +
+			Info: "Converts text to a tsvector, normalizing words according to the specified configuration. " +
 				"Position information is included in the result.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"text", types.String}},
+			ReturnType: tree.FixedReturnType(types.TSQuery),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				config := tsearch.GetConfigKey(evalCtx.SessionData().DefaultTextSearchConfig)
+				input := string(tree.MustBeDString(args[0]))
+				query, err := tsearch.PhraseToTSQuery(config, input)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DTSQuery{TSQuery: query}, nil
+			},
+			Info: "Converts text to a tsvector, normalizing words according to the default configuration. " +
+				"Position information is included in the result.",
+			Volatility: volatility.Stable,
 		},
 	),
 }
