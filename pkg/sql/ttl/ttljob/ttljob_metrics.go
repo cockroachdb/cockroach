@@ -11,13 +11,23 @@
 package ttljob
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -38,6 +48,8 @@ type RowLevelTTLAggMetrics struct {
 		m map[string]rowLevelTTLMetrics
 	}
 }
+
+var _ metric.Struct = (*RowLevelTTLAggMetrics)(nil)
 
 type rowLevelTTLMetrics struct {
 	RangeTotalDuration *aggmetric.Histogram
@@ -169,6 +181,60 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 	ret.defaultRowLevelMetrics = ret.metricsWithChildren("default")
 	ret.mu.m = make(map[string]rowLevelTTLMetrics)
 	return ret
+}
+
+func (m *rowLevelTTLMetrics) fetchStatistics(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	relationName string,
+	details jobspb.RowLevelTTLDetails,
+	aostDuration time.Duration,
+	ttlExpr catpb.Expression,
+) error {
+	aost, err := tree.MakeDTimestampTZ(timeutil.Now().Add(aostDuration), time.Microsecond)
+	if err != nil {
+		return err
+	}
+
+	for _, c := range []struct {
+		opName string
+		query  string
+		args   []interface{}
+		gauge  *aggmetric.Gauge
+	}{
+		{
+			opName: fmt.Sprintf("ttl num rows stats %s", relationName),
+			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+			gauge:  m.TotalRows,
+		},
+		{
+			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
+			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + string(ttlExpr) + ` < $1`,
+			args:   []interface{}{details.Cutoff},
+			gauge:  m.TotalExpiredRows,
+		},
+	} {
+		// User a super low quality of service (lower than TTL low), as we don't
+		// really care if statistics gets left behind and prefer the TTL job to
+		// have priority.
+		qosLevel := sessiondatapb.SystemLow
+		datums, err := execCfg.InternalExecutor.QueryRowEx(
+			ctx,
+			c.opName,
+			nil,
+			sessiondata.InternalExecutorOverride{
+				User:             username.RootUserName(),
+				QualityOfService: &qosLevel,
+			},
+			fmt.Sprintf(c.query, details.TableID, aost.String()),
+			c.args...,
+		)
+		if err != nil {
+			return err
+		}
+		c.gauge.Update(int64(tree.MustBeDInt(datums[0])))
+	}
+	return nil
 }
 
 func init() {

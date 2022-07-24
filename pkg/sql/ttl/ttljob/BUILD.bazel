@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "ttljob.go",
         "ttljob_metrics.go",
+        "ttljob_processor.go",
         "ttljob_query_builder.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob",
