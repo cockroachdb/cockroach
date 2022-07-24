@@ -97,6 +97,7 @@ func newPebbleIteratorByCloning(
 		RefreshBatchView: true,
 	})
 	if err != nil {
+		p.Close()
 		panic(err)
 	}
 	return p
@@ -124,7 +125,6 @@ func (p *pebbleIterator) init(
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
-		inuse:              true,
 		keyBuf:             p.keyBuf,
 		lowerBoundBuf:      p.lowerBoundBuf,
 		upperBoundBuf:      p.upperBoundBuf,
@@ -133,6 +133,7 @@ func (p *pebbleIterator) init(
 		supportsRangeKeys:  supportsRangeKeys,
 	}
 	p.setOptions(opts, durability)
+	p.inuse = true // after setOptions(), so panic won't cause reader to panic too
 }
 
 // initReuseOrCreate is a convenience method that (re-)initializes an existing
@@ -164,6 +165,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 			RefreshBatchView: true,
 		})
 		if err != nil {
+			p.Close()
 			panic(err)
 		}
 	}
