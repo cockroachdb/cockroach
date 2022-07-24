@@ -20,6 +20,12 @@ import (
 type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
 	Feed(create string, args ...interface{}) (TestFeed, error)
+
+	// AsUser creates a copy of this TestFeedFactory where all
+	// calls to feed() will be attempted as the given user, and
+	// passes that factory in to fn. An error will only be returned
+	// if the initial connection as the user fails.
+	AsUser(user string, fn func()) error
 }
 
 // TestFeedMessage represents one row update or resolved timestamp message from

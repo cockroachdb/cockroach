@@ -1325,3 +1325,45 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"))
 	}
 }
+
+func TestAlterChangefeedAuthorization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+		rootDB.Exec(t, `CREATE USER guest`)
+
+		for _, tableName := range []string{`normal`, `sandbox`, `secure`} {
+			rootDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s (id int primary key)`, tableName))
+			rootDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (0)`, tableName))
+			rootDB.Exec(t, fmt.Sprintf(`GRANT SELECT ON TABLE %s TO guest`, tableName))
+		}
+
+		rootDB.Exec(t, `GRANT CHANGEFEED ON TABLE sandbox TO guest`)
+
+		// TODO: Currently necessary to have CHANGEFEED on preexisting tables.
+		// Should it be?
+		rootDB.Exec(t, `GRANT CHANGEFEED ON TABLE normal TO guest`)
+
+		cf := feed(t, f, `CREATE CHANGEFEED for normal`)
+		defer closeFeed(t, cf)
+		feed, ok := cf.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+		rootDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(rootDB, t, feed.JobID(), `paused`)
+
+		asUser(t, f, `guest`, func() {
+			guestConn := f.(*kafkaFeedFactory).db
+			guest := sqlutils.MakeSQLRunner(guestConn)
+
+			// Guest can add a target they have both changefeed and select on.
+			guest.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD sandbox`, feed.JobID()))
+
+			// Guest can't add other targets.
+			guest.ExpectErr(t, `CHANGEFEED privilege`, fmt.Sprintf(`ALTER CHANGEFEED %d ADD secure`, feed.JobID()))
+		})
+
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}

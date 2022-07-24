@@ -155,12 +155,14 @@ SHOW DEFAULT PRIVILEGES
 ----
 root  false  schemas    root  ALL
 root  false  sequences  root  ALL
+root  false  tables     bar   CHANGEFEED
 root  false  tables     bar   CREATE
 root  false  tables     bar   DELETE
 root  false  tables     bar   DROP
 root  false  tables     bar   INSERT
 root  false  tables     bar   UPDATE
 root  false  tables     bar   ZONECONFIG
+root  false  tables     foo   CHANGEFEED
 root  false  tables     foo   CREATE
 root  false  tables     foo   DELETE
 root  false  tables     foo   DROP

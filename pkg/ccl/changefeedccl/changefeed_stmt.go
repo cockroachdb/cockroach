@@ -577,14 +577,6 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 
-	ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return pgerror.New(pgcode.InsufficientPrivilege, "current user must have a role WITH CONTROLCHANGEFEED")
-	}
-
 	return nil
 }
 
@@ -612,7 +604,7 @@ func getTableDescriptors(
 		}
 	}
 
-	_, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	allDescs, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -626,8 +618,10 @@ func getTableDescriptors(
 			err = errors.WithHintf(err,
 				"do the targets exist at the specified cursor time %s?", initialHighWater)
 		}
+		return targetDescs, err
 	}
-	return targetDescs, err
+
+	return targetDescs, checkPrivileges(ctx, p, allDescs)
 }
 
 func getTargetsAndTables(
@@ -650,10 +644,6 @@ func getTargetsAndTables(
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
-		}
-
-		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-			return nil, nil, err
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -1222,4 +1212,100 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 		return tag
 	}
 	return changefeedbase.OnStartup
+}
+
+// checkPrivileges iterates over all the descriptors returned by ResolveTargetsToDescriptors,
+// which includes descriptors for each targeted table and each database containing one or more
+// targeted tables, mixed together in an arbitrary order. We want to honor privileges at either
+// the database level or the table level, so when we hit a missing privilege at the table level
+// we don't know whether that's fatal until we process its parent descriptor.
+func checkPrivileges(
+	ctx context.Context, p singlePrivilegeChecker, descriptors []catalog.Descriptor,
+) error {
+	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
+	if err != nil {
+		return err
+	}
+	requiredPrivileges := []privilege.Kind{privilege.SELECT}
+	if !hasControlChangefeed {
+		requiredPrivileges = append(requiredPrivileges, privilege.CHANGEFEED)
+	}
+
+	t := newPrivilegeTracker(ctx, p, requiredPrivileges)
+
+	for _, desc := range descriptors {
+		if td, ok := desc.(catalog.TableDescriptor); ok {
+			t.noteRequiredPrivileges(td)
+		}
+		if d, ok := desc.(catalog.DatabaseDescriptor); ok {
+			t.noteCascadingPrivileges(d)
+		}
+	}
+
+	return t.validate()
+}
+
+type singlePrivilegeChecker interface {
+	CheckPrivilege(context.Context, catalog.PrivilegeObject, privilege.Kind) error
+	HasRoleOption(context.Context, roleoption.Option) (bool, error)
+}
+
+type dbPrivilege struct {
+	present bool
+	err     error
+}
+
+type dbPrivilegeKey struct {
+	id   descpb.ID
+	priv privilege.Kind
+}
+
+type privilegeTracker struct {
+	m                  map[dbPrivilegeKey]dbPrivilege
+	p                  singlePrivilegeChecker
+	requiredPrivileges []privilege.Kind
+	ctx                context.Context
+}
+
+func (t *privilegeTracker) noteCascadingPrivileges(d catalog.DatabaseDescriptor) {
+	for _, priv := range t.requiredPrivileges {
+		if t.p.CheckPrivilege(t.ctx, d, priv) == nil {
+			t.m[dbPrivilegeKey{id: d.GetID(), priv: priv}] = dbPrivilege{present: true}
+		}
+	}
+}
+
+func (t *privilegeTracker) noteRequiredPrivileges(td catalog.TableDescriptor) {
+	for _, priv := range t.requiredPrivileges {
+		key := dbPrivilegeKey{id: td.GetParentID(), priv: priv}
+		if !t.m[key].present {
+			err := t.p.CheckPrivilege(t.ctx, td, priv)
+			if err != nil {
+				// User doesn't have the privilege on the table, but may have it on its
+				// parent database, so note the requirement to cascade and save the error
+				// to return if the requirement isn't met.
+				t.m[key] = dbPrivilege{err: err}
+			}
+		}
+	}
+}
+
+func (t *privilegeTracker) validate() error {
+	for _, priv := range t.m {
+		if !priv.present {
+			return priv.err
+		}
+	}
+	return nil
+}
+
+func newPrivilegeTracker(
+	ctx context.Context, p singlePrivilegeChecker, required []privilege.Kind,
+) *privilegeTracker {
+	return &privilegeTracker{
+		ctx:                ctx,
+		p:                  p,
+		requiredPrivileges: required,
+		m:                  make(map[dbPrivilegeKey]dbPrivilege),
+	}
 }

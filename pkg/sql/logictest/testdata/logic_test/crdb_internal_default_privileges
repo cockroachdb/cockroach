@@ -408,12 +408,14 @@ test           NULL         admin     false          schemas      admin     ALL
 test           NULL         admin     false          types        public    USAGE
 test           NULL         bar       false          types        public    USAGE
 test           NULL         foo       false          types        public    USAGE
+test           NULL         root      false          tables       bar       CHANGEFEED
 test           NULL         root      false          tables       bar       CREATE
 test           NULL         root      false          tables       bar       DROP
 test           NULL         root      false          tables       bar       INSERT
 test           NULL         root      false          tables       bar       DELETE
 test           NULL         root      false          tables       bar       UPDATE
 test           NULL         root      false          tables       bar       ZONECONFIG
+test           NULL         root      false          tables       foo       CHANGEFEED
 test           NULL         root      false          tables       foo       CREATE
 test           NULL         root      false          tables       foo       DROP
 test           NULL         root      false          tables       foo       INSERT
