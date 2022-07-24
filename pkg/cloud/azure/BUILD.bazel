@@ -27,7 +27,7 @@ go_test(
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",
-        "//pkg/roachpb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/testutils/skip",

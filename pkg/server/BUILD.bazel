@@ -344,6 +344,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/server/telemetry",
+        "//pkg/server/testdata",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",

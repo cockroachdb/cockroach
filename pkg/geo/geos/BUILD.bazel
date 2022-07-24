@@ -57,6 +57,8 @@ go_library(
         "//pkg/build/bazel",
         "//pkg/docs",
         "//pkg/geo/geopb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

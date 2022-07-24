@@ -15,6 +15,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",
