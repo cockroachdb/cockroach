@@ -55,6 +55,7 @@ const (
 	EXECUTE              Kind = 20
 	VIEWCLUSTERMETADATA  Kind = 21
 	VIEWDEBUG            Kind = 22
+	CHANGEFEED           Kind = 23
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -108,21 +109,21 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges         = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE}
+	AllPrivileges         = List{ALL, CHANGEFEED, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE}
 	ReadData              = List{SELECT}
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
 	DBPrivileges          = List{ALL, CONNECT, CREATE, DROP, ZONECONFIG}
-	TablePrivileges       = List{ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	TablePrivileges       = List{ALL, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
 	FunctionPrivileges    = List{ALL, EXECUTE}
 	// SequencePrivileges is appended with TablePrivileges as well. This is because
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
-	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
-	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	GlobalPrivileges             = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
+	// Note that "CHANGEFEED, CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
+	SequencePrivileges           = List{ALL, CHANGEFEED, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
+	GlobalPrivileges             = List{ALL, CHANGEFEED, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
 	VirtualTablePrivileges       = List{ALL, SELECT}
 	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
 )
@@ -145,6 +146,7 @@ var ByValue = [...]Kind{
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
 	"ALL":                  ALL,
+	"CHANGEFEED":           CHANGEFEED,
 	"CONNECT":              CONNECT,
 	"CREATE":               CREATE,
 	"DROP":                 DROP,
