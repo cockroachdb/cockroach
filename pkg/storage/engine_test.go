@@ -1969,25 +1969,19 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		// Check errors for invalid, empty, and zero-length range keys. Not
 		// exhaustive, since we assume validation dispatches to
 		// MVCCRangeKey.Validate() which is tested separately.
-		empty := MVCCRangeKey{}
-		invalid := rangeKey("b", "a", 1)
-		zeroLength := rangeKey("a", "a", 1)
-
-		require.Error(t, rw.PutMVCCRangeKey(empty, MVCCValue{}))
-		require.Error(t, rw.PutMVCCRangeKey(invalid, MVCCValue{}))
-		require.Error(t, rw.PutMVCCRangeKey(zeroLength, MVCCValue{}))
-
-		require.Error(t, rw.PutEngineRangeKey(empty.StartKey, empty.EndKey, nil, nil))
-		require.Error(t, rw.PutEngineRangeKey(invalid.StartKey, invalid.EndKey, nil, nil))
-		require.Error(t, rw.PutEngineRangeKey(zeroLength.StartKey, zeroLength.EndKey, nil, nil))
-
-		require.Error(t, rw.ClearMVCCRangeKey(empty))
-		require.Error(t, rw.ClearMVCCRangeKey(invalid))
-		require.Error(t, rw.ClearMVCCRangeKey(zeroLength))
-
-		require.Error(t, rw.ClearAllRangeKeys(empty.StartKey, empty.EndKey))
-		require.Error(t, rw.ClearAllRangeKeys(invalid.StartKey, invalid.EndKey))
-		require.Error(t, rw.ClearAllRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
+		for name, rk := range map[string]MVCCRangeKey{
+			"empty":      {},
+			"invalid":    rangeKey("b", "a", 1),
+			"zeroLength": rangeKey("a", "a", 1),
+		} {
+			t.Run(name, func(t *testing.T) {
+				require.Error(t, rw.PutMVCCRangeKey(rk, MVCCValue{}))
+				require.Error(t, rw.PutRawMVCCRangeKey(rk, []byte{}))
+				require.Error(t, rw.PutEngineRangeKey(rk.StartKey, rk.EndKey, nil, nil))
+				require.Error(t, rw.ClearMVCCRangeKey(rk))
+				require.Error(t, rw.ClearAllRangeKeys(rk.StartKey, rk.EndKey))
+			})
+		}
 
 		// Check that non-tombstone values error.
 		require.Error(t, rw.PutMVCCRangeKey(rangeKey("a", "b", 1), stringValue("foo")))
@@ -2045,12 +2039,14 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			rangeKV("g", "h", 1, MVCCValue{}),
 		}, scanRangeKeys(t, rw))
 
-		// Write another range key to bridge the [c-g)@1 gap. We write
-		// a raw engine key rather than an MVCC key, to test that too.
+		// Write another couple of range keys to bridge the [c-g)@1 gap. We write a
+		// raw engine key and a raw MVCC key rather than a regular MVCC key, to test
+		// those methods too.
 		valueRaw, err := EncodeMVCCValue(MVCCValue{})
 		require.NoError(t, err)
 		require.NoError(t, rw.PutEngineRangeKey(
-			roachpb.Key("c"), roachpb.Key("g"), EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
+			roachpb.Key("c"), roachpb.Key("e"), EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
+		require.NoError(t, rw.PutRawMVCCRangeKey(rangeKey("e", "g", 1), valueRaw))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "f", 1, MVCCValue{}),
 			rangeKV("f", "g", 2, MVCCValue{}),
@@ -2125,6 +2121,10 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 			rangeKey := rangeKey("a", "b", 2)
 
 			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+
+			err = w.PutRawMVCCRangeKey(rangeKey, []byte{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
 

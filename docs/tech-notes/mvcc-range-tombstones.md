@@ -195,7 +195,12 @@ as conflict checks and stats updates, similarly to other `Writer` methods.
   at all timestamps) between the given key bounds using a Pebble range
   tombstone. Can remove sections of range keys, or several range keys. Does
   not affect point keys.
-  
+
+* `PutRawMVCCRangeKey(MVCCRangeKey, []byte)`:  Like `PutMVCCRangeKey`, but
+  takes an already-encoded `MVCCValue`. Can be used to avoid unnecessary
+  decode/encode roundtrips when copying range keys, but should otherwise be
+  avoided due to the lack of type safety.
+
 * `PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)`: Writes
   a raw range key directly to Pebble. Only for specialized low-level use.
 

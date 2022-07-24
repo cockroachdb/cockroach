@@ -709,6 +709,14 @@ type Writer interface {
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
+	// PutRawMVCCRangeKey is like PutMVCCRangeKey, but accepts an encoded
+	// MVCCValue. It can be used to avoid decoding and immediately re-encoding an
+	// MVCCValue, but should generally be avoided due to the lack of type safety.
+	//
+	// It is safe to modify the contents of the arguments after PutRawMVCCRangeKey
+	// returns.
+	PutRawMVCCRangeKey(MVCCRangeKey, []byte) error
+
 	// PutEngineRangeKey sets the given range key to the values provided. This is
 	// a general-purpose and low-level method that should be used sparingly, only
 	// when the other Put* methods are not applicable.

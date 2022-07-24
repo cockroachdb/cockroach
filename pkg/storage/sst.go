@@ -415,14 +415,7 @@ func UpdateSSTTimestamps(
 					rkv.RangeKey.Timestamp, from, rkv.RangeKey)
 			}
 			rkv.RangeKey.Timestamp = to
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(rkv.Value)
-			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(rkv.Value)
-			}
-			if err != nil {
-				return nil, err
-			}
-			if err = writer.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+			if err = writer.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
 				return nil, err
 			}
 		}

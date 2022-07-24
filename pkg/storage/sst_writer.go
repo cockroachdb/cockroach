@@ -155,12 +155,6 @@ func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 
 // PutMVCCRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
-	if !fw.supportsRangeKeys {
-		return errors.New("range keys not supported by SST writer")
-	}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
 	// NB: all MVCC APIs currently assume all range keys are range tombstones.
 	if !value.IsTombstone() {
 		return errors.New("range keys can only be MVCC range tombstones")
@@ -169,12 +163,23 @@ func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) err
 	if err != nil {
 		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
 	}
-	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey)) + int64(len(valueRaw))
+	return fw.PutRawMVCCRangeKey(rangeKey, valueRaw)
+}
+
+// PutRawMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
+	if !fw.supportsRangeKeys {
+		return errors.New("range keys not supported by SST writer")
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey)) + int64(len(value))
 	return fw.fw.RangeKeySet(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		valueRaw)
+		value)
 }
 
 // ClearMVCCRangeKey implements the Writer interface.

@@ -460,6 +460,19 @@ func (p *pebbleBatch) ClearAllRangeKeys(start, end roachpb.Key) error {
 
 // PutMVCCRangeKey implements the Batch interface.
 func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+	// NB: all MVCC APIs currently assume all range keys are range tombstones.
+	if !value.IsTombstone() {
+		return errors.New("range keys can only be MVCC range tombstones")
+	}
+	valueRaw, err := EncodeMVCCValue(value)
+	if err != nil {
+		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
+	}
+	return p.PutRawMVCCRangeKey(rangeKey, valueRaw)
+}
+
+// PutRawMVCCRangeKey implements the Batch interface.
+func (p *pebbleBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
 	if !p.SupportsRangeKeys() {
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
@@ -467,19 +480,11 @@ func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) er
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	// NB: all MVCC APIs currently assume all range keys are range tombstones.
-	if !value.IsTombstone() {
-		return errors.New("range keys can only be MVCC range tombstones")
-	}
-	valueBytes, err := EncodeMVCCValue(value)
-	if err != nil {
-		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
-	}
 	if err := p.batch.RangeKeySet(
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		valueBytes,
+		value,
 		nil); err != nil {
 		return err
 	}
