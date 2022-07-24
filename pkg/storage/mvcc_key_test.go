@@ -499,19 +499,19 @@ func TestMVCCRangeKeyValidate(t *testing.T) {
 	}
 }
 
-func TestFirstRangeKeyAbove(t *testing.T) {
+func TestMVCCRangeKeyVersionsFirstAbove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeKVs := []MVCCRangeKeyValue{
-		rangeKV("a", "f", 6, MVCCValue{}),
-		rangeKV("a", "f", 4, MVCCValue{}),
-		rangeKV("a", "f", 3, MVCCValue{}),
-		rangeKV("a", "f", 1, MVCCValue{}),
-	}
+	versions := rangeKeyVersions(map[int]MVCCValue{
+		6: {},
+		4: {},
+		3: {},
+		1: {},
+	})
 
 	testcases := []struct {
-		ts     int64
-		expect int64
+		ts     int
+		expect int
 	}{
 		{0, 1},
 		{1, 1},
@@ -524,25 +524,25 @@ func TestFirstRangeKeyAbove(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
-			rkv, ok := FirstRangeKeyAbove(rangeKVs, hlc.Timestamp{WallTime: tc.ts})
+			rkv, ok := versions.FirstAbove(wallTS(tc.ts))
 			if tc.expect == 0 {
 				require.False(t, ok)
 				require.Empty(t, rkv)
 			} else {
 				require.True(t, ok)
-				require.Equal(t, rangeKV("a", "f", int(tc.expect), MVCCValue{}), rkv)
+				require.Equal(t, rangeKeyVersion(tc.expect, MVCCValue{}), rkv)
 			}
 		})
 	}
 }
 
-func TestHasRangeKeyBetween(t *testing.T) {
+func TestMVCCRangeKeyVersionsHasBetween(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeKVs := []MVCCRangeKeyValue{
-		rangeKV("a", "f", 5, MVCCValue{}),
-		rangeKV("a", "f", 1, MVCCValue{}),
-	}
+	versions := rangeKeyVersions(map[int]MVCCValue{
+		5: {},
+		1: {},
+	})
 
 	testcases := []struct {
 		upper, lower int
@@ -565,12 +565,25 @@ func TestHasRangeKeyBetween(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d,%d", tc.upper, tc.lower), func(t *testing.T) {
 			if util.RaceEnabled && tc.upper < tc.lower {
-				require.Panics(t, func() { HasRangeKeyBetween(rangeKVs, wallTS(tc.upper), wallTS(tc.lower)) })
+				require.Panics(t, func() { versions.HasBetween(wallTS(tc.upper), wallTS(tc.lower)) })
 			} else {
-				require.Equal(t, tc.expect, HasRangeKeyBetween(rangeKVs, wallTS(tc.upper), wallTS(tc.lower)))
+				require.Equal(t, tc.expect, versions.HasBetween(wallTS(tc.upper), wallTS(tc.lower)))
 			}
 		})
 	}
+}
+
+func TestMVCCRangeKeyStackTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	versions := rangeKeyVersions(map[int]MVCCValue{
+		6: {},
+		4: {},
+		3: {},
+		1: {},
+	})
+
+	require.Equal(t, []hlc.Timestamp{wallTS(6), wallTS(4), wallTS(3), wallTS(1)}, versions.Timestamps())
 }
 
 // TODO(erikgrinaker): The below should use the testutils/storageutils variants
@@ -605,6 +618,37 @@ func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
 	return MVCCRangeKeyValue{
 		RangeKey: rangeKey(start, end, ts),
 		Value:    valueBytes,
+	}
+}
+
+func rangeKeyStack(start, end string, versions map[int]MVCCValue) MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{
+		Bounds:   roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)},
+		Versions: rangeKeyVersions(versions),
+	}
+}
+
+func rangeKeyVersions(v map[int]MVCCValue) MVCCRangeKeyVersions {
+	versions := make([]MVCCRangeKeyVersion, len(v))
+	var timestamps []int
+	for i := range v {
+		timestamps = append(timestamps, i)
+	}
+	sort.Ints(timestamps)
+	for i, ts := range timestamps {
+		versions[len(versions)-1-i] = rangeKeyVersion(ts, v[ts])
+	}
+	return versions
+}
+
+func rangeKeyVersion(ts int, v MVCCValue) MVCCRangeKeyVersion {
+	valueRaw, err := EncodeMVCCValue(v)
+	if err != nil {
+		panic(err)
+	}
+	return MVCCRangeKeyVersion{
+		Timestamp: wallTS(ts),
+		Value:     valueRaw,
 	}
 }
 
