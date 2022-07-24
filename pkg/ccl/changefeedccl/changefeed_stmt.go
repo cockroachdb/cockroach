@@ -353,7 +353,22 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
+	parsedSink, err := url.Parse(sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
+		parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
+		p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
+			newScheme),
+		)
+	}
+
+	if err = checkPrivileges(ctx, p, targetDescs.allIncludingParentDatabases, parsedSink); err != nil {
+		return nil, err
+	}
+
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs.byName, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +381,7 @@ func createChangefeedJobRecord(
 		TargetSpecifications: targets,
 	}
 	specs := AllTargets(details)
-	for _, desc := range targetDescs {
+	for _, desc := range targetDescs.byName {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
 				return nil, err
@@ -380,7 +395,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, _, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(), opts.IsSet(changefeedbase.OptSplitColumnFamilies),
+			ctx, p, changefeedStmt.Select, targetDescs.byName, targets, opts.IncludeVirtual(), opts.IsSet(changefeedbase.OptSplitColumnFamilies),
 		)
 		if err != nil {
 			return nil, err
@@ -426,16 +441,6 @@ func createChangefeedJobRecord(
 	// The only upside in all this nonsense is the tests are decent. I've tuned
 	// this particular order simply by rearranging stuff until the changefeedccl
 	// tests all pass.
-	parsedSink, err := url.Parse(sinkURI)
-	if err != nil {
-		return nil, err
-	}
-	if newScheme, ok := changefeedbase.NoLongerExperimental[parsedSink.Scheme]; ok {
-		parsedSink.Scheme = newScheme // This gets munged anyway when building the sink
-		p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
-			newScheme),
-		)
-	}
 
 	if err = validateDetailsAndOptions(details, opts); err != nil {
 		return nil, err
@@ -549,7 +554,7 @@ func createChangefeedJobRecord(
 		Description: jobDescription,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-			for _, desc := range targetDescs {
+			for _, desc := range targetDescs.byName {
 				sqlDescIDs = append(sqlDescIDs, desc.GetID())
 			}
 			return sqlDescIDs
@@ -577,15 +582,12 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 
-	ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return pgerror.New(pgcode.InsufficientPrivilege, "current user must have a role WITH CONTROLCHANGEFEED")
-	}
-
 	return nil
+}
+
+type targetDescriptors struct {
+	byName                      map[tree.TablePattern]catalog.Descriptor
+	allIncludingParentDatabases []catalog.Descriptor
 }
 
 func getTableDescriptors(
@@ -594,7 +596,7 @@ func getTableDescriptors(
 	targets *tree.BackupTargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-) (map[tree.TablePattern]catalog.Descriptor, error) {
+) (*targetDescriptors, error) {
 	// For now, disallow targeting a database or wildcard table selection.
 	// Getting it right as tables enter and leave the set over time is
 	// tricky.
@@ -612,7 +614,7 @@ func getTableDescriptors(
 		}
 	}
 
-	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	allDescs, _, _, byName, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -626,8 +628,12 @@ func getTableDescriptors(
 			err = errors.WithHintf(err,
 				"do the targets exist at the specified cursor time %s?", initialHighWater)
 		}
+		return nil, err
 	}
-	return targetDescs, err
+
+	td := targetDescriptors{byName: byName, allIncludingParentDatabases: allDescs}
+
+	return &td, nil
 }
 
 func getTargetsAndTables(
@@ -650,10 +656,6 @@ func getTargetsAndTables(
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
-		}
-
-		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-			return nil, nil, err
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -1225,4 +1227,142 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 		return tag
 	}
 	return changefeedbase.OnStartup
+}
+
+func requiredPrivileges(hasControlChangefeed bool, sinkURI *url.URL) (required []privilege.Kind) {
+	var selectRequired bool
+	var changefeedRequired bool
+
+	// To maintain existing behavior exactly, if you have the hasControlChangefeed role option,
+	// SELECT is required no matter what--granting CHANGEFEED on a table to someone who already
+	// has ControlChangefeed globally has no effect.
+	if hasControlChangefeed {
+		selectRequired = true
+	} else {
+		changefeedRequired = true
+	}
+
+	// TODO: Incorporate named sink privilege work here once implemented.
+	switch sinkURI.Scheme {
+	case ``:
+		// Sinkless changefeeds are effectively a SELECT, so we always require SELECT to use them.
+		selectRequired = true
+	case changefeedbase.SinkSchemeExperimentalSQL, changefeedbase.SinkSchemeCloudStorageNodelocal:
+		// We may go through a release cycle (22.2 or 23.1) where we're temporarily relying on network-level
+		// restrictions to prevent data exfiltration by users with the ability to create, but not
+		// consume, changefeeds. These sinks could be exploited to bypass that, so to be safe
+		// we're initially requiring SELECT here too. This case should be removable soon, maybe even
+		// before release.
+		selectRequired = true
+	case changefeedbase.SinkSchemeCloudStorageAzure, changefeedbase.SinkSchemeCloudStorageGCS, changefeedbase.SinkSchemeCloudStorageHTTP, changefeedbase.SinkSchemeCloudStorageHTTPS,
+		changefeedbase.SinkSchemeCloudStorageS3, changefeedbase.SinkSchemeKafka, changefeedbase.SinkSchemeNull, changefeedbase.SinkSchemeWebhookHTTP, changefeedbase.SinkSchemeWebhookHTTPS:
+		// No special handling for most sinks, we're trusting either network settings or named sinks to prevent
+		// data exfiltration.
+	default:
+		// Unrecognized sinks are untrusted.
+		selectRequired = true
+	}
+
+	if selectRequired {
+		required = append(required, privilege.SELECT)
+	}
+
+	if changefeedRequired {
+		required = append(required, privilege.CHANGEFEED)
+	}
+
+	return required
+
+}
+
+// checkPrivileges iterates over all the descriptors returned by ResolveTargetsToDescriptors,
+// which includes descriptors for each targeted table and each database containing one or more
+// targeted tables, mixed together in an arbitrary order. We want to honor privileges at either
+// the database level or the table level, so when we hit a missing privilege at the table level
+// we don't know whether that's fatal until we process its parent descriptor.
+func checkPrivileges(
+	ctx context.Context, p singlePrivilegeChecker, descriptors []catalog.Descriptor, sinkURI *url.URL,
+) error {
+	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
+	if err != nil {
+		return err
+	}
+
+	t := newPrivilegeTracker(ctx, p, requiredPrivileges(hasControlChangefeed, sinkURI))
+
+	for _, desc := range descriptors {
+		if td, ok := desc.(catalog.TableDescriptor); ok {
+			t.noteRequiredPrivileges(td)
+		}
+		if d, ok := desc.(catalog.DatabaseDescriptor); ok {
+			t.noteCascadingPrivileges(d)
+		}
+	}
+
+	return t.validate()
+}
+
+type singlePrivilegeChecker interface {
+	CheckPrivilege(context.Context, catalog.PrivilegeObject, privilege.Kind) error
+	HasRoleOption(context.Context, roleoption.Option) (bool, error)
+}
+
+type dbPrivilege struct {
+	present bool
+	err     error
+}
+
+type dbPrivilegeKey struct {
+	id   descpb.ID
+	priv privilege.Kind
+}
+
+type privilegeTracker struct {
+	m                  map[dbPrivilegeKey]dbPrivilege
+	p                  singlePrivilegeChecker
+	requiredPrivileges []privilege.Kind
+	ctx                context.Context
+}
+
+func (t *privilegeTracker) noteCascadingPrivileges(d catalog.DatabaseDescriptor) {
+	for _, priv := range t.requiredPrivileges {
+		if t.p.CheckPrivilege(t.ctx, d, priv) == nil {
+			t.m[dbPrivilegeKey{id: d.GetID(), priv: priv}] = dbPrivilege{present: true}
+		}
+	}
+}
+
+func (t *privilegeTracker) noteRequiredPrivileges(td catalog.TableDescriptor) {
+	for _, priv := range t.requiredPrivileges {
+		key := dbPrivilegeKey{id: td.GetParentID(), priv: priv}
+		if !t.m[key].present {
+			err := t.p.CheckPrivilege(t.ctx, td, priv)
+			if err != nil {
+				// User doesn't have the privilege on the table, but may have it on its
+				// parent database, so note the requirement to cascade and save the error
+				// to return if the requirement isn't met.
+				t.m[key] = dbPrivilege{err: err}
+			}
+		}
+	}
+}
+
+func (t *privilegeTracker) validate() error {
+	for _, priv := range t.m {
+		if !priv.present {
+			return priv.err
+		}
+	}
+	return nil
+}
+
+func newPrivilegeTracker(
+	ctx context.Context, p singlePrivilegeChecker, required []privilege.Kind,
+) *privilegeTracker {
+	return &privilegeTracker{
+		ctx:                ctx,
+		p:                  p,
+		requiredPrivileges: required,
+		m:                  make(map[dbPrivilegeKey]dbPrivilege),
+	}
 }

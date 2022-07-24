@@ -20,6 +20,13 @@ import (
 type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
 	Feed(create string, args ...interface{}) (TestFeed, error)
+
+	// AsUser connects to the database as the specified user,
+	// calls fn(), then goes back to using the same root
+	// connection. Will return an error if the initial connection
+	// to the database fails, but fn is responsible for failing
+	// the test on other errors.
+	AsUser(user string, fn func()) error
 }
 
 // TestFeedMessage represents one row update or resolved timestamp message from

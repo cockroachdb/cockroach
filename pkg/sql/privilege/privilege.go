@@ -53,6 +53,7 @@ const (
 	CANCELQUERY          Kind = 18
 	NOSQLLOGIN           Kind = 19
 	EXECUTE              Kind = 20
+	CHANGEFEED           Kind = 21
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -100,11 +101,11 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges      = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE}
+	AllPrivileges      = List{ALL, CHANGEFEED, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE}
 	ReadData           = List{SELECT}
 	ReadWriteData      = List{SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges       = List{ALL, CONNECT, CREATE, DROP, ZONECONFIG}
-	TablePrivileges    = List{ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	DBPrivileges       = List{ALL, CHANGEFEED, CONNECT, CREATE, DROP, ZONECONFIG}
+	TablePrivileges    = List{ALL, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges   = List{ALL, CREATE, USAGE}
 	TypePrivileges     = List{ALL, USAGE}
 	FunctionPrivileges = List{ALL, EXECUTE}
@@ -135,6 +136,7 @@ var ByValue = [...]Kind{
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
 	"ALL":                  ALL,
+	"CHANGEFEED":           CHANGEFEED,
 	"CONNECT":              CONNECT,
 	"CREATE":               CREATE,
 	"DROP":                 DROP,
