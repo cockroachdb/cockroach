@@ -2050,6 +2050,10 @@ var builtinOidsArray = []string{
 	2075: `phraseto_tsquery(config: string, text: string) -> tsquery`,
 	2076: `plainto_tsquery(config: string, text: string) -> tsquery`,
 	2077: `ts_parse(parser_name: string, document: string) -> tuple{int AS tokid, string AS token}`,
+	2078: `to_tsquery(text: string) -> tsquery`,
+	2079: `to_tsvector(text: string) -> tsvector`,
+	2080: `phraseto_tsquery(text: string) -> tsquery`,
+	2081: `plainto_tsquery(text: string) -> tsquery`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
