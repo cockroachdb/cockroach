@@ -258,6 +258,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bkaradzic/go-lz4/com_github_bkaradzic_go_lz4-v1.0.0.zip": "525f5633a4d9c8a32b5b5763c4e423ad061e773cf8cfeb21737f491feb531666",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bketelsen/crypt/com_github_bketelsen_crypt-v0.0.4.zip": "ab24f8c0386cc7fce86f4e6680c32214e1e597980bd80127ac84e71ace6763da",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/blang/semver/com_github_blang_semver-v3.5.1+incompatible.zip": "8d032399cf835b93f7cf641b5477a31a002059eed7888a775f97bd3e9677ad3c",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/blevesearch/snowballstem/com_github_blevesearch_snowballstem-v0.9.0.zip": "6640a408ddcec84810873cc678570717c02d5b7b932f37672c44caea33469506",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bmizerany/assert/com_github_bmizerany_assert-v0.0.0-20160611221934-b7ed37b82869.zip": "2532a167df77ade7e8012f07c0e3db4d4c15abdb7ffa7b05e1d961408da9a539",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bmizerany/pat/com_github_bmizerany_pat-v0.0.0-20170815010413-6226ea591a40.zip": "ed04bed4d193e25371ebc6524984da4af9ece5c107fcc82d5aa4914b726706d2",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bmizerany/perks/com_github_bmizerany_perks-v0.0.0-20141205001514-d9a9656a3a4b.zip": "b78e7083e73b6c2d63a30d073515b2a03dbe3115171601009211208ee0c6046e",
