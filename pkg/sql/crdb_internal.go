@@ -836,7 +836,8 @@ CREATE TABLE crdb_internal.jobs (
 		container := make(tree.Datums, 0, 21)
 		sessionJobs := make([]*jobs.Record, 0, len(p.extendedEvalCtx.SchemaChangeJobRecords))
 		uniqueJobs := make(map[*jobs.Record]struct{})
-		for _, job := range p.extendedEvalCtx.SchemaChangeJobRecords {
+		for _, j := range p.extendedEvalCtx.SchemaChangeJobRecords {
+			job := j.(*jobs.Record)
 			if _, ok := uniqueJobs[job]; ok {
 				continue
 			}
@@ -4733,7 +4734,8 @@ func collectMarshaledJobMetadataMap(
 	if err := it.Close(); err != nil {
 		return nil, err
 	}
-	for _, record := range p.ExtendedEvalContext().SchemaChangeJobRecords {
+	for _, r := range p.ExtendedEvalContext().SchemaChangeJobRecords {
+		record := r.(*jobs.Record)
 		progressBytes, payloadBytes, err := getPayloadAndProgressFromJobsRecord(p, record)
 		if err != nil {
 			return nil, err

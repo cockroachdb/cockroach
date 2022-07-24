@@ -114,7 +114,11 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
-	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID]
+	r, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID]
+	var record *jobs.Record
+	if recordExists {
+		record = r.(*jobs.Record)
+	}
 	if p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup != nil {
 		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup(record)
 	}

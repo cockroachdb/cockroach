@@ -323,6 +323,7 @@ go_library(
         "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/txnbase",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/clustermode",
         "//pkg/sql/clusterunique",
