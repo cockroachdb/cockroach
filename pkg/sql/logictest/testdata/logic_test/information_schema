@@ -4030,7 +4030,6 @@ SELECT * FROM information_schema.user_privileges ORDER BY grantee,privilege_type
 ----
 grantee  table_catalog  privilege_type  is_grantable
 admin    test           ALL             NULL
-admin    test           BACKUP          NULL
 admin    test           CREATE          NULL
 admin    test           DELETE          NULL
 admin    test           DROP            NULL
@@ -4039,7 +4038,6 @@ admin    test           SELECT          NULL
 admin    test           UPDATE          NULL
 admin    test           ZONECONFIG      NULL
 root     test           ALL             NULL
-root     test           BACKUP          NULL
 root     test           CREATE          NULL
 root     test           DELETE          NULL
 root     test           DROP            NULL
@@ -4708,7 +4706,6 @@ enable_multiregion_placement_policy                   off
 enable_seqscan                                        on
 enable_super_regions                                  off
 enable_zigzag_join                                    on
-enforce_home_region                                   off
 escape_string_warning                                 on
 expect_and_ignore_not_visible_columns_in_copy         off
 experimental_computed_column_rewrites                 ·

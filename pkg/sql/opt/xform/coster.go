@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -92,11 +91,8 @@ type coster struct {
 var _ Coster = &coster{}
 
 // MakeDefaultCoster creates an instance of the default coster.
-func MakeDefaultCoster(mem *memo.Memo, evalCtx *eval.Context) Coster {
-	return &coster{evalCtx: evalCtx,
-		mem:      mem,
-		locality: evalCtx.Locality,
-	}
+func MakeDefaultCoster(mem *memo.Memo) Coster {
+	return &coster{mem: mem}
 }
 
 const (
@@ -159,10 +155,6 @@ const (
 	// helps prevent surprising plans for very small tables or for when stats are
 	// stale.
 	largeMaxCardinalityScanCostPenalty = unboundedMaxCardinalityScanCostPenalty / 2
-
-	// LargeDistributeCost is the cost to use for Distribute operations when a
-	// session mode is set to error out on access of rows from remote regions.
-	LargeDistributeCost = hugeCost / 100
 
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
@@ -665,14 +657,6 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 func (c *coster) computeDistributeCost(
 	distribute *memo.DistributeExpr, required *physical.Required,
 ) memo.Cost {
-	if distribute.NoOpDistribution() {
-		// If the distribution will be elided, the cost is zero.
-		return memo.Cost(0)
-	}
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
-		return LargeDistributeCost
-	}
-
 	// TODO(rytaft): Compute a real cost here. Currently we just add a tiny cost
 	// as a placeholder.
 	return cpuCostFactor
@@ -927,7 +911,7 @@ func (c *coster) computeLookupJoinCost(
 	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return hugeCost
 	}
-	cost := c.computeIndexLookupJoinCost(
+	return c.computeIndexLookupJoinCost(
 		join,
 		required,
 		join.LookupColsAreTableKey,
@@ -938,18 +922,6 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
-		provided := distribution.BuildLookupJoinLookupTableDistribution(c.evalCtx, join)
-		if provided.Any() || len(provided.Regions) != 1 {
-			cost += LargeDistributeCost
-		}
-		var localDist physical.Distribution
-		localDist.FromLocality(c.evalCtx.Locality)
-		if !localDist.Equals(provided) {
-			cost += LargeDistributeCost
-		}
-	}
-	return cost
 }
 
 func (c *coster) computeIndexLookupJoinCost(
@@ -1106,18 +1078,6 @@ func (c *coster) computeInvertedJoinCost(
 		c.rowScanCost(join, join.Table, join.Index, lookupCols, join.Relational().Stats)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
-
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
-		provided := distribution.BuildInvertedJoinLookupTableDistribution(c.evalCtx, join)
-		if provided.Any() || len(provided.Regions) != 1 {
-			cost += LargeDistributeCost
-		}
-		var localDist physical.Distribution
-		localDist.FromLocality(c.evalCtx.Locality)
-		if !localDist.Equals(provided) {
-			cost += LargeDistributeCost
-		}
-	}
 	return cost
 }
 

@@ -16,7 +16,6 @@ import (
 	"math/bits"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -197,7 +196,7 @@ func (md *Metadata) Init() {
 // This metadata can then be modified independent of the copied metadata.
 //
 // Table annotations are not transferred over; all annotations are unset on
-// the copy, except for regionConfig, which is read-only, and can be shared.
+// the copy.
 //
 // copyScalarFn must be a function that returns a copy of the given scalar
 // expression.
@@ -227,17 +226,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		md.tables = make([]TableMeta, len(from.tables))
 	}
 	for i := range from.tables {
-		// Note: annotations inside TableMeta are not retained...
+		// Note: annotations inside TableMeta are not retained.
 		md.tables[i].copyFrom(&from.tables[i], copyScalarFn)
-
-		// ...except for the regionConfig annotation.
-		tabID := from.tables[i].MetaID
-		regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
-		if ok {
-			// Don't waste time looking up a database descriptor and constructing a
-			// RegionConfig more than once for a given table.
-			md.SetTableAnnotation(tabID, regionConfigAnnID, regionConfig)
-		}
 	}
 
 	md.sequences = append(md.sequences, from.sequences...)
@@ -495,7 +485,7 @@ func (md *Metadata) DuplicateTable(
 		}
 	}
 
-	newTabMeta := TableMeta{
+	md.tables = append(md.tables, TableMeta{
 		MetaID:                   newTabID,
 		Table:                    tabMeta.Table,
 		Alias:                    tabMeta.Alias,
@@ -505,14 +495,7 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:   partialIndexPredicates,
 		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:    checkConstraintsStats,
-	}
-	md.tables = append(md.tables, newTabMeta)
-	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
-	if ok {
-		// Don't waste time looking up a database descriptor and constructing a
-		// RegionConfig more than once for a given table.
-		md.SetTableAnnotation(newTabID, regionConfigAnnID, regionConfig)
-	}
+	})
 
 	return newTabID
 }
@@ -567,12 +550,9 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //
 //   2. If there's another column in the metadata with the same column alias but
 //      a different table name, then prefix the column alias with the table
-//      name: "tabName.columnAlias". If alwaysQualify is true, then the column
-//      alias is always prefixed with the table alias.
+//      name: "tabName.columnAlias".
 //
-func (md *Metadata) QualifiedAlias(
-	colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
-) string {
+func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog cat.Catalog) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
@@ -582,9 +562,8 @@ func (md *Metadata) QualifiedAlias(
 	// If a fully qualified alias has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
 	var tabAlias tree.TableName
-	qualify := fullyQualify || alwaysQualify
+	qualify := fullyQualify
 	if !fullyQualify {
-		tabAlias = md.TableMeta(cm.Table).Alias
 		for i := range md.cols {
 			if i == int(cm.MetaID-1) {
 				continue
@@ -593,6 +572,7 @@ func (md *Metadata) QualifiedAlias(
 			// If there are two columns with same alias, then column is ambiguous.
 			cm2 := &md.cols[i]
 			if cm2.Alias == cm.Alias {
+				tabAlias = md.TableMeta(cm.Table).Alias
 				if cm2.Table == 0 {
 					qualify = true
 				} else {

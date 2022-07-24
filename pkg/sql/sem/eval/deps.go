@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -348,12 +347,6 @@ type Planner interface {
 		privilegeObjectPath string,
 		privilegeObjectType privilege.ObjectType,
 	) (*catpb.PrivilegeDescriptor, error)
-
-	// GetMultiregionConfig synthesizes a new multiregion.RegionConfig describing
-	// the multiregion properties of the database identified via databaseID. The
-	// second return value is false if the database doesn't exist or is not
-	// multiregion.
-	GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -2147,24 +2147,13 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 		return "", err
 	}
 	md = optExpr.(memo.RelExpr).Memo().Metadata()
-	recs := indexrec.FindRecs(optExpr, md)
-	if len(recs) == 0 {
-		return fmt.Sprintf("no index recommendations\n--\noptimal plan:\n%s", ot.FormatExpr(optExpr)), nil
-	}
+	indexRecommendations := indexrec.FindIndexRecommendationSet(optExpr, md)
+	result := indexRecommendations.Output()
 
-	var sb strings.Builder
-	for i := range recs {
-		t := "creation"
-		if recs[i].Replacement {
-			t = "replacement"
-		}
-		sb.WriteString(t)
-		sb.WriteString(": ")
-		sb.WriteString(recs[i].SQL)
-		sb.WriteByte('\n')
+	if result == nil {
+		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr)), nil
 	}
-	sb.WriteString(fmt.Sprintf("--\noptimal plan:\n%s", ot.FormatExpr(optExpr)))
-	return sb.String(), nil
+	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", strings.Join(result, "\n"), ot.FormatExpr(optExpr)), nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

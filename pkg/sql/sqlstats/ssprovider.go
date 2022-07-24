@@ -235,5 +235,4 @@ type RecordedTxnStats struct {
 	RowsRead                int64
 	RowsWritten             int64
 	BytesRead               int64
-	Priority                roachpb.UserPriority
 }

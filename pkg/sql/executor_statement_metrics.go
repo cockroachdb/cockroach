@@ -170,7 +170,7 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanHash:     planner.instrumentation.planGist.Hash(),
 	}
 
-	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
+	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecommendations)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
