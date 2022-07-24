@@ -259,16 +259,22 @@ func normalizeTSVector(ret TSVector) (TSVector, error) {
 // stems and normalizes the lexemes, and returns a TSVector annotated with
 // lexeme positions according to a text search configuration passed by name.
 func DocumentToTSVector(config string, input string) (TSVector, error) {
-	if config != "simple" {
+	stopwords, ok := stopwordsMap[config]
+	if !ok {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
 	}
 
 	lower := strings.ToLower(input)
 	tokens := strings.Fields(lower)
-	vector := make(TSVector, len(tokens))
+	vector := make(TSVector, 0, len(tokens))
 	for i := range tokens {
-		vector[i].lexeme = tokens[i]
-		vector[i].positions = []tsposition{{position: i + 1}}
+		if _, ok := stopwords[tokens[i]]; ok {
+			continue
+		}
+		vector = append(vector, tsTerm{
+			lexeme:    tokens[i],
+			positions: []tsposition{{position: i + 1}},
+		})
 	}
 	return normalizeTSVector(vector)
 }
