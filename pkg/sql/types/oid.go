@@ -26,6 +26,16 @@ var (
 	RegClass = &T{InternalType: InternalType{
 		Family: OidFamily, Oid: oid.T_regclass, Locale: &emptyLocale}}
 
+	// RegConfig is the type of a Postgres regconfigj OID variant
+	// (T_regconfig).
+	RegConfig = &T{InternalType: InternalType{
+		Family: OidFamily, Oid: oid.T_regconfig, Locale: &emptyLocale}}
+
+	// RegDictionary is the type of a Postgres regdictionary OID variant
+	// (T_regdictionary).
+	RegDictionary = &T{InternalType: InternalType{
+		Family: OidFamily, Oid: oid.T_regdictionary, Locale: &emptyLocale}}
+
 	// RegNamespace is the type of a Postgres regnamespace OID variant
 	// (T_regnamespace).
 	RegNamespace = &T{InternalType: InternalType{
@@ -59,45 +69,47 @@ var (
 // instead of a method so that other packages can iterate over the map directly.
 // Note that additional elements for the array Oid types are added in init().
 var OidToType = map[oid.Oid]*T{
-	oid.T_anyelement:   Any,
-	oid.T_bit:          typeBit,
-	oid.T_bool:         Bool,
-	oid.T_bpchar:       typeBpChar,
-	oid.T_bytea:        Bytes,
-	oid.T_char:         QChar,
-	oid.T_date:         Date,
-	oid.T_float4:       Float4,
-	oid.T_float8:       Float,
-	oid.T_int2:         Int2,
-	oid.T_int2vector:   Int2Vector,
-	oid.T_int4:         Int4,
-	oid.T_int8:         Int,
-	oid.T_inet:         INet,
-	oid.T_interval:     Interval,
-	oid.T_jsonb:        Jsonb,
-	oid.T_name:         Name,
-	oid.T_numeric:      Decimal,
-	oid.T_oid:          Oid,
-	oid.T_oidvector:    OidVector,
-	oid.T_record:       AnyTuple,
-	oid.T_regclass:     RegClass,
-	oid.T_regnamespace: RegNamespace,
-	oid.T_regproc:      RegProc,
-	oid.T_regprocedure: RegProcedure,
-	oid.T_regrole:      RegRole,
-	oid.T_regtype:      RegType,
-	oid.T_text:         String,
-	oid.T_time:         Time,
-	oid.T_timetz:       TimeTZ,
-	oid.T_timestamp:    Timestamp,
-	oid.T_timestamptz:  TimestampTZ,
-	oid.T_tsquery:      TSQuery,
-	oid.T_tsvector:     TSVector,
-	oid.T_unknown:      Unknown,
-	oid.T_uuid:         Uuid,
-	oid.T_varbit:       VarBit,
-	oid.T_varchar:      VarChar,
-	oid.T_void:         Void,
+	oid.T_anyelement:    Any,
+	oid.T_bit:           typeBit,
+	oid.T_bool:          Bool,
+	oid.T_bpchar:        typeBpChar,
+	oid.T_bytea:         Bytes,
+	oid.T_char:          QChar,
+	oid.T_date:          Date,
+	oid.T_float4:        Float4,
+	oid.T_float8:        Float,
+	oid.T_int2:          Int2,
+	oid.T_int2vector:    Int2Vector,
+	oid.T_int4:          Int4,
+	oid.T_int8:          Int,
+	oid.T_inet:          INet,
+	oid.T_interval:      Interval,
+	oid.T_jsonb:         Jsonb,
+	oid.T_name:          Name,
+	oid.T_numeric:       Decimal,
+	oid.T_oid:           Oid,
+	oid.T_oidvector:     OidVector,
+	oid.T_record:        AnyTuple,
+	oid.T_regclass:      RegClass,
+	oid.T_regconfig:     RegConfig,
+	oid.T_regdictionary: RegDictionary,
+	oid.T_regnamespace:  RegNamespace,
+	oid.T_regproc:       RegProc,
+	oid.T_regprocedure:  RegProcedure,
+	oid.T_regrole:       RegRole,
+	oid.T_regtype:       RegType,
+	oid.T_text:          String,
+	oid.T_time:          Time,
+	oid.T_timetz:        TimeTZ,
+	oid.T_timestamp:     Timestamp,
+	oid.T_timestamptz:   TimestampTZ,
+	oid.T_tsquery:       TSQuery,
+	oid.T_tsvector:      TSVector,
+	oid.T_unknown:       Unknown,
+	oid.T_uuid:          Uuid,
+	oid.T_varbit:        VarBit,
+	oid.T_varchar:       VarChar,
+	oid.T_void:          Void,
 
 	oidext.T_geometry:  Geometry,
 	oidext.T_geography: Geography,

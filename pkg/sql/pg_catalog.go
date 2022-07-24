@@ -3512,10 +3512,20 @@ var pgCatalogStatioSysTablesTable = virtualSchemaTable{
 }
 
 var pgCatalogTsConfigTable = virtualSchemaTable{
-	comment: "pg_ts_config was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogTsConfig,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	comment: `contains the available text search configs
+https://www.postgresql.org/docs/current/catalog-pg-ts-config.html`,
+	schema: vtable.PgCatalogTsConfig,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor,
+		addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		namespaceOid := h.NamespaceOid(db.GetID(), pgCatalogName)
+		return addRow(
+			tree.NewDOid(oid.Oid(3748)), // oid
+			tree.NewDString("simple"),   // cfgname
+			namespaceOid,                // cfgnamespace
+			getOwnerOID(db),             // cfgowner
+			oidZero,                     // cfgparser
+		)
 	},
 	unimplemented: true,
 }

@@ -136,6 +136,8 @@ func initPGBuiltins() {
 		typ                   *types.T
 	}{
 		{"Translates a textual relation name to its OID", types.RegClass},
+		{"Translates a textual text search config name to its OID", types.RegConfig},
+		{"Translates a textual text search dictionary name to its OID", types.RegDictionary},
 		{"Translates a textual schema name to its OID", types.RegNamespace},
 		{"Translates a textual function or procedure name to its OID", types.RegProc},
 		{"Translates a textual function or procedure name(with argument types) to its OID", types.RegProcedure},

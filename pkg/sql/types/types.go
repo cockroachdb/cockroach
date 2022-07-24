@@ -1677,6 +1677,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		switch t.Oid() {
 		case oid.T_oid:
 			return "oid"
+		case oid.T_regconfig:
+			return "regconfig"
+		case oid.T_regdictionary:
+			return "regdictionary"
 		case oid.T_regclass:
 			return "regclass"
 		case oid.T_regnamespace:
@@ -2788,12 +2792,14 @@ var unreservedTypeTokens = map[string]*T{
 	"oid":        Oid,
 	"oidvector":  OidVector,
 	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
-	"regclass":     RegClass,
-	"regnamespace": RegNamespace,
-	"regproc":      RegProc,
-	"regprocedure": RegProcedure,
-	"regrole":      RegRole,
-	"regtype":      RegType,
+	"regclass":      RegClass,
+	"regconfig":     RegConfig,
+	"regdictionary": RegDictionary,
+	"regnamespace":  RegNamespace,
+	"regproc":       RegProc,
+	"regprocedure":  RegProcedure,
+	"regrole":       RegRole,
+	"regtype":       RegType,
 
 	"serial2":     &Serial2Type,
 	"serial4":     &Serial4Type,
