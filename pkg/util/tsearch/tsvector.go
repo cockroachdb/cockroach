@@ -17,6 +17,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/blevesearch/snowballstem"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -322,34 +323,49 @@ func TSParse(input string) []string {
 // TSLexize implements the "dictionary" construct that's exposed via ts_lexize.
 // It gets invoked once per input token to produce an output lexeme during
 // routines like to_tsvector and to_tsquery.
-func TSLexize(config string, token string) (lexeme string, err error) {
-	if config != "simple" {
-		return "", pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
+// It can return false in the second parameter to indicate a stopword was found.
+func TSLexize(config string, token string) (lexeme string, ok bool, err error) {
+	stopwords, ok := stopwordsMap[config]
+	if !ok {
+		return "", false, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
 	}
-	return strings.ToLower(token), nil
+
+	lower := strings.ToLower(token)
+	if _, ok := stopwords[lower]; ok {
+		return "", false, nil
+	}
+	stemmer, err := getStemmer(config)
+	if err != nil {
+		return "", false, err
+	}
+	env := snowballstem.NewEnv(lower)
+	stemmer(env)
+	return env.Current(), true, nil
 }
 
 // DocumentToTSVector parses an input document into lexemes, removes stop words,
 // stems and normalizes the lexemes, and returns a TSVector annotated with
 // lexeme positions according to a text search configuration passed by name.
 func DocumentToTSVector(config string, input string) (TSVector, error) {
-	if config != "simple" {
-		return nil, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
-	}
-
 	tokens := TSParse(input)
-	vector := make(TSVector, len(tokens))
+	vector := make(TSVector, 0, len(tokens))
 	for i := range tokens {
-		lexeme, err := TSLexize(config, tokens[i])
+		lexeme, ok, err := TSLexize(config, tokens[i])
 		if err != nil {
 			return nil, err
 		}
-		vector[i].lexeme = lexeme
+		if !ok {
+			continue
+		}
+
+		term := tsTerm{lexeme: lexeme}
+		term.lexeme = lexeme
 		pos := i + 1
 		if i > maxTSVectorPosition {
 			pos = maxTSVectorPosition
 		}
-		vector[i].positions = []tsPosition{{position: uint16(pos)}}
+		term.positions = []tsPosition{{position: uint16(pos)}}
+		vector = append(vector, term)
 	}
 	return normalizeTSVector(vector)
 }

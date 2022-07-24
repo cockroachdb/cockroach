@@ -105,3 +105,242 @@ eval
 phraseto_tsquery('simple', 'hello the#re')
 ----
 'hello' <-> 'the' <-> 're'
+
+eval
+to_tsquery('english', 'qwe & sKies ')
+----
+'qwe' & 'sky'
+
+eval
+to_tsquery('simple', 'qwe & sKies ')
+----
+'qwe' & 'skies'
+
+eval
+to_tsquery('english', '''the wether'':dc & ''           sKies '':BC ')
+----
+'wether':CD & 'sky':BC
+
+eval
+to_tsquery('english', 'asd&(and|fghj)')
+----
+'asd' & 'fghj'
+
+eval
+to_tsquery('english', '(asd&and)|fghj')
+----
+'asd' | 'fghj'
+
+eval
+to_tsquery('english', '(asd&!and)|fghj')
+----
+'asd' | 'fghj'
+
+eval
+to_tsquery('english', '(the|and&(i&1))&fghj')
+----
+'1' & 'fghj'
+
+# Test english stemming and stopword elimination in to_tsvector
+eval
+to_tsvector('english', 'Here is a sentence with some stop words')
+----
+'sentenc':4 'stop':7 'word':8
+
+# Test stopword elimination in to_tsquery
+
+eval
+to_tsquery('english', '!(a & !b) & c')
+----
+!!'b' & 'c'
+
+eval
+to_tsquery('english', '!(a & !b)')
+----
+!!'b'
+
+eval
+to_tsquery('english', '(1 <-> 2) <-> a')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> a) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(a <-> 1) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 'a <-> (1 <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '1 <-> (a <-> 2)')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '1 <-> (2 <-> a)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> 2) <3> a')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(1 <-> a) <3> 2')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '(a <-> 1) <3> 2')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', 'a <3> (1 <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '1 <3> (a <-> 2)')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '1 <3> (2 <-> a)')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(1 <3> 2) <-> a')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(1 <3> a) <-> 2')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '(a <3> 1) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 'a <-> (1 <3> 2)')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '1 <-> (a <3> 2)')
+----
+'1' <4> '2'
+
+eval
+to_tsquery('english', '1 <-> (2 <3> a)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '((a <-> 1) <-> 2) <-> s')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '(2 <-> (a <-> 1)) <-> s')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', '((1 <-> a) <-> 2) <-> s')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(2 <-> (1 <-> a)) <-> s')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', 's <-> ((a <-> 1) <-> 2)')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', 's <-> (2 <-> (a <-> 1))')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', 's <-> ((1 <-> a) <-> 2)')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', 's <-> (2 <-> (1 <-> a))')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', '((a <-> 1) <-> s) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '(s <-> (a <-> 1)) <-> 2')
+----
+'1' <-> '2'
+
+eval
+to_tsquery('english', '((1 <-> a) <-> s) <-> 2')
+----
+'1' <3> '2'
+
+eval
+to_tsquery('english', '(s <-> (1 <-> a)) <-> 2')
+----
+'1' <2> '2'
+
+eval
+to_tsquery('english', '2 <-> ((a <-> 1) <-> s)')
+----
+'2' <2> '1'
+
+eval
+to_tsquery('english', '2 <-> (s <-> (a <-> 1))')
+----
+'2' <3> '1'
+
+eval
+to_tsquery('english', '2 <-> ((1 <-> a) <-> s)')
+----
+'2' <-> '1'
+
+eval
+to_tsquery('english', '2 <-> (s <-> (1 <-> a))')
+----
+'2' <2> '1'
+
+
+eval
+to_tsquery('english', 'foo <-> (a <-> (the <-> bar))')
+----
+'foo' <3> 'bar'
+
+eval
+to_tsquery('english', '((foo <-> a) <-> the) <-> bar')
+----
+'foo' <3> 'bar'
+
+eval
+to_tsquery('english', 'foo <-> a <-> the <-> bar')
+----
+'foo' <3> 'bar'

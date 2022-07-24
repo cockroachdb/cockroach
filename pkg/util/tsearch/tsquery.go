@@ -434,17 +434,12 @@ func PhraseToTSQuery(config string, input string) (TSQuery, error) {
 // query. If the interpose operator is not invalid, it's interposed between each
 // token in the input.
 func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, error) {
-	switch config {
-	case "simple":
-	default:
-		return TSQuery{}, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
-	}
-
 	vector, err := lexTSQuery(input)
 	if err != nil {
 		return TSQuery{}, err
 	}
 	tokens := make(TSVector, 0, len(vector))
+	foundStopwords := false
 	for i := range vector {
 		tok := vector[i]
 
@@ -500,9 +495,13 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 				}
 				tokens = append(tokens, term)
 			}
-			lexeme, err := TSLexize(config, lexemeTokens[j])
+			lexeme, ok, err := TSLexize(config, lexemeTokens[j])
 			if err != nil {
 				return TSQuery{}, err
+			}
+			if !ok {
+				foundStopwords = true
+				lexeme = ""
 			}
 			tokens = append(tokens, tsTerm{lexeme: lexeme, positions: tok.positions})
 		}
@@ -510,5 +509,82 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 
 	// Now create the operator tree.
 	queryParser := tsQueryParser{terms: tokens, input: input}
-	return queryParser.parse()
+	query, err := queryParser.parse()
+	if err != nil {
+		return query, err
+	}
+
+	if foundStopwords {
+		return cleanupStopwords(query)
+	}
+	return query, nil
+}
+
+func cleanupStopwords(query TSQuery) (TSQuery, error) {
+	query.root, _, _ = cleanupStopword(query.root)
+	if query.root == nil {
+		return TSQuery{}, nil
+	}
+	return query, nil
+}
+
+func cleanupStopword(node *tsNode) (ret *tsNode, lAdd int, rAdd int) {
+	if node.op == invalid {
+		if node.term.lexeme == "" {
+			// Found a stop word.
+			return nil, 0, 0
+		}
+		return node, 0, 0
+	}
+	if node.op == not {
+		// Not doesn't change the pattern width, so just report child distances.
+		node.l, lAdd, rAdd = cleanupStopword(node.l)
+		if node.l == nil {
+			return nil, lAdd, rAdd
+		}
+		return node, lAdd, rAdd
+	}
+
+	var llAdd, lrAdd, rlAdd, rrAdd int
+	node.l, llAdd, lrAdd = cleanupStopword(node.l)
+	node.r, rlAdd, rrAdd = cleanupStopword(node.r)
+	isPhrase := node.op == followedby
+	followedN := node.followedN
+	if node.l == nil && node.r == nil {
+		// Removing an entire node.
+		if isPhrase {
+			// If we're a followed by, sum up the children lengths and propagate.
+			lAdd = llAdd + int(followedN) + rlAdd
+			rAdd = lAdd
+		} else {
+			// If not, we take the max. This corresponds to the logic in evalWithinFollowedBy.
+			lAdd = llAdd
+			if rlAdd > lAdd {
+				lAdd = rlAdd
+			}
+			rAdd = lAdd
+		}
+		return nil, lAdd, rAdd
+	} else if node.l == nil {
+		// Remove this operator and the left node.
+		if isPhrase {
+			return node.r, llAdd + int(followedN) + rlAdd, rrAdd
+		} else {
+			return node.r, rlAdd, rrAdd
+		}
+	} else if node.r == nil {
+		// Remove this operator and the right node.
+		if isPhrase {
+			return node.l, llAdd, lrAdd + int(followedN) + rrAdd
+		} else {
+			return node.l, llAdd, lrAdd
+		}
+	} else if isPhrase {
+		// Add the adjusted values to this operator.
+		node.followedN += uint16(lrAdd + rlAdd)
+		// Continue to propagate unaccounted-for adjustments.
+		return node, llAdd, rrAdd
+	}
+	// Otherwise we found a non-phrase operator; keep it as-is.
+	return node, 0, 0
 }
