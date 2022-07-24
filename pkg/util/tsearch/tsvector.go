@@ -263,6 +263,10 @@ func DocumentToTSVector(config string, input string) (TSVector, error) {
 	if !ok {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "text search configuration %q does not exist", config)
 	}
+	stemmer, err := getStemmer(config)
+	if err != nil {
+		return nil, err
+	}
 
 	lower := strings.ToLower(input)
 	tokens := strings.Fields(lower)
@@ -271,8 +275,9 @@ func DocumentToTSVector(config string, input string) (TSVector, error) {
 		if _, ok := stopwords[tokens[i]]; ok {
 			continue
 		}
+		stemmed := stemmer(tokens[i], true /* stemStopWords */)
 		vector = append(vector, tsTerm{
-			lexeme:    tokens[i],
+			lexeme:    stemmed,
 			positions: []tsposition{{position: i + 1}},
 		})
 	}

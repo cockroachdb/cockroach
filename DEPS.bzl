@@ -851,6 +851,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_blevesearch_snowball",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/blevesearch/snowball",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:cDYjn/NCH+wwt2UdehaLpr2e4BwLIjN4V/TdLsL+B5A=",
+        version = "v0.6.1",
+    )
+    go_repository(
         name = "com_github_bmizerany_assert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/bmizerany/assert",
