@@ -2368,6 +2368,10 @@ var builtinOidsArray = []string{
 	2394: `array_cat_agg(arg1: varbit[]) -> varbit[]`,
 	2395: `array_cat_agg(arg1: anyenum[]) -> anyenum[]`,
 	2396: `array_cat_agg(arg1: tuple[]) -> tuple[]`,
+	2397: `to_tsquery(text: string) -> tsquery`,
+	2398: `to_tsvector(text: string) -> tsvector`,
+	2399: `phraseto_tsquery(text: string) -> tsquery`,
+	2400: `plainto_tsquery(text: string) -> tsquery`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
