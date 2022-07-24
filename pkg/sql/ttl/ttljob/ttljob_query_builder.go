@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -35,8 +36,8 @@ type selectQueryBuilder struct {
 	selectOpName    string
 	startPK, endPK  tree.Datums
 	selectBatchSize int64
-	aost            tree.DTimestampTZ
-	ttlExpression   string
+	aost            time.Time
+	ttlExpr         catpb.Expression
 
 	// isFirst is true if we have not invoked a query using the builder yet.
 	isFirst bool
@@ -58,9 +59,9 @@ func makeSelectQueryBuilder(
 	pkColumns []string,
 	relationName string,
 	startPK, endPK tree.Datums,
-	aost tree.DTimestampTZ,
+	aost time.Time,
 	selectBatchSize int64,
-	ttlExpression string,
+	ttlExpr catpb.Expression,
 ) selectQueryBuilder {
 	// We will have a maximum of 1 + len(pkColumns)*2 columns, where one
 	// is reserved for AOST, and len(pkColumns) for both start and end key.
@@ -81,7 +82,7 @@ func makeSelectQueryBuilder(
 		endPK:           endPK,
 		aost:            aost,
 		selectBatchSize: selectBatchSize,
-		ttlExpression:   ttlExpression,
+		ttlExpr:         ttlExpr,
 
 		cachedArgs:          cachedArgs,
 		isFirst:             true,
@@ -141,8 +142,8 @@ ORDER BY %[1]s
 LIMIT %[7]d`,
 		b.pkColumnNamesSQL,
 		b.tableID,
-		b.aost.String(),
-		b.ttlExpression,
+		tree.MustMakeDTimestampTZ(b.aost, time.Microsecond),
+		b.ttlExpr,
 		filterClause,
 		endFilterClause,
 		b.selectBatchSize,
@@ -214,7 +215,7 @@ type deleteQueryBuilder struct {
 	pkColumns       []string
 	deleteBatchSize int64
 	deleteOpName    string
-	ttlExpression   string
+	ttlExpr         catpb.Expression
 
 	// cachedQuery is the cached query, which stays the same as long as we are
 	// deleting up to deleteBatchSize elements.
@@ -230,7 +231,7 @@ func makeDeleteQueryBuilder(
 	pkColumns []string,
 	relationName string,
 	deleteBatchSize int64,
-	ttlExpression string,
+	ttlExpr catpb.Expression,
 ) deleteQueryBuilder {
 	cachedArgs := make([]interface{}, 0, 1+int64(len(pkColumns))*deleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
@@ -240,7 +241,7 @@ func makeDeleteQueryBuilder(
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
 		deleteOpName:    fmt.Sprintf("ttl delete %s", relationName),
-		ttlExpression:   ttlExpression,
+		ttlExpr:         ttlExpr,
 		cachedArgs:      cachedArgs,
 	}
 }
@@ -265,7 +266,7 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 	return fmt.Sprintf(
 		`DELETE FROM [%d AS tbl_name] WHERE %s <= $1 AND (%s) IN (%s)`,
 		b.tableID,
-		b.ttlExpression,
+		b.ttlExpr,
 		columnNamesSQL,
 		placeholderStr,
 	)

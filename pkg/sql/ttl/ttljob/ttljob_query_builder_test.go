@@ -26,8 +26,6 @@ func TestSelectQueryBuilder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	mockTime := time.Date(2000, 1, 1, 13, 30, 45, 0, time.UTC)
-	mockTimestampTZ, err := tree.MakeDTimestampTZ(mockTime, time.Microsecond)
-	require.NoError(t, err)
 
 	type iteration struct {
 		expectedQuery string
@@ -48,7 +46,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				"relation_name",
 				tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
-				*mockTimestampTZ,
+				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -109,7 +107,7 @@ LIMIT 2`,
 				"table_name",
 				nil,
 				nil,
-				*mockTimestampTZ,
+				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -166,7 +164,7 @@ LIMIT 2`,
 				"table_name",
 				tree.Datums{tree.NewDInt(100)},
 				tree.Datums{tree.NewDInt(181)},
-				*mockTimestampTZ,
+				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -227,7 +225,7 @@ LIMIT 2`,
 				"table_name",
 				nil,
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
-				*mockTimestampTZ,
+				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -287,7 +285,7 @@ LIMIT 2`,
 				"table_name",
 				tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				nil,
-				*mockTimestampTZ,
+				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
