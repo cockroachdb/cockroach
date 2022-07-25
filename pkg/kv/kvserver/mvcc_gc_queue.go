@@ -626,15 +626,15 @@ func (r *replicaGCer) GC(
 	ctx context.Context,
 	keys []roachpb.GCRequest_GCKey,
 	rangeKeys []roachpb.GCRequest_GCRangeKey,
-	clearRangeKey *roachpb.GCRequest_GCClearRangeKey,
+	clearRange *roachpb.GCRequest_GCClearRange,
 ) error {
-	if len(keys) == 0 && len(rangeKeys) == 0 && clearRangeKey == nil {
+	if len(keys) == 0 && len(rangeKeys) == 0 && clearRange == nil {
 		return nil
 	}
 	req := r.template()
 	req.Keys = keys
 	req.RangeKeys = rangeKeys
-	req.ClearRangeKey = clearRangeKey
+	req.ClearRange = clearRange
 	return r.send(ctx, req)
 }
 

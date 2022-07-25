@@ -54,9 +54,9 @@ func declareKeysGC(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
-	// For ClearRangeKey request we still obtain a wide write lock as we don't
+	// For ClearRange request we still obtain a wide write lock as we don't
 	// expect any operations running on the range.
-	if rk := gcr.ClearRangeKey; rk != nil {
+	if rk := gcr.ClearRange; rk != nil {
 		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
 			hlc.MaxTimestamp)
 	}
@@ -143,7 +143,7 @@ func GC(
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
 	if !args.Threshold.IsEmpty() &&
-		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil) &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRange != nil) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -151,7 +151,7 @@ func GC(
 
 	// We do not allow removal of point or range keys combined with clear range
 	// operation as they could cover the same set of keys.
-	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) && args.ClearRangeKey != nil {
+	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) && args.ClearRange != nil {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can remove point and range keys or clear entire range, but it is unsafe for it to do both")
 	}
@@ -197,7 +197,7 @@ func GC(
 	var res result.Result
 
 	// Fast path operation to try to remove all user key data from the range.
-	if rk := args.ClearRangeKey; rk != nil {
+	if rk := args.ClearRange; rk != nil {
 		if !rk.StartKey.Equal(desc.StartKey.AsRawKey()) || !rk.EndKey.Equal(desc.EndKey.AsRawKey()) {
 			return result.Result{}, errors.Errorf("gc with clear range operation could only be used on the full range")
 		}
@@ -234,7 +234,7 @@ func GC(
 	// unnecessarily GC'd with high priority again.
 	// We should only do that when we are doing actual cleanup as we want to have
 	// a hint when request is being handled.
-	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil {
+	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRange != nil {
 		sl := MakeStateLoader(cArgs.EvalCtx)
 		hint, err := sl.LoadGCHint(ctx, readWriter)
 		if err != nil {

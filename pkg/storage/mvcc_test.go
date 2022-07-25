@@ -5648,8 +5648,8 @@ func TestMVCCGarbageCollectClearRange(t *testing.T) {
 	tsGC := mkTs(5)
 	tsMax := mkTs(9)
 
-	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
-		return roachpb.GCRequest_GCClearRangeKey{
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRange {
+		return roachpb.GCRequest_GCClearRange{
 			StartKey: start,
 			EndKey:   end,
 		}
@@ -5711,8 +5711,8 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 
 	tsGC := mkTs(5)
 
-	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
-		return roachpb.GCRequest_GCClearRangeKey{
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRange {
+		return roachpb.GCRequest_GCClearRange{
 			StartKey: start,
 			EndKey:   end,
 		}

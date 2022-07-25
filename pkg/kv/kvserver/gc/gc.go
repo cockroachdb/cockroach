@@ -152,7 +152,7 @@ type Thresholder interface {
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
 	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
-		*roachpb.GCRequest_GCClearRangeKey,
+		*roachpb.GCRequest_GCClearRange,
 	) error
 }
 
@@ -175,7 +175,7 @@ func (NoopGCer) GC(
 	context.Context,
 	[]roachpb.GCRequest_GCKey,
 	[]roachpb.GCRequest_GCRangeKey,
-	*roachpb.GCRequest_GCClearRangeKey,
+	*roachpb.GCRequest_GCClearRange,
 ) error {
 	return nil
 }
@@ -376,7 +376,7 @@ func processReplicatedKeyRange(
 		end := desc.EndKey.AsRawKey()
 		if coveredByRangeTombstone, err := storage.CanGCEntireRange(ctx, snap, start, end,
 			threshold); err == nil && coveredByRangeTombstone {
-			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRangeKey{
+			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRange{
 				StartKey: start,
 				EndKey:   end,
 			}); err == nil {
