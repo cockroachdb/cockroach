@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -414,6 +415,25 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 	// lexicographically by FlowID.
 	sort.Slice(response.Flows, func(i, j int) bool {
 		return bytes.Compare(response.Flows[i].FlowID.GetBytes(), response.Flows[j].FlowID.GetBytes()) < 0
+	})
+	return response, nil
+}
+
+func (b *baseStatusServer) ListLocalExecutionInsights(
+	ctx context.Context, _ *serverpb.ListExecutionInsightsRequest,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	if err := b.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	response := &serverpb.ListExecutionInsightsResponse{}
+	b.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
+		response.Insights = append(response.Insights, *insight)
 	})
 	return response, nil
 }
@@ -3094,6 +3114,53 @@ func mergeDistSQLRemoteFlows(a, b []serverpb.DistSQLRemoteFlows) []serverpb.Dist
 		result = append(result, b[bIter:]...)
 	}
 	return result
+}
+
+func (s *statusServer) ListExecutionInsights(
+	ctx context.Context, req *serverpb.ListExecutionInsightsRequest,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	var response serverpb.ListExecutionInsightsResponse
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalExecutionInsights(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Errors) > 0 {
+			return nil, errors.Errorf("%s", resp.Errors[0].Message)
+		}
+		return resp, nil
+	}
+	responseFn := func(nodeID roachpb.NodeID, nodeResponse interface{}) {
+		if nodeResponse == nil {
+			return
+		}
+		i := nodeResponse.(*serverpb.ListExecutionInsightsResponse).Insights
+		response.Insights = append(response.Insights, i...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := s.iterateNodes(ctx, "execution insights list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return &response, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

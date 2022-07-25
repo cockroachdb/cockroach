@@ -2524,10 +2524,10 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 <a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
-implemented on a tenant, the `node_id` field refers to the instanceIDs that
-identify individual tenant pods.
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -2599,10 +2599,10 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 <a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
-implemented on a tenant, the `node_id` field refers to the instanceIDs that
-identify individual tenant pods.
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -2694,10 +2694,10 @@ Info contains an information about a single DistSQL remote flow.
 <a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
-implemented on a tenant, the `node_id` field refers to the instanceIDs that
-identify individual tenant pods.
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -2788,10 +2788,10 @@ Info contains an information about a single DistSQL remote flow.
 <a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse and
-ListDistSQLFlowsResponse. Similar to the Statements endpoint, when
-implemented on a tenant, the `node_id` field refers to the instanceIDs that
-identify individual tenant pods.
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -4871,6 +4871,124 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | events | [cockroach.sql.contentionpb.ExtendedContentionEvent](#cockroach.server.serverpb.TransactionContentionEventsResponse-cockroach.sql.contentionpb.ExtendedContentionEvent) | repeated |  | [reserved](#support-status) |
 
+
+
+
+
+
+
+## ListExecutionInsights
+
+
+
+ListExecutionInsights returns potentially problematic statements cluster-wide,
+along with actions we suggest the application developer might take to remedy them.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| insights | [cockroach.sql.insights.Insight](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.sql.insights.Insight) | repeated | insights lists any potentially problematic statements and actions we suggest the application developer might take to remedy them. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.server.serverpb.ListActivityError) | repeated | errors holds any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
+
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListExecutionInsightsResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListExecutionInsightsResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## ListLocalExecutionInsights
+
+
+
+ListExecutionInsights returns potentially problematic statements executed on this node,
+along with actions we suggest the application developer might take to remedy them.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| insights | [cockroach.sql.insights.Insight](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.sql.insights.Insight) | repeated | insights lists any potentially problematic statements and actions we suggest the application developer might take to remedy them. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.server.serverpb.ListActivityError) | repeated | errors holds any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
+
+An error wrapper object for ListContentionEventsResponse,
+ListDistSQLFlowsResponse, and ListExecutionInsightsResponse. Similar to the
+Statements endpoint, when implemented on a tenant, the `node_id` field
+refers to the instanceIDs that identify individual tenant pods.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListExecutionInsightsResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListExecutionInsightsResponse-string) |  | Error message. | [reserved](#support-status) |
 
 
 
