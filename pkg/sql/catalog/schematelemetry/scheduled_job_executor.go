@@ -72,7 +72,13 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 	p, cleanup := cfg.PlanHookMaker("invoke-schema-telemetry", txn, username.NodeUserName())
 	execCfg := p.(sql.PlanHookState).ExecCfg()
 	defer cleanup()
-	_, err = schematelemetrycontroller.CreateSchemaTelemetryJob(ctx, execCfg.JobRegistry, txn, jobs.CreatedByScheduledJobs, sj.ScheduleID())
+	_, err = schematelemetrycontroller.CreateSchemaTelemetryJob(
+		ctx,
+		execCfg.JobRegistry,
+		txn,
+		jobs.CreatedByScheduledJobs,
+		sj.ScheduleID(),
+	)
 	return err
 }
 
