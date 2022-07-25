@@ -29,14 +29,8 @@ import (
 var supportedVolatileBuiltinFunctions = makeStringSet(
 	// These functions can be supported given that we set the statement and
 	// transaction timestamp to be equal to MVCC timestamp of the event.
-	"current_date",
-	"current_timestamp",
-	"localtimestamp",
-	"localtime",
-	"now",
 	"statement_timestamp",
 	"transaction_timestamp",
-	"timeofday",
 	"timezone",
 
 	// jsonb functions are stable because they depend on eval
