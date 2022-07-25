@@ -45,3 +45,37 @@ inspect-system-table
 ----
 
 subtest end
+
+subtest create-external-connection-global-privilege
+
+exec-sql
+CREATE USER testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
+----
+pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+exec-sql
+GRANT SYSTEM EXTERNALCONNECTION TO testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
+----
+
+inspect-system-table
+----
+privileged STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo"}}}
+
+exec-sql
+REVOKE SYSTEM EXTERNALCONNECTION FROM testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
+----
+pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+subtest end
