@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,38 +54,13 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 			require.NoError(t, err)
 			return tree.AsStringWithFlags(d, tree.FmtExport)
 		}()
-		expectTS := func() string {
-			t.Helper()
-			d, err := tree.MakeDTimestamp(futureTS.GoTime(), time.Microsecond)
-			require.NoError(t, err)
-			return tree.AsStringWithFlags(d, tree.FmtExport)
-		}()
-		expectTime := func() string {
-			d := tree.MakeDTime(timeofday.FromTime(futureTS.GoTime().Round(time.Microsecond)))
-			return tree.AsStringWithFlags(d, tree.FmtExport)
-		}()
-		expectDate := func() string {
-			t.Helper()
-			d, err := tree.NewDDateFromTime(futureTS.GoTime())
-			require.NoError(t, err)
-			return tree.AsStringWithFlags(d, tree.FmtExport)
-		}()
 
 		for _, tc := range []struct {
 			fn     string
 			expect string
 		}{
-			{fn: "current_timestamp", expect: expectTSTZ},
-			{fn: "current_date", expect: expectDate},
-			{fn: "localtimestamp", expect: expectTS},
-			{fn: "localtime", expect: expectTime},
-			{fn: "now", expect: expectTSTZ},
 			{fn: "statement_timestamp", expect: expectTSTZ},
 			{fn: "transaction_timestamp", expect: expectTSTZ},
-			{
-				fn:     "timeofday",
-				expect: futureTS.GoTime().Format("Mon Jan 2 15:04:05.000000 2006 -0700"),
-			},
 		} {
 			t.Run(tc.fn, func(t *testing.T) {
 				testRow := cdcevent.TestingMakeEventRow(desc, 0,
@@ -301,7 +275,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		rowDatums := randEncDatumRow(t, desc, 0)
 		testRow := cdcevent.TestingMakeEventRow(desc, 0, rowDatums, false)
 		e, err := makeExprEval(t, s.ClusterSettings(), testRow.EventDescriptor,
-			`SELECT  overlaps(now(), interval '0', now(), interval '-1s')`)
+			`SELECT  overlaps(transaction_timestamp(), interval '0', transaction_timestamp(), interval '-1s')`)
 		require.NoError(t, err)
 
 		p, err := e.evalProjection(ctx, testRow, s.Clock().Now(), cdcevent.Row{})
