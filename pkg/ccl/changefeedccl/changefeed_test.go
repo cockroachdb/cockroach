@@ -1454,7 +1454,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		var backfillTimestamp hlc.Timestamp
 		var initialCheckpoint roachpb.SpanGroup
 		var foundCheckpoint int32
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
 			if initialCheckpoint.Len() > 0 {
 				return true
@@ -1517,7 +1517,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		var secondCheckpoint roachpb.SpanGroup
 		foundCheckpoint = 0
 		haveGaps = false
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			// Stop resolving anything after second checkpoint set to avoid backfill completion
 			if secondCheckpoint.Len() > 0 {
 				return true
@@ -1567,7 +1567,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			resolved = append(resolved, r.Span)
 			return false
 		}
@@ -5470,7 +5470,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
 		haveGaps := false
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			if r.Span.Equal(tableSpan) {
 				// Do not emit resolved events for the entire table span.
 				// We "simulate" large table by splitting single table span into many parts, so
@@ -5553,7 +5553,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			if !r.Span.Equal(tableSpan) {
 				resolved = append(resolved, r.Span)
 			}
@@ -6676,7 +6676,7 @@ func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	// an effect of never advancing the frontier, and thus never flushing
 	// the sink due to frontier advancement.  The only time we flush the sink
 	// is if the memory pressure causes flush request to be delivered.
-	knobs.ShouldSkipResolved = func(_ *jobspb.ResolvedSpan) bool {
+	knobs.ShouldSkipResolved = func(_ jobspb.ResolvedSpan) bool {
 		return true
 	}
 

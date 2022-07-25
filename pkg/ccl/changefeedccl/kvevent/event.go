@@ -92,7 +92,8 @@ type Event struct {
 	kv                 roachpb.KeyValue
 	prevVal            roachpb.Value
 	flush              bool
-	resolved           *jobspb.ResolvedSpan
+	resolved           jobspb.ResolvedSpan
+	isResolved         bool
 	backfillTimestamp  hlc.Timestamp
 	bufferAddTimestamp time.Time
 	approxSize         int
@@ -104,12 +105,14 @@ func (b *Event) Type() Type {
 	if b.kv.Key != nil {
 		return TypeKV
 	}
-	if b.resolved != nil {
+	if b.isResolved {
 		return TypeResolved
 	}
 	if b.flush {
 		return TypeFlush
 	}
+	//fmt.Printf("AAAA %t %t", b.resolved.Timestamp.IsSet(), b.resolved.Timestamp.IsEmpty())
+	//panic("BBB")
 	return TypeUnknown
 }
 
@@ -132,7 +135,7 @@ func (b *Event) PrevValue() roachpb.Value {
 
 // Resolved will be non-nil if this is a resolved timestamp event (i.e. IsKV()
 // returns false).
-func (b *Event) Resolved() *jobspb.ResolvedSpan {
+func (b *Event) Resolved() jobspb.ResolvedSpan {
 	return b.resolved
 }
 
@@ -202,14 +205,16 @@ func (b *Event) DetachAlloc() Alloc {
 func MakeResolvedEvent(
 	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) Event {
-	return Event{
-		resolved: &jobspb.ResolvedSpan{
+	e := Event{
+		resolved: jobspb.ResolvedSpan{
 			Span:         span,
 			Timestamp:    ts,
 			BoundaryType: boundaryType,
 		},
-		approxSize: span.Size() + ts.Size() + 4,
+		isResolved: true,
 	}
+	e.approxSize = e.resolved.Size() + 1
+	return e
 }
 
 // MakeKVEvent returns KV event.

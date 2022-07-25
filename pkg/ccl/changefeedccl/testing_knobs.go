@@ -33,7 +33,7 @@ type TestingKnobs struct {
 	WrapSink func(s Sink, jobID jobspb.JobID) Sink
 	// ShouldSkipResolved is a filter returning true if the resolved span event should
 	// be skipped.
-	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
+	ShouldSkipResolved func(resolved jobspb.ResolvedSpan) bool
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs kvfeed.TestingKnobs
 	// NullSinkIsExternalIOAccounted controls whether we record
