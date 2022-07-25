@@ -13,6 +13,7 @@ package delegate
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,6 +39,14 @@ func (d *delegator) delegateShowDefaultPrivileges(
 		lexbase.EscapeSQLString(currentDatabase.Normalize()),
 		schemaClause,
 	)
+	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.ValidateGrantOption) {
+		query = fmt.Sprintf(
+			"SELECT role, for_all_roles, object_type, grantee, privilege_type, is_grantable "+
+				"FROM crdb_internal.default_privileges WHERE database_name = %s%s",
+			lexbase.EscapeSQLString(currentDatabase.Normalize()),
+			schemaClause,
+		)
+	}
 
 	if n.ForAllRoles {
 		query += " AND for_all_roles=true"
