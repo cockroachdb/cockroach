@@ -974,6 +974,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	case opt.UDFOp:
 		udf := scalar.(*UDFExpr)
 		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
+		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
 		formatUDFBody(udf, tp)
 		return

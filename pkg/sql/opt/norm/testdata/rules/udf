@@ -9,6 +9,7 @@ SELECT one()
 values
  ├── columns: one:2
  ├── cardinality: [1 - 1]
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(2)
  └── tuple
