@@ -122,7 +122,9 @@ type Thresholder interface {
 
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
-	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey) error
+	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
+		*roachpb.GCRequest_GCClearRangeKey,
+	) error
 }
 
 // A GCer is an abstraction used by the MVCC GC queue to carry out chunked deletions.
@@ -140,8 +142,8 @@ var _ GCer = NoopGCer{}
 func (NoopGCer) SetGCThreshold(context.Context, Threshold) error { return nil }
 
 // GC implements storage.GCer.
-func (NoopGCer) GC(
-	context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
+func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
+	*roachpb.GCRequest_GCClearRangeKey,
 ) error {
 	return nil
 }
@@ -425,7 +427,7 @@ func processReplicatedKeyRange(
 		}
 		// If limit was reached, delegate to GC'r to remove collected batch.
 		if shouldSendBatch {
-			if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
+			if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
 				if errors.Is(err, ctx.Err()) {
 					return err
 				}
@@ -448,7 +450,7 @@ func processReplicatedKeyRange(
 		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -820,7 +822,7 @@ func (b *rangeKeyBatcher) flushPendingFragments(ctx context.Context) error {
 		}
 		b.pending = b.pending[:0]
 		b.pendingSize = 0
-		return b.gcer.GC(ctx, nil, toSend)
+		return b.gcer.GC(ctx, nil, toSend, nil)
 	}
 	return nil
 }
@@ -901,7 +903,7 @@ func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
 }
 
 func (b *batchingInlineGCer) Flush(ctx context.Context) {
-	err := b.gcer.GC(ctx, b.gcKeys, nil)
+	err := b.gcer.GC(ctx, b.gcKeys, nil, nil)
 	b.gcKeys = nil
 	b.size = 0
 	if err != nil {
