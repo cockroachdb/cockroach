@@ -976,7 +976,7 @@ func (sb *statisticsBuilder) colStatSelect(
 	// filter conditions were pushed down into the input after s.Selectivity
 	// was calculated. For example, an index scan or index join created during
 	// exploration could absorb some of the filter conditions.
-	selectivity := props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+	selectivity := props.MakeSelectivityFromFraction(s.RowCount, inputStats.RowCount)
 	colStat.ApplySelectivity(selectivity, inputStats.RowCount)
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
