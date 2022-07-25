@@ -22,11 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 const composeDir = "compose"
 
 func TestComposeGSS(t *testing.T) {
+	skip.WithIssue(t, 84978)
 	testCompose(t, filepath.Join("gss", "docker-compose.yml"), "psql")
 }
 
