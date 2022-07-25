@@ -68,6 +68,11 @@ type BulkAdderOptions struct {
 	// the first buffer to pick split points in the hope it is a representative
 	// sample of the overall input.
 	InitialSplitsIfUnordered int
+
+	// ImportJobID specifies the import job the Bulk Adder is doing work for. If
+	// specified, the Bulk Adder's SSTBatcher will write the job ID to each
+	// versioned value's metadata.
+	ImportJobID int64
 }
 
 // BulkAdderFactory describes a factory function for BulkAdders.

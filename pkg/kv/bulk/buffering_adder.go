@@ -56,6 +56,11 @@ type BufferingAdder struct {
 	// name of the BufferingAdder for the purpose of logging only.
 	name string
 
+	// importJobID specifies the import job the BufferingAdder is doing work for.
+	// If specified, the Bulk Adder's SSTBatcher will write the job ID to each
+	// versioned value's metadata.
+	importJobID int64
+
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
 
@@ -89,7 +94,8 @@ func MakeBulkAdder(
 	}
 
 	b := &BufferingAdder{
-		name: opts.Name,
+		name:        opts.Name,
+		importJobID: opts.ImportJobID,
 		sink: SSTBatcher{
 			name:                   opts.Name,
 			db:                     db,
@@ -265,8 +271,14 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	for i := range b.curBuf.entries {
 		mvccKey.Key = b.curBuf.Key(i)
-		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
-			return err
+		if b.importJobID != 0 {
+			if err := b.sink.AddMVCCKeyWithImportID(ctx, mvccKey, b.curBuf.Value(i), b.importJobID); err != nil {
+				return err
+			}
+		} else {
+			if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
+				return err
+			}
 		}
 	}
 	if err := b.sink.Flush(ctx); err != nil {

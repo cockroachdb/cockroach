@@ -283,6 +283,7 @@ func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
 	}
 	var v MVCCValue
 	v.LocalTimestamp = header.LocalTimestamp
+	v.ClientMeta = header.ClientMeta
 	v.Value.RawBytes = buf[headerSize:]
 	return v, nil
 }

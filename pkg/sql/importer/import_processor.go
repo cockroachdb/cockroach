@@ -388,6 +388,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		ImportJobID:              spec.JobID,
 	})
 	if err != nil {
 		return nil, err
@@ -404,6 +405,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		ImportJobID:              spec.JobID,
 	})
 	if err != nil {
 		return nil, err

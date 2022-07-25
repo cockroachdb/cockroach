@@ -140,7 +140,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expect:         kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expectStatsEst: true,
-			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/0.000000002,0`,
+			expectErrRace:  `SST contains non-empty Local Timestamp in the MVCC value header for key "a"/0.000000002,0`,
 		},
 		"blind rejects local timestamp on range key under race only": { // unfortunately, for performance
 			sst:            kvs{rangeKVWithLocalTS("a", "d", 2, 1, "")},
@@ -293,7 +293,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
 			expect:         kvs{pointKVWithLocalTS("a", 10, 1, "a2")},
 			expectStatsEst: true,
-			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/0.000000002,0`,
+			expectErrRace:  `SST contains non-empty Local Timestamp in the MVCC value header for key "a"/0.000000002,0`,
 		},
 
 		// DisallowConflicts
