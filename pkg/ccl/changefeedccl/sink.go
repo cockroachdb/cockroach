@@ -29,9 +29,30 @@ import (
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
+// This union interface is mainly meant for ease of mocking--an individual
+// changefeed processor should only need one of these.
 type Sink interface {
-	// Dial establishes connection to the sink.
+	EventSink
+	ResolvedTimestampSink
+}
+
+// externalResource is the interface common to both EventSink and
+// ResolvedTimestampSink.
+type externalResource interface {
+	// Dial establishes a connection to the sink.
 	Dial() error
+
+	// Close does not guarantee delivery of outstanding messages.
+	// It releases resources and may surface diagnostic information
+	// in logs or the returned error.
+	Close() error
+}
+
+// EventSink is the interface used when emitting changefeed events
+// and ensuring they were received.
+type EventSink interface {
+	externalResource
+
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
@@ -41,24 +62,53 @@ type Sink interface {
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
-	// EmitResolvedTimestamp enqueues a resolved timestamp message for
-	// asynchronous delivery on every topic that has been seen by EmitRow. An
-	// error may be returned if a previously enqueued message has failed.
-	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
-	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp has been acknowledged by the sink. If an error is
+
+	// Flush blocks until every message enqueued by EmitRow
+	// has been acknowledged by the sink. If an error is
 	// returned, no guarantees are given about which messages have been
 	// delivered or not delivered.
 	Flush(ctx context.Context) error
-	// Close does not guarantee delivery of outstanding messages.
-	Close() error
+}
+
+// ResolvedTimestampSink is the interface used when emitting resolved
+// timestamps.
+type ResolvedTimestampSink interface {
+	externalResource
+	// EmitResolvedTimestamp enqueues a resolved timestamp message for
+	// asynchronous delivery on every topic. An error may be returned
+	// if a previously enqueued message has failed. Implementations may
+	// alternatively emit synchronously.
+	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
 }
 
 // SinkWithTopics extends the Sink interface to include a method that returns
-// the topics that a changefeed will emit to
+// the topics that a changefeed will emit to.
 type SinkWithTopics interface {
-	Sink
 	Topics() []string
+}
+
+func getEventSink(
+	ctx context.Context,
+	serverCfg *execinfra.ServerConfig,
+	feedCfg jobspb.ChangefeedDetails,
+	timestampOracle timestampLowerBoundOracle,
+	user username.SQLUsername,
+	jobID jobspb.JobID,
+	m metricsRecorder,
+) (EventSink, error) {
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+}
+
+func getResolvedTimestampSink(
+	ctx context.Context,
+	serverCfg *execinfra.ServerConfig,
+	feedCfg jobspb.ChangefeedDetails,
+	timestampOracle timestampLowerBoundOracle,
+	user username.SQLUsername,
+	jobID jobspb.JobID,
+	m metricsRecorder,
+) (ResolvedTimestampSink, error) {
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 }
 
 func getSink(
@@ -247,7 +297,7 @@ func (u *sinkURL) String() string {
 // verify configuration, but in the steady state, no sink error should be
 // terminal.
 type errorWrapperSink struct {
-	wrapped Sink
+	wrapped externalResource
 }
 
 // EmitRow implements Sink interface.
@@ -258,7 +308,7 @@ func (s errorWrapperSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -268,7 +318,7 @@ func (s errorWrapperSink) EmitRow(
 func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
+	if err := s.wrapped.(ResolvedTimestampSink).EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -276,7 +326,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 
 // Flush implements Sink interface.
 func (s errorWrapperSink) Flush(ctx context.Context) error {
-	if err := s.wrapped.Flush(ctx); err != nil {
+	if err := s.wrapped.(EventSink).Flush(ctx); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil

@@ -37,7 +37,7 @@ type kvEventToRowConsumer struct {
 	frontier  *span.Frontier
 	encoder   Encoder
 	scratch   bufalloc.ByteAllocator
-	sink      Sink
+	sink      EventSink
 	cursor    hlc.Timestamp
 	knobs     TestingKnobs
 	decoder   cdcevent.Decoder
@@ -55,7 +55,7 @@ func newKVEventToRowConsumer(
 	evalCtx *eval.Context,
 	frontier *span.Frontier,
 	cursor hlc.Timestamp,
-	sink Sink,
+	sink EventSink,
 	encoder Encoder,
 	details ChangefeedConfig,
 	expr execinfrapb.Expression,
