@@ -434,6 +434,9 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
 func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {
+	if selectivity == ZeroSelectivity {
+		return nil
+	}
 	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
