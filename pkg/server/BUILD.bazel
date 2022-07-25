@@ -204,6 +204,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlutil",

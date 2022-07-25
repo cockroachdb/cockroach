@@ -4877,6 +4877,52 @@ Support status: [reserved](#support-status)
 
 
 
+## ListExecutionInsights
+
+
+
+ListExecutionInsights returns potentially problematic statements cluster-wide,
+along with actions we suggest the application developer might take to remedy them.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.ListExecutionInsightsRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| insights | [cockroach.sql.insights.Insight](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.sql.insights.Insight) | repeated | insights lists any potentially problematic statements and actions we suggest the application developer might take to remedy them. | [reserved](#support-status) |
+| errors | [cockroach.errorspb.EncodedError](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.errorspb.EncodedError) | repeated | errors holds any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

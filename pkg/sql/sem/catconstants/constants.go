@@ -97,6 +97,7 @@ const (
 	CrdbInternalClusterContendedTablesViewID
 	CrdbInternalClusterContentionEventsTableID
 	CrdbInternalClusterDistSQLFlowsTableID
+	CrdbInternalClusterExecutionInsightsTableID
 	CrdbInternalClusterLocksTableID
 	CrdbInternalClusterQueriesTableID
 	CrdbInternalClusterTransactionsTableID

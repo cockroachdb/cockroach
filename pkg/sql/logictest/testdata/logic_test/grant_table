@@ -36,6 +36,7 @@ test           crdb_internal       cluster_contended_tables               public
 test           crdb_internal       cluster_contention_events              public   SELECT          false
 test           crdb_internal       cluster_database_privileges            public   SELECT          false
 test           crdb_internal       cluster_distsql_flows                  public   SELECT          false
+test           crdb_internal       cluster_execution_insights             public   SELECT          false
 test           crdb_internal       cluster_inflight_traces                public   SELECT          false
 test           crdb_internal       cluster_locks                          public   SELECT          false
 test           crdb_internal       cluster_queries                        public   SELECT          false

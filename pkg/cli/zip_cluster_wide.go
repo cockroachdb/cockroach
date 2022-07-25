@@ -78,6 +78,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.cluster_contention_events",
 	"crdb_internal.cluster_distsql_flows",
 	"crdb_internal.cluster_database_privileges",
+	"crdb_internal.cluster_execution_insights",
 	"crdb_internal.cluster_locks",
 	"crdb_internal.cluster_queries",
 	"crdb_internal.cluster_sessions",

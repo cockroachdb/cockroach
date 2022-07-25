@@ -561,6 +561,7 @@ cluster_contended_tables               NULL
 cluster_contention_events              NULL
 cluster_database_privileges            NULL
 cluster_distsql_flows                  NULL
+cluster_execution_insights             NULL
 cluster_inflight_traces                NULL
 cluster_locks                          NULL
 cluster_queries                        NULL
