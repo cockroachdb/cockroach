@@ -557,3 +557,45 @@ CLOSE foo
 
 statement ok
 ALTER TABLE a ADD COLUMN c INT
+
+statement ok
+COMMIT;
+
+statement ok
+BEGIN;
+
+statement ok
+DECLARE "a"" b'c" CURSOR FOR SELECT 1;
+
+query I
+FETCH 1 "a"" b'c";
+----
+1
+
+statement ok
+CLOSE "a"" b'c";
+DECLARE "a b" CURSOR FOR SELECT 2;
+
+query I
+FETCH 1 "a b";
+----
+2
+
+statement ok
+CLOSE "a b";
+DECLARE "a\b" CURSOR FOR SELECT 3;
+
+query I
+FETCH 1 "a\b";
+----
+3
+
+statement ok
+CLOSE "a\b";
+
+query error pq: at or near "b": syntax error
+FETCH 1 a b;
+
+statement ok
+COMMIT;
+
