@@ -12,7 +12,7 @@ values
  ├── key: ()
  ├── fd: ()-->(2)
  └── tuple
-      └── user-defined-function: one
+      └── udf: one
            └── values
                 ├── columns: "?column?":1!null
                 ├── cardinality: [1 - 1]
