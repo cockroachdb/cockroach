@@ -401,6 +401,71 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 	return t.baseStatusServer.ListLocalContentionEvents(ctx, req)
 }
 
+func (t *tenantStatusServer) ListExecutionInsights(
+	ctx context.Context, req *serverpb.ListExecutionInsightsRequest,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	localRequest := serverpb.ListExecutionInsightsRequest{NodeID: "local"}
+
+	if len(req.NodeID) > 0 {
+		requestedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return t.baseStatusServer.localExecutionInsights(ctx)
+		}
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, requestedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, requestedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.ListExecutionInsights(ctx, &localRequest)
+	}
+
+	var response serverpb.ListExecutionInsightsResponse
+
+	podFn := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListExecutionInsights(ctx, &localRequest)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	responseFn := func(_ base.SQLInstanceID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		insightsResponse := nodeResp.(*serverpb.ListExecutionInsightsResponse)
+		response.Insights = append(response.Insights, insightsResponse.Insights...)
+	}
+	errorFn := func(instanceID base.SQLInstanceID, err error) {
+		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
+	}
+
+	if err := t.iteratePods(ctx, "execution insights list", t.dialCallback, podFn, responseFn, errorFn); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 func (t *tenantStatusServer) ResetSQLStats(
 	ctx context.Context, req *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {

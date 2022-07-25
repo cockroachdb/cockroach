@@ -12,7 +12,9 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -931,4 +933,72 @@ func TestIsAtLeastVersion(t *testing.T) {
 			db.CheckQueryResults(t, query, [][]string{{tc.expected}})
 		}
 	}
+}
+
+// This test doesn't care about the contents of these virtual tables;
+// other places (the insights integration tests) do that for us.
+// What we look at here is the role-option-checking we need to make sure
+// the current sql user has permission to read these tables at all.
+// VIEWACTIVITY or VIEWACTIVITYREDACTED should be sufficient.
+func TestExecutionInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster.
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// We'll check both the cluster-wide table and the node-local one.
+	virtualTables := []interface{}{
+		"cluster_execution_insights",
+		"node_execution_insights",
+	}
+	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table interface{}) {
+		testCases := []struct {
+			option  string
+			granted bool
+		}{
+			{option: "VIEWACTIVITY", granted: true},
+			{option: "VIEWACTIVITYREDACTED", granted: true},
+			{option: "NOVIEWACTIVITY"},
+			{option: "NOVIEWACTIVITYREDACTED"},
+		}
+		for _, testCase := range testCases {
+			t.Run(fmt.Sprintf("option=%s", testCase.option), func(t *testing.T) {
+				// Create a test user with the role option we're testing.
+				sqlDB.Exec(t, fmt.Sprintf("CREATE USER testuser WITH %s", testCase.option))
+				defer func() {
+					sqlDB.Exec(t, "DROP USER testuser")
+				}()
+
+				// Connect to the cluster as the test user.
+				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
+					url.User("testuser"),
+				)
+				defer cleanup()
+				db, err := gosql.Open("postgres", pgUrl.String())
+				require.NoError(t, err)
+				defer func() { _ = db.Close() }()
+
+				// Try to read the virtual table, and see that we can or cannot as expected.
+				rows, err := db.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
+				defer func() {
+					if rows != nil {
+						_ = rows.Close()
+					}
+				}()
+				if testCase.granted {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
+		}
+
+	})
 }
