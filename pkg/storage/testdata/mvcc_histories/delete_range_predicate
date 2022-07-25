@@ -1,0 +1,382 @@
+# Tests MVCC Del Range with timestamp predicate.
+#
+# Set up some point keys, point tombstones x, range tombstones o--o,
+# and intents [].
+#
+# 7                                [i7]
+# 6
+# 5
+# 4  x           d4     f4   x  h4          o-------------------o
+# 3      b3
+# 2  a2              e2      g2
+# 1              d1
+# 0
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+run ok
+put k=a ts=2 v=a2
+del k=a ts=4
+put k=b ts=3 v=b3
+put k=d ts=1 v=d1
+put k=d ts=4 v=d4
+put k=e ts=2 v=e2
+put k=f ts=4 v=f4
+put k=g ts=2 v=g2
+del k=g ts=4
+put k=h ts=4 v=h4
+del_range_ts k=k end=p ts=4
+with t=A
+  txn_begin ts=7
+  put k=i v=i7
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing next to or above point keys and tombstones should work.
+run stats ok
+del_range_pred k=a end=i ts=5 startTime=3 rangeThreshold=2
+----
+>> del_range_pred k=a end=i ts=5 startTime=3 rangeThreshold=2
+stats: key_bytes=+12 val_count=+1 range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-3 live_bytes=-63 gc_bytes_age=+8455
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# error on intent, no tombstones should be written
+run stats error
+del_range_pred k=a end=p ts=6 startTime=1
+----
+>> del_range_pred k=a end=p ts=6 startTime=1
+stats: no change
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+# error encountering point key at d5.
+# a tombstone should not get written at c5 or e5, since
+# DeleteRange didn't flush before reaching d5.
+run stats error
+put k=c ts=2 v=c2
+del_range_pred k=c end=f ts=5 startTime=1
+----
+>> put k=c ts=2 v=c2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_pred k=c end=f ts=5 startTime=1
+stats: no change
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: key_count=9 key_bytes=174 val_count=13 val_bytes=118 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=4 live_bytes=132 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
+
+# error encountering range key at k4.
+# a tombstones should not get written to j4 or q4 since
+# DeleteRange did not flush before reaching rangekey {k-p}4.
+run stats error
+put k=j ts=2 v=j2
+put k=q ts=2 v=q2
+del_range_pred k=j end=r ts=4 startTime=1 rangeThreshold=2
+----
+>> put k=j ts=2 v=j2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=q ts=2 v=q2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_pred k=j end=r ts=4 startTime=1 rangeThreshold=2
+stats: no change
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+# At this point the keyspace looks like this:
+# 7                                [i7]
+# 6
+# 5              x       o-----------o
+# 4  x           d4      f4  x   h4          o-------------------o
+# 3      b3
+# 2  a2     c2       e2      g2          j2                        q2
+# 1              d1
+# 0
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p  q
+
+# check that del_range will not write anything if no live keys are in its span
+# and predicate ts. Note that the range keys bounds are [firstMatchingKey,LastMatchingKey.Next()].
+run stats ok
+del_range_pred k=j end=r ts=5 startTime=2 rangeThreshold=2
+----
+>> del_range_pred k=j end=r ts=5 startTime=2 rangeThreshold=2
+stats: no change
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# try the same call as above, except with startTime set to 1
+# check that delrange properly continues the run over a range tombstone
+run stats ok
+del_range_pred k=j end=r ts=5 startTime=1 rangeThreshold=2
+----
+>> del_range_pred k=j end=r ts=5 startTime=1 rangeThreshold=2
+stats: range_key_count=+2 range_key_bytes=+36 range_val_count=+3 live_count=-2 live_bytes=-42 gc_bytes_age=+7406
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {j-k}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[5.000000000,0=/<empty> 4.000000000,0=/<empty>]
+rangekey: {p-q\x00}/[5.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=4 range_key_bytes=63 range_val_count=5 live_count=4 live_bytes=132 gc_bytes_age=25269 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# check that we flush with a range tombstone, if maxBytes is exceeded
+# even though range tombstone threshold has not been met.
+# Return a resume span. Note that the run extends past key d, since
+# its latest value is a point tombstone, and is therefore not counted
+# in runByteSize.
+run stats ok
+del_range_pred k=c end=i ts=6 startTime=1 maxBytes=1
+----
+>> del_range_pred k=c end=i ts=6 startTime=1 maxBytes=1
+del_range_pred: resume span ["e","i")
+stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3290
+>> at end:
+rangekey: c{-\x00}/[6.000000000,0=/<empty>]
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {j-k}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[5.000000000,0=/<empty> 4.000000000,0=/<empty>]
+rangekey: {p-q\x00}/[5.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=28559 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# check that we flush properly if maxBatchSize is exceeded.
+# Since max is 1, write a tombstone to e, and as soon as it sees the
+# next eligible key to delete (f), return a resume span.
+# Note that we dont count shadowed tombstones in the batchSize
+run stats ok
+put k=f ts=6 v=f6
+del_range_pred k=c end=i ts=7 startTime=1 max=1
+----
+>> put k=f ts=6 v=f6
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
+>> del_range_pred k=c end=i ts=7 startTime=1 max=1
+del_range_pred: resume span ["f","i")
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3069
+>> at end:
+rangekey: c{-\x00}/[6.000000000,0=/<empty>]
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {j-k}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[5.000000000,0=/<empty> 4.000000000,0=/<empty>]
+rangekey: {p-q\x00}/[5.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/7.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=31438 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# Run the same DeleteRange as above at ts 8
+# No resume span should get returned because the iterator goes through
+# the whole span without encountering a second eligible key to delete
+run stats ok
+del_range_pred k=c end=i ts=8 startTime=1 max=1
+----
+>> del_range_pred k=c end=i ts=8 startTime=1 max=1
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3036
+>> at end:
+rangekey: c{-\x00}/[6.000000000,0=/<empty>]
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {j-k}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[5.000000000,0=/<empty> 4.000000000,0=/<empty>]
+rangekey: {p-q\x00}/[5.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/7.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/8.000000000,0 -> /<empty>
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=238 val_count=18 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=2 live_bytes=90 gc_bytes_age=34474 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+
+# Write some new keys on a and b and ensure a run of point tombstones gets properly written
+run stats ok
+put k=a ts=5 v=a5
+put k=b ts=5 v=a5
+del_range_pred k=a end=c ts=6 startTime=1
+----
+>> put k=a ts=5 v=a5
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-192
+>> put k=b ts=5 v=a5
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 gc_bytes_age=+1805
+>> del_range_pred k=a end=c ts=6 startTime=1
+stats: key_bytes=+24 val_count=+2 live_count=-2 live_bytes=-42 gc_bytes_age=+6204
+>> at end:
+rangekey: c{-\x00}/[6.000000000,0=/<empty>]
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {j-k}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[5.000000000,0=/<empty> 4.000000000,0=/<empty>]
+rangekey: {p-q\x00}/[5.000000000,0=/<empty>]
+data: "a"/6.000000000,0 -> /<empty>
+data: "a"/5.000000000,0 -> /BYTES/a5
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/6.000000000,0 -> /<empty>
+data: "b"/5.000000000,0 -> /BYTES/a5
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/7.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/8.000000000,0 -> /<empty>
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "q"/2.000000000,0 -> /BYTES/q2
+stats: key_count=11 key_bytes=286 val_count=22 val_bytes=153 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=1 live_bytes=69 gc_bytes_age=42291 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93

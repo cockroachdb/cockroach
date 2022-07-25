@@ -12,6 +12,8 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,8 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDeleteRangeTombstone tests DeleteRange range tombstones directly, using
-// only a Pebble engine.
+// TestDeleteRangeTombstone tests DeleteRange range tombstones and predicated based DeleteRange
+// directly, using only a Pebble engine.
 //
 // MVCC range tombstone logic is tested exhaustively in the MVCC history tests,
 // this just tests the RPC plumbing.
@@ -76,6 +78,11 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		inline     bool
 		returnKeys bool
 		expectErr  interface{} // error type, substring, or true (any)
+
+		// The fields below test predicate based delete range rpc plumbing.
+		predicateStartTime int64 // if set, the test will only run with predicate based delete range
+		onlyPointKeys      bool  // if set UsingRangeTombstone arg is set to false
+		maxBatchSize       int64 // if predicateStartTime is set, then MaxBatchSize must be set
 	}{
 		"above points succeed": {
 			start: "a",
@@ -142,128 +149,214 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			ts:        1e9,
 			expectErr: &roachpb.WriteTooOldError{},
 		},
+		"predicate without UsingRangeTombstone error": {
+			start:              "a",
+			end:                "f",
+			ts:                 10e9,
+			predicateStartTime: 1,
+			maxBatchSize:       maxDeleteRangeBatchBytes,
+			onlyPointKeys:      true,
+			expectErr:          "UseRangeTombstones must be passed with predicate based Delete Range",
+		},
+		"predicate maxBatchSize error": {
+			start:              "a",
+			end:                "f",
+			ts:                 10e9,
+			predicateStartTime: 1,
+			maxBatchSize:       0,
+			expectErr:          "MaxSpanRequestKeys must be greater than zero when using predicated based DeleteRange",
+		},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
-			st := cluster.MakeTestingClusterSettings()
-			engine := storage.NewDefaultInMemForTesting()
-			defer engine.Close()
-
-			writeInitialData(t, ctx, engine)
-
-			rangeKey := storage.MVCCRangeKey{
-				StartKey:  roachpb.Key(tc.start),
-				EndKey:    roachpb.Key(tc.end),
-				Timestamp: hlc.Timestamp{WallTime: tc.ts},
-			}
-
-			// Prepare the request and environment.
-			evalCtx := &MockEvalCtx{
-				ClusterSettings: st,
-				Desc: &roachpb.RangeDescriptor{
-					StartKey: roachpb.RKey(rangeStart),
-					EndKey:   roachpb.RKey(rangeEnd),
-				},
-			}
-
-			h := roachpb.Header{
-				Timestamp: rangeKey.Timestamp,
-			}
-			if tc.txn {
-				txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
-				h.Txn = &txn
-			}
-
-			req := &roachpb.DeleteRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key:    rangeKey.StartKey,
-					EndKey: rangeKey.EndKey,
-				},
-				UseRangeTombstone: true,
-				Inline:            tc.inline,
-				ReturnKeys:        tc.returnKeys,
-			}
-
-			ms := computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime)
-
-			// Use a spanset batch to assert latching of all accesses. In particular,
-			// the additional seeks necessary to check for adjacent range keys that we
-			// may merge with (for stats purposes) which should not cross the range
-			// bounds.
-			var latchSpans, lockSpans spanset.SpanSet
-			declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
-			batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
-			defer batch.Close()
-
-			// Run the request.
-			resp := &roachpb.DeleteRangeResponse{}
-			_, err := DeleteRange(ctx, batch, CommandArgs{
-				EvalCtx: evalCtx.EvalContext(),
-				Stats:   &ms,
-				Now:     now,
-				Header:  h,
-				Args:    req,
-			}, resp)
-
-			// Check the error.
-			if tc.expectErr != nil {
-				require.Error(t, err)
-				if b, ok := tc.expectErr.(bool); ok && b {
-					// any error is fine
-				} else if expectMsg, ok := tc.expectErr.(string); ok {
-					require.Contains(t, err.Error(), expectMsg)
-				} else if e, ok := tc.expectErr.(error); ok {
-					require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
-				} else {
-					require.Fail(t, "invalid expectErr", "expectErr=%v", tc.expectErr)
+			for _, runWithPredicates := range []bool{false, true} {
+				if tc.predicateStartTime > 0 && !runWithPredicates {
+					continue
 				}
-				return
-			}
-			require.NoError(t, err)
-			require.NoError(t, batch.Commit(true))
+				t.Run(fmt.Sprintf("Predicates=%v", runWithPredicates), func(t *testing.T) {
+					ctx := context.Background()
+					st := cluster.MakeTestingClusterSettings()
+					engine := storage.NewDefaultInMemForTesting()
+					defer engine.Close()
 
-			// Check that the range tombstone was written successfully.
-			iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypeRangesOnly,
-				LowerBound: rangeKey.StartKey,
-				UpperBound: rangeKey.EndKey,
-			})
-			defer iter.Close()
-			iter.SeekGE(storage.MVCCKey{Key: rangeKey.StartKey})
+					writeInitialData(t, ctx, engine)
 
-			var seen storage.MVCCRangeKeyValue
-			for {
-				ok, err := iter.Valid()
-				require.NoError(t, err)
-				if !ok {
-					break
-				}
-				require.True(t, ok)
-				for _, rkv := range iter.RangeKeys() {
-					if rkv.RangeKey.Timestamp.Equal(rangeKey.Timestamp) {
-						if len(seen.RangeKey.StartKey) == 0 {
-							seen = rkv.Clone()
-						} else {
-							seen.RangeKey.EndKey = rkv.RangeKey.EndKey.Clone()
-							require.Equal(t, seen.Value, rkv.Value)
-						}
-						break
+					rangeKey := storage.MVCCRangeKey{
+						StartKey:  roachpb.Key(tc.start),
+						EndKey:    roachpb.Key(tc.end),
+						Timestamp: hlc.Timestamp{WallTime: tc.ts},
 					}
-				}
-				iter.Next()
+
+					// Prepare the request and environment.
+					evalCtx := &MockEvalCtx{
+						ClusterSettings: st,
+						Desc: &roachpb.RangeDescriptor{
+							StartKey: roachpb.RKey(rangeStart),
+							EndKey:   roachpb.RKey(rangeEnd),
+						},
+					}
+
+					h := roachpb.Header{
+						Timestamp: rangeKey.Timestamp,
+					}
+					if tc.txn {
+						txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
+						h.Txn = &txn
+					}
+					var predicates roachpb.DeleteRangePredicates
+					if runWithPredicates {
+						predicates = roachpb.DeleteRangePredicates{
+							StartTime: hlc.Timestamp{WallTime: 1},
+						}
+						h.MaxSpanRequestKeys = math.MaxInt64
+					}
+					if tc.predicateStartTime > 0 {
+						predicates = roachpb.DeleteRangePredicates{
+							StartTime: hlc.Timestamp{WallTime: tc.predicateStartTime},
+						}
+						h.MaxSpanRequestKeys = tc.maxBatchSize
+					}
+
+					req := &roachpb.DeleteRangeRequest{
+						RequestHeader: roachpb.RequestHeader{
+							Key:    rangeKey.StartKey,
+							EndKey: rangeKey.EndKey,
+						},
+						UseRangeTombstone: !tc.onlyPointKeys,
+						Inline:            tc.inline,
+						ReturnKeys:        tc.returnKeys,
+						Predicates:        predicates,
+					}
+
+					ms := computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime)
+
+					// Use a spanset batch to assert latching of all accesses. In particular,
+					// the additional seeks necessary to check for adjacent range keys that we
+					// may merge with (for stats purposes) which should not cross the range
+					// bounds.
+					var latchSpans, lockSpans spanset.SpanSet
+					declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
+					batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
+					defer batch.Close()
+
+					// Run the request.
+					resp := &roachpb.DeleteRangeResponse{}
+					_, err := DeleteRange(ctx, batch, CommandArgs{
+						EvalCtx: evalCtx.EvalContext(),
+						Stats:   &ms,
+						Now:     now,
+						Header:  h,
+						Args:    req,
+					}, resp)
+
+					// Check the error.
+					if tc.expectErr != nil {
+						require.Error(t, err)
+						if b, ok := tc.expectErr.(bool); ok && b {
+							// any error is fine
+						} else if expectMsg, ok := tc.expectErr.(string); ok {
+							require.Contains(t, err.Error(), expectMsg)
+						} else if e, ok := tc.expectErr.(error); ok {
+							require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
+						} else {
+							require.Fail(t, "invalid expectErr", "expectErr=%v", tc.expectErr)
+						}
+						return
+					}
+					require.NoError(t, err)
+					require.NoError(t, batch.Commit(true))
+
+					if runWithPredicates {
+						checkPredicateDeleteRange(t, engine, rangeKey)
+					} else {
+						checkDeleteRangeTombstone(t, engine, rangeKey, now)
+					}
+
+					// Check that range tombstone stats were updated correctly.
+					require.Equal(t, computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime), ms)
+				})
 			}
-			require.Equal(t, rangeKey, seen.RangeKey)
-
-			value, err := storage.DecodeMVCCValue(seen.Value)
-			require.NoError(t, err)
-			require.True(t, value.IsTombstone())
-			require.Equal(t, now, value.LocalTimestamp)
-
-			// Check that range tombstone stats were updated correctly.
-			require.Equal(t, computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime), ms)
 		})
 	}
+}
+
+// checkDeleteRangeTombstone checks that the span targeted by the predicate
+// based delete range operation only has point tombstones, as the size of the
+// spans in this test are below rangeTombstoneThreshold
+//
+// the passed in rangekey contains info on the span PredicateDeleteRange
+// operated on. The command should not have written an actual rangekey!
+func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo storage.MVCCRangeKey) {
+
+	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: rKeyInfo.StartKey,
+		UpperBound: rKeyInfo.EndKey,
+	})
+	defer iter.Close()
+
+	for iter.SeekGE(storage.MVCCKey{Key: rKeyInfo.StartKey}); ; iter.NextKey() {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		hasPoint, hashRange := iter.HasPointAndRange()
+		if !hasPoint && hashRange {
+			// PredicateDeleteRange should not have written any delete tombstones;
+			// therefore, any range key tombstones in the span should have been
+			// written before the request was issued.
+			for _, rKey := range iter.RangeKeys() {
+				require.Equal(t, true, rKey.RangeKey.Timestamp.Less(rKeyInfo.Timestamp))
+			}
+			continue
+		}
+		value, err := storage.DecodeMVCCValue(iter.UnsafeValue())
+		require.NoError(t, err)
+		require.True(t, value.IsTombstone())
+	}
+}
+
+// checkDeleteRangeTombstone checks that the range tombstone was written successfully.
+func checkDeleteRangeTombstone(
+	t *testing.T, engine storage.Reader, rangeKey storage.MVCCRangeKey, now hlc.ClockTimestamp,
+) {
+	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: rangeKey.StartKey,
+		UpperBound: rangeKey.EndKey,
+	})
+	defer iter.Close()
+	iter.SeekGE(storage.MVCCKey{Key: rangeKey.StartKey})
+
+	var seen storage.MVCCRangeKeyValue
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		require.True(t, ok)
+		for _, rkv := range iter.RangeKeys() {
+			if rkv.RangeKey.Timestamp.Equal(rangeKey.Timestamp) {
+				if len(seen.RangeKey.StartKey) == 0 {
+					seen = rkv.Clone()
+				} else {
+					seen.RangeKey.EndKey = rkv.RangeKey.EndKey.Clone()
+					require.Equal(t, seen.Value, rkv.Value)
+				}
+				break
+			}
+		}
+		iter.Next()
+	}
+	rangeKey.StartKey.Equal(seen.RangeKey.StartKey)
+	require.Equal(t, rangeKey, seen.RangeKey)
+
+	value, err := storage.DecodeMVCCValue(seen.Value)
+	require.NoError(t, err)
+	require.True(t, value.IsTombstone())
+	require.Equal(t, now, value.LocalTimestamp)
 }
 
 // computeStats computes MVCC stats for the given range.

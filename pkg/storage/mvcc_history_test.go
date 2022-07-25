@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -73,6 +74,7 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key>
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
@@ -659,6 +661,7 @@ var commands = map[string]cmd{
 	"del":            {typDataUpdate, cmdDelete},
 	"del_range":      {typDataUpdate, cmdDeleteRange},
 	"del_range_ts":   {typDataUpdate, cmdDeleteRangeTombstone},
+	"del_range_pred": {typDataUpdate, cmdDeleteRangePredicate},
 	"export":         {typReadOnly, cmdExport},
 	"get":            {typReadOnly, cmdGet},
 	"increment":      {typDataUpdate, cmdIncrement},
@@ -1017,6 +1020,40 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
 		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0)
 	})
+}
+
+func cmdDeleteRangePredicate(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	max := math.MaxInt64
+	if e.hasArg("max") {
+		e.scanArg("max", &max)
+	}
+
+	maxBytes := math.MaxInt64
+	if e.hasArg("maxBytes") {
+		e.scanArg("maxBytes", &maxBytes)
+	}
+	predicates := roachpb.DeleteRangePredicates{
+		StartTime: e.getTsWithName("startTime"),
+	}
+	rangeThreshold := 64
+	if e.hasArg("rangeThreshold") {
+		e.scanArg("rangeThreshold", &rangeThreshold)
+	}
+	return e.withWriter("del_range_pred", func(rw ReadWriter) error {
+		resumeSpan, err := MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts,
+			localTs, nil, nil, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
+
+		if resumeSpan != nil {
+			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
+				resumeSpan.EndKey)
+		}
+		return err
+	},
+	)
 }
 
 func cmdGet(e *evalCtx) error {
