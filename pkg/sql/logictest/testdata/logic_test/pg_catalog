@@ -6034,3 +6034,31 @@ SELECT * FROM pg_sequences WHERE sequencename = 'serial'
 ----
 schemaname  sequencename  sequenceowner  data_type  start_value  min_value  max_value            increment_by  cycle  cache_size  last_value
 public      serial        root           20         101          1          9223372036854775807  5             false  1           NULL
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT);
+INSERT INTO t VALUES (1, 2), (2, 3);
+
+statement ok
+BEGIN;
+
+statement ok
+DECLARE "a"" b'c" CURSOR FOR TABLE t;
+DECLARE "a b" CURSOR FOR TABLE t;
+DECLARE "a\b" CURSOR FOR TABLE t;
+
+## pg_catalog.pg_cursors
+
+query TTBBB colnames
+SELECT name, statement, is_holdable, is_binary, is_scrollable FROM pg_catalog.pg_cursors ORDER BY name;
+----
+name    statement  is_holdable  is_binary  is_scrollable
+a b     TABLE t    false        false      false
+a" b'c  TABLE t    false        false      false
+a\b     TABLE t    false        false      false
+
+statement ok
+COMMIT;
+
+statement ok
+DROP TABLE t;
