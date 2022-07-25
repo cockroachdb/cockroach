@@ -82,7 +82,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/timeofday",
         "@com_github_stretchr_testify//require",
     ],
 )
