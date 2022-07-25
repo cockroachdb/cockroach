@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -89,9 +88,10 @@ func (p *planner) AlterTenantSetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	// We don't support changing the version for another tenant just yet.
+	// We don't support changing the version for another tenant.
+	// See discussion on issue https://github.com/cockroachdb/cockroach/issues/77733 (wontfix).
 	if _, isVersion := setting.(*settings.VersionSetting); isVersion {
-		return nil, unimplemented.NewWithIssue(77733, "cannot change the version of another tenant")
+		return nil, errors.Newf("cannot change the version of another tenant")
 	}
 
 	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)
