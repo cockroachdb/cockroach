@@ -3,25 +3,42 @@ user testuser
 statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
 SELECT * FROM crdb_internal.cluster_settings;
 
+statement error pq: only users with the CREATEEXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+
 user root
 
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SYSTEM CREATEEXTERNALCONNECTION TO testuser
 
 user testuser
 
 statement ok
 SELECT * FROM crdb_internal.cluster_settings;
 
+statement ok
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+
 user root
 
 query TTTT
 SELECT * FROM system.privileges
 ----
-testuser  /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {CREATEEXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+
+query TT
+SELECT connection_name, connection_type FROM system.external_connections
+----
+foo  STORAGE
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+statement ok
+REVOKE SYSTEM CREATEEXTERNALCONNECTION FROM testuser
 
 user testuser
 
