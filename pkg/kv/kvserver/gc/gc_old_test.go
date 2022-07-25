@@ -150,7 +150,7 @@ func runGCOld(
 						if batchGCKeysBytes >= KeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
 
-							err := gcer.GC(ctx, batchGCKeys, nil)
+							err := gcer.GC(ctx, batchGCKeys, nil, roachpb.GCRequest_GCClearRangeKey{})
 
 							batchGCKeys = nil
 							batchGCKeysBytes = 0
@@ -209,7 +209,7 @@ func runGCOld(
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil, roachpb.GCRequest_GCClearRangeKey{}); err != nil {
 			return Info{}, err
 		}
 	}
