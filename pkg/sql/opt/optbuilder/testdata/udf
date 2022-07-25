@@ -15,6 +15,13 @@ exec-ddl
 CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
 ----
 
+exec-ddl
+CREATE FUNCTION two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT 2;
+$$
+----
+
 build
 SELECT one()
 ----
@@ -23,7 +30,7 @@ project
  ├── values
  │    └── ()
  └── projections
-      └── user-defined-function: one [as=one:2]
+      └── udf: one [as=one:2]
            └── project
                 ├── columns: "?column?":1!null
                 ├── values
@@ -39,7 +46,7 @@ project
  ├── scan abc
  │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      └── user-defined-function: one [as=one:7]
+      └── udf: one [as=one:7]
            └── project
                 ├── columns: "?column?":6!null
                 ├── values
@@ -58,7 +65,7 @@ project
       │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       └── filters
            └── eq
-                ├── user-defined-function: one
+                ├── udf: one
                 │    └── project
                 │         ├── columns: "?column?":6!null
                 │         ├── values
@@ -66,3 +73,54 @@ project
                 │         └── projections
                 │              └── 1 [as="?column?":6]
                 └── c:3
+
+build
+SELECT a + one(), b + two() FROM abc WHERE c = two()
+----
+project
+ ├── columns: "?column?":9 "?column?":12
+ ├── select
+ │    ├── columns: a:1!null b:2 c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── scan abc
+ │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    └── filters
+ │         └── eq
+ │              ├── c:3
+ │              └── udf: two
+ │                   ├── project
+ │                   │    ├── columns: "?column?":6!null
+ │                   │    ├── values
+ │                   │    │    └── ()
+ │                   │    └── projections
+ │                   │         └── 1 [as="?column?":6]
+ │                   └── project
+ │                        ├── columns: "?column?":7!null
+ │                        ├── values
+ │                        │    └── ()
+ │                        └── projections
+ │                             └── 2 [as="?column?":7]
+ └── projections
+      ├── plus [as="?column?":9]
+      │    ├── a:1
+      │    └── udf: one
+      │         └── project
+      │              ├── columns: "?column?":8!null
+      │              ├── values
+      │              │    └── ()
+      │              └── projections
+      │                   └── 1 [as="?column?":8]
+      └── plus [as="?column?":12]
+           ├── b:2
+           └── udf: two
+                ├── project
+                │    ├── columns: "?column?":10!null
+                │    ├── values
+                │    │    └── ()
+                │    └── projections
+                │         └── 1 [as="?column?":10]
+                └── project
+                     ├── columns: "?column?":11!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 2 [as="?column?":11]
