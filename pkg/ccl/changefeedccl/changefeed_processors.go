@@ -555,8 +555,8 @@ func (ca *changeAggregator) tick() error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) error {
-	advanced, err := ca.frontier.ForwardResolvedSpan(*resolved)
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}

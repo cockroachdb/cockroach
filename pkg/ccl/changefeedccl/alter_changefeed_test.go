@@ -581,7 +581,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		}
 
 		// ensure that we do not emit a resolved timestamp
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			return true
 		}
 
@@ -616,7 +616,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		)
 
 		// allow the changefeed to emit resolved events now
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			return false
 		}
 
@@ -980,7 +980,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		var backfillTimestamp hlc.Timestamp
 		var initialCheckpoint roachpb.SpanGroup
 		var foundCheckpoint int32
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
 			if initialCheckpoint.Len() > 0 {
 				return true
@@ -1077,7 +1077,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		// Emit resolved events for the majority of spans. Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolvedFoo timestamp (to force checkpointing).
 		haveGaps := false
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			rndMu.Lock()
 			defer rndMu.Unlock()
 
@@ -1159,7 +1159,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolvedFoo []roachpb.Span
-		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+		knobs.ShouldSkipResolved = func(r jobspb.ResolvedSpan) bool {
 			if !r.Span.Equal(fooTableSpan) {
 				resolvedFoo = append(resolvedFoo, r.Span)
 			}
