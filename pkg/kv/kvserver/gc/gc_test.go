@@ -145,19 +145,19 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
 	}
-	fakeGCer := makeFakeGCer()
+	gcer := makeFakeGCer()
 
 	// Test GC desired behavior.
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
-		fakeGCer.resolveIntentsAsync)
+		RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &gcer, gcer.resolveIntents,
+		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
 	info, err = Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
-		fakeGCer.resolveIntentsAsync)
+		RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &gcer, gcer.resolveIntents,
+		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
 		"Expected 1 intents considered by GC with short threshold")
@@ -212,22 +212,22 @@ func TestIntentCleanupBatching(t *testing.T) {
 	baseGCer.normalize()
 
 	var batchSize int64 = 7
-	fakeGCer := makeFakeGCer()
+	gcer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize},
 		gcTTL,
-		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
+		&gcer, gcer.resolveIntents, gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0
-	for _, batch := range fakeGCer.batches {
+	for _, batch := range gcer.batches {
 		if intents := len(batch); intents > maxIntents {
 			maxIntents = intents
 		}
 	}
 	require.Equal(t, int64(maxIntents), batchSize, "Batch size")
 	require.Equal(t, 15, info.ResolveTotal)
-	fakeGCer.normalize()
-	require.EqualValues(t, baseGCer, fakeGCer, "GC result with batching")
+	gcer.normalize()
+	require.EqualValues(t, baseGCer, gcer, "GC result with batching")
 }
 
 type testResolver [][]roachpb.Intent
@@ -683,12 +683,18 @@ var avoidMergingDifferentTs = `
  1 |
 `
 
+type testRunData struct {
+	name                 string
+	data                 string
+	deleteRangeThreshold int
+	keyBytesThreshold    int64
+	disableClearRange    bool
+	clearRangeCooldown   int
+}
+
 func TestGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, d := range []struct {
-		name string
-		data string
-	}{
+	for _, d := range []testRunData{
 		{name: "single", data: singleValueData},
 		{name: "multiple_newer", data: multipleValuesNewerData},
 		{name: "multiple_older", data: multipleValuesOlderData},
@@ -708,12 +714,387 @@ func TestGC(t *testing.T) {
 		{name: "avoid_merging_different_ts", data: avoidMergingDifferentTs},
 	} {
 		t.Run(d.name, func(t *testing.T) {
-			runTest(t, d.data)
+			d.disableClearRange = true
+			runTest(t, d, nil)
 		})
 	}
 }
 
-func runTest(t *testing.T, data string) {
+var clearRangePointsSplitAtKeyBoundaries = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |
+>5 | .------------
+ 4 |            d E
+ 3 | a     cc
+ 2 |    bb
+ 1 |
+`
+
+var clearRangePointsSplitAtVersions = `
+   | a  bb ccc  d  e
+---+----------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |       A
+>5 | .-------------
+ 4 |            d  E
+ 3 | a     cc
+ 2 |    bb f    gg
+ 1 |
+`
+
+var clearRangeManySplitsPerKey = `
+   | a  bb ccc  d  e
+---+----------------
+ 9 |    K
+>8 | .-------------
+ 7 |       g
+ 6 |    i
+ 5 | l     eee
+ 4 |    h  dd 
+ 3 | a     ccc
+ 2 |    bb f
+ 1 |
+`
+
+var rangeClearInOneGo = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 | 
+>5 | .----------
+ 4 |
+ 3 | a     ccc
+ 2 |    bb
+ 1 |
+`
+
+var rangeClearAtKeyBoundary = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |    B
+>5 | .------------
+ 4 |            d
+ 3 | a     ccc  e
+ 2 |            f
+ 1 |
+`
+
+var rangeClearAtGarbageVersion = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |    H
+ 7 |
+ 6 |    B
+>5 | .------------
+ 4 |            d
+ 3 | a  g  ccc  e
+ 2 |            f
+ 1 |
+`
+
+var rangeClearAtNewest = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |    B
+>5 | .------------
+ 4 |            d
+ 3 | a  g  ccc  e
+ 2 |            f
+ 1 |
+`
+
+var rangeClearAtIntent = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |    !B
+>5 | .------------
+ 4 |            d
+ 3 | a  g  ccc  e
+ 2 |            f
+ 1 |
+`
+
+var rangeClearAtNewestUnderIntent = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |    !H
+ 7 |
+ 6 |    B
+>5 | .------------
+ 4 |            d
+ 3 | a  g  ccc  e
+ 2 |            f
+ 1 |
+`
+
+var rangeClearRestartAfterIntent = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |       !H
+ 7 |
+ 6 |
+>5 | .------------
+ 4 |
+ 3 | a  g  ccc
+ 2 |    i       f
+ 1 |
+`
+
+var rangeClearRestartAfterNewest = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |       H
+ 7 |
+ 6 |
+>5 | .------------
+ 4 |
+ 3 | a  g  ccc
+ 2 |    i       f
+ 1 |
+`
+
+var rangeClearRestartAfterMultipleVersions = `
+   | a  bb ccc  d e
+---+---------------
+ 9 | 
+ 8 |       H
+ 7 |
+ 6 |       J
+>5 | .------------
+ 4 |
+ 3 | a  g  ccc
+ 2 |    i       f
+ 1 |
+`
+
+var sequentialKeyCount = `
+   | a  bb ccc  d e f
+---+------------------
+ 9 | 
+ 8 | 
+ 7 |
+ 6 |    B
+>5 | .--------------
+ 4 |
+ 3 | a  d  ccc
+ 2 |    e       f g
+ 1 |
+`
+
+// This test uses cooldown, so after H batcher will send at least one point
+// batch before switching back to clear range keys.
+var reenableClearRangeCooldown = `
+   | a  bb ccc  d e f
+---+------------------
+ 9 | 
+ 8 | 
+ 7 |
+ 6 |       H
+>5 | .--------------
+ 4 |
+ 3 | a  d  ccc
+ 2 |    e       f g
+ 1 |
+`
+
+// For testing clear range we perform normal checks, but also explicitly verify
+// generated clear range spans as normal point key deletions would do the same
+// job but less efficiently.
+type clearRangeTestData struct {
+	testRunData
+	clearSpans []roachpb.Span
+}
+
+func TestGCUseClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mkKey := func(key string) roachpb.Key {
+		tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
+		return append(tablePrefix, key...)
+	}
+	last := keys.SystemSQLCodec.TablePrefix(42).PrefixEnd()
+
+	for _, d := range []clearRangeTestData{
+		{
+			testRunData: testRunData{
+				name:              "point batches split at key boundaries",
+				data:              clearRangePointsSplitAtKeyBoundaries,
+				disableClearRange: true,
+				keyBytesThreshold: 25,
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:              "point batches split at versions",
+				data:              clearRangePointsSplitAtVersions,
+				disableClearRange: true,
+				keyBytesThreshold: 35,
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:              "point batches multiple splits per key",
+				data:              clearRangeManySplitsPerKey,
+				disableClearRange: true,
+				keyBytesThreshold: 30,
+			},
+		},
+		{
+			testRunData: testRunData{
+				name: "clear all range data",
+				data: rangeClearInOneGo,
+			},
+			clearSpans: []roachpb.Span{{mkKey("a"), last}},
+		},
+		{
+			testRunData: testRunData{
+				name: "range clear at key boundary",
+				data: rangeClearAtKeyBoundary,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+				{mkKey("a"), mkKey("bb")},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear stop at older version",
+				data:                 rangeClearAtGarbageVersion,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear stop at newest version",
+				data:                 rangeClearAtNewest,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear stop at intent",
+				data:                 rangeClearAtIntent,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear stop an newest under intent",
+				data:                 rangeClearAtNewestUnderIntent,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear restart after intent",
+				data:                 rangeClearRestartAfterIntent,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("a"), mkKey("ccc")},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear restart after newest",
+				data:                 rangeClearRestartAfterNewest,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("a"), mkKey("ccc")},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "range clear restart after many versions",
+				data:                 rangeClearRestartAfterMultipleVersions,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("a"), mkKey("ccc")},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "not enough sequential keys",
+				data:                 sequentialKeyCount,
+				deleteRangeThreshold: 4,
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "just enough sequential keys",
+				data:                 sequentialKeyCount,
+				deleteRangeThreshold: 3,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("ccc"), last},
+			},
+		},
+		{
+			testRunData: testRunData{
+				name:                 "reenable clear range after non-garbage",
+				data:                 reenableClearRangeCooldown,
+				deleteRangeThreshold: 0,
+				clearRangeCooldown:   2,
+			},
+			clearSpans: []roachpb.Span{
+				{mkKey("d"), mkKey("e")},
+				{mkKey("a"), mkKey("bb")},
+			},
+		},
+	} {
+		// Defaults to enable range from first key.
+		if d.deleteRangeThreshold == 0 {
+			d.deleteRangeThreshold = 1
+		}
+		if d.keyBytesThreshold == 0 {
+			d.keyBytesThreshold = 1
+		}
+		t.Run(d.name, func(t *testing.T) {
+			runTest(t, d.testRunData, func(t *testing.T, gcer *fakeGCer) {
+				require.EqualValues(t, d.clearSpans, r2s(gcer.gcClearRangeKeys), "clear range requests")
+			})
+		})
+	}
+}
+
+type gcVerifier func(t *testing.T, gcer *fakeGCer)
+
+func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	ctx := context.Background()
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
 	desc := roachpb.RangeDescriptor{
@@ -724,21 +1105,42 @@ func runTest(t *testing.T, data string) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data)
+	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data.data)
 	ds := dataItems.fullDistribution()
 	stats := ds.setupTest(t, eng, desc)
 	snap := eng.NewSnapshot()
 	defer snap.Close()
 
+	restartCount := math.MaxInt
+	if data.disableClearRange {
+		restartCount = 0
+	}
 	gcer := makeFakeGCer()
 	_, err := Run(ctx, &desc, snap, now, gcTS,
-		RunOptions{IntentAgeThreshold: time.Nanosecond * time.Duration(now.WallTime)}, time.Second,
+		RunOptions{
+			IntentAgeThreshold:        time.Nanosecond * time.Duration(now.WallTime),
+			MaxKeyVersionChunkBytes:   data.keyBytesThreshold,
+			DeleteRangeMinKeys:        data.deleteRangeThreshold,
+			MaxClearRangeRestartCount: restartCount,
+			ClearRangeCooldownCount:   data.clearRangeCooldown,
+		},
+		time.Second,
 		&gcer,
 		gcer.resolveIntents, gcer.resolveIntentsAsync)
+
+	if verify != nil {
+		verify(t, &gcer)
+	}
+
 	require.NoError(t, err)
 	require.Empty(t, gcer.intents, "expecting no intents")
 	require.NoError(t,
 		storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcTS))
+
+	clearRangeKeys := makeCollectableGCClearRangesFromGCRequests(desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(), gcer.clearRangeKeys())
+	require.NoError(t,
+		storage.MVCCGarbageCollectWithClearRange(ctx, eng, &stats, gcTS, clearRangeKeys))
 
 	for _, batch := range gcer.rangeKeyBatches() {
 		rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
@@ -769,6 +1171,20 @@ func runTest(t *testing.T, data string) {
 	expectedStats.AgeTo(now.WallTime)
 	stats.AgeTo(now.WallTime)
 	require.Equal(t, expectedStats, stats, "mvcc stats don't match the data")
+}
+
+func r2s(cc []roachpb.GCRequest_GCClearRangeKey) (spans []roachpb.Span) {
+	if len(cc) == 0 {
+		return nil
+	}
+	spans = make([]roachpb.Span, len(cc))
+	for i, c := range cc {
+		spans[i] = roachpb.Span{
+			Key:    c.StartKey,
+			EndKey: c.EndKey,
+		}
+	}
+	return spans
 }
 
 // requireEqualReaders compares data in two readers
@@ -1439,4 +1855,61 @@ func TestRangeKeyBatching(t *testing.T) {
 			require.EqualValues(t, data.expect, gcer.rangeKeys())
 		})
 	}
+}
+
+func assertClearRangeOn(t *testing.T, g *clearRangeGate, step int, seq []bool) {
+	t.Helper()
+	if step >= len(seq) {
+		panic("Expected step must be within sequence length or -1 to ignore")
+	}
+	for i, garbage := range seq {
+		if garbage {
+			g.foundGarbageData()
+		} else {
+			g.foundLiveData()
+		}
+		if step == i {
+			require.True(t, g.shouldRestartClearRange(), "expected restart on step %d of garbage sequence %s", i, seq)
+		} else {
+			require.False(t, g.shouldRestartClearRange(), "unexpected restart on step %d (instead of %d) of garbage sequence %s", i, step, seq)
+		}
+	}
+}
+
+func TestClearRangeGateEnableOnCooldown(t *testing.T) {
+	g := clearRangeGate{
+		cooldownThreshold: 3,
+		maxRestartCount:   5,
+	}
+	assertClearRangeOn(t, &g, 2, []bool{true, true, true})
+}
+
+func TestClearRangeGateSkipInterleavedGarbage(t *testing.T) {
+	g := clearRangeGate{
+		cooldownThreshold: 3,
+		maxRestartCount:   5,
+	}
+	assertClearRangeOn(t, &g, 7, []bool{true, true, false, true, false, true, true, true})
+}
+
+func TestClearRangeSkipOverGarbage(t *testing.T) {
+	g := clearRangeGate{
+		cooldownThreshold: 3,
+		maxRestartCount:   5,
+	}
+	g.abandonedClearRange()
+	assertClearRangeOn(t, &g, 7, []bool{true, true, true, true, false, true, true, true})
+}
+
+func TestClearRangeDisableAfterRewindCountExceeded(t *testing.T) {
+	g := clearRangeGate{
+		cooldownThreshold: 3,
+		maxRestartCount:   5,
+	}
+	g.abandonedClearRange()
+	g.abandonedClearRange()
+	g.abandonedClearRange()
+	g.abandonedClearRange()
+	g.abandonedClearRange()
+	assertClearRangeOn(t, &g, -1, []bool{true, true, true, true, true, true})
 }
