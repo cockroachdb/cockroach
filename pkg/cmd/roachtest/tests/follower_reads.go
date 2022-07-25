@@ -877,7 +877,8 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
 	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
+	startOpts := option.DefaultStartOpts()
+	c.Start(ctx, t.L(), startOpts, settings, c.All())
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 
@@ -885,7 +886,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
+	upgradeNodes(ctx, nodeToUpgrade, startOpts, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
@@ -897,6 +898,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
+	upgradeNodes(ctx, remainingNodes, startOpts, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }
