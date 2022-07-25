@@ -218,7 +218,7 @@ var _ Command = PrepareStmt{}
 // DescribeStmt is the Command for producing info about a prepared statement or
 // portal.
 type DescribeStmt struct {
-	Name string
+	Name tree.Name
 	Type pgwirebase.PrepareType
 }
 

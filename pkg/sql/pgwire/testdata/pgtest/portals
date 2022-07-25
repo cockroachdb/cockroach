@@ -1486,3 +1486,71 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"08P01","Message":"invalid DESCRIBE message subtype 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check declaring cursor with a name enclosed in double quotes
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "DECLARE \"a b\" CURSOR FOR SELECT generate_series(1, 10) AS bar"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Describe {"ObjectType": "P", "Name": "a b"}
+Sync
+----
+
+until ignore_type_oids ignore_table_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"bar","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "FETCH 2 \"a b\""}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until ignore_type_oids ignore_table_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"bar","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"FETCH 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
