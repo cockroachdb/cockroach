@@ -1944,7 +1944,7 @@ oid         typname                                typnamespace  typowner    typ
 4294967255  node_sessions                          194902141     3233629770  -1      false     c
 4294967256  node_transactions                      194902141     3233629770  -1      false     c
 4294967257  node_queries                           194902141     3233629770  -1      false     c
-4294967258  node_execution_outliers                194902141     3233629770  -1      false     c
+4294967258  node_execution_insights                194902141     3233629770  -1      false     c
 4294967259  node_distsql_flows                     194902141     3233629770  -1      false     c
 4294967260  node_contention_events                 194902141     3233629770  -1      false     c
 4294967261  leases                                 194902141     3233629770  -1      false     c
@@ -2336,7 +2336,7 @@ oid         typname                                typcategory  typispreferred  
 4294967255  node_sessions                          C            false           true          ,         4294967255  0        0
 4294967256  node_transactions                      C            false           true          ,         4294967256  0        0
 4294967257  node_queries                           C            false           true          ,         4294967257  0        0
-4294967258  node_execution_outliers                C            false           true          ,         4294967258  0        0
+4294967258  node_execution_insights                C            false           true          ,         4294967258  0        0
 4294967259  node_distsql_flows                     C            false           true          ,         4294967259  0        0
 4294967260  node_contention_events                 C            false           true          ,         4294967260  0        0
 4294967261  leases                                 C            false           true          ,         4294967261  0        0
@@ -2728,7 +2728,7 @@ oid         typname                                typinput        typoutput    
 4294967255  node_sessions                          record_in       record_out       record_recv       record_send       0         0          0
 4294967256  node_transactions                      record_in       record_out       record_recv       record_send       0         0          0
 4294967257  node_queries                           record_in       record_out       record_recv       record_send       0         0          0
-4294967258  node_execution_outliers                record_in       record_out       record_recv       record_send       0         0          0
+4294967258  node_execution_insights                record_in       record_out       record_recv       record_send       0         0          0
 4294967259  node_distsql_flows                     record_in       record_out       record_recv       record_send       0         0          0
 4294967260  node_contention_events                 record_in       record_out       record_recv       record_send       0         0          0
 4294967261  leases                                 record_in       record_out       record_recv       record_send       0         0          0
@@ -3120,7 +3120,7 @@ oid         typname                                typalign  typstorage  typnotn
 4294967255  node_sessions                          NULL      NULL        false       0            -1
 4294967256  node_transactions                      NULL      NULL        false       0            -1
 4294967257  node_queries                           NULL      NULL        false       0            -1
-4294967258  node_execution_outliers                NULL      NULL        false       0            -1
+4294967258  node_execution_insights                NULL      NULL        false       0            -1
 4294967259  node_distsql_flows                     NULL      NULL        false       0            -1
 4294967260  node_contention_events                 NULL      NULL        false       0            -1
 4294967261  leases                                 NULL      NULL        false       0            -1
@@ -3512,7 +3512,7 @@ oid         typname                                typndims  typcollation  typde
 4294967255  node_sessions                          0         0             NULL           NULL        NULL
 4294967256  node_transactions                      0         0             NULL           NULL        NULL
 4294967257  node_queries                           0         0             NULL           NULL        NULL
-4294967258  node_execution_outliers                0         0             NULL           NULL        NULL
+4294967258  node_execution_insights                0         0             NULL           NULL        NULL
 4294967259  node_distsql_flows                     0         0             NULL           NULL        NULL
 4294967260  node_contention_events                 0         0             NULL           NULL        NULL
 4294967261  leases                                 0         0             NULL           NULL        NULL

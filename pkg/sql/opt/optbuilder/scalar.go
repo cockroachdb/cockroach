@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -529,6 +530,10 @@ func (b *Builder) buildFunction(
 		panic(err)
 	}
 
+	if f.ResolvedOverload().Body != "" {
+		return b.buildUDF(f, def, inScope, outScope, outCol)
+	}
+
 	if isAggregate(def) {
 		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
 	}
@@ -580,6 +585,35 @@ func (b *Builder) buildFunction(
 		}
 	}
 
+	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+}
+
+// buildUDF builds a set of memo groups that represents a user-defined function
+// invocation.
+// TODO(mgartner): Support multi-statement UDFs.
+// TODO(mgartner): Support UDFs with arguments.
+func (b *Builder) buildUDF(
+	f *tree.FuncExpr, def *tree.FunctionDefinition, inScope, outScope *scope, outCol *scopeColumn,
+) (out opt.ScalarExpr) {
+	stmt, err := parser.ParseOne(f.ResolvedOverload().Body)
+	if err != nil {
+		panic(err)
+	}
+
+	// A statement inside a UDF body cannot refer to anything from the outer
+	// expression calling the function, so we use an empty scope.
+	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent CTEs
+	// that mutate and are not at the top-level.
+	bodyScope := b.allocScope()
+	bodyScope = b.buildStmt(stmt.AST, nil /* desiredTypes */, bodyScope)
+
+	out = b.factory.ConstructUserDefinedFunction(
+		bodyScope.expr,
+		&memo.UserDefinedFunctionPrivate{
+			Name: def.Name,
+			Typ:  f.ResolvedType(),
+		},
+	)
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 

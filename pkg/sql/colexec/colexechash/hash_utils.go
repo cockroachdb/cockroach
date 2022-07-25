@@ -197,7 +197,5 @@ func (d *TupleHashDistributor) ResetNumOutputs(numOutputs int) {
 	// old selection vectors and reuse them if possible.
 	oldSelections := d.selections
 	d.selections = make([][]int, numOutputs)
-	for i := range oldSelections {
-		d.selections[i] = oldSelections[i]
-	}
+	copy(d.selections, oldSelections)
 }

@@ -70,7 +70,7 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_build_info",
 	"crdb_internal.node_contention_events",
 	"crdb_internal.node_distsql_flows",
-	"crdb_internal.node_execution_outliers",
+	"crdb_internal.node_execution_insights",
 	"crdb_internal.node_inflight_trace_spans",
 	"crdb_internal.node_metrics",
 	"crdb_internal.node_queries",

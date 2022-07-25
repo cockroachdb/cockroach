@@ -12,11 +12,12 @@ package sqlstatsutil
 
 import (
 	"encoding/hex"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
@@ -30,7 +31,7 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 	nodePlan.Add("Name", json.FromString(node.Name))
 
 	for _, attr := range node.Attrs {
-		nodePlan.Add(strings.Title(attr.Key), json.FromString(attr.Value))
+		nodePlan.Add(cases.Title(language.English, cases.NoLower).String(attr.Key), json.FromString(attr.Value))
 	}
 
 	for _, childNode := range node.Children {

@@ -121,6 +121,8 @@ go_library(
         "@com_github_twpayne_go_geom//:go-geom",
         "@com_github_twpayne_go_geom//encoding/ewkb",
         "@org_golang_x_crypto//bcrypt",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
     ],
 )
 

@@ -1,0 +1,68 @@
+exec-ddl
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+----
+
+build
+SELECT foo()
+----
+error (42883): unknown function: foo
+
+exec-ddl
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+----
+
+build
+SELECT one()
+----
+project
+ ├── columns: one:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── user-defined-function: one [as=one:2]
+           └── project
+                ├── columns: "?column?":1!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── 1 [as="?column?":1]
+
+build
+SELECT *, one() FROM abc
+----
+project
+ ├── columns: a:1!null b:2 c:3 one:7
+ ├── scan abc
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      └── user-defined-function: one [as=one:7]
+           └── project
+                ├── columns: "?column?":6!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── 1 [as="?column?":6]
+
+build
+SELECT * FROM abc WHERE one() = c
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── user-defined-function: one
+                │    └── project
+                │         ├── columns: "?column?":6!null
+                │         ├── values
+                │         │    └── ()
+                │         └── projections
+                │              └── 1 [as="?column?":6]
+                └── c:3

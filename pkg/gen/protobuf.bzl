@@ -47,7 +47,7 @@ PROTOBUF_SRCS = [
   "//pkg/sql/rowenc/rowencpb:rowencpb_go_proto",
   "//pkg/sql/schemachanger/scpb:scpb_go_proto",
   "//pkg/sql/sessiondatapb:sessiondatapb_go_proto",
-  "//pkg/sql/sqlstats/outliers:outliers_go_proto",
+  "//pkg/sql/sqlstats/insights:insights_go_proto",
   "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_go_proto",
   "//pkg/sql/stats:stats_go_proto",
   "//pkg/sql/types:types_go_proto",

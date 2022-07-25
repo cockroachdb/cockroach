@@ -656,10 +656,8 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 			}(i)
 		}
 		// Wait for requests to be coalesced before unblocking the db.
-		if coalesced != nil {
-			for i := 0; i < 2; i++ {
-				<-coalesced
-			}
+		for i := 0; i < 2; i++ {
+			<-coalesced
 		}
 
 		log.Infof(ctx, "test resuming lookups")

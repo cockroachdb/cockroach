@@ -137,6 +137,7 @@ func (s *Server) ServeWith(
 	for {
 		rw, e := l.Accept()
 		if e != nil {
+			//lint:ignore SA1019 see discussion at https://github.com/cockroachdb/cockroach/pull/84590#issuecomment-1192709976
 			if ne := (net.Error)(nil); errors.As(e, &ne) && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -170,6 +171,7 @@ func (s *Server) ServeWith(
 // cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF, or net.ErrClosed.
 func IsClosedConnection(err error) bool {
 	if netError := net.Error(nil); errors.As(err, &netError) {
+		//lint:ignore SA1019 see discussion at https://github.com/cockroachdb/cockroach/pull/84590#issuecomment-1192709976
 		return !netError.Temporary()
 	}
 	return errors.IsAny(err, cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF, net.ErrClosed) ||

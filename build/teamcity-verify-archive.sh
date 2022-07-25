@@ -32,7 +32,7 @@ run docker run \
   --rm \
   --volume="$(cd "$(dirname "$0")" && pwd):/work:ro" \
   --workdir="/work" \
-  golang:1.17-buster ./verify-archive.sh
+  golang:1.18-buster ./verify-archive.sh
 tc_end_block "Test archive"
 
 tc_start_block "Clean up"

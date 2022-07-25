@@ -43,6 +43,7 @@ func TestRunWithTimeout(t *testing.T) {
 	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
+	//lint:ignore SA1019 grandfathered test code
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
@@ -60,6 +61,7 @@ func TestRunWithTimeout(t *testing.T) {
 	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
+	//lint:ignore SA1019 grandfathered test code
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
@@ -84,6 +86,7 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
+	//lint:ignore SA1019 grandfathered test code
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
