@@ -112,6 +112,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 	targetObject privilege.TargetObjectType,
 	withGrantOption bool,
 ) {
+	// check grant option?
 	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
 		d.grantOrRevokeDefaultPrivilegesHelper(defaultPrivilegesForRole, role, targetObject, grantee, privileges, withGrantOption, true /* isGrant */)
@@ -289,18 +290,13 @@ func foldPrivileges(
 ) {
 	if targetObject == privilege.Types &&
 		privileges.CheckPrivilege(username.PublicRoleName(), privilege.USAGE) {
-		publicUser, ok := privileges.FindUser(username.PublicRoleName())
-		if ok {
-			if !privilege.USAGE.IsSetIn(publicUser.WithGrantOption) {
-				setPublicHasUsageOnTypes(defaultPrivilegesForRole, true)
-				privileges.Revoke(
-					username.PublicRoleName(),
-					privilege.List{privilege.USAGE},
-					privilege.Type,
-					false, /* grantOptionFor */
-				)
-			}
-		}
+		setPublicHasUsageOnTypes(defaultPrivilegesForRole, true)
+		privileges.Revoke(
+			username.PublicRoleName(),
+			privilege.List{privilege.USAGE},
+			privilege.Type,
+			false, /* grantOptionFor */
+		)
 	}
 	// ForAllRoles cannot be a grantee, nothing left to do.
 	if role.ForAllRoles {

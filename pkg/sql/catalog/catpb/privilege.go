@@ -237,6 +237,7 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 func (p *PrivilegeDescriptor) Grant(
 	user username.SQLUsername, privList privilege.List, withGrantOption bool,
 ) {
+	// don't allow public to have grant option
 	userPriv := p.FindOrCreateUser(user)
 	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
 		// User already has 'ALL' privilege: no-op.
