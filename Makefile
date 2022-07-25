@@ -1931,8 +1931,3 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
-
-# Cypress e2e tests
-.PHONY: db-console-e2e-test
-db-console-e2e-test: pkg/ui/yarn.opt.installed
-	cd pkg/ui/workspaces/db-console && yarn cypress:run

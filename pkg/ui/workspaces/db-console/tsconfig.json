@@ -39,7 +39,6 @@
     }
   },
   "exclude": [
-    "cypress",
     "cluster-ui",
     "dist"
   ]
