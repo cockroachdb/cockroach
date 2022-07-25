@@ -681,6 +681,7 @@ func (mgcq *mvccGCQueue) process(
 	maxIntentsPerCleanupBatch := gc.MaxIntentsPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	maxIntentKeyBytesPerCleanupBatch := gc.MaxIntentKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
+	minKeyNumberForClearRange := gc.MinKeyNumberForClearRange.Get(&repl.store.ClusterSettings().SV)
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
 		gc.RunOptions{
@@ -690,6 +691,7 @@ func (mgcq *mvccGCQueue) process(
 			TxnCleanupThreshold:                    txnCleanupThreshold,
 			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
 			IntentCleanupBatchTimeout:              mvccGCQueueIntentBatchTimeout,
+			ClearRangeMinKeys:                      minKeyNumberForClearRange,
 		},
 		conf.TTL(),
 		&replicaGCer{
