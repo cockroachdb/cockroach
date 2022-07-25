@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -792,6 +793,10 @@ func (h *hasher) HashFunctionBodyStr(val tree.FunctionBodyStr) {
 	h.HashString(string(val))
 }
 
+func (h *hasher) HashVolatility(val volatility.V) {
+	h.HashInt(int(val))
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1282,6 +1287,10 @@ func (h *hasher) IsFunctionOptionsEqual(l, r tree.FunctionOptions) bool {
 }
 
 func (h *hasher) IsFunctionBodyStrEqual(l, r tree.FunctionBodyStr) bool {
+	return l == r
+}
+
+func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
 	return l == r
 }
 

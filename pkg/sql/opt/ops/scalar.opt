@@ -1226,6 +1226,7 @@ define UDFPrivate {
     Name string
     Body RelListExpr
     Typ Type
+    Volatility Volatility
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
