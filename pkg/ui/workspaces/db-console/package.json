@@ -10,11 +10,6 @@
     "karma": "karma start",
     "karma:watch": "karma start --no-single-run --auto-watch",
     "storybook": "start-storybook -p 9009",
-    "cypress": "./opt/node_modules/.bin/cypress",
-    "cypress:open": "yarn cypress open",
-    "cypress:run": "yarn cypress run --browser chrome",
-    "cypress:run-visual-regression": "yarn cypress run --browser chrome --spec 'cypress/integration/**/*.visual.spec.ts'",
-    "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'",
     "test": "DEBUG_PRINT_LIMIT=1000000 jest"
   },
   "dependencies": {
@@ -188,11 +183,6 @@
     "world-atlas": "^1.1.4"
   },
   "optionalDependencies": {
-    "@cypress/webpack-preprocessor": "^5.1.2",
-    "@testing-library/cypress": "^7.0.4",
-    "@types/cypress-image-snapshot": "^3.1.2",
-    "cypress": "^4.7.0",
-    "cypress-image-snapshot": "^3.1.1",
     "timers-browserify": "^2.0.12",
     "webpack-dashboard": "^3.2.0"
   },
