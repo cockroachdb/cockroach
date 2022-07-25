@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,16 +62,11 @@ func (p *planner) makeExternalConnectionEval(
 func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
-	// TODO(adityamaru): Check that the user has `CREATEEXTERNALCONNECTION` global
-	// privilege once we add support for it. Remove admin only check.
-	hasAdmin, err := params.p.HasAdminRole(params.ctx)
-	if err != nil {
-		return err
-	}
-	if !hasAdmin {
+	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
+		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(
 			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to CREATE EXTERNAL CONNECTION")
+			"only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION")
 	}
 
 	// TODO(adityamaru): Add some metrics to track CREATE EXTERNAL CONNECTION

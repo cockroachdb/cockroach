@@ -24,30 +24,31 @@ import (
 type Tenant struct {
 	serverutils.TestTenantInterface
 
-	t       *testing.T
-	db      *sqlutils.SQLRunner
-	cleanup func()
+	t          *testing.T
+	userToDB   map[string]*sqlutils.SQLRunner
+	curDB      *sqlutils.SQLRunner
+	cleanupFns []func()
 }
 
 // Exec is a wrapper around gosql.Exec that kills the test on error. It records
 // the execution timestamp for subsequent use.
 func (s *Tenant) Exec(query string, args ...interface{}) {
-	s.db.Exec(s.t, query, args...)
+	s.curDB.Exec(s.t, query, args...)
 }
 
 // ExecWithErr is like Exec but returns the error, if any. It records the
 // execution timestamp for subsequent use.
 func (s *Tenant) ExecWithErr(query string, args ...interface{}) error {
-	_, err := s.db.DB.ExecContext(context.Background(), query, args...)
+	_, err := s.curDB.DB.ExecContext(context.Background(), query, args...)
 	return err
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (s *Tenant) Query(query string, args ...interface{}) *gosql.Rows {
-	return s.db.Query(s.t, query, args...)
+	return s.curDB.Query(s.t, query, args...)
 }
 
 // QueryWithErr is like Query but returns the error.
 func (s *Tenant) QueryWithErr(query string, args ...interface{}) (*gosql.Rows, error) {
-	return s.db.DB.QueryContext(context.Background(), query, args...)
+	return s.curDB.DB.QueryContext(context.Background(), query, args...)
 }

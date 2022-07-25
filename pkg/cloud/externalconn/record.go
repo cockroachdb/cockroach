@@ -183,9 +183,12 @@ func (e *ExternalConnection) Create(
 		return err
 	}
 
+	// CREATE EXTERNAL CONNECTION is only allowed for users with the
+	// `EXTERNALCONNECTION` system privilege. We run the query as `node`
+	// since the user might not have `INSERT` on the system table.
 	createQuery := "INSERT INTO system.external_connections (%s) VALUES (%s) RETURNING connection_name"
 	row, retCols, err := ex.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn,
-		sessiondata.InternalExecutorOverride{User: user},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		fmt.Sprintf(createQuery, strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
 	)
