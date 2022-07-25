@@ -60,6 +60,7 @@ func (c *collectingGCer) GC(
 	keys []roachpb.GCRequest_GCKey,
 	_ []roachpb.GCRequest_GCRangeKey,
 	_ *roachpb.GCRequest_GCClearRangeKey,
+	_ *roachpb.GCRequest_GCClearSubRangeKey,
 ) error {
 	c.keys = append(c.keys, keys)
 	return nil

@@ -152,7 +152,7 @@ type Thresholder interface {
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
 	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
-		*roachpb.GCRequest_GCClearRangeKey,
+		*roachpb.GCRequest_GCClearRangeKey, *roachpb.GCRequest_GCClearSubRangeKey,
 	) error
 }
 
@@ -176,6 +176,7 @@ func (NoopGCer) GC(
 	[]roachpb.GCRequest_GCKey,
 	[]roachpb.GCRequest_GCRangeKey,
 	*roachpb.GCRequest_GCClearRangeKey,
+	*roachpb.GCRequest_GCClearSubRangeKey,
 ) error {
 	return nil
 }
@@ -379,7 +380,7 @@ func processReplicatedKeyRange(
 			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRangeKey{
 				StartKey: start,
 				EndKey:   end,
-			}); err == nil {
+			}, nil); err == nil {
 				excludeUserKeySpan = true
 				info.ClearRangeKeyOperations++
 			} else {
@@ -496,7 +497,7 @@ func processReplicatedKeyRange(
 		}
 		// If limit was reached, delegate to GC'r to remove collected batch.
 		if shouldSendBatch {
-			if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
+			if err := gcer.GC(ctx, batchGCKeys, nil, nil, nil); err != nil {
 				if errors.Is(err, ctx.Err()) {
 					return false, err
 				}
@@ -519,7 +520,7 @@ func processReplicatedKeyRange(
 		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil, nil, nil); err != nil {
 			return false, err
 		}
 	}
@@ -895,7 +896,7 @@ func (b *rangeKeyBatcher) flushPendingFragments(ctx context.Context) error {
 		}
 		b.pending = b.pending[:0]
 		b.pendingSize = 0
-		return b.gcer.GC(ctx, nil, toSend, nil)
+		return b.gcer.GC(ctx, nil, toSend, nil, nil)
 	}
 	return nil
 }
@@ -978,7 +979,7 @@ func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
 }
 
 func (b *batchingInlineGCer) Flush(ctx context.Context) {
-	err := b.gcer.GC(ctx, b.gcKeys, nil, nil)
+	err := b.gcer.GC(ctx, b.gcKeys, nil, nil, nil)
 	b.gcKeys = nil
 	b.size = 0
 	if err != nil {
