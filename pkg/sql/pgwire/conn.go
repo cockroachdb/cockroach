@@ -1281,7 +1281,8 @@ func (c *conn) bufferRow(
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
-// It is a noop for zero-length batch.
+// It is a noop for zero-length batch. Depending on the buffer size limit,
+// bufferBatch may flush the buffered data to the connection.
 //
 // formatCodes describes the desired encoding for each column. It can be nil, in
 // which case all columns are encoded using the text encoding. Otherwise, it
@@ -1292,7 +1293,9 @@ func (c *conn) bufferBatch(
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondatapb.DataConversionConfig,
 	sessionLoc *time.Location,
-) {
+	pos sql.CmdPos,
+	bufferingDisabled bool,
+) error {
 	sel := batch.Selection()
 	n := batch.Length()
 	vecs := batch.ColVecs()
@@ -1321,7 +1324,11 @@ func (c *conn) bufferBatch(
 		if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 			panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 		}
+		if err := c.maybeFlush(pos, bufferingDisabled); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
@@ -1524,12 +1531,12 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 }
 
 // maybeFlush flushes the buffer to the network connection if it exceeded
-// sessionArgs.ConnResultsBufferSize.
-func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
-		return false, nil
+// sessionArgs.ConnResultsBufferSize or if buffering is disabled.
+func (c *conn) maybeFlush(pos sql.CmdPos, bufferingDisabled bool) error {
+	if !bufferingDisabled && int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
+		return nil
 	}
-	return true, c.Flush(pos)
+	return c.Flush(pos)
 }
 
 // LockCommunication is part of the ClientComm interface.

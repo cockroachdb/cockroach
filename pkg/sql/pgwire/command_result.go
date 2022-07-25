@@ -191,7 +191,7 @@ func (r *commandResult) SetError(err error) {
 
 // addInternal is the skeleton of AddRow and AddBatch implementations.
 // bufferData should update rowsAffected and buffer the data accordingly.
-func (r *commandResult) addInternal(bufferData func()) error {
+func (r *commandResult) addInternal(bufferData func() error) error {
 	r.assertNotReleased()
 	if r.err != nil {
 		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
@@ -205,30 +205,29 @@ func (r *commandResult) addInternal(bufferData func()) error {
 		panic("can't send row after error")
 	}
 
-	bufferData()
-
-	var err error
-	if r.bufferingDisabled {
-		err = r.conn.Flush(r.pos)
-	} else {
-		_ /* flushed */, err = r.conn.maybeFlush(r.pos)
+	if err := bufferData(); err != nil {
+		return err
 	}
-	return err
+
+	return r.conn.maybeFlush(r.pos, r.bufferingDisabled)
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	return r.addInternal(func() {
+	return r.addInternal(func() error {
 		r.rowsAffected++
 		r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+		return nil
 	})
 }
 
 // AddBatch is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
-	return r.addInternal(func() {
+	return r.addInternal(func() error {
 		r.rowsAffected += batch.Length()
-		r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.location)
+		return r.conn.bufferBatch(
+			ctx, batch, r.formatCodes, r.conv, r.location, r.pos, r.bufferingDisabled,
+		)
 	})
 }
 
@@ -439,10 +438,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 
 		return r.moreResultsNeeded(ctx)
 	}
-	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
-		return err
-	}
-	return nil
+	return r.conn.maybeFlush(r.pos, r.bufferingDisabled)
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
