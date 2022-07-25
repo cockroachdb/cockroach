@@ -417,7 +417,7 @@ func (p *Provider) Create(
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
-		"--scopes", "default,storage-rw",
+		"--scopes", "cloud-platform",
 		"--image", providerOpts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-type", "pd-ssd",
