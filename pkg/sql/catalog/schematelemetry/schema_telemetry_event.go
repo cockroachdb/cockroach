@@ -17,13 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -122,6 +125,26 @@ func filteredForTelemetry(
 	if colID, ok := a.(descpb.ColumnID); ok && colinfo.IsColIDSystemColumn(colID) {
 		return nil
 	}
+	// Redact literals which may contain PII.
+	switch e := element.(type) {
+	case *scpb.EnumTypeValue:
+		e.LogicalRepresentation = "_"
+		e.PhysicalRepresentation = []byte("_")
+	case *scpb.IndexPartitioning:
+		redactPartitioning(&e.PartitioningDescriptor)
+	case *scpb.SecondaryIndexPartial:
+		redactExpr(&e.Expression)
+	case *scpb.CheckConstraint:
+		redactExpr(&e.Expression)
+	case *scpb.ColumnDefaultExpression:
+		redactExpr(&e.Expression)
+	case *scpb.ColumnOnUpdateExpression:
+		redactExpr(&e.Expression)
+	case *scpb.ColumnType:
+		if e.ComputeExpr != nil {
+			redactExpr(e.ComputeExpr)
+		}
+	}
 	// Return the visited element-status pair as a telemetry payload element.
 	es := &scpb.TelemetryPayload_ElementStatus{}
 	es.SetValue(element)
@@ -130,4 +153,30 @@ func filteredForTelemetry(
 		es.Status = status
 	}
 	return es
+}
+
+func redactPartitioning(p *catpb.PartitioningDescriptor) {
+	for i := range p.List {
+		l := &p.List[i]
+		for j := range l.Values {
+			l.Values[j] = []byte("_")
+		}
+		redactPartitioning(&l.Subpartitioning)
+	}
+	for i := range p.Range {
+		r := &p.Range[i]
+		r.FromInclusive = []byte("_")
+		r.ToExclusive = []byte("_")
+	}
+}
+
+func redactExpr(e *scpb.Expression) {
+	parsedExpr, err := parser.ParseExpr(string(e.Expr))
+	if err != nil {
+		e.Expr = "_"
+		return
+	}
+	ctx := tree.NewFmtCtx(tree.FmtHideConstants)
+	parsedExpr.Format(ctx)
+	e.Expr = catpb.Expression(ctx.String())
 }
