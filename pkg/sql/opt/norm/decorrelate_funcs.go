@@ -63,7 +63,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		// only occurs when the Any is nested, in a projection, etc.
 		return !t.Input.Relational().OuterCols.Empty()
 
-	case *memo.UserDefinedFunctionExpr:
+	case *memo.UDFExpr:
 		// Do not attempt to hoist UDFs.
 		return false
 	}
