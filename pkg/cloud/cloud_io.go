@@ -211,10 +211,17 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
 			lastErr = r.Open(ctx)
+			if lastErr != nil {
+				fmt.Println("r.open err=", lastErr)
+			}
 		}
 
 		if lastErr == nil {
 			n, readErr := r.Reader.Read(p)
+			if readErr != nil {
+				fmt.Println("r.Reader.Read err=", readErr)
+			}
+
 			if readErr == nil || readErr == io.EOF {
 				r.Pos += int64(n)
 				return n, readErr
