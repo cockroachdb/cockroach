@@ -401,6 +401,70 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 	return t.baseStatusServer.ListLocalContentionEvents(ctx, req)
 }
 
+func (t *tenantStatusServer) ListExecutionInsights(
+	ctx context.Context, req *serverpb.ListExecutionInsightsRequest,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	var response serverpb.ListExecutionInsightsResponse
+
+	podFn := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalExecutionInsights(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Errors) > 0 {
+			return nil, errors.Errorf("%s", resp.Errors[0].Message)
+		}
+		return resp, nil
+	}
+	responseFn := func(_ base.SQLInstanceID, nodeResp interface{}) {
+		if nodeResp == nil {
+			return
+		}
+		i := nodeResp.(*serverpb.ListExecutionInsightsResponse).Insights
+		response.Insights = append(response.Insights, i...)
+	}
+	errorFn := func(instanceID base.SQLInstanceID, err error) {
+		errResponse := serverpb.ListActivityError{NodeID: roachpb.NodeID(instanceID), Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := t.iteratePods(
+		ctx,
+		"contention events list",
+		t.dialCallback,
+		podFn,
+		responseFn,
+		errorFn,
+	); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (t *tenantStatusServer) ListLocalExecutionInsights(
+	ctx context.Context, req *serverpb.ListExecutionInsightsRequest,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+	return t.baseStatusServer.ListLocalExecutionInsights(ctx, req)
+}
+
 func (t *tenantStatusServer) ResetSQLStats(
 	ctx context.Context, req *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {

@@ -55,7 +55,7 @@ func TestInsightsIntegration(t *testing.T) {
 
 	// See no recorded insights.
 	var count int
-	row := conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_insights")
+	row := conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.cluster_execution_insights")
 	err := row.Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
@@ -67,7 +67,7 @@ func TestInsightsIntegration(t *testing.T) {
 
 	// Eventually see one recorded insight.
 	testutils.SucceedsWithin(t, func() error {
-		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.node_execution_insights")
+		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.cluster_execution_insights")
 		if err = row.Scan(&count); err != nil {
 			return err
 		}
