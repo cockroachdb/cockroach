@@ -511,15 +511,16 @@ func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) e
 	return r.send(ctx, req)
 }
 
-func (r *replicaGCer) GC(
-	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey,
+	rangeKeys []roachpb.GCRequest_GCRangeKey, clearRangeKey *roachpb.GCRequest_GCClearRangeKey,
 ) error {
-	if len(keys) == 0 && len(rangeKeys) == 0 {
+	if len(keys) == 0 && len(rangeKeys) == 0 && clearRangeKey == nil {
 		return nil
 	}
 	req := r.template()
 	req.Keys = keys
 	req.RangeKeys = rangeKeys
+	req.ClearRangeKey = clearRangeKey
 	return r.send(ctx, req)
 }
 

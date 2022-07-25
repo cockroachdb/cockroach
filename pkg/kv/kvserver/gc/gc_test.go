@@ -55,8 +55,8 @@ type collectingGCer struct {
 	keys [][]roachpb.GCRequest_GCKey
 }
 
-func (c *collectingGCer) GC(
-	_ context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+func (c *collectingGCer) GC(_ context.Context, keys []roachpb.GCRequest_GCKey,
+	_ []roachpb.GCRequest_GCRangeKey, _ *roachpb.GCRequest_GCClearRangeKey,
 ) error {
 	c.keys = append(c.keys, keys)
 	return nil
