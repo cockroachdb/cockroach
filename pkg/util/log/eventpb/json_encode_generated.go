@@ -2900,15 +2900,6 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, '"')
 	}
 
-	if m.DatabaseID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"DatabaseID\":"...)
-		b = strconv.AppendUint(b, uint64(m.DatabaseID), 10)
-	}
-
 	if m.StatementFingerprintID != 0 {
 		if printComma {
 			b = append(b, ',')
