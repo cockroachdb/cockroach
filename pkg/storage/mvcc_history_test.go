@@ -1560,19 +1560,16 @@ func printIter(e *evalCtx) {
 	e.results.buf.Printf("%s:", e.td.Cmd)
 	defer e.results.buf.Printf("\n")
 
-	hasPoint, hasRange := e.iter.HasPointAndRange()
 	ok, err := e.iter.Valid()
 	if err != nil {
 		e.results.buf.Printf(" err=%v", err)
 		return
 	}
 	if !ok {
-		if hasPoint || hasRange {
-			e.t.Fatalf("invalid iterator gave hasPoint=%t hasRange=%t", hasPoint, hasRange)
-		}
 		e.results.buf.Print(" .")
 		return
 	}
+	hasPoint, hasRange := e.iter.HasPointAndRange()
 	if !hasPoint && !hasRange {
 		e.t.Fatalf("valid iterator at %s without point nor range keys", e.iter.UnsafeKey())
 	}

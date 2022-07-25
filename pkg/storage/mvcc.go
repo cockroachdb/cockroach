@@ -3672,14 +3672,15 @@ func mvccResolveWriteIntent(
 			valid, err := iter.Valid()
 			if err != nil {
 				return false, err
-			}
-			if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
-				// If the seek lands on a bare range key, attempt to step to a point.
-				iter.Next()
-				if valid, err = iter.Valid(); err != nil {
-					return false, err
-				} else if valid {
-					valid, _ = iter.HasPointAndRange()
+			} else if valid {
+				if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
+					// If the seek lands on a bare range key, attempt to step to a point.
+					iter.Next()
+					if valid, err = iter.Valid(); err != nil {
+						return false, err
+					} else if valid {
+						valid, _ = iter.HasPointAndRange()
+					}
 				}
 			}
 			if !valid || !iter.UnsafeKey().Equal(oldKey) {
@@ -3826,14 +3827,15 @@ func mvccResolveWriteIntent(
 		iter.SeekGE(nextKey)
 		if ok, err = iter.Valid(); err != nil {
 			return false, err
-		}
-		// If the seek lands on a bare range key, attempt to step to a point.
-		if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
-			iter.Next()
-			if ok, err = iter.Valid(); err != nil {
-				return false, err
-			} else if ok {
-				ok, _ = iter.HasPointAndRange()
+		} else if ok {
+			// If the seek lands on a bare range key, attempt to step to a point.
+			if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
+				iter.Next()
+				if ok, err = iter.Valid(); err != nil {
+					return false, err
+				} else if ok {
+					ok, _ = iter.HasPointAndRange()
+				}
 			}
 		}
 		if ok = ok && iter.UnsafeKey().Key.Equal(latestKey.Key); ok {
