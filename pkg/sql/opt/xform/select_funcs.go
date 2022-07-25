@@ -933,6 +933,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
+		// The reason we also check !spanExpr.Unique here is that sometimes we
+		// eliminate the UNION operator in the tree, replacing it with a non-nil
+		// FactoredUnionSpans in the SpanExpression, and that case needs to be
+		// noticed and filtered.
 		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != inverted.None
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID

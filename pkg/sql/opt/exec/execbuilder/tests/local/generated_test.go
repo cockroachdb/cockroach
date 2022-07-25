@@ -550,6 +550,13 @@ func TestExecBuild_trigram_index(
 	runExecBuildLogicTest(t, "trigram_index")
 }
 
+func TestExecBuild_tsvector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "tsvector_index")
+}
+
 func TestExecBuild_tuple(
 	t *testing.T,
 ) {
