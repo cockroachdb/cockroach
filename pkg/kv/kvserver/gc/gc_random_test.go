@@ -725,6 +725,7 @@ type fakeGCer struct {
 	// feed them into MVCCGarbageCollectRangeKeys and ranges argument should be
 	// non-overlapping.
 	gcRangeKeyBatches [][]roachpb.GCRequest_GCRangeKey
+	gcRangeDeleteKeys []roachpb.GCRequest_GCClearRangeKey
 	threshold         Threshold
 	intents           []roachpb.Intent
 	batches           [][]roachpb.Intent
@@ -745,12 +746,16 @@ func (f *fakeGCer) SetGCThreshold(ctx context.Context, t Threshold) error {
 }
 
 func (f *fakeGCer) GC(
-	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	ctx context.Context,
+	keys []roachpb.GCRequest_GCKey,
+	rangeKeys []roachpb.GCRequest_GCRangeKey,
+	deletionKeys []roachpb.GCRequest_GCClearRangeKey,
 ) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
 	}
 	f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
+	f.gcRangeDeleteKeys = append(f.gcRangeDeleteKeys, deletionKeys...)
 	return nil
 }
 

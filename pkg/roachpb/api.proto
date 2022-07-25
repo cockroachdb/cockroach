@@ -979,6 +979,17 @@ message GCRequest {
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 
+  // Range deletion request.
+  message GCClearRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+  }
+  // range_deletion_keys contains zero or more (typically a single) ranges
+  // that would be deleted using storage range delete operation. Note that
+  // those ranges must not have any data newer than GC threshold or the
+  // request will fail.
+  repeated GCClearRangeKey clear_range_keys = 7 [(gogoproto.nullable) = false];
+
   reserved 5;
 }
 
