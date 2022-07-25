@@ -43,13 +43,6 @@ export const clusterReducerObj = new CachedDataReducer(
 );
 export const refreshCluster = clusterReducerObj.refresh;
 
-const eventsReducerObj = new CachedDataReducer(
-  api.getEvents,
-  "events",
-  moment.duration(10, "s"),
-);
-export const refreshEvents = eventsReducerObj.refresh;
-
 export type HealthState = CachedDataReducerState<api.HealthResponseMessage>;
 export const healthReducerObj = new CachedDataReducer(
   api.getHealth,
@@ -405,7 +398,6 @@ export const refreshInsights = insightsReducerObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
-  events: CachedDataReducerState<api.EventsResponseMessage>;
   health: HealthState;
   nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
@@ -443,7 +435,6 @@ export interface APIReducersState {
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
-  [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
   [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,

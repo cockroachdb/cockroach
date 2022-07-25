@@ -41,6 +41,12 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	err := WaitFor3XReplication(ctx, t, db)
 	require.NoError(t, err)
 
+	// TODO(knz): system.eventlog is deprecated. The test should be modified
+	// to assert the creation of structured logging events instead.
+	// See: https://github.com/cockroachdb/cockroach/issues/84994
+	_, err = db.Exec(`SET CLUSTER SETTING server.eventlog.enabled = true`)
+	require.NoError(t, err)
+
 	err = retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
 			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = 'node_join'`,

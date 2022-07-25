@@ -50,7 +50,6 @@ const METRICS_HEADER = "Metrics";
 const NODE_LIST_LABEL = /Nodes \([\d]\)/;
 const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
-const EVENTS_HEADER = "Events";
 const JOBS_HEADER = "Jobs";
 const DATABASES_HEADER = "Databases";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
@@ -224,15 +223,8 @@ describe("Routing to", () => {
   });
 
   {
-    /* events & jobs */
+    /* jobs */
   }
-  describe("'/events' path", () => {
-    test("routes to <EventPageUnconnected> component", () => {
-      navigateToPath("/events");
-      screen.getByText(EVENTS_HEADER, { selector: "h1" });
-    });
-  });
-
   describe("'/jobs' path", () => {
     test("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
@@ -624,13 +616,6 @@ describe("Routing to", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}/logs`);
       expect(history.location.pathname).toBe(`/node/${nodeIDAttr}/logs`);
-    });
-  });
-
-  describe("'/cluster/events' path", () => {
-    test("redirected to '/events'", () => {
-      navigateToPath("/cluster/events");
-      expect(history.location.pathname).toBe("/events");
     });
   });
 

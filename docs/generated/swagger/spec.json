@@ -967,7 +967,7 @@
       "x-go-package": "time"
     },
     "EventsResponse": {
-      "description": "EventsResponse contains a set of event log entries. This is always limited\nto the latest N entries (N is enforced in the associated endpoint).",
+      "description": "EventsResponse contains a set of event log entries. This is always limited\nto the latest N entries (N is enforced in the associated endpoint).\nNote: this API is deprecated.",
       "type": "object",
       "properties": {
         "events": {
