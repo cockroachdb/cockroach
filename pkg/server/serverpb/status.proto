@@ -23,6 +23,7 @@ import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/serverpb/index_recommendations.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
+import "sql/sqlstats/insights/insights.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -1824,6 +1825,14 @@ message TransactionContentionEventsResponse {
   ];
 }
 
+message ListExecutionInsightsRequest {}
+
+message ListExecutionInsightsResponse {
+  repeated cockroach.sql.insights.Insight insights = 1 [
+    (gogoproto.nullable) = false
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2260,4 +2269,8 @@ service Status {
       get: "/_status/transactioncontentionevents"
     };
   }
+
+  rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
+
+  rpc ListLocalExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
 }

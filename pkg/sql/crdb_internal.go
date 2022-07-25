@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -110,6 +109,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterContendedTablesViewID:       crdbInternalClusterContendedTablesView,
 		catconstants.CrdbInternalClusterContentionEventsTableID:     crdbInternalClusterContentionEventsTable,
 		catconstants.CrdbInternalClusterDistSQLFlowsTableID:         crdbInternalClusterDistSQLFlowsTable,
+		catconstants.CrdbInternalClusterExecutionInsightsTableID:    crdbInternalClusterExecutionInsightsTable,
 		catconstants.CrdbInternalClusterLocksTableID:                crdbInternalClusterLocksTable,
 		catconstants.CrdbInternalClusterQueriesTableID:              crdbInternalClusterQueriesTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:         crdbInternalClusterTxnsTable,
@@ -6204,25 +6204,46 @@ func populateClusterLocksWithFilter(
 	return matched, err
 }
 
-var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE crdb_internal.node_execution_insights (
+const executionInsightsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
 	session_id               STRING NOT NULL,
 	transaction_id           UUID NOT NULL,
 	statement_id             STRING NOT NULL,
 	statement_fingerprint_id BYTES NOT NULL
-);`,
+)`
+
+var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(executionInsightsSchemaPattern, "cluster_execution_insights"),
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		p.extendedEvalCtx.statsProvider.IterateInsights(ctx, func(
-			ctx context.Context, o *insights.Insight,
-		) {
-			err = errors.CombineErrors(err, addRow(
-				tree.NewDString(hex.EncodeToString(o.Session.ID.GetBytes())),
-				tree.NewDUuid(tree.DUuid{UUID: o.Transaction.ID}),
-				tree.NewDString(hex.EncodeToString(o.Statement.ID.GetBytes())),
-				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(o.Statement.FingerprintID)))),
-			))
-		})
-		return err
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, &serverpb.ListExecutionInsightsRequest{})
+		if err != nil {
+			return err
+		}
+		return populateExecutionInsightsTable(response, addRow)
 	},
+}
+
+var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(executionInsightsSchemaPattern, "node_execution_insights"),
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListLocalExecutionInsights(ctx, &serverpb.ListExecutionInsightsRequest{})
+		if err != nil {
+			return err
+		}
+		return populateExecutionInsightsTable(response, addRow)
+	},
+}
+
+func populateExecutionInsightsTable(
+	response *serverpb.ListExecutionInsightsResponse, addRow func(...tree.Datum) error,
+) (err error) {
+	for _, insight := range response.Insights {
+		err = errors.CombineErrors(err, addRow(
+			tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
+			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
+			tree.NewDString(hex.EncodeToString(insight.Statement.ID.GetBytes())),
+			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Statement.FingerprintID)))),
+		))
+	}
+	return err
 }
