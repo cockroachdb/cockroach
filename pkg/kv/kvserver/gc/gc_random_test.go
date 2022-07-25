@@ -301,6 +301,9 @@ func TestNewVsInvariants(t *testing.T) {
 				require.NoError(t,
 					storage.MVCCGarbageCollectRangeKeys(ctx, eng, &stats, rangeKeys))
 			}
+			if len(gcer.gcClearRangeKeys) > 0 {
+				panic("Clear range happened")
+			}
 
 			assertLiveData(t, eng, beforeGC, *desc, tc.now, gcThreshold, intentThreshold, ttl,
 				gcInfoNew)
@@ -720,7 +723,7 @@ type fakeGCer struct {
 	// feed them into MVCCGarbageCollectRangeKeys and ranges argument should be
 	// non-overlapping.
 	gcRangeKeyBatches [][]roachpb.GCRequest_GCRangeKey
-	gcRangeDeleteKeys []roachpb.GCRequest_GCClearRangeKey
+	gcClearRangeKeys  []roachpb.GCRequest_GCClearRangeKey
 	threshold         Threshold
 	intents           []roachpb.Intent
 	batches           [][]roachpb.Intent
@@ -750,7 +753,7 @@ func (f *fakeGCer) GC(
 		f.gcKeys[k.Key.String()] = k
 	}
 	f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
-	f.gcRangeDeleteKeys = append(f.gcRangeDeleteKeys, deletionKeys...)
+	f.gcClearRangeKeys = append(f.gcClearRangeKeys, deletionKeys...)
 	return nil
 }
 
@@ -799,6 +802,10 @@ func (f *fakeGCer) rangeKeys() []roachpb.GCRequest_GCRangeKey {
 	return reqs
 }
 
+func (f *fakeGCer) clearRangeKeys() []roachpb.GCRequest_GCClearRangeKey {
+	return f.gcClearRangeKeys
+}
+
 func intentLess(a, b *roachpb.Intent) bool {
 	cmp := a.Key.Compare(b.Key)
 	switch {
@@ -823,25 +830,61 @@ func makeCollectableGCRangesFromGCRequests(
 ) []storage.CollectableGCRangeKey {
 	collectableKeys := make([]storage.CollectableGCRangeKey, len(rangeKeys))
 	for i, rk := range rangeKeys {
-		leftPeekBound := rk.StartKey.Prevish(roachpb.PrevishKeyLength)
-		if len(rangeStart) > 0 && leftPeekBound.Compare(rangeStart) <= 0 {
-			leftPeekBound = rangeStart
-		}
-		rightPeekBound := rk.EndKey.Next()
-		if len(rangeEnd) > 0 && rightPeekBound.Compare(rangeEnd) >= 0 {
-			rightPeekBound = rangeEnd
-		}
+		peekBounds := expandRangeSpan(roachpb.Span{
+			Key:    rk.StartKey,
+			EndKey: rk.EndKey,
+		}, roachpb.Span{
+			Key:    rangeStart,
+			EndKey: rangeEnd,
+		})
 		collectableKeys[i] = storage.CollectableGCRangeKey{
 			MVCCRangeKey: storage.MVCCRangeKey{
 				StartKey:  rk.StartKey,
 				EndKey:    rk.EndKey,
 				Timestamp: rk.Timestamp,
 			},
-			LatchSpan: roachpb.Span{
-				Key:    leftPeekBound,
-				EndKey: rightPeekBound,
-			},
+			LatchSpan: peekBounds,
 		}
 	}
 	return collectableKeys
+}
+
+// makeCollectableGCRangesFromGCRequests mirrors
+// MakeCollectableGCRangesFromGCRequests to break cyclic dependecies.
+func makeCollectableGCClearRangesFromGCRequests(
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCClearRangeKey,
+) []storage.CollectableGCClearRangeKey {
+	collectableKeys := make([]storage.CollectableGCClearRangeKey, len(rangeKeys))
+	for i, rk := range rangeKeys {
+		peekBounds := expandRangeSpan(roachpb.Span{
+			Key:    rk.StartKey,
+			EndKey: rk.EndKey,
+		}, roachpb.Span{
+			Key:    rangeStart,
+			EndKey: rangeEnd,
+		})
+		collectableKeys[i] = storage.CollectableGCClearRangeKey{
+			Span: roachpb.Span{
+				Key:    rk.StartKey,
+				EndKey: rk.EndKey,
+			},
+			LatchSpan: peekBounds,
+		}
+	}
+	return collectableKeys
+}
+
+func expandRangeSpan(rangeKey, limits roachpb.Span) roachpb.Span {
+	leftPeekBound := rangeKey.Key.Prevish(roachpb.PrevishKeyLength)
+	if len(limits.Key) > 0 && leftPeekBound.Compare(limits.Key) <= 0 {
+		leftPeekBound = limits.Key
+	}
+	rightPeekBound := rangeKey.EndKey.Next()
+	if len(limits.EndKey) > 0 && rightPeekBound.Compare(limits.EndKey) >= 0 {
+		rightPeekBound = limits.EndKey
+	}
+	return roachpb.Span{
+		Key:    leftPeekBound,
+		EndKey: rightPeekBound,
+	}
 }
