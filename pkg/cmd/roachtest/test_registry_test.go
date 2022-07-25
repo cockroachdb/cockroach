@@ -20,7 +20,7 @@ import (
 
 func TestMakeTestRegistry(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "preferSSD", func(t *testing.T, preferSSD bool) {
-		r, err := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD)
+		r, err := makeTestRegistry(spec.AWS, "foo", "", "zone123", preferSSD)
 		require.NoError(t, err)
 		require.Equal(t, preferSSD, r.preferSSD)
 		require.Equal(t, "zone123", r.zones)

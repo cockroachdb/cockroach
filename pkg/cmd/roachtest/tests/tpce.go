@@ -27,11 +27,12 @@ import (
 
 func registerTPCE(r registry.Registry) {
 	type tpceOptions struct {
-		owner     registry.Owner // defaults to test-eng
-		customers int
-		nodes     int
-		cpus      int
-		ssds      int
+		owner           registry.Owner // defaults to test-eng
+		customers       int
+		activeCustomers int
+		nodes           int
+		cpus            int
+		ssds            int
 
 		tags    []string
 		timeout time.Duration
@@ -46,7 +47,6 @@ func registerTPCE(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.StoreCount = opts.ssds
 		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
@@ -55,22 +55,7 @@ func registerTPCE(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// Configure to increase the speed of the import.
-		func() {
-			db := c.Conn(ctx, t.L(), 1)
-			defer db.Close()
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-			); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
+		importC := make(chan struct{})
 		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
@@ -87,13 +72,14 @@ func registerTPCE(r registry.Registry) {
 			t.Status("preparing workload")
 			c.Run(ctx, loadNode, fmt.Sprintf("%s --customers=%d --racks=%d --init %s",
 				dockerRun, opts.customers, racks, roachNodeIPFlags[0]))
+			close(importC)
 
 			t.Status("running workload")
-			duration := 2 * time.Hour
-			threads := opts.nodes * opts.cpus
+			duration := 48 * time.Hour
+			threads := 1200
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode,
-				fmt.Sprintf("%s --customers=%d --racks=%d --duration=%s --threads=%d %s",
-					dockerRun, opts.customers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
+				fmt.Sprintf("%s --customers=%d --active-customers=%d --racks=%d --duration=%s --threads=%d %s",
+					dockerRun, opts.customers, opts.activeCustomers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
 			if err != nil {
 				t.Fatal(err.Error())
 			}
@@ -103,29 +89,47 @@ func registerTPCE(r registry.Registry) {
 			}
 			return nil
 		})
+		m.Go(func(ctx context.Context) error {
+			// Wait for the import to complete.
+			select {
+			case <-importC:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			// Wait for the load to run for 1 hour before starting the index build.
+			select {
+			case <-time.After(1 * time.Hour):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+			if _, err := db.ExecContext(ctx, "ALTER DATABASE tpce CONFIGURE ZONE USING gc.ttlseconds = 5000;"); err != nil {
+				return err
+			}
+			_, err := db.ExecContext(ctx, "CREATE INDEX ON tpce.cash_transaction (ct_dts)")
+			return err
+		})
 		m.Wait()
 	}
 
-	for _, opts := range []tpceOptions{
-		// Nightly, small scale configurations.
-		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1},
-		// Weekly, large scale configurations.
-		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
-	} {
-		opts := opts
-		owner := registry.OwnerTestEng
-		if opts.owner != "" {
-			owner = opts.owner
-		}
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
-			Owner:   owner,
-			Tags:    opts.tags,
-			Timeout: opts.timeout,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runTPCE(ctx, t, c, opts)
-			},
-		})
-	}
+	// To use, run the following from a GCE worker tmux session:
+	//  roachtest run tpce --instance-type=n2-standard-48 --zones=us-central1-c --min-cpu-platform='Intel Ice Lake' --wipe=false --cockroach=<path_to_cockroach>
+	week := 7 * 24 * time.Hour
+	r.Add(registry.TestSpec{
+		Name:    "tpce/index-backfill",
+		Owner:   registry.OwnerKV,
+		Timeout: week,
+		Cluster: r.MakeClusterSpec(16, spec.VolumeSize(5000)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			opts := tpceOptions{
+				customers:       2_000_000,
+				activeCustomers: 600_000,
+				nodes:           15,
+			}
+			runTPCE(ctx, t, c, opts)
+		},
+	})
 }

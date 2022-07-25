@@ -36,25 +36,27 @@ func ownerToAlias(o registry.Owner) team.Alias {
 }
 
 type testRegistryImpl struct {
-	m            map[string]*registry.TestSpec
-	cloud        string
-	instanceType string // optional
-	zones        string
-	preferSSD    bool
+	m              map[string]*registry.TestSpec
+	cloud          string
+	instanceType   string // optional
+	minCPUPlatform string // optional
+	zones          string
+	preferSSD      bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool,
+	cloud string, instanceType string, minCPUPlatform string, zones string, preferSSD bool,
 ) (testRegistryImpl, error) {
 	r := testRegistryImpl{
-		cloud:        cloud,
-		instanceType: instanceType,
-		zones:        zones,
-		preferSSD:    preferSSD,
-		m:            make(map[string]*registry.TestSpec),
+		cloud:          cloud,
+		instanceType:   instanceType,
+		minCPUPlatform: minCPUPlatform,
+		zones:          zones,
+		preferSSD:      preferSSD,
+		m:              make(map[string]*registry.TestSpec),
 	}
 	v := buildTag
 	if v == "" {
@@ -96,7 +98,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 		finalOpts = append(finalOpts, spec.Zones(r.zones))
 	}
 	finalOpts = append(finalOpts, opts...)
-	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, r.minCPUPlatform, nodeCount, finalOpts...)
 }
 
 const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
@@ -137,7 +139,7 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	// may not be scheduled until a few hours in due to the CPU quota, individual
 	// tests should expect to take "less time". Longer-running tests require the
 	// weekly tag.
-	const maxTimeout = 18 * time.Hour
+	const maxTimeout = 7 * 24 * time.Hour
 	if spec.Timeout > maxTimeout {
 		var weekly bool
 		for _, tag := range spec.Tags {

@@ -43,7 +43,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+	r, err := makeTestRegistry(spec.GCE, "", "", "", false)
 	require.NoError(t, err)
 	return r
 }
@@ -340,7 +340,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", "", 0),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			<-ctx.Done()
 		},
@@ -375,7 +375,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -385,7 +385,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:    "illegal *[]",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", "", 0),
 			},
 			`illegal \*\[\]: Name must match this regexp: `,
 			nil,
@@ -393,7 +393,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+			r, err := makeTestRegistry(spec.GCE, "", "", "", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -423,7 +423,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	r.Add(registry.TestSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", "", 0),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)

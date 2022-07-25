@@ -171,7 +171,7 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+			r, err := makeTestRegistry(cloud, instanceType, minCPUPlatform, zonesF, localSSDArg)
 			if err != nil {
 				return err
 			}
@@ -297,6 +297,8 @@ runner itself.
 		cmd.Flags().StringVar(
 			&instanceType, "instance-type", instanceType,
 			"the instance type to use (see https://aws.amazon.com/ec2/instance-types/, https://cloud.google.com/compute/docs/machine-types or https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes)")
+		cmd.Flags().StringVar(
+			&minCPUPlatform, "min-cpu-platform", minCPUPlatform, "")
 		cmd.Flags().IntVar(
 			&cpuQuota, "cpu-quota", 300,
 			"The number of cloud CPUs roachtest is allowed to use at any one time.")
@@ -362,7 +364,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
-	r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+	r, err := makeTestRegistry(cloud, instanceType, minCPUPlatform, zonesF, localSSDArg)
 	if err != nil {
 		return err
 	}
