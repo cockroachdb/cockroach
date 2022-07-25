@@ -785,48 +785,6 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		t.Errorf("expected public to have USAGE privilege on types")
 	}
 
-	// Test granting when withGrantOption is true.
-	defaultPrivileges.GrantDefaultPrivileges(
-		catpb.DefaultPrivilegesRole{Role: creatorUser},
-		privilege.List{privilege.USAGE},
-		[]username.SQLUsername{username.PublicRoleName()},
-		privilege.Types,
-		true, /* withGrantOption */
-	)
-
-	privDesc := defaultPrivilegesForCreator.DefaultPrivilegesPerObject[privilege.Types]
-	user, found := privDesc.FindUser(username.PublicRoleName())
-	if !found {
-		t.Errorf("public not found on privilege descriptor when expected")
-	}
-	if !privilege.USAGE.IsSetIn(user.WithGrantOption) {
-		t.Errorf("expected public to have USAGE grant options on types")
-	}
-	// This flag should not be true since there is a "modification" - i.e. grant option bits for USAGE are active,
-	// so do not remove that user from the descriptor.
-	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
-		t.Errorf("expected public to not have USAGE privilege on types")
-	}
-
-	// Test revoking when grantOptionFor is true.
-	defaultPrivileges.RevokeDefaultPrivileges(
-		catpb.DefaultPrivilegesRole{Role: creatorUser},
-		privilege.List{privilege.USAGE},
-		[]username.SQLUsername{username.PublicRoleName()},
-		privilege.Types,
-		true, /* grantOptionFor */
-	)
-
-	privDesc = defaultPrivilegesForCreator.DefaultPrivilegesPerObject[privilege.Types]
-	_, found = privDesc.FindUser(username.PublicRoleName())
-	if found {
-		t.Errorf("public found on privilege descriptor when it was supposed to be removed")
-	}
-	// Public still has usage on types since only the grant option for USAGE was revoked, not the privilege itself.
-	if !GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
-		t.Errorf("expected public to have USAGE privilege on types")
-	}
-
 	// Test a complete revoke afterwards.
 	defaultPrivileges.RevokeDefaultPrivileges(
 		catpb.DefaultPrivilegesRole{Role: creatorUser},

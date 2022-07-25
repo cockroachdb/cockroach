@@ -126,7 +126,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := params.p.validateRoles(params.ctx, granteeSQLUsernames, true /* isPublicValid */); err != nil {
+	if err := params.p.preChangePrivilegesValidation(params.ctx, granteeSQLUsernames, grantOption, n.n.IsGrant); err != nil {
 		return err
 	}
 
