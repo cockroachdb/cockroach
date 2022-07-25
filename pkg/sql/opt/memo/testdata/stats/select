@@ -3232,3 +3232,71 @@ select
  │                     <--- 0 ------- 100000000000
  └── filters
       └── x:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+
+# Regression test for #84478. Avoid error due to selectivity is NaN.
+exec-ddl
+CREATE TABLE t84478 (
+  col0 FLOAT4,
+  col1 REGPROC NULL,
+  col2 BOX2D NOT NULL,
+  col3 TIMESTAMP NULL,
+  col4 FLOAT8 AS (col0 + NULL) VIRTUAL,
+  UNIQUE (col0) STORING (col1, col2, col3)
+)
+----
+
+norm
+SELECT
+  NULL, 1
+FROM
+  t84478 AS t1
+  JOIN t84478 AS t2
+    JOIN t84478 AS t3 ON
+        (t2.col4) = (t3.col0)
+        AND (t2.col3) = (t3.col3)
+        AND (t2.col2) = (t3.col2) ON (t1.tableoid) = (t2.col1)
+  RIGHT JOIN t84478 AS t4 ON
+      isnan(t1.crdb_internal_mvcc_timestamp::DECIMAL)::BOOL
+GROUP BY
+  t1.col2
+----
+project
+ ├── columns: "?column?":33(unknown) "?column?":34(int!null)
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── fd: ()-->(33,34)
+ ├── distinct-on
+ │    ├── columns: col2:3(box2d)
+ │    ├── grouping columns: col2:3(box2d)
+ │    ├── immutable
+ │    ├── stats: [rows=1, distinct(3)=1, null(3)=1, avgsize(3)=0]
+ │    ├── key: (3)
+ │    └── left-join (cross)
+ │         ├── columns: col2:3(box2d) crdb_internal_mvcc_timestamp:7(decimal)
+ │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │         ├── immutable
+ │         ├── stats: [rows=1000, distinct(3)=1, null(3)=1000, avgsize(3)=0]
+ │         ├── scan t84478
+ │         │    ├── computed column expressions
+ │         │    │    └── col4:29
+ │         │    │         └── CAST(NULL AS FLOAT8) [type=float]
+ │         │    └── stats: [rows=1000]
+ │         ├── select
+ │         │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
+ │         │    ├── cardinality: [0 - 0]
+ │         │    ├── immutable
+ │         │    ├── stats: [rows=0, distinct(3)=0, null(3)=0, avgsize(3)=0]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3,7)
+ │         │    ├── values
+ │         │    │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
+ │         │    │    ├── cardinality: [0 - 0]
+ │         │    │    ├── stats: [rows=0, distinct(3)=0, null(3)=0, avgsize(3)=0]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3,7)
+ │         │    └── filters
+ │         │         └── isnan(crdb_internal_mvcc_timestamp:7) [type=bool, outer=(7), immutable, constraints=(/7: (/NULL - ])]
+ │         └── filters (true)
+ └── projections
+      ├── NULL [as="?column?":33, type=unknown]
+      └── 1 [as="?column?":34, type=int]
