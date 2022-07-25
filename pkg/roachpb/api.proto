@@ -1001,6 +1001,19 @@ message GCRequest {
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 
+  // Range clear request. Each request covers data starting from an MVCC version
+  // down to the full key at the end of the range. This approach allows us to
+  // delete data from the key which has non garbage versions down to the next
+  // key that has non garbage versions along with all the range tombstones.
+  message GCClearRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+  }
+  // range_deletion_keys contains zero or one range that would be deleted using
+  // storage range delete operation. Note that this range must not have any
+  // data newer than GC threshold or the request will fail.
+  GCClearRangeKey clear_range_key = 7;
+
   reserved 5;
 }
 
