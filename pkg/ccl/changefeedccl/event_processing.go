@@ -163,10 +163,14 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		if err != nil {
 			return errors.Wrapf(err, "while matching filter: %s", c.safeExpr)
 		}
+
 		if !matches {
 			// TODO(yevgeniy): Add metrics
+			a := ev.DetachAlloc()
+			a.Release(ctx)
 			return nil
 		}
+
 		projection, err := c.evaluator.Projection(ctx, updatedRow, mvccTimestamp, prevRow)
 		if err != nil {
 			return errors.Wrapf(err, "while evaluating projection: %s", c.safeExpr)
