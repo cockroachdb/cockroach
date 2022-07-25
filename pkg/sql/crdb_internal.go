@@ -5191,7 +5191,8 @@ CREATE TABLE crdb_internal.default_privileges (
 	for_all_roles   BOOL,
 	object_type     STRING NOT NULL,
 	grantee         STRING NOT NULL,
-	privilege_type  STRING NOT NULL
+	privilege_type  STRING NOT NULL,
+	is_grantable    BOOL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -5217,8 +5218,9 @@ CREATE TABLE crdb_internal.default_privileges (
 									role,                                 // role
 									forAllRoles,                          // for_all_roles
 									tree.NewDString(objectType.String()), // object_type
-									tree.NewDString(userPrivs.User().Normalized()), // grantee
-									tree.NewDString(priv.String()),                 // privilege_type
+									tree.NewDString(userPrivs.User().Normalized()),                      // grantee
+									tree.NewDString(priv.String()),                                      // privilege_type
+									tree.MakeDBool(tree.DBool(priv.IsSetIn(userPrivs.WithGrantOption))), // is_grantable
 								); err != nil {
 									return err
 								}
@@ -5237,6 +5239,8 @@ CREATE TABLE crdb_internal.default_privileges (
 									tree.NewDString(objectType.String()),  // object_type
 									tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()), // grantee
 									tree.NewDString(privilege.ALL.String()),                                                     // privilege_type
+									tree.DBoolTrue,
+									// is_grantable
 								); err != nil {
 									return err
 								}
@@ -5251,6 +5255,7 @@ CREATE TABLE crdb_internal.default_privileges (
 								tree.NewDString(privilege.Types.String()),               // object_type
 								tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 								tree.NewDString(privilege.USAGE.String()),               // privilege_type
+								tree.DBoolFalse, // is_grantable
 							); err != nil {
 								return err
 							}
