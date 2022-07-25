@@ -831,9 +831,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	adminAuthzCheck.makePlanner = func(opName string, user username.SQLUsername) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
+		txn := db.NewTxn(ctx, "checker")
 		return sql.NewInternalPlanner(
 			opName,
-			db.NewTxn(ctx, "admin-privilege-checker"),
+			txn,
 			user,
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2769,8 +2768,8 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
 	sqlDB.Exec(t, "CREATE USER withoutprivs")
 
-	execCfg := s.ExecutorConfig().(*sql.ExecutorConfig)
-	txn := kvDB.NewTxn(ctx, "test")
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	//txn := kvDB.NewTxn(ctx, "test")
 	// p, cleanup := sql.NewInternalPlanner(
 	// 	"admin-privilege-checker",
 	// 	txn,
@@ -2784,12 +2783,13 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	plannerFn := func(opName string, user username.SQLUsername) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
+		txn := kvDB.NewTxn(ctx, "checker")
 		return sql.NewInternalPlanner(
 			opName,
 			txn,
 			user,
 			&sql.MemoryMetrics{},
-			execCfg,
+			&execCfg,
 			sessiondatapb.SessionData{},
 		)
 	}
@@ -2800,16 +2800,11 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		makePlanner: plannerFn,
 	}
 
-	withAdmin, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
-	require.NoError(t, err)
-	withVa, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withva")
-	require.NoError(t, err)
-	withVaRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredacted")
-	require.NoError(t, err)
-	withVaAndRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredacted")
-	require.NoError(t, err)
-	withoutPrivs, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
-	require.NoError(t, err)
+	withAdmin := username.MakeSQLUsernameFromPreNormalizedString("withadmin")
+	withVa := username.MakeSQLUsernameFromPreNormalizedString("withva")
+	withVaRedacted := username.MakeSQLUsernameFromPreNormalizedString("withvaredacted")
+	withVaAndRedacted := username.MakeSQLUsernameFromPreNormalizedString("withvaandredacted")
+	withoutPrivs := username.MakeSQLUsernameFromPreNormalizedString("withoutprivs")
 
 	tests := []struct {
 		name            string
@@ -2839,33 +2834,28 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		},
 	}
 	// test system privileges if valid version
-	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		sqlDB.Exec(t, "CREATE USER withvasystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvasystemprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedsystemprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
+	sqlDB.Exec(t, "CREATE USER withvasystemprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvasystemprivilege")
+	sqlDB.Exec(t, "CREATE USER withvaredactedsystemprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedsystemprivilege")
+	sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
 
-		withVaSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvasystemprivilege")
-		require.NoError(t, err)
-		withVaRedactedSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredactedsystemprivilege")
-		require.NoError(t, err)
-		withVaAndRedactedSystemPrivilege, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredactedsystemprivilege")
-		require.NoError(t, err)
+	withVaSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvasystemprivilege")
+	withVaRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedsystemprivilege")
+	withVaAndRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedsystemprivilege")
 
-		tests[0].usernameWantErr[withVaSystemPrivilege] = false
-		tests[1].usernameWantErr[withVaSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaSystemPrivilege] = false
-		tests[0].usernameWantErr[withVaRedactedSystemPrivilege] = true
-		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
-		tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
-		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
+	tests[0].usernameWantErr[withVaSystemPrivilege] = false
+	tests[1].usernameWantErr[withVaSystemPrivilege] = false
+	tests[2].usernameWantErr[withVaSystemPrivilege] = false
+	tests[0].usernameWantErr[withVaRedactedSystemPrivilege] = true
+	tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
+	tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
+	tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
+	tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
+	tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
 
-	}
 	for _, tt := range tests {
 		for userName, wantErr := range tt.usernameWantErr {
 			t.Run(fmt.Sprintf("%s-%s", tt.name, userName), func(t *testing.T) {

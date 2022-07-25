@@ -3461,7 +3461,6 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 
 		if !hasViewActivity {
 			hasSystemPrivilege := c.checkHasSystemPrivilege(ctx, userName, privilege.VIEWACTIVITY)
-
 			if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
 				if !hasSystemPrivilege {
 					return status.Errorf(
@@ -3629,10 +3628,10 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 func (c *adminPrivilegeChecker) checkHasSystemPrivilege(
 	ctx context.Context, user username.SQLUsername, privilege privilege.Kind,
 ) bool {
-	planner, cleanup := c.makePlanner("check-system-privilege", user)
+	planner, cleanup := c.makePlanner("check-system-privilege", username.RootUserName())
 	defer cleanup()
 	aa := planner.(sql.AuthorizationAccessor)
-	err := aa.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege)
+	err := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
 	return err == nil
 }
 
