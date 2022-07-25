@@ -31,3 +31,6 @@ revoke_stmt ::=
 	| 'REVOKE' 'SYSTEM' 'ALL' 'PRIVILEGES' 'FROM' role_spec_list
 	| 'REVOKE' 'SYSTEM' 'ALL'  'FROM' role_spec_list
 	| 'REVOKE' 'SYSTEM' privilege_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'SYSTEM' 'ALL' 'PRIVILEGES' 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'SYSTEM' 'ALL'  'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'SYSTEM' privilege_list 'FROM' role_spec_list
