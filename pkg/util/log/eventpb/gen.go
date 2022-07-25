@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build bazel
 // +build bazel
 
 package main
@@ -342,6 +343,11 @@ func readInput(
 				return errors.Newf("field definition must not span multiple lines: %q", line)
 			}
 
+			// Skip reserved fields.
+			if reservedDefRe.MatchString(line) {
+				continue
+			}
+
 			// A field.
 			if strings.HasPrefix(line, "repeated") {
 				line = "array_of_" + strings.TrimSpace(strings.TrimPrefix(line, "repeated"))
@@ -445,6 +451,8 @@ var fieldDefRe = regexp.MustCompile(`\s*(?P<typ>[a-z._A-Z0-9]+)` +
 	`(.*"redact:\\"(?P<reportingsafe>nonsensitive|mixed)\\"")?` +
 	`(.*"redact:\\"safeif:(?P<safeif>([^\\]|\\[^"])+)\\"")?` +
 	`).*$`)
+
+var reservedDefRe = regexp.MustCompile(`\s*(reserved ([1-9][0-9]*);)`)
 
 func camelToSnake(typeName string) string {
 	var res strings.Builder
