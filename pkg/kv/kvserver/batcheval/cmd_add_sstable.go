@@ -47,9 +47,19 @@ func declareKeysAddSSTable(
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
+	args := req.(*roachpb.AddSSTableRequest)
 	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to return its span.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+
+	// TODO(bilal): Audit all AddSSTable callers to ensure they send MVCCStats.
+	if args.MVCCStats == nil || args.MVCCStats.RangeKeyCount > 0 {
+		// NB: The range end key is not available, so this will pessimistically
+		// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
+		// span will be tightened during evaluation.
+		l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
+	}
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -311,7 +321,9 @@ func EvalAddSSTable(
 	// cumulative for this command. These stats can then be marked as accurate.
 	if checkConflicts {
 		stats.Add(statsDelta)
-		stats.ContainsEstimates = 0
+		if statsDelta.ContainsEstimates == 0 {
+			stats.ContainsEstimates = 0
+		}
 	} else {
 		stats.ContainsEstimates++
 	}
