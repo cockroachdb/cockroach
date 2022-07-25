@@ -29,6 +29,7 @@ proto_library(
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
+        "//pkg/sql/sqlstats/insights:insights_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/ts/catalog:catalog_proto",
         "//pkg/util:util_proto",
@@ -68,6 +69,7 @@ go_proto_library(
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep
+        "//pkg/sql/sqlstats/insights",
         "//pkg/storage/enginepb",
         "//pkg/ts/catalog",
         "//pkg/util",
