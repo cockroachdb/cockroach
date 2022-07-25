@@ -460,12 +460,18 @@ func (c *tsNodeCodec) decodeTSNodePGBinary(b []byte) ([]byte, *tsNode, error) {
 // index key for the terms in this tsvector.
 func EncodeInvertedIndexKeys(inKey []byte, vector TSVector) ([][]byte, error) {
 	outKeys := make([][]byte, 0, len(vector))
+	// Note that by construction, TSVector contains only unique term, so we don't
+	// need to de-duplicate terms when constructing the inverted index keys.
 	for i := range vector {
-		l := vector[i].lexeme
-		outKey := make([]byte, len(inKey), len(inKey)+len(l))
-		copy(outKey, inKey)
-		newKey := encoding.EncodeStringAscending(outKey, l)
+		newKey := EncodeInvertedIndexKey(inKey, vector[i].lexeme)
 		outKeys = append(outKeys, newKey)
 	}
 	return outKeys, nil
+}
+
+// EncodeInvertedIndexKey returns the inverted index key for the input lexeme.
+func EncodeInvertedIndexKey(inKey []byte, lexeme string) []byte {
+	outKey := make([]byte, len(inKey), len(inKey)+len(lexeme))
+	copy(outKey, inKey)
+	return encoding.EncodeStringAscending(outKey, lexeme)
 }
