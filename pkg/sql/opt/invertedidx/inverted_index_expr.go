@@ -116,18 +116,27 @@ func TryFilterInvertedIndex(
 	} else {
 		col := index.InvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
-		if typ.Family() == types.StringFamily {
+		switch typ.Family() {
+		case types.StringFamily:
 			filterPlanner = &trigramFilterPlanner{
 				tabID:           tabID,
 				index:           index,
 				computedColumns: computedColumns,
 			}
-		} else {
+		case types.TSVectorFamily:
+			filterPlanner = &tsqueryFilterPlanner{
+				tabID:           tabID,
+				index:           index,
+				computedColumns: computedColumns,
+			}
+		case types.JsonFamily, types.ArrayFamily:
 			filterPlanner = &jsonOrArrayFilterPlanner{
 				tabID:           tabID,
 				index:           index,
 				computedColumns: computedColumns,
 			}
+		default:
+			return nil, nil, nil, nil, false
 		}
 	}
 

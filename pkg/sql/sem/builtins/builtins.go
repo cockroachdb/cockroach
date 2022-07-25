@@ -5924,8 +5924,8 @@ value if you rely on the HLC for accuracy.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"val", types.TSVector},
-				{"version", types.Int},
+				{Name: "val", Typ: types.TSVector},
+				{Name: "version", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {

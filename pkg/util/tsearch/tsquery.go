@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -167,6 +168,54 @@ func (q TSQuery) String() string {
 		return ""
 	}
 	return q.root.String()
+}
+
+// GetInvertedExpr returns the inverted expression that can be used to search
+// an index.
+func (q TSQuery) GetInvertedExpr() (expr inverted.Expression, err error) {
+	return q.root.getInvertedExpr()
+}
+
+func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
+	switch n.op {
+	case invalid:
+		key := EncodeInvertedIndexKey(nil /* inKey */, n.term.lexeme)
+		span := inverted.MakeSingleValSpan(key)
+		return inverted.ExprForSpan(span, true), nil
+	case followedby:
+		fallthrough
+	case and:
+		l, lErr := n.l.getInvertedExpr()
+		r, rErr := n.r.getInvertedExpr()
+		if lErr != nil && rErr != nil {
+			// We need a positive match on at least one side.
+			return nil, lErr
+		} else if lErr != nil {
+			//nolint:returnerrcheck
+			return r, nil
+		} else if rErr != nil {
+			//nolint:returnerrcheck
+			return l, nil
+		}
+		return inverted.And(l, r), nil
+	case or:
+		l, lErr := n.l.getInvertedExpr()
+		r, rErr := n.r.getInvertedExpr()
+		if lErr != nil || rErr != nil {
+			// We need a positive match on both sides, so we return an error here.
+			// For example, searching for a | !b would require a full scan, since some
+			// documents could match that contain neither a nor b.
+			return nil, lErr
+		}
+		return inverted.Or(l, r), nil
+	case not:
+		// A not would require more advanced machinery than we have, so for now
+		// we'll just assume we can't perform an inverted expression search on a
+		// not. Note that a nested not would make it possible, but we are ignoring
+		// this case for now as it seems marginal.
+		return nil, errors.New("unable to create inverted expr for not")
+	}
+	return nil, errors.AssertionFailedf("invalid operator %d", n.op)
 }
 
 func lexTSQuery(input string) (TSVector, error) {
