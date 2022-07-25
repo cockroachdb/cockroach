@@ -13,7 +13,6 @@ package gc
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -23,7 +22,7 @@ import (
 // gcIterator wraps an rditer.ReplicaMVCCDataIterator which it reverse iterates for
 // the purpose of discovering gc-able replicated data.
 type gcIterator struct {
-	it        *rditer.ReplicaMVCCDataIterator
+	it        storage.MVCCIterator
 	threshold hlc.Timestamp
 	done      bool
 	err       error
@@ -35,15 +34,9 @@ type gcIterator struct {
 	cachedRangeTombstoneKey roachpb.Key
 }
 
-func makeGCIterator(
-	desc *roachpb.RangeDescriptor, snap storage.Reader, threshold hlc.Timestamp,
-) gcIterator {
+func makeGCIterator(iter storage.MVCCIterator, threshold hlc.Timestamp) gcIterator {
 	return gcIterator{
-		it: rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
-			Reverse:  true,
-			IterKind: storage.MVCCKeyAndIntentsIterKind,
-			KeyTypes: storage.IterKeyTypePointsAndRanges,
-		}),
+		it:        iter,
 		threshold: threshold,
 	}
 }
@@ -202,9 +195,10 @@ func (it *gcIterator) currentRangeTS() hlc.Timestamp {
 	return it.cachedRangeTombstoneTS
 }
 
-func (it *gcIterator) close() {
-	it.it.Close()
-	it.it = nil
+// rewind iterator to previously seen key to restart GC process
+func (it *gcIterator) seek(key storage.MVCCKey) {
+	it.it.SeekLT(key)
+	it.buf.resetAfterSeek()
 }
 
 // gcIteratorRingBufSize is 3 because the gcIterator.state method at most needs
@@ -271,4 +265,13 @@ func (b *gcIteratorRingBuf) pushBack(k storage.MVCCKey, v []byte, rangeTS hlc.Ti
 	}
 	b.firstRangeTombstoneAtOrBelowGCTss[i] = rangeTS
 	b.len++
+}
+
+// resetAfterSeek will ensure that iterator would be empty after remove
+// front so that state can advance and continue from a new seek point.
+func (b *gcIteratorRingBuf) resetAfterSeek() {
+	for b.len > 0 {
+		b.removeFront()
+	}
+	b.pushBack(storage.MVCCKey{}, nil, hlc.Timestamp{})
 }
