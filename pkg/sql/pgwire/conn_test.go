@@ -159,6 +159,9 @@ func TestConn(t *testing.T) {
 	if err := finishQuery(generateError, conn); err != nil {
 		t.Fatal(err)
 	}
+	expectExecStmt(ctx, t, "DECLARE \"a b\" CURSOR FOR SELECT 10", &rd, conn, queryStringComplete)
+	expectExecStmt(ctx, t, "FETCH 1 \"a b\"", &rd, conn, queryStringComplete)
+	expectExecStmt(ctx, t, "CLOSE \"a b\"", &rd, conn, queryStringComplete)
 	// We got to the COMMIT at the end of the batch.
 	expectExecStmt(ctx, t, "COMMIT TRANSACTION", &rd, conn, queryStringComplete)
 	expectSync(ctx, t, &rd)
@@ -505,6 +508,9 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	batch.Queue("BEGIN")
 	batch.Queue("select 7")
 	batch.Queue("select 8")
+	batch.Queue("declare \"a b\" cursor for select 10")
+	batch.Queue("fetch 1 \"a b\"")
+	batch.Queue("close \"a b\"")
 	batch.Queue("COMMIT")
 
 	batchResults := conn.SendBatch(ctx, batch)
@@ -676,7 +682,7 @@ func expectPrepareStmt(
 func expectDescribeStmt(
 	ctx context.Context,
 	t *testing.T,
-	expName string,
+	expName tree.Name,
 	expType pgwirebase.PrepareType,
 	rd *sql.StmtBufReader,
 	c *conn,
