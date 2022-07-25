@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -596,7 +597,7 @@ func (ex *connExecutor) execDescribe(
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
 			// Check SQL-level cursors.
-			cursor := ex.getCursorAccessor().getCursor(descCmd.Name)
+			cursor := ex.getSQLCursor(descCmd.Name)
 			if cursor == nil {
 				return retErr(pgerror.Newf(
 					pgcode.InvalidCursorName, "unknown portal %q", descCmd.Name))
@@ -642,4 +643,19 @@ func (ex *connExecutor) isAllowedInAbortedTxn(ast tree.Statement) bool {
 	default:
 		return false
 	}
+}
+
+// getSQLCursor looks up a SQL Cursor by name and returns a pointer to it,
+// if found.
+func (ex *connExecutor) getSQLCursor(cursorName string) *sqlCursor {
+	cursor := ex.getCursorAccessor().getCursor(cursorName)
+	if cursor == nil {
+		// If an invalid identifier is used as a cursor name, it is stored within the cursor
+		// map as enclosed in double quotes. Attempt to look up the cursor name by enclosing
+		// it in double quotes to cover such a case.
+		// TODO(rimadeodhar): Is there a better way to do this? Do we have any helper methods
+		// for this already?
+		cursor = ex.getCursorAccessor().getCursor(fmt.Sprintf("\"%s\"", cursorName))
+	}
+	return cursor
 }
