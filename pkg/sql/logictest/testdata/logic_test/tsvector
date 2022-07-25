@@ -139,3 +139,99 @@ query T
 VALUES ( json_build_array($$'cat' & 'rat'$$:::TSQUERY)::JSONB)
 ----
 ["'cat' & 'rat'"]
+
+# Test tsvector inverted indexes.
+statement ok
+DROP TABLE a;
+CREATE TABLE a (
+  a TSVECTOR,
+  b TSQUERY,
+  INVERTED INDEX(a)
+);
+INSERT INTO a VALUES('foo:3 bar:4,5'), ('baz:1'), ('foo:3'), ('bar:2')
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo'
+----
+'bar':4,5 'foo':3
+'foo':3
+
+statement error index \"a_a_idx\" is inverted and cannot be used for this query
+SELECT a FROM a@a_a_idx WHERE a @@ '!foo'
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo' OR a @@ 'bar'
+----
+'bar':4,5 'foo':3
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo | bar'
+----
+'bar':4,5 'foo':3
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo | bar' OR a @@ 'baz'
+----
+'bar':4,5 'foo':3
+'baz':1
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo & bar'
+----
+'bar':4,5 'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo <-> bar'
+----
+'bar':4,5 'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'bar <-> foo'
+----
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo <-> !bar'
+----
+'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ '!baz <-> bar'
+----
+'bar':4,5 'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'foo & !bar'
+----
+'foo':3
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:*'
+----
+'bar':4,5 'foo':3
+'baz':1
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:* | foo'
+----
+'bar':4,5 'foo':3
+'baz':1
+'foo':3
+'bar':2
+
+query T
+SELECT a FROM a@a_a_idx WHERE a @@ 'ba:* & foo'
+----
+'bar':4,5 'foo':3
+
+# Test that tsvector indexes can't accelerate the @@ operator with no constant
+# columns.
+statement error index \"a_a_idx\" is inverted and cannot be used for this query
+EXPLAIN SELECT * FROM a@a_a_idx WHERE a @@ b

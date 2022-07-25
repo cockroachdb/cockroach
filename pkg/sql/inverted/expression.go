@@ -305,6 +305,10 @@ type SpanExpression struct {
 	// JSON or Array SpanExpressions, and it holds when unique SpanExpressions
 	// are combined with And. It does not hold when these SpanExpressions are
 	// combined with Or.
+	//
+	// Note that the uniqueness property represented here holds for the *output*
+	// of the invertedFilter operator that executes the And/Or, not the raw, input
+	// spans of data.
 	Unique bool
 
 	// SpansToRead are the spans to read from the inverted index

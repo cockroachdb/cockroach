@@ -52,13 +52,38 @@ func RandomTSVector(rng *rand.Rand) TSVector {
 
 // RandomTSQuery returns a random TSQuery for testing.
 func RandomTSQuery(rng *rand.Rand) TSQuery {
-	// TODO(jordan): make this a more robust random query generator
+	// TODO(jordan): add parenthesis grouping to the random query generator
+	nTerms := 1 + rng.Intn(5)
 	for {
-		l := make([]byte, 1+rng.Intn(10))
-		for i := range l {
-			l[i] = alphabet[rng.Intn(len(alphabet))]
+		var sb strings.Builder
+		for i := 0; i < nTerms; i++ {
+			l := make([]byte, 1+rng.Intn(10))
+			for i := range l {
+				l[i] = alphabet[rng.Intn(len(alphabet))]
+			}
+			if rng.Intn(4) == 0 {
+				// Make it a negation query!
+				sb.WriteString("!")
+			}
+			sb.Write(l)
+			sb.WriteString(" ")
+			if i < nTerms-1 {
+				infixOp := rng.Intn(3)
+				var opstr string
+				switch infixOp {
+				case 0:
+					opstr = "&"
+				case 1:
+					opstr = "|"
+				case 2:
+					opstr = "<->"
+				}
+				sb.WriteString(opstr)
+				sb.WriteString(" ")
+			}
 		}
-		query, err := ParseTSQuery(string(l))
+
+		query, err := ParseTSQuery(sb.String())
 		if err != nil {
 			continue
 		}
