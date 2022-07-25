@@ -75,7 +75,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			// `cockroach` flag will be used.
 			const newVersion = ""
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-			upgradeNodes(ctx, nodesToUpgrade, newVersion, t, c)
+			upgradeNodes(ctx, nodesToUpgrade, startOpts, newVersion, t, c)
 		} else {
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
