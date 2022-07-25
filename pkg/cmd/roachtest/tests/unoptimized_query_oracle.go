@@ -69,32 +69,43 @@ func runUnoptimizedQueryOracleImpl(
 	h queryComparisonHelper,
 	disableRuleProbability float64,
 ) error {
+	var stmt string
 	// Ignore panics from Generate.
-	defer func() {
-		if r := recover(); r != nil {
-			return
-		}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				return
+			}
+		}()
+		stmt = smither.Generate()
 	}()
 
-	stmt := smither.Generate()
+	var verboseLogging bool
+	defer func() {
+		// We're logging all statements, even if no error is encountered, to
+		// make it easier to reproduce the problems since it appears that the
+		// state of the previous iteration might influence the execution of the
+		// current iteration.
+		h.logStatements()
+		if verboseLogging {
+			h.logVerboseOutput()
+		}
+	}()
 
 	// First, run the statement with some optimizer rules and vectorized execution
 	// disabled.
 	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
 	if err := h.execStmt(seedStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to set random seed")
 	}
 	disableOptimizerStmt := fmt.Sprintf(
 		"SET testing_optimizer_disable_rule_probability = %f", disableRuleProbability,
 	)
 	if err := h.execStmt(disableOptimizerStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to disable optimizer rules")
 	}
 	disableVectorizeStmt := "SET vectorize = off"
 	if err := h.execStmt(disableVectorizeStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to disable the vectorized engine")
 	}
 
@@ -113,17 +124,14 @@ func runUnoptimizedQueryOracleImpl(
 	enable := rnd.Intn(3)
 	if enable > 0 {
 		if err := h.execStmt(resetSeedStmt); err != nil {
-			h.logStatements()
 			return h.makeError(err, "failed to reset random seed")
 		}
 		if err := h.execStmt(resetOptimizerStmt); err != nil {
-			h.logStatements()
 			return h.makeError(err, "failed to reset the optimizer")
 		}
 	}
 	if enable < 2 {
 		if err := h.execStmt(resetVectorizeStmt); err != nil {
-			h.logStatements()
 			return h.makeError(err, "failed to reset the vectorized engine")
 		}
 	}
@@ -135,8 +143,7 @@ func runUnoptimizedQueryOracleImpl(
 		// succeeds, we'd like to know, so consider this a test failure.
 		es := err.Error()
 		if strings.Contains(es, "internal error") {
-			h.logStatements()
-			h.logVerboseOutput()
+			verboseLogging = true
 			return h.makeError(err, "internal error while running optimized statement")
 		}
 		// Otherwise, skip optimized statements that fail with a non-internal
@@ -149,8 +156,7 @@ func runUnoptimizedQueryOracleImpl(
 	}
 	if diff := unsortedMatricesDiff(unoptimizedRows, optimizedRows); diff != "" {
 		// We have a mismatch in the unoptimized vs optimized query outputs.
-		h.logStatements()
-		h.logVerboseOutput()
+		verboseLogging = true
 		return h.makeError(errors.Newf(
 			"expected unoptimized and optimized results to be equal\n%s\nsql: %s",
 			diff, stmt,
@@ -159,15 +165,12 @@ func runUnoptimizedQueryOracleImpl(
 
 	// Reset all settings in case they weren't reset above.
 	if err := h.execStmt(resetSeedStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to reset random seed")
 	}
 	if err := h.execStmt(resetOptimizerStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to reset the optimizer")
 	}
 	if err := h.execStmt(resetVectorizeStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to reset the vectorized engine")
 	}
 
