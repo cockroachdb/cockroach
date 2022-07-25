@@ -942,8 +942,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
-	planRightSideFn := func(ef exec.Factory, leftRow tree.Datums) (exec.Plan, error) {
-		o.Init(b.evalCtx, b.catalog)
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (exec.Plan, error) {
+		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
 
 		// Copy the right expression into a new memo, replacing each bound column
