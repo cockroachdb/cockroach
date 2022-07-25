@@ -16,6 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/build/bazel",
+        "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
