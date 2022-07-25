@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -147,15 +149,15 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
 	}
-	fakeGCer := makeFakeGCer()
+	gcer := makeFakeGCer()
 
 	// Test GC desired behavior.
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
 			IntentAgeThreshold:  intentLongThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
-		}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
-		fakeGCer.resolveIntentsAsync)
+		}, gcTTL, &gcer, gcer.resolveIntents,
+		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
@@ -164,8 +166,8 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 		RunOptions{
 			IntentAgeThreshold:  intentShortThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
-		}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
-		fakeGCer.resolveIntentsAsync)
+		}, gcTTL, &gcer, gcer.resolveIntents,
+		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
 		"Expected 1 intents considered by GC with short threshold")
@@ -224,7 +226,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	baseGCer.normalize()
 
 	var batchSize int64 = 7
-	fakeGCer := makeFakeGCer()
+	gcer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
 			IntentAgeThreshold:              intentAgeThreshold,
@@ -232,18 +234,18 @@ func TestIntentCleanupBatching(t *testing.T) {
 			TxnCleanupThreshold:             txnCleanupThreshold,
 		},
 		gcTTL,
-		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
+		&gcer, gcer.resolveIntents, gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0
-	for _, batch := range fakeGCer.batches {
+	for _, batch := range gcer.batches {
 		if intents := len(batch); intents > maxIntents {
 			maxIntents = intents
 		}
 	}
 	require.Equal(t, int64(maxIntents), batchSize, "Batch size")
 	require.Equal(t, 15, info.ResolveTotal)
-	fakeGCer.normalize()
-	require.EqualValues(t, baseGCer, fakeGCer, "GC result with batching")
+	gcer.normalize()
+	require.EqualValues(t, baseGCer, gcer, "GC result with batching")
 }
 
 type testResolver [][]roachpb.Intent
@@ -699,6 +701,14 @@ var avoidMergingDifferentTs = `
  1 |
 `
 
+type testRunData struct {
+	data                 string
+	deleteRangeThreshold int64
+	keyBytesThreshold    int64
+	disableClearRange    bool
+	maxPendingKeySize    int64
+}
+
 func TestGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, d := range []struct {
@@ -724,12 +734,318 @@ func TestGC(t *testing.T) {
 		{name: "avoid_merging_different_ts", data: avoidMergingDifferentTs},
 	} {
 		t.Run(d.name, func(t *testing.T) {
-			runTest(t, d.data)
+			testutils.RunTrueAndFalse(t, "clearRange", func(t *testing.T, clearRange bool) {
+				runTest(t, testRunData{
+					data:                 d.data,
+					deleteRangeThreshold: 2,
+					disableClearRange:    !clearRange,
+				}, nil)
+			})
 		})
 	}
 }
 
-func runTest(t *testing.T, data string) {
+type ClearRangeKey roachpb.GCRequest_GCClearSubRangeKey
+
+// Format implements the fmt.Formatter interface.
+func (k ClearRangeKey) Format(f fmt.State, _ rune) {
+	fmt.Fprintf(f, "ClearRangeKey{%s@%s - %s}", k.StartKey, k.StartKeyTimestamp, k.EndKey)
+}
+
+type clearRangeKeys []roachpb.GCRequest_GCClearSubRangeKey
+
+func (k clearRangeKeys) toTestData() (spans []ClearRangeKey) {
+	if len(k) == 0 {
+		return nil
+	}
+	spans = make([]ClearRangeKey, len(k))
+	for i, c := range k {
+		spans[i] = ClearRangeKey{
+			StartKey:          c.StartKey,
+			StartKeyTimestamp: c.StartKeyTimestamp,
+			EndKey:            c.EndKey,
+		}
+	}
+	return spans
+}
+
+type clearPointsKey roachpb.GCRequest_GCKey
+
+// Format implements the fmt.Formatter interface.
+func (k clearPointsKey) Format(f fmt.State, c rune) {
+	storage.MVCCKey{
+		Key:       k.Key,
+		Timestamp: k.Timestamp,
+	}.Format(f, c)
+}
+
+type gcPointsBatches [][]roachpb.GCRequest_GCKey
+
+// toTestData converts batches to test data structs that are easier to create
+// and assert. This method also ignores nil convention that allows tests to
+// use nil to ignore asserts when not interesting and use empty slice when we
+// want to ensure that there are no requests.
+func (b gcPointsBatches) toTestData() (keys [][]clearPointsKey) {
+	keys = make([][]clearPointsKey, len(b))
+	for i, b := range b {
+		keys[i] = make([]clearPointsKey, len(b))
+		for j, k := range b {
+			keys[i][j] = clearPointsKey{
+				Key:       k.Key,
+				Timestamp: k.Timestamp,
+			}
+		}
+	}
+	return keys
+}
+
+// For testing clear range we perform normal checks, but also explicitly verify
+// generated clear range spans as normal point key deletions would do the same
+// job but less efficiently.
+type clearRangeTestData struct {
+	name        string
+	data        testRunData
+	clearSpans  []ClearRangeKey
+	clearPoints [][]clearPointsKey
+}
+
+// TestGCUseClearRange tests garbage collection correctness from scanning engine
+// data to applying MVCC operations based on GC run results.
+// Test doesn't cover GC all internals extensively (batching limits, selecting
+// between point and range deletions etc.), but it provides a test that executes
+// collection as a whole ensuring GC components work well together.
+// There are separate tests for GC iterator, batcher, intent batcher that verify
+// corner cases in each component.
+func TestGCUseClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	first := keys.SystemSQLCodec.TablePrefix(42)
+	// mkKey creates a key in a table from a string value. If key ends with a +
+	// then Next() key is returned.
+	mkKey := func(key string) roachpb.Key {
+		if l := len(key); l > 1 && key[l-1] == '+' {
+			return append(first[:len(first):len(first)], key[:l-1]...).Next()
+		}
+		return append(first[:len(first):len(first)], key...)
+	}
+	last := first.PrefixEnd()
+
+	mkKeyPair := func(start string, startTs int64, end string) ClearRangeKey {
+		return ClearRangeKey{
+			StartKey:          mkKey(start),
+			StartKeyTimestamp: hlc.Timestamp{WallTime: startTs * time.Second.Nanoseconds()},
+			EndKey:            mkKey(end),
+		}
+	}
+	mkKeyPairToLast := func(start string, startTs int64) ClearRangeKey {
+		return ClearRangeKey{
+			StartKey:          mkKey(start),
+			StartKeyTimestamp: hlc.Timestamp{WallTime: startTs * time.Second.Nanoseconds()},
+			EndKey:            last,
+		}
+	}
+	mkRawKeyPair := func(start, end roachpb.Key) ClearRangeKey {
+		return ClearRangeKey{
+			StartKey: start,
+			EndKey:   end,
+		}
+	}
+	_, _, _ = mkKeyPair, mkKeyPairToLast, mkRawKeyPair
+	clearRangeTestDefaults := func(d testRunData) testRunData {
+		if d.deleteRangeThreshold == 0 {
+			d.deleteRangeThreshold = 1
+		}
+		if d.keyBytesThreshold == 0 {
+			d.keyBytesThreshold = 1
+		}
+		return d
+	}
+
+	for _, d := range []clearRangeTestData{
+		{
+			name: "clear multiple keys",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 6 |
+>5 |
+ 4 |    C  .    F
+ 3 | A     ee
+ 2 |    dd
+ 1 |
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPair("bb", 2, "d"),
+			},
+		},
+		{
+			name: "clear range limits",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 6 |
+>5 |            X
+ 4 |    C  .    y
+ 3 | A     ee
+ 2 |    dd      z
+ 1 |
+`,
+				deleteRangeThreshold: 3,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPair("bb", 2, "d"),
+			},
+		},
+		{
+			name: "clear multiple keys till end range",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 6 |
+>5 |            .
+ 4 |    C  .    f
+ 3 | A     ee
+ 2 |    dd
+ 1 |
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPairToLast("bb", 2),
+			},
+		},
+		{
+			name: "clear multiple keys from start range",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 6 |
+>5 |            
+ 4 | .  .  .    F
+ 3 | a     ee
+ 2 |    dd
+ 1 |
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPair("a", 4, "d"),
+			},
+		},
+		{
+			name: "clear range restarts on live data",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 7 |
+ 6 |            X 
+>5 |       .     
+ 4 |    .  e    
+ 3 | A          . 
+ 2 |    dd        .
+ 1 |       ff   y z
+`,
+				deleteRangeThreshold: 2,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPairToLast("d", 3),
+				mkKeyPair("bb", 4, "d"),
+			},
+		},
+		{
+			name: "clear range restart on intents",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e
+---+---------------
+ 7 |
+ 6 |            !X 
+>5 |       .     
+ 4 |    .  e    .
+ 3 | A            .
+ 2 |    dd        x
+ 1 |       ff   y
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPairToLast("d", 4),
+				mkKeyPair("bb", 4, "d"),
+			},
+		},
+		{
+			name: "clear range when covered by range tombstone",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e f
+---+------------------
+ 6 |                Z
+>5 |    .----------
+ 4 |    c  f    . .
+ 3 | A          h i
+ 2 | b  dd ggg
+ 1 |      
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPair("a", 2, "f"),
+			},
+		},
+		{
+			name: "clear range with live data above range tombstone",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e f
+---+------------------
+ 6 |       E         
+>5 |    .-----------
+ 4 |    c  f    . .
+ 3 | A          h i
+ 2 | b  dd ggg
+ 1 |      
+`,
+			},
+			clearSpans: []ClearRangeKey{
+				mkKeyPairToLast("ccc", 4),
+				mkKeyPair("a", 2, "ccc"),
+			},
+		},
+		{
+			name: "clear full range optimization",
+			data: testRunData{
+				data: `
+   | a  bb ccc  d e f
+---+------------------
+ 6 |           
+>5 | .--------------
+ 4 |    c  f    . .
+ 3 | a          h i
+ 2 | b  dd ggg
+ 1 |      
+`,
+			},
+			// Empty slice ensures that assertion of emptiness is made.
+			clearPoints: [][]clearPointsKey{},
+		},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			runTest(t, clearRangeTestDefaults(d.data), func(t *testing.T, gcer *fakeGCer) {
+				require.EqualValues(t, d.clearSpans, clearRangeKeys(gcer.gcClearSubRangeKeys).toTestData(),
+					"clear range requests")
+				if d.clearPoints != nil {
+					require.EqualValues(t, d.clearPoints, gcPointsBatches(gcer.gcPointsBatches).toTestData())
+				}
+			})
+		})
+	}
+}
+
+type gcVerifier func(t *testing.T, gcer *fakeGCer)
+
+func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	ctx := context.Background()
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
 	desc := roachpb.RangeDescriptor{
@@ -740,24 +1056,53 @@ func runTest(t *testing.T, data string) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data)
+	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data.data)
 	ds := dataItems.fullDistribution()
 	stats := ds.setupTest(t, eng, desc)
 	snap := eng.NewSnapshot()
 	defer snap.Close()
 
+	if data.disableClearRange {
+		data.deleteRangeThreshold = 0
+	}
+	if data.maxPendingKeySize == 0 {
+		data.maxPendingKeySize = math.MaxInt64
+	}
+
 	gcer := makeFakeGCer()
 	_, err := Run(ctx, &desc, snap, now, gcTS,
 		RunOptions{
-			IntentAgeThreshold:  time.Nanosecond * time.Duration(now.WallTime),
-			TxnCleanupThreshold: txnCleanupThreshold,
+			IntentAgeThreshold:      time.Nanosecond * time.Duration(now.WallTime),
+			TxnCleanupThreshold:     txnCleanupThreshold,
+			MaxKeyVersionChunkBytes: data.keyBytesThreshold,
+			ClearRangeMinKeys:       data.deleteRangeThreshold,
+			MaxPendingKeysSize:      data.maxPendingKeySize,
 		}, time.Second,
 		&gcer,
 		gcer.resolveIntents, gcer.resolveIntentsAsync)
+
+	if verify != nil {
+		verify(t, &gcer)
+	}
+
 	require.NoError(t, err)
 	require.Empty(t, gcer.intents, "expecting no intents")
 	require.NoError(t,
 		storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcTS))
+
+	for _, r := range gcer.clearRangeKeys() {
+		require.NoError(t,
+			storage.MVCCGarbageCollectWholeRange(ctx, eng, &stats, r.StartKey, r.EndKey, gcTS, stats))
+	}
+
+	for _, r := range gcer.clearSubRangeKeys() {
+		if r.EndKey == nil {
+			r.EndKey = r.StartKey.Next()
+		}
+		require.NoError(t,
+			storage.MVCCGarbageCollectPointsWithClearRange(ctx, eng, &stats, r.StartKey, r.EndKey,
+				r.StartKeyTimestamp, gcTS))
+	}
 
 	for _, batch := range gcer.rangeKeyBatches() {
 		rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
@@ -823,7 +1168,12 @@ func requireEqualReaders(
 			break
 		}
 
-		require.Equal(t, okExp, okAct, "iterators have different number of elements")
+		if okExp && !okAct {
+			t.Errorf("expected data not found in actual: %s", itExp.UnsafeKey().String())
+		}
+		if !okExp && okAct {
+			t.Errorf("unexpected data found in actual: %s", itActual.UnsafeKey().String())
+		}
 		require.True(t, itExp.UnsafeKey().Equal(itActual.UnsafeKey()),
 			"expected key not equal to actual (expected %s, found %s)", itExp.UnsafeKey(),
 			itActual.UnsafeKey())
@@ -1458,4 +1808,518 @@ func TestRangeKeyBatching(t *testing.T) {
 			require.EqualValues(t, data.expect, gcer.rangeKeys())
 		})
 	}
+}
+
+type GR roachpb.GCRequest_GCKey
+
+func (g GR) Format(f fmt.State, r rune) {
+	g.Key.Format(f, r)
+	fmt.Fprintf(f, "@%d", g.Timestamp.WallTime/1e9)
+}
+
+type GCR roachpb.GCRequest_GCClearSubRangeKey
+
+func (g GCR) Format(f fmt.State, r rune) {
+	g.StartKey.Format(f, r)
+	fmt.Fprintf(f, "@%d-", g.StartKeyTimestamp.WallTime/1e9)
+	g.EndKey.Format(f, r)
+}
+
+// Union of GC args
+type gcReq struct {
+	gcKeys []GR
+	// Note that we just reuse the type, but semantic is different
+	gcClearRangeKey GCR
+}
+
+func (o gcReq) Format(f fmt.State, r rune) {
+	if len(o.gcKeys) > 0 {
+		fmt.Fprintf(f, "%s", o.gcKeys)
+	} else {
+		o.gcClearRangeKey.Format(f, r)
+	}
+}
+
+type capturingGCer struct {
+	t   *testing.T
+	ops []gcReq
+}
+
+func (c *capturingGCer) GC(
+	_ context.Context,
+	k []roachpb.GCRequest_GCKey,
+	_ []roachpb.GCRequest_GCRangeKey,
+	_ *roachpb.GCRequest_GCClearRangeKey,
+	crk *roachpb.GCRequest_GCClearSubRangeKey,
+) error {
+	if len(k) > 0 {
+		kk := make([]GR, len(k))
+		for i, k := range k {
+			kk[i] = GR{Key: k.Key.Clone(), Timestamp: k.Timestamp}
+		}
+		c.ops = append(c.ops, gcReq{gcKeys: kk})
+		return nil
+	}
+	if crk != nil {
+		c.ops = append(c.ops, gcReq{gcClearRangeKey: GCR{
+			StartKey:          crk.StartKey.Clone(),
+			StartKeyTimestamp: crk.StartKeyTimestamp,
+			EndKey:            crk.EndKey.Clone(),
+		}})
+		return nil
+	}
+	c.t.Fatal("unexpected or empty GC request")
+	return nil
+}
+
+type gcData struct {
+	kv      mvccKeyValue
+	garbage bool
+}
+
+func TestGcKeyBatcher(t *testing.T) {
+	ctx := context.Background()
+
+	// Size is a GC size including 1 extra byte and MVCCVersionTimestampSize
+	keyOfSize := func(seq int, size int) roachpb.Key {
+		t.Helper()
+		var k roachpb.Key
+		k = append(k, keys.SystemSQLCodec.IndexPrefix(42, 1)...)
+		kt := encoding.EncodeStringAscending(k, fmt.Sprintf("%06d", seq))
+		baseKeySize := storage.MVCCKey{Key: kt, Timestamp: hlc.Timestamp{WallTime: 1}}.EncodedSize()
+		if padding := size - baseKeySize; padding < 0 {
+			t.Fatalf("invalid test data: test key size is too small. must be >= %d", baseKeySize)
+		} else if padding > 0 {
+			k = encoding.EncodeStringAscending(k, fmt.Sprintf("%06d-%s", seq, strings.Repeat("a", padding-1)))
+		} else {
+			k = kt
+		}
+		require.Equal(t, size,
+			storage.MVCCKey{Key: k, Timestamp: hlc.Timestamp{WallTime: 1}}.EncodedSize(),
+			"test infra bug: generated key size mismatched requested")
+		return k
+	}
+
+	hist := func(key roachpb.Key, versions, garbage int) []gcData {
+		require.LessOrEqual(t, garbage, versions, "invalid test data: can not have more garbage than versions")
+		var res []gcData
+		for i := 0; i < versions; i++ {
+			res = append(res, gcData{
+				kv: mvccKeyValue{
+					key: storage.MVCCKey{
+						Key: key,
+						Timestamp: hlc.Timestamp{
+							WallTime: int64(i+1) * time.Second.Nanoseconds(),
+						},
+					},
+					mvccValueLen: 10,
+				},
+				garbage: i < garbage,
+			})
+		}
+		return res
+	}
+
+	point := func(key roachpb.Key, ts int) GR {
+		return GR{
+			Key:       key,
+			Timestamp: hlc.Timestamp{WallTime: int64(ts) * time.Second.Nanoseconds()},
+		}
+	}
+
+	points := func(keys ...GR) gcReq {
+		return gcReq{gcKeys: keys}
+	}
+
+	clearRange := func(key roachpb.Key, ts int, endKey roachpb.Key) gcReq {
+		return gcReq{
+			gcClearRangeKey: GCR{
+				StartKey:          key,
+				StartKeyTimestamp: hlc.Timestamp{WallTime: int64(ts) * time.Second.Nanoseconds()},
+				EndKey:            endKey,
+			},
+		}
+	}
+
+	const minKeySize = 24
+	const largeKeySize = 100
+
+	for _, d := range []struct {
+		name     string
+		data     []gcData
+		reqs     []gcReq
+		batchMax int64
+		memMax   int
+		rangeMin int
+	}{
+		{
+			// Test verifies that min key limit is not reached with 4 versions of the
+			// first key, but reached on the second and third. We have two consecutive
+			// keys specifically to avoid single key range optimizations.
+			name: "minimum range limit",
+			data: keySeq(
+				hist(keyOfSize(4, minKeySize), 6 /* versions */, 5 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 1 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 9 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(4, minKeySize), 5)),
+				clearRange(keyOfSize(2, minKeySize), 9, keyOfSize(4, minKeySize)),
+				points(point(keyOfSize(1, minKeySize), 1)),
+			},
+			rangeMin: 6,
+			batchMax: minKeySize * 5,
+		},
+		{
+			// Test verifies that a batch could be split correctly by the start of
+			// range key. We have two consecutive keys specifically to avoid single
+			// key range optimizations.
+			name: "clear range mid batch",
+			data: keySeq(
+				hist(keyOfSize(4, minKeySize), 5 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 1 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 9 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(4, minKeySize), 2)),
+				clearRange(keyOfSize(2, minKeySize), 9, keyOfSize(4, minKeySize)),
+				points(point(keyOfSize(1, minKeySize), 1)),
+			},
+			rangeMin: 6,
+			batchMax: minKeySize * 4,
+		},
+		{
+			// Test verifies that a batch could be split correctly by the start of
+			// range key. Batch spans multiple keys with non gc data.
+			name: "clear range mid batch 2",
+			data: keySeq(
+				hist(keyOfSize(5, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(4, minKeySize), 3 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 1 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 8 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(5, minKeySize), 1),
+					point(keyOfSize(4, minKeySize), 2),
+				),
+				clearRange(keyOfSize(2, minKeySize), 8, keyOfSize(4, minKeySize)),
+				points(point(keyOfSize(1, minKeySize), 1)),
+			},
+			rangeMin: 6,
+			batchMax: minKeySize * 4,
+		},
+		{
+			name: "clear range at batch boundary",
+			data: keySeq(
+				hist(keyOfSize(4, minKeySize), 3 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 1 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 9 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(4, minKeySize), 2)),
+				clearRange(keyOfSize(2, minKeySize), 9, keyOfSize(4, minKeySize)),
+				points(point(keyOfSize(1, minKeySize), 1)),
+			},
+			rangeMin: 6,
+			batchMax: minKeySize * 2,
+		},
+		{
+			// Test verifies that point batch history is not lost when non-garbage
+			// data is found. Batch spans multiple versions of a key.
+			name: "clear multiple points batches",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 10 /* versions */, 8 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 10 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(3, minKeySize), 5)),
+				points(point(keyOfSize(3, minKeySize), 8)),
+				clearRange(keyOfSize(1, minKeySize), 1, keyOfSize(3, minKeySize)),
+			},
+			rangeMin: 10,
+			batchMax: minKeySize*4 + 1,
+		},
+		{
+			// Test verifies that point batch history is not lost when non-garbage
+			// data is found. Batch spans multiple keys.
+			name: "clear multiple points batches 2",
+			data: keySeq(
+				hist(keyOfSize(6, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(5, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(4, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 10 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(6, minKeySize), 2),
+					point(keyOfSize(5, minKeySize), 2),
+					point(keyOfSize(4, minKeySize), 1),
+				),
+				points(
+					point(keyOfSize(4, minKeySize), 2),
+					point(keyOfSize(3, minKeySize), 1),
+				),
+				clearRange(keyOfSize(1, minKeySize), 1, keyOfSize(3, minKeySize)),
+			},
+			rangeMin: 10,
+			batchMax: 100,
+		},
+		{
+			// Test clear range reaches start of the range.
+			name: "clear range to first key",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 10 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 2 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(3, minKeySize), 1)),
+				clearRange(keyOfSize(1, minKeySize), 2, keyOfSize(3, minKeySize)),
+			},
+			rangeMin: 10,
+			batchMax: 100,
+		},
+		{
+			// Test clear range reaches start of the range.
+			name: "clear points to first key",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 8 /* versions */, 8 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 3 /* versions */, 3 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(3, minKeySize), 1),
+					point(keyOfSize(2, minKeySize), 3),
+				),
+				points(
+					point(keyOfSize(2, minKeySize), 7),
+				),
+				points(
+					point(keyOfSize(2, minKeySize), 8),
+					point(keyOfSize(1, minKeySize), 3),
+				),
+			},
+			rangeMin: 100,
+			batchMax: 96,
+		},
+		{
+			// Test clear range ends at the end of the range.
+			name: "clear range to last key",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 10 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 1 /* garbage */),
+			),
+			reqs: []gcReq{
+				clearRange(keyOfSize(1, minKeySize), 1, keys.MaxKey),
+			},
+			rangeMin: 10,
+		},
+		{
+			// Test memory limit is reached before min range limit.
+			// For memory limits we need multiple keys (not versions) since we only
+			// keep latest version of the key per batch.
+			name: "prevent clear range when reaching memory limit",
+			data: keySeq(
+				hist(keyOfSize(6, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(5, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(4, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 2 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(6, minKeySize), 2),
+					point(keyOfSize(5, minKeySize), 2),
+				),
+				points(
+					point(keyOfSize(4, minKeySize), 2),
+					point(keyOfSize(3, minKeySize), 2),
+				),
+				points(
+					point(keyOfSize(2, minKeySize), 2),
+					point(keyOfSize(1, minKeySize), 2),
+				),
+			},
+			rangeMin: 6,
+			batchMax: 96,
+			memMax:   1,
+		},
+		{
+			// Test memory limit is reached before min range limit.
+			// For memory limits we need multiple keys (not versions) since we only
+			// keep latest version of the key per batch.
+			name: "delay clear range when reaching memory limit",
+			data: keySeq(
+				hist(keyOfSize(6, largeKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(5, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(4, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 2 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(6, largeKeySize), 1),
+				),
+				points(
+					point(keyOfSize(6, largeKeySize), 2),
+				),
+				// Next() is iffy, but we don't have a better option when we flush the
+				// batch as we don't always know if there are more versions of the same
+				// key or not that should be covered by clear range.
+				clearRange(keyOfSize(1, minKeySize), 2, keyOfSize(6, largeKeySize).Next()),
+			},
+			rangeMin: 5,
+			batchMax: 100,
+			// When calculating mem size we don't use encoded length, but raw key and
+			// timestamp length which adds 3 extra bytes.
+			memMax: 100,
+		},
+		{
+			// Test memory limit is reached before min range limit. Range starts in
+			// the middle of the points batch. Is it even possible?
+			name: "delay clear range to mid batch",
+			data: keySeq(
+				hist(keyOfSize(6, largeKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(5, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(4, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 2 /* versions */, 2 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 2 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(
+					point(keyOfSize(6, largeKeySize), 1),
+					point(keyOfSize(5, minKeySize), 1),
+				),
+				clearRange(keyOfSize(1, minKeySize), 2, keyOfSize(5, minKeySize).Next()),
+			},
+			rangeMin: 6,
+			batchMax: 101,
+			// When calculating mem size we don't use encoded length, but raw key and
+			// timestamp length which adds 3 extra bytes.
+			memMax: 120,
+		},
+		{
+			// Verify that when we delete multiple versions of the same key, then we
+			// don't send the end range key to signal that we can avoid locking.
+			name: "clear range optimize single key deletions for several versions",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 10 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 0 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(3, minKeySize), 1)),
+				clearRange(keyOfSize(2, minKeySize), 10, nil),
+			},
+			rangeMin: 6,
+		},
+		{
+			// Verify that when we delete multiple versions of the same key, then we
+			// don't send the end range key to signal that we can avoid locking.
+			name: "clear range optimize single key deletions for all versions",
+			data: keySeq(
+				hist(keyOfSize(3, minKeySize), 2 /* versions */, 1 /* garbage */),
+				hist(keyOfSize(2, minKeySize), 10 /* versions */, 9 /* garbage */),
+				hist(keyOfSize(1, minKeySize), 2 /* versions */, 0 /* garbage */),
+			),
+			reqs: []gcReq{
+				points(point(keyOfSize(3, minKeySize), 1)),
+				clearRange(keyOfSize(2, minKeySize), 9, nil),
+			},
+			rangeMin: 6,
+		},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			g := capturingGCer{}
+			enabled := true
+			if d.rangeMin == 0 {
+				enabled = false
+			}
+			memMax := d.memMax
+			if memMax == 0 {
+				memMax = math.MaxInt
+			}
+			batchMax := d.batchMax
+			if batchMax == 0 {
+				batchMax = math.MaxInt64
+			}
+			b := gcKeyBatcher{
+				gcKeyBatcherThresholds: gcKeyBatcherThresholds{
+					batchGCKeysBytesThreshold: batchMax,
+					clearRangeMinKeys:         d.rangeMin,
+					clearRangeEnabled:         enabled,
+					maxPendingKeysSize:        memMax,
+				},
+				gcer:             &g,
+				pointsBatches:    make([]pointsBatch, 1),
+				clearRangeEndKey: keys.MaxKey,
+				prevWasNewest:    true,
+			}
+
+			assertBatcher := func(cnt gcBatchCounters) {
+				// Assert used memory invariants.
+				totalMem := 0
+				for _, b := range b.pointsBatches {
+					batchMem := 0
+					for _, k := range b.batchGCKeys {
+						batchMem += len(k.Key) + hlcTimestampSize
+					}
+					require.Equal(t, batchMem, b.memUsed, "batch memory usage")
+					totalMem += batchMem
+				}
+				require.Equal(t, totalMem, b.totalMemUsed, "batcher memory usage")
+			}
+
+			process := func(k gcData, newest bool) {
+				var (
+					upd gcBatchCounters
+					err error
+				)
+				if k.garbage {
+					upd, err = b.foundGarbage(ctx, &k.kv, newest)
+				} else {
+					upd, err = b.foundNonGCableData(ctx, &k.kv, newest)
+				}
+				require.NoError(t, err, "failed to update batcher")
+				assertBatcher(upd)
+			}
+
+			// Run simulated GC
+			var prev gcData
+			for _, k := range d.data {
+				if prev.kv.key.Key != nil {
+					newest := prev.kv.key.Key.Compare(k.kv.key.Key) != 0
+					process(prev, newest)
+				}
+				prev = k
+			}
+			process(prev, true)
+			upd, err := b.flushLastBatch(ctx)
+			require.NoError(t, err, "failed last batch")
+			assertBatcher(upd)
+
+			// Assert batch history
+			require.EqualValues(t, d.reqs, g.ops, "Produced batches")
+		})
+	}
+}
+
+func keySeq(keyHistory ...[]gcData) (res []gcData) {
+	for _, h := range keyHistory {
+		res = append(res, h...)
+	}
+	return res
 }

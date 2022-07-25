@@ -434,6 +434,7 @@ func IterateReplicaKeySpans(
 type IterateOptions struct {
 	CombineRangesAndPoints bool
 	Reverse                bool
+	ExcludeUserKeySpan     bool
 }
 
 // IterateMVCCReplicaKeySpans iterates over replica's key spans in the similar
@@ -449,6 +450,9 @@ func IterateMVCCReplicaKeySpans(
 		panic("reader must provide consistent iterators")
 	}
 	spans := MakeReplicatedKeySpansExceptLockTable(desc)
+	if options.ExcludeUserKeySpan {
+		spans = MakeReplicatedKeySpansExcludingUserAndLockTable(desc)
+	}
 	if options.Reverse {
 		spanMax := len(spans) - 1
 		for i := 0; i < len(spans)/2; i++ {

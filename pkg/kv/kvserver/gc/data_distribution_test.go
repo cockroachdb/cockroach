@@ -388,11 +388,11 @@ type uniformDistSpec struct {
 	deleteFrac                       float64
 	// keysPerValue parameters determine number of versions for a key. This number
 	// includes tombstones and intents which may be present on top of the history.
-	keysPerValueMin, keysPerValueMax int
+	versionsPerKeyMin, versionsPerKeyMax int
 	// Fractions define how likely is that a key will belong to one of categories.
 	// If we only had a single version for each key, then that would be fraction
 	// of total number of objects, but if we have many versions, this value would
-	// roughly be total objects/avg(keysPerValueMin, keysPerValueMax) * frac.
+	// roughly be total objects/avg(versionsPerKeyMin, versionsPerKeyMax) * frac.
 	intentFrac, oldIntentFrac float64
 	rangeKeyFrac              float64
 }
@@ -414,7 +414,7 @@ func (ds uniformDistSpec) dist(maxRows int, rng *rand.Rand) dataDistribution {
 		uniformTableStringKeyDistribution(ds.desc().StartKey.AsRawKey(), ds.keySuffixMin,
 			ds.keySuffixMax, rng),
 		uniformValueStringDistribution(ds.valueLenMin, ds.valueLenMax, ds.deleteFrac, rng),
-		uniformValuesPerKey(ds.keysPerValueMin, ds.keysPerValueMax, rng),
+		uniformVersionsPerKey(ds.versionsPerKeyMin, ds.versionsPerKeyMax, rng),
 		ds.intentFrac,
 		ds.oldIntentFrac,
 		ds.rangeKeyFrac,
@@ -436,12 +436,12 @@ func (ds uniformDistSpec) String() string {
 		"ts=[%d,%d],"+
 			"keySuffix=[%d,%d],"+
 			"valueLen=[%d,%d],"+
-			"keysPerValue=[%d,%d],"+
+			"versionsPerKey=[%d,%d],"+
 			"deleteFrac=%f,intentFrac=%f,oldIntentFrac=%f,rangeFrac=%f",
 		ds.tsSecFrom, ds.tsSecTo,
 		ds.keySuffixMin, ds.keySuffixMax,
 		ds.valueLenMin, ds.valueLenMax,
-		ds.keysPerValueMin, ds.keysPerValueMax,
+		ds.versionsPerKeyMin, ds.versionsPerKeyMax,
 		ds.deleteFrac, ds.intentFrac, ds.oldIntentFrac, ds.rangeKeyFrac)
 }
 
@@ -497,7 +497,7 @@ func uniformValueStringDistribution(
 	}
 }
 
-func uniformValuesPerKey(valuesPerKeyMin, valuesPerKeyMax int, rng *rand.Rand) func() int {
+func uniformVersionsPerKey(valuesPerKeyMin, valuesPerKeyMax int, rng *rand.Rand) func() int {
 	if valuesPerKeyMin > valuesPerKeyMax {
 		panic(fmt.Errorf("min (%d) > max (%d)", valuesPerKeyMin, valuesPerKeyMax))
 	}
