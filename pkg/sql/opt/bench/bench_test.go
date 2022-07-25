@@ -391,7 +391,7 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 	if err != nil {
 		tb.Fatalf("%v", err)
 	}
-	h.optimizer.Init(&h.evalCtx, h.testCat)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
 	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.testCat, h.optimizer.Factory(), stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
@@ -408,7 +408,7 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 			tb.Fatalf("%v", err)
 		}
 	}
-	h.prepMemo = h.optimizer.DetachMemo()
+	h.prepMemo = h.optimizer.DetachMemo(context.Background())
 	h.optimizer = xform.Optimizer{}
 
 	// Construct placeholder values.
@@ -455,7 +455,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		return
 	}
 
-	h.optimizer.Init(&h.evalCtx, h.testCat)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
 	if phase == OptBuildNoNorm {
 		h.optimizer.DisableOptimizations()
 	}
@@ -501,7 +501,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 
 // runPrepared simulates running the query after it was prepared.
 func (h *harness) runPrepared(tb testing.TB, phase Phase) {
-	h.optimizer.Init(&h.evalCtx, h.testCat)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
 
 	if !h.prepMemo.IsOptimized() {
 		if phase == AssignPlaceholdersNoNorm {

@@ -112,7 +112,7 @@ func TestMemoInit(t *testing.T) {
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
 
-	o.Init(&evalCtx, catalog)
+	o.Init(context.Background(), &evalCtx, catalog)
 	if !o.Memo().IsEmpty() {
 		t.Fatal("memo should be empty")
 	}

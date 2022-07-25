@@ -67,7 +67,7 @@ func TestExprIsNeverNull(t *testing.T) {
 				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer
-				o.Init(&evalCtx, catalog)
+				o.Init(ctx, &evalCtx, catalog)
 
 				var sv testutils.ScalarVars
 

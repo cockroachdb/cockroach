@@ -191,7 +191,7 @@ func (cb *cascadeBuilder) planCascade(
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var o xform.Optimizer
-	o.Init(evalCtx, cb.b.catalog)
+	o.Init(ctx, evalCtx, cb.b.catalog)
 	factory := o.Factory()
 	md := factory.Metadata()
 
@@ -280,7 +280,7 @@ func (cb *cascadeBuilder) planCascade(
 		// Construct a new memo that is copied from the memo created above, but with
 		// placeholders assigned. Stable operators can be constant-folded at this
 		// time.
-		preparedMemo := o.DetachMemo()
+		preparedMemo := o.DetachMemo(ctx)
 		factory.FoldingControl().AllowStableFolds()
 		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
 			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")

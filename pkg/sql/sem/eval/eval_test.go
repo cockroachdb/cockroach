@@ -95,8 +95,8 @@ func TestEval(t *testing.T) {
 
 func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
-	o.Init(evalCtx, nil /* catalog */)
 	ctx := context.Background()
+	o.Init(ctx, evalCtx, nil /* catalog */)
 	semaCtx := tree.MakeSemaContext()
 	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, o.Factory())
 	if err := b.Build(e); err != nil {
