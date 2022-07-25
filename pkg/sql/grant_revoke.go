@@ -176,16 +176,15 @@ type changeNonDescriptorBackedPrivilegesNode struct {
 // and expects to see its own writes.
 func (n *changeDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
-func (n *changePrivilegesNode) preChangePrivilegesValidation(params runParams) error {
-	ctx := params.ctx
-	p := params.p
-
-	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
+func (p *planner) preChangePrivilegesValidation(
+	ctx context.Context, grantees []username.SQLUsername, withGrantOption, isGrant bool,
+) error {
+	if err := p.validateRoles(ctx, grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 	// The public role is not allowed to have grant options.
-	if n.isGrant && n.withGrantOption {
-		for _, grantee := range n.grantees {
+	if isGrant && withGrantOption {
+		for _, grantee := range grantees {
 			if grantee.IsPublicRole() {
 				return pgerror.Newf(
 					pgcode.InvalidGrantOperation,
@@ -202,7 +201,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 	ctx := params.ctx
 	p := params.p
 
-	if err := n.changePrivilegesNode.preChangePrivilegesValidation(params); err != nil {
+	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
 
