@@ -373,6 +373,15 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
+	// TODO(knz): system.eventlog is deprecated. The test should be modified
+	// to assert the creation of structured logging events instead.
+	// See: https://github.com/cockroachdb/cockroach/issues/84994
+	func() {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		_, err := db.Exec(`SET CLUSTER SETTING server.eventlog.enabled = true`)
+		require.NoError(t, err)
+	}()
 	h := newDecommTestHelper(t, c)
 
 	firstNodeID := h.nodeIDs[0]

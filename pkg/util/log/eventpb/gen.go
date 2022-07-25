@@ -615,11 +615,8 @@ func (m *{{.GoType}}) LoggingChannel() logpb.Channel { return logpb.Channel_{{.L
 `,
 
 	"eventlog.md": `Certain notable events are reported using a structured format.
-Commonly, these notable events are also copied to the table
-` + "`system.eventlog`" + `, unless the cluster setting
-` + "`server.eventlog.enabled`" + ` is unset.
 
-Additionally, notable events are copied to specific external logging
+Notable events are copied to specific external logging
 channels in log messages, where they can be collected for further processing.
 
 The sections below document the possible notable event types

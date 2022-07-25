@@ -1,9 +1,6 @@
 Certain notable events are reported using a structured format.
-Commonly, these notable events are also copied to the table
-`system.eventlog`, unless the cluster setting
-`server.eventlog.enabled` is unset.
 
-Additionally, notable events are copied to specific external logging
+Notable events are copied to specific external logging
 channels in log messages, where they can be collected for further processing.
 
 The sections below document the possible notable event types
@@ -25,11 +22,6 @@ Events not documented on this page will have an unstructured format in log messa
 
 Events in this category pertain to an entire cluster and are
 not relative to any particular tenant.
-
-In a multi-tenant setup, the `system.eventlog` table for individual
-tenants cannot contain a copy of cluster-level events; conversely,
-the `system.eventlog` table in the system tenant cannot contain the
-SQL-level events for individual tenants.
 
 Events in this category are logged to the `OPS` channel.
 
@@ -297,8 +289,6 @@ successful revert.
 Events in this category report miscellaneous SQL events.
 
 They are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of these miscellaneous events are
-preserved in each tenant's own system.eventlog table.
 
 Events in this category are logged to the `DEV` channel.
 
@@ -358,10 +348,6 @@ is changed, either for another tenant or for all tenants.
 
 Events in this category are generated when a table has been
 marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
-
-Note: These events are not written to `system.eventlog`, even
-when the cluster setting `system.eventlog.enabled` is set. They
-are only emitted via external logging.
 
 Events in this category are logged to the `SENSITIVE_ACCESS` channel.
 
@@ -434,10 +420,6 @@ a table marked as audited.
 
 Events in this category report executed queries.
 
-Note: These events are not written to `system.eventlog`, even
-when the cluster setting `system.eventlog.enabled` is set. They
-are only emitted via external logging.
-
 Events in this category are logged to the `SQL_EXEC` channel.
 
 
@@ -478,8 +460,6 @@ operations performed by SQL statements that modify the SQL logical
 schema.
 
 They are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own `system.eventlog` table.
 
 Events in this category are logged to the `SQL_SCHEMA` channel.
 
@@ -1592,8 +1572,6 @@ operations performed by SQL statements that modify the privilege
 grants for stored objects.
 
 They are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own `system.eventlog` table.
 
 Events in this category are logged to the `PRIVILEGES` channel.
 
@@ -1837,8 +1815,6 @@ Events in this category report SQL client connections
 and sessions.
 
 They are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of these miscellaneous events are
-preserved in each tenant's own `system.eventlog` table.
 
 Events in this category are logged to the `SESSIONS` channel.
 
@@ -2005,10 +1981,6 @@ Events of this type are only emitted when the cluster setting
 
 Events in this category report slow query execution.
 
-Note: these events are not written to `system.eventlog`, even
-when the cluster setting `system.eventlog.enabled` is set. They
-are only emitted via external logging.
-
 Events in this category are logged to the `SQL_PERF` channel.
 
 
@@ -2130,10 +2102,6 @@ Events in this category report slow query execution by
 internal executors, i.e., when CockroachDB internally issues
 SQL statements.
 
-Note: these events are not written to `system.eventlog`, even
-when the cluster setting `system.eventlog.enabled` is set. They
-are only emitted via external logging.
-
 Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
 
@@ -2251,8 +2219,6 @@ Events in this category pertain to SQL statements that modify the
 properties of users and roles.
 
 They are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own `system.eventlog` table.
 
 Events in this category are logged to the `USER_ADMIN` channel.
 
@@ -2496,11 +2462,6 @@ the SQL schema or system ranges.
 
 When zone configs apply to individual tables or other objects in a
 SQL logical schema, they are relative to a particular SQL tenant.
-In a multi-tenant setup, copies of these zone config events are preserved
-in each tenant's own `system.eventlog` table.
-
-When they apply to cluster-level ranges (e.g., the system zone config),
-they are stored in the system tenant's own `system.eventlog` table.
 
 Events in this category are logged to the `OPS` channel.
 

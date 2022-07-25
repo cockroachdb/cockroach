@@ -409,12 +409,13 @@ func LogEventForJobs(
 	)
 }
 
-var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
+// EventLogSystemTableEnabled is exported for use in tests.
+var EventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
-	true,
-).WithPublic()
+	false,
+)
 
 // LogEventDestination indicates for InsertEventRecord where the
 // event should be directed to.
@@ -514,7 +515,7 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && EventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {

@@ -20,11 +20,6 @@ import "util/log/eventpb/events.proto";
 //
 // Events in this category pertain to an entire cluster and are
 // not relative to any particular tenant.
-//
-// In a multi-tenant setup, the `system.eventlog` table for individual
-// tenants cannot contain a copy of cluster-level events; conversely,
-// the `system.eventlog` table in the system tenant cannot contain the
-// SQL-level events for individual tenants.
 
 // Notes to CockroachDB maintainers: refer to doc.go at the package
 // level for more details. Beware that JSON compatibility rules apply

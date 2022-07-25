@@ -257,6 +257,12 @@ ROLLBACK
 
 subtest system_table_lookup
 
+# Note: system.eventlog is now deprecated. Even though the test below
+# does not care whether the table contains data, it should probably be
+# tweaked to use a different system table instead, as the table might
+# even disappear from the namespace at a later version.
+# See: https://github.com/cockroachdb/cockroach/issues/84989
+
 # Read from the table once to remove any intents. This test can be flakey due
 # to the test encountering an intent on system.public.eventlog from previous
 # transactions.

@@ -308,6 +308,7 @@ message UsersResponse {
 
 // EventsRequest is a request for event log entries, optionally filtered
 // by the specified event type and/or target_id.
+// Note: this API is deprecated.
 message EventsRequest {
   string type = 1;
   int64 target_id = 2;
@@ -326,6 +327,7 @@ message EventsRequest {
 
 // EventsResponse contains a set of event log entries. This is always limited
 // to the latest N entries (N is enforced in the associated endpoint).
+// Note: this API is deprecated.
 message EventsResponse {
   message Event {
     // timestamp is the time at which the event occurred.
@@ -895,7 +897,8 @@ service Admin {
     };
   }
 
-  // Example URLs:
+  // Note: this API is deprecated.
+  //
   // Example URLs:
   // - /_admin/v1/events
   // - /_admin/v1/events?limit=100

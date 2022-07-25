@@ -85,6 +85,12 @@ func registerAllocator(r registry.Registry) {
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, nodes))
 
+		// TODO(knz): system.eventlog is deprecated. The test should be modified
+		// to assert the creation of structured logging events instead.
+		// See: https://github.com/cockroachdb/cockroach/issues/84994
+		_, err = db.Exec(`SET CLUSTER SETTING server.eventlog.enabled = true`)
+		require.NoError(t, err)
+
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
 		for node := 1; node <= nodes; node++ {
 			node := node
