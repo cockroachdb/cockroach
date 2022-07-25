@@ -11,7 +11,6 @@
 package gc
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -21,7 +20,7 @@ import (
 // gcIterator wraps an rditer.ReplicaMVCCDataIterator which it reverse iterates for
 // the purpose of discovering gc-able replicated data.
 type gcIterator struct {
-	it        *rditer.ReplicaMVCCDataIterator
+	it        storage.MVCCIterator
 	threshold hlc.Timestamp
 	err       error
 	buf       gcIteratorRingBuf
@@ -35,19 +34,9 @@ type gcIterator struct {
 // TODO(sumeer): change gcIterator to use MVCCValueLenAndIsTombstone(). It
 // needs to get the value only for intents.
 
-func makeGCIterator(
-	desc *roachpb.RangeDescriptor,
-	snap storage.Reader,
-	threshold hlc.Timestamp,
-	excludeUserKeySpan bool,
-) gcIterator {
+func makeGCIterator(iter storage.MVCCIterator, threshold hlc.Timestamp) gcIterator {
 	return gcIterator{
-		it: rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
-			Reverse:            true,
-			IterKind:           storage.MVCCKeyAndIntentsIterKind,
-			KeyTypes:           storage.IterKeyTypePointsAndRanges,
-			ExcludeUserKeySpan: excludeUserKeySpan,
-		}),
+		it:        iter,
 		threshold: threshold,
 	}
 }
@@ -67,6 +56,12 @@ type gcIteratorState struct {
 func (s *gcIteratorState) curIsNewest() bool {
 	return s.cur.key.IsValue() &&
 		(s.next == nil || (s.afterNext != nil && !s.afterNext.key.IsValue()))
+}
+
+// True if we are positioned on newest version when there's no intent or on
+// intent.
+func (s *gcIteratorState) curLastKeyVersion() bool {
+	return s.next == nil
 }
 
 // curIsNotValue returns true if the current MVCCKeyValue in the gcIteratorState
@@ -186,11 +181,6 @@ func (it *gcIterator) currentRangeTS() hlc.Timestamp {
 		it.cachedRangeTombstoneTS = hlc.Timestamp{}
 	}
 	return it.cachedRangeTombstoneTS
-}
-
-func (it *gcIterator) close() {
-	it.it.Close()
-	it.it = nil
 }
 
 // gcIteratorRingBufSize is 3 because the gcIterator.state method at most needs
