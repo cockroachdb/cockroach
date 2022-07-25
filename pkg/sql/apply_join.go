@@ -247,7 +247,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	opName := "apply-join-iteration-" + strconv.Itoa(a.iterationCount)
 	ctx, sp := tracing.ChildSpan(params.ctx, opName)
 	defer sp.Finish()
-	p, err := a.planRightSideFn(newExecFactory(params.p), leftRow)
+	p, err := a.planRightSideFn(ctx, newExecFactory(params.p), leftRow)
 	if err != nil {
 		return err
 	}
