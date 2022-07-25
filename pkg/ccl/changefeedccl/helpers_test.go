@@ -977,3 +977,27 @@ func waitForJobStatus(
 		return nil
 	})
 }
+
+//
+//func cdcBenchWithSystem(
+//	b *testing.B, name string, testFn cdcTestWithSystemFn, testOpts ...feedTestOption,
+//) {
+//	b.Helper()
+//	options := makeOptions(testOpts...)
+//	cleanupCloudStorage := addCloudStorageOptions(t, &options)
+//
+//	sinkType := randomSinkTypeWithOptions(options)
+//	testLabel := sinkType
+//	if name != "" {
+//		testLabel = fmt.Sprintf("%s/%s", sinkType, name)
+//	}
+//	b.Run(testLabel, func(b *testing.T) {
+//		testServer, cleanupServer := makeServerWithOptions(t, options)
+//		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
+//		defer cleanupServer()
+//		defer cleanupSink()
+//		defer cleanupCloudStorage()
+//
+//		testFn(t, testServer, feedFactory)
+//	})
+//}
