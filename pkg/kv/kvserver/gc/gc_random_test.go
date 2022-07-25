@@ -742,12 +742,13 @@ type fakeGCer struct {
 	// fake GCer stores range key batches as it since we need to be able to
 	// feed them into MVCCGarbageCollectRangeKeys and ranges argument should be
 	// non-overlapping.
-	gcRangeKeyBatches [][]roachpb.GCRequest_GCRangeKey
-	gcClearRangeKeys  []roachpb.GCRequest_GCClearRangeKey
-	threshold         Threshold
-	intents           []roachpb.Intent
-	batches           [][]roachpb.Intent
-	txnIntents        []txnIntents
+	gcRangeKeyBatches   [][]roachpb.GCRequest_GCRangeKey
+	gcClearRangeKeys    []roachpb.GCRequest_GCClearRangeKey
+	gcClearSubRangeKeys []roachpb.GCRequest_GCClearSubRangeKey
+	threshold           Threshold
+	intents             []roachpb.Intent
+	batches             [][]roachpb.Intent
+	txnIntents          []txnIntents
 }
 
 func makeFakeGCer() fakeGCer {
@@ -768,6 +769,7 @@ func (f *fakeGCer) GC(
 	keys []roachpb.GCRequest_GCKey,
 	rangeKeys []roachpb.GCRequest_GCRangeKey,
 	clearRangeKey *roachpb.GCRequest_GCClearRangeKey,
+	clearSubRangeKey *roachpb.GCRequest_GCClearSubRangeKey,
 ) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
@@ -775,6 +777,9 @@ func (f *fakeGCer) GC(
 	f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
 	if clearRangeKey != nil {
 		f.gcClearRangeKeys = append(f.gcClearRangeKeys, *clearRangeKey)
+	}
+	if clearSubRangeKey != nil {
+		f.gcClearSubRangeKeys = append(f.gcClearSubRangeKeys, *clearSubRangeKey)
 	}
 	return nil
 }

@@ -1010,6 +1010,18 @@ message GCRequest {
   // the request will fail.
   GCClearRangeKey clear_range_key = 7;
 
+  // GCClearSubRangeKey contains a range of GCd point keys to clear. Start
+  // of ranges starts at a key with a timestamp includive and ends with a
+  // key without timestamp exclusive. Resulting operations will delete data
+  // in range [start_key@ts, end_key).
+  // This operation doesn't remove range tombstones covered.
+  message GCClearSubRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp start_key_timestamp = 2 [(gogoproto.nullable) = false];
+    bytes end_key = 3 [(gogoproto.casttype) = "Key"];
+  }
+  GCClearSubRangeKey clear_sub_range_key = 8;
+  
   reserved 5;
 }
 
