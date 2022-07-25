@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -174,6 +175,8 @@ func New(
 // If any subroutines panic with a non-runtime error as part of the build
 // process, the panic is caught here and returned as an error.
 func (b *Builder) Build() (err error) {
+	log.VEventf(b.ctx, 1, "optbuilder start")
+	defer log.VEventf(b.ctx, 1, "optbuilder finish")
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -182,6 +185,7 @@ func (b *Builder) Build() (err error) {
 			// manipulate locks.
 			if ok, e := errorutil.ShouldCatch(r); ok {
 				err = e
+				log.VEventf(b.ctx, 1, "%v", err)
 			} else {
 				panic(r)
 			}

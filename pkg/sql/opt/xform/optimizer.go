@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"context"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -51,6 +52,7 @@ type RuleSet = util.FastIntSet
 // expression must provide. The optimizer will return an Expr over the output
 // expression tree with the lowest cost.
 type Optimizer struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 
 	// f is the factory that creates the normalized expressions during the first
@@ -113,10 +115,11 @@ const maxGroupPasses = 100_000
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
-func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
+func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*o = Optimizer{
+		ctx:      ctx,
 		evalCtx:  evalCtx,
 		catalog:  catalog,
 		f:        o.f,
@@ -153,9 +156,9 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 // DetachMemo extracts the memo from the optimizer, and then re-initializes the
 // optimizer so that its reuse will not impact the detached memo. This method is
 // used to extract a read-only memo during the PREPARE phase.
-func (o *Optimizer) DetachMemo() *memo.Memo {
+func (o *Optimizer) DetachMemo(ctx context.Context) *memo.Memo {
 	detach := o.f.DetachMemo()
-	o.Init(o.evalCtx, o.catalog)
+	o.Init(ctx, o.evalCtx, o.catalog)
 	return detach
 }
 
@@ -227,6 +230,8 @@ func (o *Optimizer) Memo() *memo.Memo {
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+	log.VEventf(o.ctx, 1, "optimize start")
+	defer log.VEventf(o.ctx, 1, "optimize finish")
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having to add
@@ -235,6 +240,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 			// locks.
 			if ok, e := errorutil.ShouldCatch(r); ok {
 				err = e
+				log.VEventf(o.ctx, 1, "%v", err)
 			} else {
 				// Other panic objects can't be considered "safe" and thus are
 				// propagated as crashes that terminate the session.
