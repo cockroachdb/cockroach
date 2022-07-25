@@ -5484,7 +5484,8 @@ about a table.
 
 `GET /_admin/v1/events`
 
-Example URLs:
+Note: this API is deprecated.
+
 Example URLs:
 - /_admin/v1/events
 - /_admin/v1/events?limit=100
@@ -5502,6 +5503,7 @@ Support status: [reserved](#support-status)
 
 EventsRequest is a request for event log entries, optionally filtered
 by the specified event type and/or target_id.
+Note: this API is deprecated.
 
 
 | Field | Type | Label | Description | Support status |
@@ -5524,6 +5526,7 @@ by the specified event type and/or target_id.
 
 EventsResponse contains a set of event log entries. This is always limited
 to the latest N entries (N is enforced in the associated endpoint).
+Note: this API is deprecated.
 
 
 | Field | Type | Label | Description | Support status |

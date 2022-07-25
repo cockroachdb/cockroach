@@ -17,7 +17,6 @@ import { NodesSummary } from "src/redux/nodes";
 import { Bytes } from "src/util/format";
 import { util } from "@cockroachlabs/cluster-ui";
 
-import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
 import {
   SummaryBar,
@@ -199,10 +198,6 @@ export default function (props: ClusterSummaryProps) {
             downsampleMax
           />
         </SummaryMetricStat>
-      </SummaryBar>
-      <SummaryBar>
-        <SummaryLabel>Events</SummaryLabel>
-        <EventBox />
       </SummaryBar>
     </div>
   );

@@ -117,6 +117,8 @@ type eventsResponse struct {
 //
 // Lists the latest event log entries, in descending order.
 //
+// Note: this API is deprecated.
+//
 // ---
 // parameters:
 // - name: type

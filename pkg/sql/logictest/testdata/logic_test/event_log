@@ -2,6 +2,13 @@
 # entries will differ.
 # LogicTest: !local-legacy-schema-changer
 
+# NB: system.eventlog is deprecated now. When it is removed,
+# this cluster setting can be dropped and the eventlog test below
+# can be replaced by a structured logging event test.
+# See: https://github.com/cockroachdb/cockroach/issues/84986
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 # For some reason, some of the queries produce non-deterministic results if
 # distsql_workmem value is randomized, so we'll override it to the production
 # value.

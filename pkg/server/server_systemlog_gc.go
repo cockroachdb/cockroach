@@ -57,7 +57,7 @@ var (
 			systemLogGCPeriod,
 		),
 		90*24*time.Hour, // 90 days
-	).WithPublic()
+	)
 )
 
 // gcSystemLog deletes entries in the given system log table between

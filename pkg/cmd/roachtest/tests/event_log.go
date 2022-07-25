@@ -38,54 +38,15 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// a node starts and contacts the cluster.
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-	err := WaitFor3XReplication(ctx, t, db)
+
+	// TODO(knz): system.eventlog is deprecated. The test should be modified
+	// to assert the creation of structured logging events instead.
+	// See: https://github.com/cockroachdb/cockroach/issues/84994
+	_, err := db.Exec(`SET CLUSTER SETTING server.eventlog.enabled = true`)
 	require.NoError(t, err)
 
-	err = retry.ForDuration(10*time.Second, func() error {
-		rows, err := db.Query(
-			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = 'node_join'`,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		seenIds := make(map[int64]struct{})
-		for rows.Next() {
-			var targetID int64
-			var infoStr gosql.NullString
-			if err := rows.Scan(&targetID, &infoStr); err != nil {
-				t.Fatal(err)
-			}
-
-			// Verify the stored node descriptor.
-			if !infoStr.Valid {
-				t.Fatalf("info not recorded for node join, target node %d", targetID)
-			}
-			var info nodeEventInfo
-			if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
-				t.Fatal(err)
-			}
-			if a, e := int64(info.NodeID), targetID; a != e {
-				t.Fatalf("Node join with targetID %d had descriptor for wrong node %d", e, a)
-			}
-
-			// Verify that all NodeIDs are different.
-			if _, ok := seenIds[targetID]; ok {
-				t.Fatalf("Node ID %d seen in two different node join messages", targetID)
-			}
-			seenIds[targetID] = struct{}{}
-		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		if c.Spec().NodeCount != len(seenIds) {
-			return fmt.Errorf("expected %d node join messages, found %d: %v",
-				c.Spec().NodeCount, len(seenIds), seenIds)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	err = WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	// Stop and Start Node 3, and verify the node restart message.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))

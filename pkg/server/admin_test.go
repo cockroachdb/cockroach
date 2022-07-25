@@ -1014,15 +1014,21 @@ VALUES ('adminUser', 'abc', 200), ('bob', 'xyz', 201)`
 	}
 }
 
+// TestAdminAPIEvents tests the event API.
+// Note: this is deprecated - and the test removed when the API is removed too.
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DisableDefaultTestTenant: true,
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
+
+	sql.EventLogSystemTableEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
@@ -1048,16 +1054,14 @@ func TestAdminAPIEvents(t *testing.T) {
 		expCount   int
 	}
 	testcases := []testcase{
-		{"node_join", false, 0, false, 1},
-		{"node_restart", false, 0, false, 0},
 		{"drop_database", false, 0, false, 0},
-		{"create_database", false, 0, false, 3},
+		{"create_database", false, 0, false, 1},
 		{"drop_table", false, 0, false, 2},
 		{"create_table", false, 0, false, 3},
-		{"set_cluster_setting", false, 0, false, 4},
+		{"set_cluster_setting", false, 0, false, 1},
 		// We use limit=true with no limit here because otherwise the
 		// expCount will mess up the expected total count below.
-		{"set_cluster_setting", true, 0, true, 4},
+		{"set_cluster_setting", true, 0, true, 1},
 		{"create_table", true, 0, false, 3},
 		{"create_table", true, -1, false, 3},
 		{"create_table", true, 2, false, 2},

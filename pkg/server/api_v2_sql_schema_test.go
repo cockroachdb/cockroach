@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -170,6 +171,8 @@ func TestEventsV2(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts1 := testCluster.Server(0)
+
+	sql.EventLogSystemTableEnabled.Override(ctx, &ts1.ClusterSettings().SV, true)
 
 	conn := testCluster.ServerConn(0)
 	_, err := conn.Exec("CREATE DATABASE testdb;")

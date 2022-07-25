@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -497,6 +498,12 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			s, db, cleanup := setup(t)
 			now := s.Clock().Now().GoTime()
 			defer cleanup()
+
+			// TODO(knz): system.eventlog is deprecated. Instead use checks on logged
+			// structured events.
+			// See: https://github.com/cockroachdb/cockroach/issues/84993
+			sql.EventLogSystemTableEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
 			tdb := sqlutils.MakeSQLRunner(db)
 			descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 			for _, op := range tc.before {

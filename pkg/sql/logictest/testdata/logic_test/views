@@ -1,3 +1,10 @@
+# NB: system.eventlog is deprecated now. When it is removed,
+# this cluster setting can be dropped and the eventlog test below
+# can be replaced by a structured logging event test.
+# See: https://github.com/cockroachdb/cockroach/issues/84990
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 

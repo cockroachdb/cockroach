@@ -40,7 +40,6 @@ import {
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
-import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
@@ -151,8 +150,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   component={NodeLogs}
                 />
 
-                {/* events & jobs */}
-                <Route path="/events" component={EventPage} />
+                {/* jobs */}
                 <Route exact path="/jobs" component={JobsPage} />
                 <Route path={"/jobs/:id"} component={JobDetails} />
 
@@ -407,8 +405,6 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   from={`/cluster/nodes/:${nodeIDAttr}/logs`}
                   to={`/node/:${nodeIDAttr}/logs`}
                 />
-                <Redirect from="/cluster/events" to="/events" />
-
                 <Redirect exact from="/nodes" to="/overview/list" />
 
                 {/* 404 */}

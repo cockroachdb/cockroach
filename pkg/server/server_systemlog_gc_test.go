@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -141,6 +142,7 @@ func TestLogGC(t *testing.T) {
 func TestLogGCTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	systemLogRowCount := func(ctx context.Context, db *gosql.DB, table string, ts time.Time) int {
 		var count int
 		err := db.QueryRowContext(ctx,
@@ -191,6 +193,8 @@ func TestLogGCTrigger(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
+
+	sql.EventLogSystemTableEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	// Insert something in the rangelog table, otherwise it's empty for new
 	// clusters.
