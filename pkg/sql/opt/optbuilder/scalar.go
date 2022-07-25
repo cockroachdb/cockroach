@@ -610,8 +610,8 @@ func (b *Builder) buildUDF(
 		rels[i] = bodyScope.expr
 	}
 
-	out = b.factory.ConstructUserDefinedFunction(
-		&memo.UserDefinedFunctionPrivate{
+	out = b.factory.ConstructUDF(
+		&memo.UDFPrivate{
 			Name: def.Name,
 			Body: rels,
 			Typ:  f.ResolvedType(),

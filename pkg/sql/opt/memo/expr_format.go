@@ -867,7 +867,7 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
-	formatUDFBody := func(udf *UserDefinedFunctionExpr, tp treeprinter.Node) {
+	formatUDFBody := func(udf *UDFExpr, tp treeprinter.Node) {
 		for i := range udf.Body {
 			f.formatExpr(udf.Body[i], tp)
 		}
@@ -927,8 +927,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		}
 		return
 
-	case opt.UserDefinedFunctionOp:
-		udf := scalar.(*UserDefinedFunctionExpr)
+	case opt.UDFOp:
+		udf := scalar.(*UDFExpr)
 		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		tp = tp.Child(f.Buffer.String())
 		formatUDFBody(udf, tp)
@@ -989,7 +989,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			intercepted = true
 		}
 	}
-	if udf, ok := scalar.(*UserDefinedFunctionExpr); ok {
+	if udf, ok := scalar.(*UDFExpr); ok {
 		// A UDF function body will be printed after the scalar props, so
 		// pre-emptively set intercepted=true to avoid the default
 		// formatScalarPrivate formatting below.
@@ -1007,7 +1007,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 	tp = tp.Child(f.Buffer.String())
 
-	if udf, ok := scalar.(*UserDefinedFunctionExpr); ok {
+	if udf, ok := scalar.(*UDFExpr); ok {
 		// Always print UDF function body.
 		formatUDFBody(udf, tp)
 	}
