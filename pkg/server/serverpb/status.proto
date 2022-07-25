@@ -13,6 +13,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "build/info.proto";
+import "errorspb/errors.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
@@ -23,6 +24,7 @@ import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/serverpb/index_recommendations.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
+import "sql/sqlstats/insights/insights.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -1824,6 +1826,27 @@ message TransactionContentionEventsResponse {
   ];
 }
 
+message ListExecutionInsightsRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1 [
+    (gogoproto.customname) = "NodeID"
+  ];
+}
+
+message ListExecutionInsightsResponse {
+  // insights lists any potentially problematic statements and actions we
+  // suggest the application developer might take to remedy them.
+  repeated cockroach.sql.insights.Insight insights = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  // errors holds any errors that occurred during fan-out calls to other nodes.
+  repeated errorspb.EncodedError errors = 2 [
+    (gogoproto.nullable) = false
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2260,4 +2283,8 @@ service Status {
       get: "/_status/transactioncontentionevents"
     };
   }
+
+  // ListExecutionInsights returns potentially problematic statements cluster-wide,
+  // along with actions we suggest the application developer might take to remedy them.
+  rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
 }
