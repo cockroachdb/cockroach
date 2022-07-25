@@ -33,7 +33,7 @@ type recordResolvedWriter struct {
 
 func (r *recordResolvedWriter) Add(ctx context.Context, e kvevent.Event) error {
 	if e.Type() == kvevent.TypeResolved {
-		r.resolved = append(r.resolved, *e.Resolved())
+		r.resolved = append(r.resolved, e.Resolved())
 	}
 	return nil
 }
