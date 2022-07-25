@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -67,7 +67,7 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	outliers outliers.Registry
+	insights insights.Registry
 }
 
 func newSQLStats(
@@ -76,7 +76,7 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
-	outliersRegistry outliers.Registry,
+	outliersRegistry insights.Registry,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -96,7 +96,7 @@ func newSQLStats(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
-		outliers:                   outliersRegistry,
+		insights:                   outliersRegistry,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
@@ -134,7 +134,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.outliers,
+		s.insights,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -191,10 +191,9 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	return err
 }
 
-// IterateOutliers calls visitor with each of the currently retained set of
-// execution outliers.
-func (s *SQLStats) IterateOutliers(
-	ctx context.Context, visitor func(context.Context, *outliers.Outlier),
+// IterateInsights calls visitor with each of the currently retained set of insights.
+func (s *SQLStats) IterateInsights(
+	ctx context.Context, visitor func(context.Context, *insights.Insight),
 ) {
-	s.outliers.IterateOutliers(ctx, visitor)
+	s.insights.IterateInsights(ctx, visitor)
 }

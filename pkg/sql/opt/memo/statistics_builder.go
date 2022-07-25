@@ -4119,7 +4119,6 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 	var conjunctSelectivity props.Selectivity
 
 	for f := 0; f < len(h.filters); f++ {
-		conjunctSelectivity = props.OneSelectivity
 		disjunction := h.filters[f]
 		var disjuncts []opt.ScalarExpr
 		if orExpr, ok := disjunction.Condition.(*OrExpr); !ok {

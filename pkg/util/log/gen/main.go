@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/gostdlib/go/format"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func main() {
@@ -137,7 +139,8 @@ func readInput(protoName string) (chans []info, sevs []info, err error) {
 			continue
 		}
 		key := strings.Split(line, " ")[0]
-		title := strings.ReplaceAll(strings.Title(strings.ReplaceAll(strings.ToLower(key), "_", " ")), " ", "")
+		title := strings.ReplaceAll(cases.Title(language.English, cases.NoLower).String(
+			strings.ReplaceAll(strings.ToLower(key), "_", " ")), " ", "")
 		if inSevs {
 			comment := "// The `" + key + "` severity" + strings.TrimPrefix(rawComment, "// "+key)
 			sevs = append(sevs, info{

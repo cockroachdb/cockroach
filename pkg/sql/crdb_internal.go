@@ -65,7 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -142,7 +142,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalTransactionsTableID:           crdbInternalLocalTxnsTable,
 		catconstants.CrdbInternalLocalSessionsTableID:               crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
-		catconstants.CrdbInternalNodeExecutionOutliersTableID:       crdbInternalNodeExecutionOutliersTable,
+		catconstants.CrdbInternalNodeExecutionInsightsTableID:       crdbInternalNodeExecutionInsightsTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
@@ -3574,9 +3574,8 @@ CREATE TABLE crdb_internal.zones (
 				// In this case, just don't show the zoneSpecifier in the
 				// output of the table.
 				continue
-			} else {
-				zoneSpecifier = &zs
 			}
+			zoneSpecifier = &zs
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
 			var configProto zonepb.ZoneConfig
@@ -3660,12 +3659,11 @@ CREATE TABLE crdb_internal.zones (
 						// dropped and in the MVCC GC queue.
 						continue
 					}
-					if zoneSpecifier != nil {
-						zs := zs
-						zs.TableOrIndex.Index = tree.UnrestrictedName(index.GetName())
-						zs.Partition = tree.Name(s.PartitionName)
-						zoneSpecifier = &zs
-					}
+
+					zs := zs
+					zs.TableOrIndex.Index = tree.UnrestrictedName(index.GetName())
+					zs.Partition = tree.Name(s.PartitionName)
+					zoneSpecifier = &zs
 
 					// Generate information about full / inherited constraints.
 					// There are two cases -- the subzone we are looking at refers
@@ -6204,17 +6202,17 @@ func populateClusterLocksWithFilter(
 	return matched, err
 }
 
-var crdbInternalNodeExecutionOutliersTable = virtualSchemaTable{
+var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.node_execution_outliers (
+CREATE TABLE crdb_internal.node_execution_insights (
 	session_id               STRING NOT NULL,
 	transaction_id           UUID NOT NULL,
 	statement_id             STRING NOT NULL,
 	statement_fingerprint_id BYTES NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		p.extendedEvalCtx.statsProvider.IterateOutliers(ctx, func(
-			ctx context.Context, o *outliers.Outlier,
+		p.extendedEvalCtx.statsProvider.IterateInsights(ctx, func(
+			ctx context.Context, o *insights.Insight,
 		) {
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(o.Session.ID.GetBytes())),

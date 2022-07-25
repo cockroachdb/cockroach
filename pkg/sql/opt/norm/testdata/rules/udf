@@ -1,0 +1,21 @@
+exec-ddl
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+----
+
+# Do not attempt to hoist UDFs.
+norm
+SELECT one()
+----
+values
+ ├── columns: one:2
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── user-defined-function: one
+           └── values
+                ├── columns: "?column?":1!null
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── (1,)

@@ -114,9 +114,7 @@ func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 // to load. Calling this function resets the list of suggestions.
 func (s *SplitDecider) ClearSplitKeys() []RangeID {
 	suggestions := make([]RangeID, len(s.suggestions))
-	for i, suggestion := range s.suggestions {
-		suggestions[i] = suggestion
-	}
+	copy(suggestions, s.suggestions)
 
 	s.suggestions = []RangeID{}
 	return suggestions
