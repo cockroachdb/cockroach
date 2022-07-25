@@ -439,6 +439,16 @@ func (k MVCCRangeKey) Validate() (err error) {
 	}
 }
 
+// Includes returns if this MVCCRangeKey includes the specified key.
+func (k MVCCRangeKey) Includes(key roachpb.Key) bool {
+	return k.StartKey.Compare(key) <= 0 && k.EndKey.Compare(key) > 0
+}
+
+// Deletes returns whether this MVCCRangeKey deletes the specified MVCC key.
+func (k MVCCRangeKey) Deletes(key MVCCKey) bool {
+	return k.Includes(key.Key) && !k.Timestamp.Less(key.Timestamp)
+}
+
 // FirstRangeKeyAbove does a binary search for the first range key at or above
 // the given timestamp. It assumes the range keys are ordered in descending
 // timestamp order, as returned by SimpleMVCCIterator.RangeKeys(). Returns false
