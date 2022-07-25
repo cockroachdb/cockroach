@@ -46,47 +46,47 @@ var (
 		tsSecFrom: 1, tsSecTo: 100,
 		keySuffixMin: 2, keySuffixMax: 6,
 		valueLenMin: 1, valueLenMax: 1,
-		deleteFrac:      0,
-		keysPerValueMin: 1, keysPerValueMax: 2,
+		deleteFrac:        0,
+		versionsPerKeyMin: 1, versionsPerKeyMax: 2,
 		intentFrac: .1,
 	}
 	someVersionsMidSizeRows = uniformDistSpec{
 		tsSecFrom: 1, tsSecTo: 100,
 		keySuffixMin: 8, keySuffixMax: 8,
 		valueLenMin: 8, valueLenMax: 16,
-		deleteFrac:      .1,
-		keysPerValueMin: 1, keysPerValueMax: 100,
+		deleteFrac:        .1,
+		versionsPerKeyMin: 1, versionsPerKeyMax: 100,
 		intentFrac: .1,
 	}
 	lotsOfVersionsMidSizeRows = uniformDistSpec{
 		tsSecFrom: 1, tsSecTo: 100,
-		keySuffixMin: 8, keySuffixMax: 8,
+		keySuffixMin: 7, keySuffixMax: 9,
 		valueLenMin: 8, valueLenMax: 16,
-		deleteFrac:      .1,
-		keysPerValueMin: 1000, keysPerValueMax: 1000000,
+		deleteFrac:        .1,
+		versionsPerKeyMin: 1000, versionsPerKeyMax: 1000000,
 		intentFrac: .1,
 	}
 	// This spec is identical to someVersionsMidSizeRows except for number of
 	// intents.
 	someVersionsMidSizeRowsLotsOfIntents = uniformDistSpec{
 		tsSecFrom: 1, tsSecTo: 100,
-		keySuffixMin: 8, keySuffixMax: 8,
+		keySuffixMin: 7, keySuffixMax: 9,
 		valueLenMin: 8, valueLenMax: 16,
-		deleteFrac:      .1,
-		keysPerValueMin: 1, keysPerValueMax: 100,
+		deleteFrac:        .1,
+		versionsPerKeyMin: 1, versionsPerKeyMax: 100,
 		intentFrac: 1,
 	}
 	someVersionsWithSomeRangeKeys = uniformDistSpec{
 		tsSecFrom: 1, tsSecTo: 100,
 		tsSecMinIntent: 70, tsSecOldIntentTo: 85,
-		keySuffixMin: 8, keySuffixMax: 8,
+		keySuffixMin: 7, keySuffixMax: 9,
 		valueLenMin: 8, valueLenMax: 16,
-		deleteFrac:      .1,
-		keysPerValueMin: 1,
-		keysPerValueMax: 100,
-		intentFrac:      .1,
-		oldIntentFrac:   .1,
-		rangeKeyFrac:    .1,
+		deleteFrac:        .1,
+		versionsPerKeyMin: 1,
+		versionsPerKeyMax: 100,
+		intentFrac:        .1,
+		oldIntentFrac:     .1,
+		rangeKeyFrac:      .1,
 	}
 
 	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
@@ -297,6 +297,7 @@ func TestNewVsInvariants(t *testing.T) {
 				gcThreshold, RunOptions{
 					IntentAgeThreshold:  intentAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
+					ClearRangeMinKeys:   100,
 				}, ttl,
 				&gcer,
 				gcer.resolveIntents,
@@ -315,6 +316,15 @@ func TestNewVsInvariants(t *testing.T) {
 				}
 				_, err := storage.MVCCResolveWriteIntent(ctx, eng, &stats, l)
 				require.NoError(t, err, "failed to resolve intent")
+			}
+			for _, cr := range gcer.clearRanges() {
+				require.False(t, cr.StartKeyTimestamp.IsEmpty(), "unexpected full range delete")
+				if cr.EndKey == nil {
+					cr.EndKey = cr.StartKey.Next()
+				}
+				require.NoError(t,
+					storage.MVCCGarbageCollectPointsWithClearRange(ctx, eng, &stats, cr.StartKey, cr.EndKey,
+						cr.StartKeyTimestamp, gcThreshold))
 			}
 			for _, batch := range gcer.rangeKeyBatches() {
 				rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
@@ -738,7 +748,8 @@ func mergeRanges(fragments [][]storage.MVCCRangeKeyValue) []storage.MVCCRangeKey
 }
 
 type fakeGCer struct {
-	gcKeys map[string]roachpb.GCRequest_GCKey
+	gcKeys          map[string]roachpb.GCRequest_GCKey
+	gcPointsBatches [][]roachpb.GCRequest_GCKey
 	// fake GCer stores range key batches as it since we need to be able to
 	// feed them into MVCCGarbageCollectRangeKeys and ranges argument should be
 	// non-overlapping.
@@ -772,9 +783,18 @@ func (f *fakeGCer) GC(
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
 	}
-	f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
+	if keys != nil {
+		f.gcPointsBatches = append(f.gcPointsBatches, keys)
+	}
+	if rangeKeys != nil {
+		f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
+	}
 	if clearRange != nil {
-		f.gcClearRanges = append(f.gcClearRanges, *clearRange)
+		f.gcClearRanges = append(f.gcClearRanges, roachpb.GCRequest_GCClearRange{
+			StartKey:          clearRange.StartKey.Clone(),
+			StartKeyTimestamp: clearRange.StartKeyTimestamp,
+			EndKey:            clearRange.EndKey.Clone(),
+		})
 	}
 	return nil
 }
@@ -790,6 +810,10 @@ func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) e
 	return nil
 }
 
+// normalize will converge GC request history between old and new
+// implementations and drop info that is not produced by old GC.
+// It will however preserve info like clear range which covers functionality
+// not relevant for old gc as it shouldn't be compared between such invocations.
 func (f *fakeGCer) normalize() {
 	sortIntents := func(i, j int) bool {
 		return intentLess(&f.intents[i], &f.intents[j])
@@ -802,6 +826,7 @@ func (f *fakeGCer) normalize() {
 		return f.txnIntents[i].txn.ID.String() < f.txnIntents[j].txn.ID.String()
 	})
 	f.batches = nil
+	f.gcPointsBatches = nil
 }
 
 func (f *fakeGCer) pointKeys() []roachpb.GCRequest_GCKey {
@@ -822,6 +847,10 @@ func (f *fakeGCer) rangeKeys() []roachpb.GCRequest_GCRangeKey {
 		reqs = append(reqs, r...)
 	}
 	return reqs
+}
+
+func (f *fakeGCer) clearRanges() []roachpb.GCRequest_GCClearRange {
+	return f.gcClearRanges
 }
 
 func intentLess(a, b *roachpb.Intent) bool {
@@ -848,25 +877,36 @@ func makeCollectableGCRangesFromGCRequests(
 ) []storage.CollectableGCRangeKey {
 	collectableKeys := make([]storage.CollectableGCRangeKey, len(rangeKeys))
 	for i, rk := range rangeKeys {
-		leftPeekBound := rk.StartKey.Prevish(roachpb.PrevishKeyLength)
-		if len(rangeStart) > 0 && leftPeekBound.Compare(rangeStart) <= 0 {
-			leftPeekBound = rangeStart
-		}
-		rightPeekBound := rk.EndKey.Next()
-		if len(rangeEnd) > 0 && rightPeekBound.Compare(rangeEnd) >= 0 {
-			rightPeekBound = rangeEnd
-		}
+		peekBounds := expandRangeSpan(roachpb.Span{
+			Key:    rk.StartKey,
+			EndKey: rk.EndKey,
+		}, roachpb.Span{
+			Key:    rangeStart,
+			EndKey: rangeEnd,
+		})
 		collectableKeys[i] = storage.CollectableGCRangeKey{
 			MVCCRangeKey: storage.MVCCRangeKey{
 				StartKey:  rk.StartKey,
 				EndKey:    rk.EndKey,
 				Timestamp: rk.Timestamp,
 			},
-			LatchSpan: roachpb.Span{
-				Key:    leftPeekBound,
-				EndKey: rightPeekBound,
-			},
+			LatchSpan: peekBounds,
 		}
 	}
 	return collectableKeys
+}
+
+func expandRangeSpan(rangeKey, limits roachpb.Span) roachpb.Span {
+	leftPeekBound := rangeKey.Key.Prevish(roachpb.PrevishKeyLength)
+	if len(limits.Key) > 0 && leftPeekBound.Compare(limits.Key) <= 0 {
+		leftPeekBound = limits.Key
+	}
+	rightPeekBound := rangeKey.EndKey.Next()
+	if len(limits.EndKey) > 0 && rightPeekBound.Compare(limits.EndKey) >= 0 {
+		rightPeekBound = limits.EndKey
+	}
+	return roachpb.Span{
+		Key:    leftPeekBound,
+		EndKey: rightPeekBound,
+	}
 }
