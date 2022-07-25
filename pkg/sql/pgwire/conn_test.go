@@ -694,7 +694,7 @@ func expectDescribeStmt(
 		t.Fatalf("expected command DescribeStmt, got: %T (%+v)", cmd, cmd)
 	}
 
-	if desc.Name != expName {
+	if desc.Name.String() != expName {
 		t.Fatalf("expected name %s, got %s", expName, desc.Name)
 	}
 
