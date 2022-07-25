@@ -1,13 +1,13 @@
 # Default privileges start with an implicit set, the creator role has ALL
 # and Public has usage.
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    root    ALL
-root  false  sequences  root    ALL
-root  false  tables     root    ALL
-root  false  types      public  USAGE
-root  false  types      root    ALL
+root  false  schemas    root    ALL    true
+root  false  sequences  root    ALL    true
+root  false  tables     root    ALL    true
+root  false  types      public  USAGE  false
+root  false  types      root    ALL    true
 
 # Ensure revoking "default" default privileges reflects in show default
 # privileges.
@@ -15,12 +15,12 @@ statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM root;
 ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    root  ALL
-root  false  sequences  root  ALL
-root  false  types      root  ALL
+root  false  schemas    root  ALL  true
+root  false  sequences  root  ALL  true
+root  false  types      root  ALL  true
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
@@ -28,16 +28,16 @@ ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    public  USAGE
-root  false  schemas    root    ALL
-root  false  sequences  public  SELECT
-root  false  sequences  root    ALL
-root  false  tables     public  SELECT
-root  false  types      public  USAGE
-root  false  types      root    ALL
+root  false  schemas    public  USAGE   false
+root  false  schemas    root    ALL     true
+root  false  sequences  public  SELECT  false
+root  false  sequences  root    ALL     true
+root  false  tables     public  SELECT  false
+root  false  types      public  USAGE   false
+root  false  types      root    ALL     true
 
 statement ok
 CREATE USER foo
@@ -45,16 +45,16 @@ CREATE USER foo
 statement ok
 CREATE USER bar
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    public  USAGE
-root  false  schemas    root    ALL
-root  false  sequences  public  SELECT
-root  false  sequences  root    ALL
-root  false  tables     public  SELECT
-root  false  types      public  USAGE
-root  false  types      root    ALL
+root  false  schemas    public  USAGE   false
+root  false  schemas    root    ALL     true
+root  false  sequences  public  SELECT  false
+root  false  sequences  root    ALL     true
+root  false  tables     public  SELECT  false
+root  false  types      public  USAGE   false
+root  false  types      root    ALL     true
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo, bar;
@@ -62,34 +62,34 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar, root
 ----
-bar   false  schemas    bar     ALL
-bar   false  sequences  bar     ALL
-bar   false  tables     bar     ALL
-bar   false  types      bar     ALL
-bar   false  types      public  USAGE
-foo   false  schemas    foo     ALL
-foo   false  sequences  foo     ALL
-foo   false  tables     foo     ALL
-foo   false  types      foo     ALL
-foo   false  types      public  USAGE
-root  false  schemas    bar     ALL
-root  false  schemas    foo     ALL
-root  false  schemas    public  USAGE
-root  false  schemas    root    ALL
-root  false  sequences  bar     ALL
-root  false  sequences  foo     ALL
-root  false  sequences  public  SELECT
-root  false  sequences  root    ALL
-root  false  tables     bar     ALL
-root  false  tables     foo     ALL
-root  false  tables     public  SELECT
-root  false  types      bar     ALL
-root  false  types      foo     ALL
-root  false  types      public  USAGE
-root  false  types      root    ALL
+bar   false  schemas    bar     ALL     true
+bar   false  sequences  bar     ALL     true
+bar   false  tables     bar     ALL     true
+bar   false  types      bar     ALL     true
+bar   false  types      public  USAGE   false
+foo   false  schemas    foo     ALL     true
+foo   false  sequences  foo     ALL     true
+foo   false  tables     foo     ALL     true
+foo   false  types      foo     ALL     true
+foo   false  types      public  USAGE   false
+root  false  schemas    bar     ALL     false
+root  false  schemas    foo     ALL     false
+root  false  schemas    public  USAGE   false
+root  false  schemas    root    ALL     true
+root  false  sequences  bar     ALL     false
+root  false  sequences  foo     ALL     false
+root  false  sequences  public  SELECT  false
+root  false  sequences  root    ALL     true
+root  false  tables     bar     ALL     false
+root  false  tables     foo     ALL     false
+root  false  tables     public  SELECT  false
+root  false  types      bar     ALL     false
+root  false  types      foo     ALL     false
+root  false  types      public  USAGE   false
+root  false  types      root    ALL     true
 
 statement ok
 GRANT foo, bar TO root;
@@ -100,24 +100,24 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    bar     ALL
-root  false  schemas    foo     ALL
-root  false  schemas    public  USAGE
-root  false  schemas    root    ALL
-root  false  sequences  bar     ALL
-root  false  sequences  foo     ALL
-root  false  sequences  public  SELECT
-root  false  sequences  root    ALL
-root  false  tables     bar     ALL
-root  false  tables     foo     ALL
-root  false  tables     public  SELECT
-root  false  types      bar     ALL
-root  false  types      foo     ALL
-root  false  types      public  USAGE
-root  false  types      root    ALL
+root  false  schemas    bar     ALL     false
+root  false  schemas    foo     ALL     false
+root  false  schemas    public  USAGE   false
+root  false  schemas    root    ALL     true
+root  false  sequences  bar     ALL     false
+root  false  sequences  foo     ALL     false
+root  false  sequences  public  SELECT  false
+root  false  sequences  root    ALL     true
+root  false  tables     bar     ALL     false
+root  false  tables     foo     ALL     false
+root  false  tables     public  SELECT  false
+root  false  types      bar     ALL     false
+root  false  types      foo     ALL     false
+root  false  types      public  USAGE   false
+root  false  types      root    ALL     true
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -125,24 +125,24 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    bar     ALL
-root  false  schemas    foo     ALL
-root  false  schemas    public  USAGE
-root  false  schemas    root    ALL
-root  false  sequences  bar     ALL
-root  false  sequences  foo     ALL
-root  false  sequences  public  SELECT
-root  false  sequences  root    ALL
-root  false  tables     bar     ALL
-root  false  tables     foo     ALL
-root  false  tables     public  SELECT
-root  false  types      bar     ALL
-root  false  types      foo     ALL
-root  false  types      public  USAGE
-root  false  types      root    ALL
+root  false  schemas    bar     ALL     false
+root  false  schemas    foo     ALL     false
+root  false  schemas    public  USAGE   false
+root  false  schemas    root    ALL     true
+root  false  sequences  bar     ALL     false
+root  false  sequences  foo     ALL     false
+root  false  sequences  public  SELECT  false
+root  false  sequences  root    ALL     true
+root  false  tables     bar     ALL     false
+root  false  tables     foo     ALL     false
+root  false  tables     public  SELECT  false
+root  false  types      bar     ALL     false
+root  false  types      foo     ALL     false
+root  false  types      public  USAGE   false
+root  false  types      root    ALL     true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
@@ -150,37 +150,37 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    root  ALL
-root  false  sequences  root  ALL
-root  false  tables     bar   CREATE
-root  false  tables     bar   DELETE
-root  false  tables     bar   DROP
-root  false  tables     bar   INSERT
-root  false  tables     bar   UPDATE
-root  false  tables     bar   ZONECONFIG
-root  false  tables     foo   CREATE
-root  false  tables     foo   DELETE
-root  false  tables     foo   DROP
-root  false  tables     foo   INSERT
-root  false  tables     foo   UPDATE
-root  false  tables     foo   ZONECONFIG
-root  false  types      root  ALL
+root  false  schemas    root  ALL         true
+root  false  sequences  root  ALL         true
+root  false  tables     bar   CREATE      false
+root  false  tables     bar   DELETE      false
+root  false  tables     bar   DROP        false
+root  false  tables     bar   INSERT      false
+root  false  tables     bar   UPDATE      false
+root  false  tables     bar   ZONECONFIG  false
+root  false  tables     foo   CREATE      false
+root  false  tables     foo   DELETE      false
+root  false  tables     foo   DROP        false
+root  false  tables     foo   INSERT      false
+root  false  tables     foo   UPDATE      false
+root  false  tables     foo   ZONECONFIG  false
+root  false  types      root  ALL         true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  schemas    root  ALL
-root  false  sequences  root  ALL
-root  false  tables     foo   DROP
-root  false  tables     foo   ZONECONFIG
-root  false  types      root  ALL
+root  false  schemas    root  ALL         true
+root  false  sequences  root  ALL         true
+root  false  tables     foo   DROP        true
+root  false  tables     foo   ZONECONFIG  true
+root  false  types      root  ALL         true
 
 # Create a second database.
 statement ok
@@ -192,69 +192,69 @@ statement ok
 GRANT testuser TO root;
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
-testuser  false  schemas    testuser  ALL
-testuser  false  sequences  testuser  ALL
-testuser  false  tables     foo       DROP
-testuser  false  tables     foo       ZONECONFIG
-testuser  false  tables     testuser  ALL
-testuser  false  types      public    USAGE
-testuser  false  types      testuser  ALL
+testuser  false  schemas    testuser  ALL         true
+testuser  false  sequences  testuser  ALL         true
+testuser  false  tables     foo       DROP        true
+testuser  false  tables     foo       ZONECONFIG  true
+testuser  false  tables     testuser  ALL         true
+testuser  false  types      public    USAGE       false
+testuser  false  types      testuser  ALL         true
 
 # SHOW DEFAULT PRIVILEGES should show default privileges for the current role.
 user testuser
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES
 ----
-testuser  false  schemas    testuser  ALL
-testuser  false  sequences  testuser  ALL
-testuser  false  tables     testuser  ALL
-testuser  false  types      public    USAGE
-testuser  false  types      testuser  ALL
+testuser  false  schemas    testuser  ALL    true
+testuser  false  sequences  testuser  ALL    true
+testuser  false  tables     testuser  ALL    true
+testuser  false  types      public    USAGE  false
+testuser  false  types      testuser  ALL    true
 
 user root
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
-testuser  false  schemas    testuser  ALL
-testuser  false  sequences  testuser  ALL
-testuser  false  tables     foo       DROP
-testuser  false  tables     foo       ZONECONFIG
-testuser  false  tables     testuser  ALL
-testuser  false  types      public    USAGE
-testuser  false  types      testuser  ALL
+testuser  false  schemas    testuser  ALL         true
+testuser  false  sequences  testuser  ALL         true
+testuser  false  tables     foo       DROP        true
+testuser  false  tables     foo       ZONECONFIG  true
+testuser  false  tables     testuser  ALL         true
+testuser  false  types      public    USAGE       false
+testuser  false  types      testuser  ALL         true
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ROLE root, testuser
 ----
-root      false  schemas    root      ALL
-root      false  sequences  root      ALL
-root      false  tables     foo       DROP
-root      false  tables     foo       ZONECONFIG
-root      false  tables     root      ALL
-root      false  types      public    USAGE
-root      false  types      root      ALL
-testuser  false  schemas    testuser  ALL
-testuser  false  sequences  testuser  ALL
-testuser  false  tables     foo       DROP
-testuser  false  tables     foo       ZONECONFIG
-testuser  false  tables     testuser  ALL
-testuser  false  types      public    USAGE
-testuser  false  types      testuser  ALL
+root      false  schemas    root      ALL         true
+root      false  sequences  root      ALL         true
+root      false  tables     foo       DROP        true
+root      false  tables     foo       ZONECONFIG  true
+root      false  tables     root      ALL         true
+root      false  types      public    USAGE       false
+root      false  types      root      ALL         true
+testuser  false  schemas    testuser  ALL         true
+testuser  false  sequences  testuser  ALL         true
+testuser  false  tables     foo       DROP        true
+testuser  false  tables     foo       ZONECONFIG  true
+testuser  false  tables     testuser  ALL         true
+testuser  false  types      public    USAGE       false
+testuser  false  types      testuser  ALL         true
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
 # ForAllRoles is not a real role and thus is not the grantee for any privileges.
-query TBTTT
+query TBTTTB
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  foo     DROP
-NULL  true  tables  foo     ZONECONFIG
-NULL  true  types   public  USAGE
+NULL  true  tables  foo     DROP        true
+NULL  true  tables  foo     ZONECONFIG  true
+NULL  true  types   public  USAGE       false

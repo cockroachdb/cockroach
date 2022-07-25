@@ -543,7 +543,8 @@ CREATE TABLE crdb_internal.default_privileges (
    for_all_roles BOOL NULL,
    object_type STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
 )  CREATE TABLE crdb_internal.default_privileges (
    database_name STRING NOT NULL,
    schema_name STRING NULL,
@@ -551,7 +552,8 @@ CREATE TABLE crdb_internal.default_privileges (
    for_all_roles BOOL NULL,
    object_type STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
 )  {}  {}
 CREATE TABLE crdb_internal.feature_usage (
    feature_name STRING NOT NULL,

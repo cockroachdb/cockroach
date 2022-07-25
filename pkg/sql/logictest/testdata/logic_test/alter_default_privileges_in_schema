@@ -212,77 +212,77 @@ test           s2           t12         admin     ALL             true
 test           s2           t12         root      ALL             true
 test           s2           t12         testuser  ALL             true
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges WHERE schema_name IS NOT NULL
 ----
-database_name  schema_name  role  for_all_roles  object_type  grantee    privilege_type
-test           public       NULL  true           tables       testuser2  SELECT
-test           s            NULL  true           tables       testuser2  SELECT
+database_name  schema_name  role  for_all_roles  object_type  grantee    privilege_type  is_grantable
+test           public       NULL  true           tables       testuser2  SELECT          false
+test           s            NULL  true           tables       testuser2  SELECT          false
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA public
 ----
-role  for_all_roles  object_type  grantee  privilege_type
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA s
 ----
-role  for_all_roles  object_type  grantee  privilege_type
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA s2
 ----
-role  for_all_roles  object_type  grantee  privilege_type
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT ALL ON TABLES TO testuser;
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s GRANT USAGE ON TYPES TO testuser2;
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s2 GRANT SELECT, UPDATE, DROP ON TABLES TO testuser2
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges WHERE schema_name IS NOT NULL
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee    privilege_type
-test           public       testuser  false          tables       testuser   ALL
-test           public       NULL      true           tables       testuser2  SELECT
-test           s            testuser  false          types        testuser2  USAGE
-test           s            NULL      true           tables       testuser2  SELECT
-test           s2           testuser  false          tables       testuser2  DROP
-test           s2           testuser  false          tables       testuser2  SELECT
-test           s2           testuser  false          tables       testuser2  UPDATE
+database_name  schema_name  role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+test           public       testuser  false          tables       testuser   ALL             false
+test           public       NULL      true           tables       testuser2  SELECT          false
+test           s            testuser  false          types        testuser2  USAGE           false
+test           s            NULL      true           tables       testuser2  SELECT          false
+test           s2           testuser  false          tables       testuser2  DROP            false
+test           s2           testuser  false          tables       testuser2  SELECT          false
+test           s2           testuser  false          tables       testuser2  UPDATE          false
 
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA public
 ----
-role      for_all_roles  object_type  grantee   privilege_type
-testuser  false          tables       testuser  ALL
+role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+testuser  false          tables       testuser  ALL             false
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA s
 ----
-role      for_all_roles  object_type  grantee    privilege_type
-testuser  false          types        testuser2  USAGE
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          types        testuser2  USAGE           false
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA s2
 ----
-role      for_all_roles  object_type  grantee    privilege_type
-testuser  false          tables       testuser2  DROP
-testuser  false          tables       testuser2  SELECT
-testuser  false          tables       testuser2  UPDATE
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          tables       testuser2  DROP            false
+testuser  false          tables       testuser2  SELECT          false
+testuser  false          tables       testuser2  UPDATE          false
 
 user root
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s2
 ----
-role      for_all_roles  object_type  grantee    privilege_type
-testuser  false          tables       testuser2  DROP
-testuser  false          tables       testuser2  SELECT
-testuser  false          tables       testuser2  UPDATE
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          tables       testuser2  DROP            false
+testuser  false          tables       testuser2  SELECT          false
+testuser  false          tables       testuser2  UPDATE          false
 
-query TBTTT colnames
+query TBTTTB colnames
 SHOW DEFAULT PRIVILEGES IN SCHEMA "'; drop database test; SELECT '";
 ----
-role  for_all_roles  object_type  grantee  privilege_type
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
