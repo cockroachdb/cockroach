@@ -83,7 +83,7 @@ func TestBuilder(t *testing.T) {
 				evalCtx.SessionData().LocalityOptimizedSearch = true
 
 				var o xform.Optimizer
-				o.Init(&evalCtx, catalog)
+				o.Init(ctx, &evalCtx, catalog)
 				var sv testutils.ScalarVars
 
 				for _, arg := range d.CmdArgs {

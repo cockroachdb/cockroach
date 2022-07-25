@@ -11,6 +11,7 @@
 package xform_test
 
 import (
+	"context"
 	"flag"
 	"strings"
 	"sync"
@@ -45,7 +46,7 @@ func TestDetachMemo(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE c=$1")
 
-	before := o.DetachMemo()
+	before := o.DetachMemo(context.Background())
 
 	if !o.Memo().IsEmpty() {
 		t.Error("memo expression should be reinitialized by DetachMemo")
@@ -96,7 +97,7 @@ func TestDetachMemoRace(t *testing.T) {
 	var o xform.Optimizer
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE a = $1")
-	mem := o.DetachMemo()
+	mem := o.DetachMemo(context.Background())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -105,7 +106,7 @@ func TestDetachMemoRace(t *testing.T) {
 		go func() {
 			var o xform.Optimizer
 			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			o.Init(&evalCtx, catalog)
+			o.Init(context.Background(), &evalCtx, catalog)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {

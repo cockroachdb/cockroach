@@ -84,6 +84,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
