@@ -39,7 +39,7 @@ import (
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), but this is only checked for keys that exist in both sides, for
-// performance. MVCC range tombstones are not yet handled, and will error.
+// performance.
 //
 // The returned MVCC statistics is a delta between the SST-only statistics and
 // their effect when applied, which when added to the SST statistics will adjust
@@ -55,10 +55,19 @@ func CheckSSTConflicts(
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 
+	allowIdempotentHelper := func(_ hlc.Timestamp) bool { return false }
+	if disallowShadowingBelow.IsEmpty() && disallowShadowing {
+		allowIdempotentHelper = func(_ hlc.Timestamp) bool { return true }
+	} else if !disallowShadowingBelow.IsEmpty() {
+		allowIdempotentHelper = func(extTimestamp hlc.Timestamp) bool {
+			return disallowShadowingBelow.LessEq(extTimestamp)
+		}
+	}
+
 	// Check for any range keys.
 	//
-	// TODO(erikgrinaker): We should support these, but it's not needed yet.
-	// See: https://github.com/cockroachdb/cockroach/issues/83405
+	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
+	// need to read the SST to figure out if it has range keys.
 	rkIter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
@@ -68,13 +77,45 @@ func CheckSSTConflicts(
 		return enginepb.MVCCStats{}, err
 	}
 	rkIter.SeekGE(NilKey)
+
 	if ok, err := rkIter.Valid(); err != nil {
 		return enginepb.MVCCStats{}, err
 	} else if ok {
-		return enginepb.MVCCStats{}, errors.Errorf(
-			"MVCC range tombstone conflict checks are not yet supported, found %s",
-			rkIter.RangeBounds().Clone())
+		// If the incoming SST contains range tombstones, we cannot use prefix
+		// iteration.
+		usePrefixSeek = false
 	}
+	rkIter.Close()
+
+	rkIter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		UpperBound: end.Key,
+		KeyTypes:   IterKeyTypeRangesOnly,
+	})
+	rkIter.SeekLT(start)
+
+	// Check both the current key and the next key for range keys. We need to
+	// check the next one in case SeekLT took us well behind the span
+	// we're interested in.
+	if ok, err := rkIter.Valid(); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if ok {
+		if rkIter.RangeBounds().ContainsKey(start.Key) {
+			// If the engine contains range tombstones in this span, we cannot use prefix
+			// iteration.
+			usePrefixSeek = false
+		}
+		rkIter.Next()
+	} else {
+		rkIter.SeekGE(start)
+	}
+	if ok, err := rkIter.Valid(); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if ok {
+		// If the engine contains range tombstones in this span, we cannot use prefix
+		// iteration.
+		usePrefixSeek = false
+	}
+	rkIter.Close()
 
 	var statsDiff enginepb.MVCCStats
 	var intents []roachpb.Intent
@@ -93,17 +134,18 @@ func CheckSSTConflicts(
 		}
 	}
 
-	// TODO(erikgrinaker): We need to handle MVCC range tombstones both in the SST
-	// and in the existing data here. For now, we ignore them. See:
-	// https://github.com/cockroachdb/cockroach/issues/83405
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:     IterKeyTypePointsAndRanges,
 		UpperBound:   end.Key,
 		Prefix:       usePrefixSeek,
 		useL6Filters: true,
 	})
 	defer extIter.Close()
 
-	sstIter, err := NewMemSSTIterator(sst, false)
+	sstIter, err := NewPebbleMemSSTIterator(sst, false, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		UpperBound: end.Key,
+	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -276,8 +318,8 @@ func CheckSSTConflicts(
 			sstIter.NextKey()
 			sstOK, sstErr = sstIter.Valid()
 		}
-	} else {
-		extIter.SeekGE(start)
+	} else if sstOK {
+		extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 		extOK, extErr = extIter.Valid()
 	}
 
@@ -285,31 +327,192 @@ func CheckSSTConflicts(
 		if err := ctx.Err(); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
+		extHasPoint, extHasRange := extIter.HasPointAndRange()
+		sstHasPoint, sstHasRange := sstIter.HasPointAndRange()
+		// Case where SST and engine both have range keys at the current iterator
+		// points. The SST range keys must be newer than engine range keys.
+		if extHasRange && sstHasRange {
+			extRangeKeys := extIter.RangeKeys()
+			sstRangeKeys := sstIter.RangeKeys()
+			// Check if the oldest SST range key conflicts with the newest ext
+			// range key.
+			if sstRangeKeys[len(sstRangeKeys)-1].RangeKey.Overlaps(extRangeKeys[0].RangeKey) {
+				sstTombstone := sstRangeKeys[len(sstRangeKeys)-1].RangeKey
+				if sstTombstone.Timestamp.Less(extRangeKeys[0].RangeKey.Timestamp) {
+					// Conflict. We can't slide an MVCC range tombstone below an
+					// existing MVCC range tombstone in the engine.
+					return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+						sstTombstone.Timestamp, extRangeKeys[0].RangeKey.Timestamp.Next(), sstTombstone.StartKey)
+				}
+				if ok := allowIdempotentHelper(extRangeKeys[0].RangeKey.Timestamp); !ok &&
+					(extRangeKeys[0].RangeKey.Timestamp == sstTombstone.Timestamp) {
+					// Idempotence is not allowed.
+					return enginepb.MVCCStats{}, errors.Errorf(
+						"ingested range key collides with an existing one: %s", sstTombstone)
+				}
+			}
+		}
+		// Case where the engine has a range key that might delete the current SST
+		// point.
+		if sstHasPoint && extHasRange {
+			sstKey := sstIter.UnsafeKey()
+			extTombstone := extIter.RangeKeys()[0]
+			if extTombstone.RangeKey.Deletes(sstKey) {
+				// A range tombstone in the engine deletes this SST key. Return
+				// a WriteTooOldError.
+				return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+					sstKey.Timestamp, extTombstone.RangeKey.Timestamp.Next(), sstKey.Key)
+			}
+		}
+		// Mark stats as estimated if there are any SST range keys.
+		//
+		// TODO(bilal): Remove this when we are able to accurately calculate
+		// stats from ingesting MVCC range tombstones.
+		if sstHasRange {
+			statsDiff.ContainsEstimates = 1
+		}
+		// Check that the oldest SST range key is not underneath the current ext
+		// point key. If requested (with disallowShadowing or
+		// disallowShadowingBelow), check that the newest SST range tombstone does
+		// not shadow a live key.
+		if sstHasRange && extHasPoint {
+			sstBottomTombstone := sstIter.RangeKeys()[len(sstIter.RangeKeys())-1]
+			sstTopTombstone := sstIter.RangeKeys()[0]
+			extKey := extIter.UnsafeKey()
+			extValue, ok, err := tryDecodeSimpleMVCCValue(extIter.UnsafeValue())
+			if !ok && err == nil {
+				extValue, err = decodeExtendedMVCCValue(extIter.UnsafeValue())
+			}
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+
+			if sstBottomTombstone.RangeKey.Timestamp.LessEq(extKey.Timestamp) {
+				// Conflict.
+				return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+					sstBottomTombstone.RangeKey.Timestamp, extKey.Timestamp.Next(), sstBottomTombstone.RangeKey.StartKey)
+			}
+			if sstTopTombstone.RangeKey.Deletes(extKey) {
+				// Check if shadowing a live key is allowed. Deleting a live key counts
+				// as a shadow.
+				extValueDeleted := extHasRange && extIter.RangeKeys()[0].RangeKey.Deletes(extKey)
+				if !extValue.IsTombstone() && !extValueDeleted && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+					// Note that we don't check for value equality here, unlike in the
+					// point key shadow case. This is because a range key and a point key
+					// by definition have different values.
+					return enginepb.MVCCStats{}, errors.Errorf(
+						"ingested range key collides with an existing one: %s", sstTopTombstone)
+				}
+			}
+		}
+
 		extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
 		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
 
 		// Keep seeking the iterators until both keys are equal.
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
-			// sstIter is further ahead. Seek extIter.
-			extIter.SeekGE(MVCCKey{Key: sstKey.Key})
-			extOK, extErr = extIter.Valid()
-			continue
+			// sstIter is further ahead. This should never happen; we always seek
+			// extIter after seeking/nexting sstIter.
+			panic("unreachable")
 		} else if cmp > 0 {
 			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
 			sstOK, sstErr = sstIter.Valid()
+			if sstOK {
+				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			}
+			extOK, extErr = extIter.Valid()
 			continue
 		}
 
-		if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
-			return enginepb.MVCCStats{}, err
+		extValueDeleted := extHasRange && extHasPoint && extIter.RangeKeys()[0].RangeKey.Deletes(extKey)
+		if sstHasPoint && extHasPoint && !extValueDeleted {
+			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+		} else if extValueDeleted {
+			statsDiff.KeyCount--
+			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
 
-		sstIter.NextKey()
-		sstOK, sstErr = sstIter.Valid()
-		if sstOK {
-			extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+		// Calling NextKey is only safe if both iterators are at a point key. This is
+		// because there could be a point key hiding behind the range key that we're
+		// currently at, and NextKey() would skip over it.
+		//
+		// The below logic accounts for all combinations of point keys and range
+		// keys being present and not present at the current iterator positions.
+		// Note that SeekGE()s pause at the seek key if there's a covering range key
+		// however we need to take care to not go into an infinite loop of seeks
+		// if we step one iterator past a transient range key pausing point and
+		// seek the other, and on the next iteration, step the second iterator
+		// and seek the former iterator back to the same point.
+		if sstHasPoint && extHasPoint {
+			sstIter.NextKey()
+			sstOK, sstErr = sstIter.Valid()
+			if sstOK {
+				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			}
+			extOK, extErr = extIter.Valid()
+		} else {
+			oldKey := sstIter.Key()
+			if extHasPoint { // !sstHasPoint
+				// Similar logic as above, but with the iterators swapped.
+				sstIter.Next()
+				sstOK, sstErr = sstIter.Valid()
+				if sstErr != nil {
+					return enginepb.MVCCStats{}, sstErr
+				}
+				if sstOK && !sstIter.UnsafeKey().Key.Equal(oldKey.Key) {
+					// sstIter stepped one key ahead. Re-seek extIter at this key.
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+					extOK, extErr = extIter.Valid()
+				}
+				// If sstIter found a point key at the same MVCC Key, we still need
+				// to check for conflicts against it.
+			} else if sstHasPoint { // !extHasPoint
+				// Check if ext has a point at this key. If not, NextKey() on sstIter
+				// and seek extIter.
+				extIter.Next()
+				extOK, extErr = extIter.Valid()
+				if extErr != nil {
+					return enginepb.MVCCStats{}, extErr
+				}
+				if !extOK || !extIter.UnsafeKey().Key.Equal(oldKey.Key) {
+					// extIter either went out of bounds or stepped one key ahead. Re-seek
+					// it at the next SST key.
+					sstIter.NextKey()
+					sstOK, sstErr = sstIter.Valid()
+					if sstOK {
+						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+					}
+					extOK, extErr = extIter.Valid()
+				}
+				// If extIter found a point key at the same MVCC Key, we still need
+				// to check for conflicts against it.
+			} else { // sstHasRange && extHasRange && !sstHasPoint && !extHasPoint
+				// Step both iterators forward. If one iterator stays at the same key,
+				// seek the other one back to the same key.
+				//
+				// Note that we can't do this if either sstHasPoint or extHasPoint, as
+				// this logic does not guarantee forward progress in those cases.
+				sstIter.Next()
+				sstOK, sstErr = sstIter.Valid()
+				extIter.Next()
+				extOK, extErr = extIter.Valid()
+				sstChangedKeys := !sstOK || !sstIter.UnsafeKey().Key.Equal(oldKey.Key)
+				extChangedKeys := !extOK || !extIter.UnsafeKey().Key.Equal(oldKey.Key)
+				if sstChangedKeys && !extChangedKeys {
+					sstIter.SeekGE(MVCCKey{Key: extIter.UnsafeKey().Key})
+					sstOK, sstErr = sstIter.Valid()
+				}
+				if extChangedKeys && !sstChangedKeys {
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+					extOK, extErr = extIter.Valid()
+				}
+				// If both iterators are invalid, we are now done. If one both iterators
+				// are at point keys under the same MVCC key, then we can check for
+				// conflicts between them.
+			}
 		}
-		extOK, extErr = extIter.Valid()
 	}
 
 	if extErr != nil {
