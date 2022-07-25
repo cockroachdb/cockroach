@@ -2321,8 +2321,16 @@ func MVCCClearTimeRange(
 	})
 	defer iter.Close()
 
+	// clearedMetaKey is the latest surfaced key that will get cleared
 	var clearedMetaKey MVCCKey
-	var clearedMeta, restoredMeta enginepb.MVCCMetadata
+
+	// clearedMeta contains metadata on the clearedMetaKey
+	var clearedMeta enginepb.MVCCMetadata
+
+	// restoredMeta contains metadata on the previous version the clearedMetaKey.
+	// Once the key in clearedMetaKey is cleared, the key represented in
+	// restoredMeta becomes the latest version of this MVCC key.
+	var restoredMeta enginepb.MVCCMetadata
 	iter.SeekGE(MVCCKey{Key: key})
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -2464,6 +2472,297 @@ func MVCCDeleteRange(
 		}
 	}
 	return keys, res.ResumeSpan, res.NumKeys, nil
+}
+
+// MVCCPredicateDeleteRange issues MVCC tombstones at endTime to live keys
+// within the span [startKey, endKey) that also have MVCC versions that match
+// the predicate filters. Long runs of matched keys will get deleted with a
+// range Tombstone, while smaller runs will get deleted with point tombstones.
+// The keyspaces of each run do not overlap.
+//
+// This operation is non-transactional, but will check for existing intents in
+// the target key span, regardless of timestamp, and return a WriteIntentError
+// containing up to maxIntents intents.
+//
+// MVCCPredicateDeleteRange will return with a resumeSpan if the number of tombstones
+// written exceeds maxBatchSize or the size of the written tombstones exceeds maxByteSize.
+// These constraints prevent overwhelming raft.
+//
+// If an MVCC key surfaced has a timestamp at or above endTime,
+// MVCCPredicateDeleteRange returns a WriteTooOldError without a resumeSpan,
+// even if tombstones were already written to disk. To resolve, the caller
+// should retry the call at a higher timestamp, assuming they have the
+// appropriate level of isolation (e.g. the span covers an offline table, in the
+// case of IMPORT rollbacks).
+//
+// An example of how this works: Issuing DeleteRange[a,e)@3 with
+// Predicate{StartTime=1} on the following keys would issue tombstones at a@3,
+// b@3, and d@3.
+//
+// t3
+// t2 a2 b2    d2 e2
+// t1    b1 c1
+//    a  b  c  d  e
+func MVCCPredicateDeleteRange(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	endTime hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
+	leftPeekBound, rightPeekBound roachpb.Key,
+	predicates roachpb.DeleteRangePredicates,
+	maxBatchSize, maxBatchByteSize int64,
+	rangeTombstoneThreshold int64,
+	maxIntents int64,
+) (*roachpb.Span, error) {
+
+	if maxBatchSize == 0 {
+		// Set maxBatchSize to a large number to ensure MVCCPredicateDeleteRange
+		// doesn't return early due to batch size. Note that maxBatchSize is only
+		// set to 0 during testing.
+		maxBatchSize = math.MaxInt64
+	}
+
+	// batchSize is the number tombstones (point and range) that have been flushed.
+	var batchSize int64
+	var batchByteSize int64
+
+	// runSize is the number tombstones (point and range) that will get flushed in
+	// the current run.
+	var runSize int64
+	var runByteSize int64
+
+	var runStart, runEnd roachpb.Key
+
+	buf := make([]roachpb.Key, rangeTombstoneThreshold)
+
+	if ms == nil {
+		return nil, errors.AssertionFailedf(
+			"MVCCStats passed in to MVCCPredicateDeleteRange must be non-nil to ensure proper stats" +
+				" computation during Delete operations")
+	}
+
+	// Check for any overlapping intents, and return them to be resolved.
+	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+		return nil, err
+	} else if len(intents) > 0 {
+		return nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	// continueRun returns three bools: the first is true if the current run
+	// should continue; the second is true if the latest key is a point tombstone;
+	// the third is true if the latest key is a range tombstone. If a non-nil
+	// error is returned, the booleans are invalid. The run should continue if:
+	//
+	//  1) The latest version of the key is a point or range tombstone, with a
+	//  timestamp below the client provided EndTime. Since the goal is to create
+	//  long runs, any tombstoned key should continue the run.
+	//
+	//  2) The latest key is live, matches the predicates, and has a
+	//  timestamp below EndTime.
+	continueRun := func(k MVCCKey, iter SimpleMVCCIterator,
+	) (toContinue bool, isPointTombstone bool, isRangeTombstone bool, err error) {
+		hasPointKey, hasRangeKey := iter.HasPointAndRange()
+		if hasRangeKey {
+			// TODO (msbutler): cache the range keys while the range bounds remain
+			// constant, since iter.RangeKeys() is expensive. Manual caching may not be necessary if
+			// https://github.com/cockroachdb/cockroach/issues/84379 lands.
+			rangeKeys := iter.RangeKeys()
+			if endTime.LessEq(rangeKeys[0].RangeKey.Timestamp) {
+				return false, false, false, roachpb.NewWriteTooOldError(endTime,
+					rangeKeys[0].RangeKey.Timestamp.Next(), k.Key.Clone())
+			}
+			if !hasPointKey {
+				// landed on bare range key.
+				return true, false, true, nil
+			}
+			if k.Timestamp.Less(rangeKeys[0].RangeKey.Timestamp) {
+				// The latest range tombstone shadows the point key; ok to continue run.
+				return true, false, true, nil
+			}
+		}
+
+		// At this point, there exists a point key that shadows all range keys,
+		// if they exist.
+		vRaw := iter.UnsafeValue()
+
+		if endTime.LessEq(k.Timestamp) {
+			return false, false, false, roachpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
+				k.Key.Clone())
+		}
+		if len(vRaw) == 0 {
+			// The latest version of the key is a point tombstone.
+			return true, true, false, nil
+		}
+
+		// The latest key is a live point key. Conduct predicate filtering.
+		if k.Timestamp.LessEq(predicates.StartTime) {
+			return false, false, false, nil
+		}
+
+		// TODO (msbutler): use MVCCValueHeader to match on job ID predicate
+		_, err = DecodeMVCCValue(vRaw)
+		if err != nil {
+			return false, false, false, err
+		}
+		return true, false, false, nil
+	}
+
+	// Create some reusable machinery for flushing a run with point tombstones
+	// that is typically used in a single MVCCPut call.
+	pointTombstoneIter := newMVCCIterator(rw, endTime, false /* rangeKeyMasking */, IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	})
+	defer pointTombstoneIter.Close()
+	pointTombstoneBuf := newPutBuffer()
+	defer pointTombstoneBuf.release()
+
+	flushDeleteKeys := func() error {
+		if runSize == 0 {
+			return nil
+		}
+		if runSize >= rangeTombstoneThreshold ||
+			// Even if we didn't get a large enough number of keys to switch to
+			// using range tombstones, the byte size of the keys we did get is now too large to
+			// encode them all within the byte size limit, so use a range tombstone anyway.
+			batchByteSize+runByteSize >= maxBatchByteSize {
+			if err := MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
+				runStart, runEnd.Next(), endTime, localTimestamp, leftPeekBound, rightPeekBound,
+				maxIntents); err != nil {
+				return err
+			}
+			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
+			batchSize++
+		} else {
+			// Use Point tombstones
+			for i := int64(0); i < runSize; i++ {
+				if err := mvccPutInternal(ctx, rw, pointTombstoneIter, ms, buf[i], endTime, localTimestamp, noValue,
+					nil, pointTombstoneBuf, nil); err != nil {
+					return err
+				}
+			}
+			batchByteSize += runByteSize
+			batchSize += runSize
+		}
+		runSize = 0
+		runStart = roachpb.Key{}
+		return nil
+	}
+
+	// Using the IncrementalIterator with the time-bound iter optimization could
+	// potentially be a big win here -- the expected use-case for this is to run
+	// over an entire table's span with a very recent timestamp, issuing tombstones to
+	// writes of some failed IMPORT and that could very likely only have hit
+	// some small subset of the table's keyspace.
+	//
+	// The MVCCIncrementalIterator uses a non-time-bound iter as its source
+	// of truth, and only uses the TBI iterator as an optimization when finding
+	// the next KV to iterate over. This pattern allows us to quickly skip over
+	// swaths of uninteresting keys, but then iterates over the latest key of each MVCC key.
+	//
+	// Notice that the iterator's EndTime is set to hlc.MaxTimestamp, in order to
+	// detect and fail on any keys written at or after the client provided
+	// endTime. We don't _expect_ to hit intents or newer keys in the client
+	// provided span since the MVCCPredicateDeleteRange is only intended for
+	// non-live key spans, but there could be an intent leftover.
+	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+		EndKey:               endKey,
+		StartTime:            predicates.StartTime,
+		EndTime:              hlc.MaxTimestamp,
+		RangeKeyMaskingBelow: endTime,
+		KeyTypes:             IterKeyTypePointsAndRanges,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(MVCCKey{Key: startKey})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+		k := iter.UnsafeKey()
+		toContinue, isPointTombstone, isRangeTombstone, err := continueRun(k, iter)
+		if err != nil {
+			return nil, err
+		}
+
+		// If the latest version of the key is a tombstone at a timestamp < endtime,
+		// the timestamp could be less than predicates.startTime. In this case, the
+		// run can continue and Since there's no need to issue another tombstone,
+		// don't update runSize or buf.
+		if isRangeTombstone {
+			// Because range key information can be inferred at point keys,
+			// skip over the surfaced range key, and reason about shadowed keys at
+			// the surfaced point key.
+			//
+			// E.g. Scanning the keys below:
+			//  2  a2
+			//  1  o---o
+			//     a   b
+			//
+			//  would result in two surfaced keys:
+			//   {a-b}@1;
+			//   a2, {a-b}@1
+			//
+			// Note that the range key gets surfaced before the point key,
+			// even though the point key shadows it.
+			iter.NextIgnoringTime()
+		} else if isPointTombstone {
+			// Since the latest version of this key is a point tombstone, skip over
+			// older versions of this key, and move the iterator to the next key
+			// even if it lies outside (startTime, endTime), to see if there's a
+			// need to flush.
+			iter.NextKeyIgnoringTime()
+		} else if toContinue {
+			// The latest version of the key is live, matches the predicate filters
+			// -- e.g. has a timestamp between (predicates.startTime, Endtime);
+			// therefore, plan to delete it.
+			if batchSize+runSize >= maxBatchSize || batchByteSize+runByteSize >= maxBatchByteSize {
+				// The matched key will be the start the resume span.
+				if err := flushDeleteKeys(); err != nil {
+					return nil, err
+				}
+				return &roachpb.Span{Key: k.Key.Clone(), EndKey: endKey}, nil
+			}
+			if runSize == 0 {
+				runStart = append(runStart[:0], k.Key...)
+			}
+			runEnd = append(runEnd[:0], k.Key...)
+
+			if runSize < rangeTombstoneThreshold {
+				// Only buffer keys if there's a possibility of issuing point tombstones.
+				//
+				// To avoid unecessary memory allocation, overwrite the previous key at
+				// buffer's current position. No data corruption occurs because the
+				// buffer is flushed up to runSize.
+				buf[runSize] = append(buf[runSize][:0], runEnd...)
+			}
+
+			runSize++
+			runByteSize += int64(k.EncodedSize())
+
+			// Move the iterator to the next key in linear iteration even if it lies
+			// outside (startTime, endTime), to see if there's a need to flush. We can
+			// skip to the next key, as we don't care about older versions of the
+			// current key we're about to delete.
+			iter.NextKeyIgnoringTime()
+		} else {
+			// This key does not match. Flush the run of matching keys,
+			// to prevent issuing tombstones on keys that do not match the predicates.
+			if err := flushDeleteKeys(); err != nil {
+				return nil, err
+			}
+			// Move the incremental iterator to the next valid MVCC key that can be
+			// deleted. If TBI was enabled when initializing the incremental iterator,
+			// this step could jump over large swaths of keys that do not qualify for
+			// clearing.
+			iter.NextKey()
+		}
+	}
+	return nil, flushDeleteKeys()
 }
 
 // MVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at the given
