@@ -1219,13 +1219,13 @@ define NthValue {
 # pointer to its type.
 [Scalar]
 define UserDefinedFunction {
-    Body RelExpr
     _ UserDefinedFunctionPrivate
 }
 
 [Private]
 define UserDefinedFunctionPrivate {
     Name string
+    Body RelListExpr
     Typ Type
 }
 
