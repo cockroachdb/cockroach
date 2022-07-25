@@ -45,14 +45,26 @@ func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
 func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparisonHelper) error {
+	var stmt string
 	// Ignore panics from Generate.
-	defer func() {
-		if r := recover(); r != nil {
-			return
-		}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				return
+			}
+		}()
+		stmt = smither.Generate()
 	}()
 
-	stmt := smither.Generate()
+	var verboseLogging bool
+	defer func() {
+		// We're logging all statements, even if no error is encountered, to
+		// make it easier to understand the failures.
+		h.logStatements()
+		if verboseLogging {
+			h.logVerboseOutput()
+		}
+	}()
 
 	// First, run the statement without cost perturbation.
 	controlRows, err := h.runQuery(stmt)
@@ -64,14 +76,12 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 
 	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
 	if err := h.execStmt(seedStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to set random seed")
 	}
 	// Perturb costs such that an expression with cost c will be randomly assigned
 	// a new cost in the range [0, 2*c).
 	perturbCostsStmt := "SET testing_optimizer_cost_perturbation = 1.0"
 	if err := h.execStmt(perturbCostsStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to perturb costs")
 	}
 
@@ -82,8 +92,7 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		// succeeds, we'd like to know, so consider this a test failure.
 		es := err2.Error()
 		if strings.Contains(es, "internal error") {
-			h.logStatements()
-			h.logVerboseOutput()
+			verboseLogging = true
 			return h.makeError(err, "internal error while running perturbed statement")
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
@@ -97,8 +106,7 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 
 	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
 		// We have a mismatch in the perturbed vs control query outputs.
-		h.logStatements()
-		h.logVerboseOutput()
+		verboseLogging = true
 		return h.makeError(errors.Newf(
 			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n",
 			diff, stmt,
@@ -113,12 +121,10 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 	// Finally, disable cost perturbation for the next statement.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
 	if err := h.execStmt(resetSeedStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to reset random seed")
 	}
 	resetPerturbCostsStmt := "RESET testing_optimizer_cost_perturbation"
 	if err := h.execStmt(resetPerturbCostsStmt); err != nil {
-		h.logStatements()
 		return h.makeError(err, "failed to disable cost perturbation")
 	}
 	return nil
