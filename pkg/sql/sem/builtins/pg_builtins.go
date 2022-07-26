@@ -772,13 +772,13 @@ var pgBuiltins = map[string]builtinDefinition{
 					// The session has not yet created a temporary schema.
 					return tree.NewDOid(0), nil
 				}
-				oid, err := ctx.Planner.ResolveOIDFromString(
+				oid, errSafeToIgnore, err := ctx.Planner.ResolveOIDFromString(
 					ctx.Ctx(), types.RegNamespace, tree.NewDString(schema))
 				if err != nil {
 					// If the OID lookup returns an UndefinedObject error, return 0
 					// instead. We can hit this path if the session created a temporary
 					// schema in one database and then changed databases.
-					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+					if errSafeToIgnore && pgerror.GetPGCode(err) == pgcode.UndefinedObject {
 						return tree.NewDOid(0), nil
 					}
 					return nil, err
