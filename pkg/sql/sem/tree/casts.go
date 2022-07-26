@@ -1473,8 +1473,11 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return ret, nil
 
 	default:
-		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
+		oid, errSafeToIgnore, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
 		if err != nil {
+			if !errSafeToIgnore {
+				return nil, err
+			}
 			oid = NewDOid(v)
 			oid.semanticType = t
 		}
