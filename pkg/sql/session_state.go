@@ -149,7 +149,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 		if err != nil {
 			return nil, err
 		}
-		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeID.SQLInstanceID())
+		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
 		stmt := makeStatement(parserStmt, id)
 
 		var placeholderTypes tree.PlaceholderTypes

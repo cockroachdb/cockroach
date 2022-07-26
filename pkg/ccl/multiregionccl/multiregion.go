@@ -118,7 +118,7 @@ func initializeMultiRegionMetadata(
 func CheckClusterSupportsMultiRegion(execCfg *sql.ExecutorConfig) error {
 	return utilccl.CheckEnterpriseEnabled(
 		execCfg.Settings,
-		execCfg.LogicalClusterID(),
+		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Organization(),
 		"multi-region features",
 	)
@@ -129,7 +129,7 @@ func getMultiRegionEnumAddValuePlacement(
 ) (tree.AlterTypeAddValue, error) {
 	if err := utilccl.CheckEnterpriseEnabled(
 		execCfg.Settings,
-		execCfg.LogicalClusterID(),
+		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Organization(),
 		"ADD REGION",
 	); err != nil {

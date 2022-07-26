@@ -505,7 +505,7 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 // capabilities.
 func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	org := sql.ClusterOrganization.Get(&ts.st.SV)
-	clusterID := ts.sqlServer.execCfg.LogicalClusterID
+	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
 	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), org, "SQL servers"); err != nil {
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.

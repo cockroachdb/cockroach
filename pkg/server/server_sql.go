@@ -1265,7 +1265,7 @@ func (s *SQLServer) preStart(
 		&migrationsExecutor,
 		s.execCfg.Clock,
 		mmKnobs,
-		s.execCfg.NodeID.SQLInstanceID().String(),
+		s.execCfg.NodeInfo.NodeID.SQLInstanceID().String(),
 		s.execCfg.Settings,
 		s.jobRegistry,
 	)
@@ -1461,5 +1461,5 @@ func (s *SQLServer) startServeSQL(
 // LogicalClusterID retrieves the logical (tenant-level) cluster ID
 // for this server.
 func (s *SQLServer) LogicalClusterID() uuid.UUID {
-	return s.execCfg.LogicalClusterID()
+	return s.execCfg.NodeInfo.LogicalClusterID()
 }
