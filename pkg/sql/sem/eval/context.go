@@ -279,6 +279,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}
+	ctx.SessionData().ReorderJoinsLimit = 8
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
 	ctx.Context = context.TODO()
