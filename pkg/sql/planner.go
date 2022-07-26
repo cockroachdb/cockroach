@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobrecords"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -96,7 +97,7 @@ type extendedEvalContext struct {
 	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState of
 	// in sql.connExecutor. sql.connExecutor.createJobs() enqueues jobs with these
 	// records when transaction is committed.
-	SchemaChangeJobRecords map[descpb.ID]*jobs.Record
+	SchemaChangeJobRecords map[descpb.ID]jobrecords.JobRecords
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 

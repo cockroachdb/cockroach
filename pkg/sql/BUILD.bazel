@@ -273,6 +273,7 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/gossip",
         "//pkg/jobs",
+        "//pkg/jobs/jobrecords",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",

@@ -21,7 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobrecords"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -959,7 +959,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.txnRewindPos = -1
-	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
+	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]jobrecords.JobRecords)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
@@ -1275,7 +1275,7 @@ type connExecutor struct {
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
 		// queued up for the given ID. The cache remains valid only for the current
 		// transaction and it is cleared after the transaction is committed.
-		schemaChangeJobRecords map[descpb.ID]*jobs.Record
+		schemaChangeJobRecords map[descpb.ID]jobrecords.JobRecords
 
 		// firstStmtExecuted indicates that the first statement inside this
 		// transaction has been executed.
