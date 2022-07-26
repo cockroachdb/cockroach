@@ -19,13 +19,14 @@ cockroach_entrypoint="/cockroach/cockroach"
 
 certs_dir="certs"
 url=
-listen_addr=
-advertise_addr=
 default_listen_addr_host="127.0.0.1"
 default_port="26257"
 default_log_dir="./cockroach-data/logs"
 
-advertise_addr_host=$default_listen_addr_host
+listen_addr=
+advertise_addr=
+advertise_addr_host=
+advertise_addr_port=
 
 # parse_command_line is to extract the values assigned to certain flags
 # in the command.
@@ -58,32 +59,18 @@ parse_command_line() {
     esac
   done
 
-  # Check if the listen address passed by command line is with hostname 127.0.0.1
-  # or localhost, and with port 26257.
-  if [[ -n "$listen_addr" ]]; then
-    local hostname=${listen_addr%%:*}
-    local port
-    # If the value passed with `--listen-addr` contain the char ":", we extract
-    # the substring after ":" as the port number.
-    if [[ "$listen_addr" =~ ":" ]]; then
-      port=${listen_addr##*:}
-    fi
-
-    if [[ ( -n "$hostname" ) && ("$hostname" != $default_listen_addr_host ) && ( "$hostname" != "localhost" ) ]]; then
-      echo >&2 "error: hostname of listen_addr must be \"$default_listen_addr_host\" or \"localhost\""
-      exit 1
-    fi
-    if [[ ( -n "$port" ) && ( "$port" != $default_port ) ]]; then
-      echo >&2 "error: port of listen_addr must be \"$default_port\""
-      exit 1
+  # If advertise-addr is not explicitly set, we set it by looking at the
+  # listen-addr first. If listen-addr is also unset, we use the default addr.
+  if [[ -z "$advertise_addr" ]]; then
+    if [[ -n "$listen_addr" ]]; then
+      advertise_addr="$listen_addr"
+    else
+      advertise_addr="$default_listen_addr_host:$default_port"
     fi
   fi
 
-  if [[ -n "$advertise_addr" ]]; then
-    advertise_addr_host=${advertise_addr%%:*}
-  else
-    advertise_addr="$default_listen_addr_host:$default_port"
-  fi
+  advertise_addr_host=${advertise_addr%%:*}
+  advertise_addr_port=${advertise_addr##*:}
 }
 
 # setup_certs_dir is to set up the certs dir.
@@ -102,7 +89,7 @@ setup_certs_dir() {
   # for this specific node.
   if ! ls "$certs_dir"/node.* &>/dev/null; then
     $cockroach_entrypoint cert create-node --certs-dir="$certs_dir" \
-    --ca-key="$certs_dir"/ca.key "$advertise_addr_host" "$default_listen_addr_host"
+    --ca-key="$certs_dir"/ca.key "$advertise_addr_host" "$advertise_addr_port"
   fi
 
   echo "certificate dir \"$certs_dir\" is successfully set up"
@@ -134,6 +121,7 @@ start_init_node() {
   local start_node_query=( exec $cockroach_entrypoint start-single-node \
                            --listening-url-file=server_fifo \
                            --pid-file=server_pid \
+                           --listen-addr="$listen_addr" \
                            --advertise-addr="$advertise_addr" \
                            --certs-dir="$certs_dir" \
                            --log="file-defaults: {dir: $default_log_dir}" \
