@@ -1615,6 +1615,7 @@ system              public             check_sampling_probability               
 system              public             primary                                                                                                         system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
 system              public             630200280_42_10_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_11_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
+system              public             630200280_42_12_not_null                                                                                        system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_1_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_2_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             630200280_42_3_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
@@ -1801,6 +1802,7 @@ system              public             630200280_41_1_not_null                  
 system              public             630200280_41_2_not_null                                                                                         secret IS NOT NULL
 system              public             630200280_41_3_not_null                                                                                         expiration IS NOT NULL
 system              public             630200280_42_10_not_null                                                                                        plan IS NOT NULL
+system              public             630200280_42_12_not_null                                                                                        index_recommendations IS NOT NULL
 system              public             630200280_42_1_not_null                                                                                         aggregated_ts IS NOT NULL
 system              public             630200280_42_2_not_null                                                                                         fingerprint_id IS NOT NULL
 system              public             630200280_42_3_not_null                                                                                         transaction_fingerprint_id IS NOT NULL
@@ -2196,6 +2198,7 @@ system         public        statement_statistics             aggregated_ts     
 system         public        statement_statistics             app_name                                                                                                  5
 system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  11
 system         public        statement_statistics             fingerprint_id                                                                                            2
+system         public        statement_statistics             index_recommendations                                                                                     12
 system         public        statement_statistics             metadata                                                                                                  8
 system         public        statement_statistics             node_id                                                                                                   6
 system         public        statement_statistics             plan                                                                                                      10

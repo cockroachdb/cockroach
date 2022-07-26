@@ -481,6 +481,8 @@ CREATE TABLE system.statement_statistics (
       mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)
     ) STORED,
 
+    index_recommendations STRING[] NOT NULL DEFAULT (array[]::STRING[]),
+
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
@@ -495,7 +497,8 @@ CREATE TABLE system.statement_statistics (
 			agg_interval,
 			metadata,
 			statistics,
-			plan
+			plan,
+			index_recommendations
 		)
 )
 `
@@ -1983,6 +1986,8 @@ var (
 			},
 		))
 
+	defaultIndexRec = "ARRAY[]:::STRING[]"
+
 	// StatementStatisticsTable is the descriptor for the SQL statement stats table.
 	// It stores statistics for statement fingerprints.
 	StatementStatisticsTable = registerSystemTable(
@@ -2009,6 +2014,7 @@ var (
 					ComputeExpr: &sqlStmtHashComputeExpr,
 					Hidden:      true,
 				},
+				{Name: "index_recommendations", ID: 12, Type: types.StringArray, Nullable: false, DefaultExpr: &defaultIndexRec},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2017,9 +2023,9 @@ var (
 					ColumnNames: []string{
 						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
-						"agg_interval", "metadata", "statistics", "plan",
+						"agg_interval", "metadata", "statistics", "plan", "index_recommendations",
 					},
-					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12},
 					DefaultColumnID: 0,
 				},
 			},

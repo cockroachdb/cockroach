@@ -1,4 +1,4 @@
-# LogicTest: local local-spec-planning
+# LogicTest: local
 
 # Make sure that the zigzag join is used in the regression tests for #71093.
 statement ok

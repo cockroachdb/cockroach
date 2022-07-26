@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -403,13 +404,14 @@ func (s *PersistedSQLStats) updateStatementStats(
 ) error {
 	updateStmt := `
 UPDATE system.statement_statistics
-SET statistics = $1
-WHERE fingerprint_id = $2
-  AND transaction_fingerprint_id = $3
-	AND aggregated_ts = $4
-  AND app_name = $5
-  AND plan_hash = $6
-  AND node_id = $7
+SET statistics = $1,
+index_recommendations = $2
+WHERE fingerprint_id = $3
+  AND transaction_fingerprint_id = $4
+	AND aggregated_ts = $5
+  AND app_name = $6
+  AND plan_hash = $7
+  AND node_id = $8
 `
 
 	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stats.Stats)
@@ -417,6 +419,12 @@ WHERE fingerprint_id = $2
 		return err
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
+	indexRecommendations := tree.NewDArray(types.String)
+	for _, recommendation := range stats.Stats.IndexRecommendations {
+		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+			return err
+		}
+	}
 
 	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
 		ctx,
@@ -427,6 +435,7 @@ WHERE fingerprint_id = $2
 		},
 		updateStmt,
 		statistics,                           // statistics
+		indexRecommendations,                 // index_recommendations
 		serializedFingerprintID,              // fingerprint_id
 		serializedTransactionFingerprintID,   // transaction_fingerprint_id
 		aggregatedTs,                         // aggregated_ts
@@ -465,7 +474,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 ) (rowsAffected int, err error) {
 	insertStmt := `
 INSERT INTO system.statement_statistics
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
              aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
@@ -486,6 +495,12 @@ DO NOTHING
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
+	indexRecommendations := tree.NewDArray(types.String)
+	for _, recommendation := range stats.Stats.IndexRecommendations {
+		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+			return 0, err
+		}
+	}
 
 	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
 		ctx,
@@ -505,6 +520,7 @@ DO NOTHING
 		metadata,                             // metadata
 		statistics,                           // statistics
 		plan,                                 // plan
+		indexRecommendations,                 // index_recommendations
 	)
 
 	return rowsAffected, err
