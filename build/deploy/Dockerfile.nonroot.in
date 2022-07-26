@@ -1,0 +1,9 @@
+FROM @FROM@
+
+# Create a "home" directory for the unprivileged user and set it as workdir for
+# all calls. The startup script relies on the current working directory being
+# writable in order to create directories for certificates and logs.
+RUN mkdir -m 0700 /roacher && chown 1001:1001 /roacher
+ENV HOME /roacher
+WORKDIR /roacher
+USER 1001:1001
