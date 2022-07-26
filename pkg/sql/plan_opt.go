@@ -55,7 +55,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
-	opc.reset()
+	opc.reset(ctx)
 
 	switch t := stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
@@ -223,7 +223,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 
 	opc := &p.optPlanningCtx
-	opc.reset()
+	opc.reset(ctx)
 
 	execMemo, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -332,7 +332,7 @@ func (opc *optPlanningCtx) init(p *planner) {
 }
 
 // reset initializes the planning context for the statement in the planner.
-func (opc *optPlanningCtx) reset() {
+func (opc *optPlanningCtx) reset(ctx context.Context) {
 	p := opc.p
 	opc.catalog.reset()
 	opc.optimizer.Init(ctx, p.EvalContext(), &opc.catalog)
