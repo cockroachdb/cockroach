@@ -35,8 +35,11 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		if err != nil {
 			return nil, err
 		}
-		oidRes, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
+		oidRes, errSafeToIgnore, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
 		if err != nil {
+			if !errSafeToIgnore {
+				return nil, err
+			}
 			oidRes = tmpOid
 			*oidRes = tree.MakeDOid(tmpOid.Oid, t)
 		}
@@ -104,9 +107,13 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, missingTypeErr := ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, tree.NewDString(tree.Name(s).Normalize()))
+		dOid, errSafeToIgnore, missingTypeErr := ctx.Planner.ResolveOIDFromString(
+			ctx.Ctx(), t, tree.NewDString(tree.Name(s).Normalize()),
+		)
 		if missingTypeErr == nil {
-			return dOid, missingTypeErr
+			return dOid, nil
+		} else if !errSafeToIgnore {
+			return nil, missingTypeErr
 		}
 		// Fall back to some special cases that we support for compatibility
 		// only. Client use syntax like 'sometype'::regtype to produce the oid
@@ -137,7 +144,8 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
 
 	default:
-		return ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, tree.NewDString(s))
+		d, _ /* errSafeToIgnore */, err := ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, tree.NewDString(s))
+		return d, err
 	}
 }
 

@@ -955,8 +955,11 @@ func performIntToOidCast(
 			return tree.WrapAsZeroOid(t), nil
 		}
 
-		dOid, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
+		dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
 		if err != nil {
+			if !errSafeToIgnore {
+				return nil, err
+			}
 			dOid = tree.NewDOidWithType(o, t)
 		}
 		return dOid, nil
