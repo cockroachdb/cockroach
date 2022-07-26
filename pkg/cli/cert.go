@@ -177,6 +177,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			certCtx.certificateLifetime,
 			certCtx.overwriteFiles,
 			username,
+			certCtx.tenantScope,
 			certCtx.generatePKCS8Key),
 		"failed to generate client certificate and key")
 }

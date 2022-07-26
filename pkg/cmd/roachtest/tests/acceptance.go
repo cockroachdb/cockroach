@@ -40,11 +40,6 @@ func registerAcceptance(r registry.Registry) {
 				encryptionSupport: registry.EncryptionAlwaysDisabled,
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
-			{
-				name:       "multitenant",
-				minVersion: "v20.2.0", // multitenancy is introduced in this cycle
-				fn:         runAcceptanceMultitenant,
-			},
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
@@ -63,6 +58,13 @@ func registerAcceptance(r registry.Registry) {
 				// to head after 19.2 fails.
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
+			},
+		},
+		registry.OwnerMultiTenant: {
+			{
+				name: "multitenant",
+				skip: "https://github.com/cockroachdb/cockroach/issues/81506",
+				fn:   runAcceptanceMultitenant,
 			},
 		},
 		registry.OwnerServer: {

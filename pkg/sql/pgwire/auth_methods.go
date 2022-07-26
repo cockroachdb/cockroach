@@ -408,7 +408,7 @@ func authCert(
 	_ context.Context,
 	_ AuthConn,
 	tlsState tls.ConnectionState,
-	_ *sql.ExecutorConfig,
+	execCfg *sql.ExecutorConfig,
 	hbaEntry *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
@@ -427,7 +427,7 @@ func authCert(
 		tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 			tlsState.PeerCertificates[0].Subject.CommonName,
 		).Normalize()
-		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState)
+		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState, execCfg.RPCContext.TenantID)
 		if err != nil {
 			return err
 		}

@@ -831,7 +831,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	for _, subsystem := range subsystems {
 		t.Run(fmt.Sprintf("bad-user/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)
-			if exp := `user \[testuser\] is not allowed to perform this RPC`; !testutils.IsError(err, exp) {
+			if exp := `client certificate CN=testuser,O=Cockroach cannot be used to perform RPC on tenant {1}`; !testutils.IsError(err, exp) {
 				t.Errorf("expected %q error, but got %v", exp, err)
 			}
 		})

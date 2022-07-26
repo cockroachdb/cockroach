@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -271,6 +272,10 @@ var certCtx struct {
 	// This configuration flag is only used for 'cert' commands
 	// that generate certificates.
 	certPrincipalMap []string
+	// tenantScope indicates a tenantID(s) that a certificate is being
+	// scoped to. By creating a tenant-scoped certicate, the usage of that certificate
+	// is restricted to a specific tenant.
+	tenantScope []roachpb.TenantID
 }
 
 func setCertContextDefaults() {
@@ -283,6 +288,7 @@ func setCertContextDefaults() {
 	certCtx.overwriteFiles = false
 	certCtx.generatePKCS8Key = false
 	certCtx.certPrincipalMap = nil
+	certCtx.tenantScope = []roachpb.TenantID{roachpb.SystemTenantID}
 }
 
 var sqlExecCtx = clisqlexec.Context{

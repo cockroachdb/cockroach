@@ -1805,32 +1805,36 @@ func (c *clusterImpl) StartE(
 	}
 
 	if settings.Secure {
-		var err error
-		c.localCertsDir, err = ioutil.TempDir("", "roachtest-certs")
-		if err != nil {
-			return err
-		}
-		// `roachprod get` behaves differently with `--local` depending on whether
-		// the target dir exists. With `--local`, it'll put the files into the
-		// existing dir. Without `--local`, it'll create a new subdir to house the
-		// certs. Bypass that distinction (which should be fixed independently, but
-		// that might cause fallout) by using a non-existing dir here.
-		c.localCertsDir = filepath.Join(c.localCertsDir, "certs")
-		// Get the certs from the first node.
-		if err := c.Get(ctx, c.l, "./certs", c.localCertsDir, c.Node(1)); err != nil {
-			return errors.Wrap(err, "cluster.StartE")
-		}
-		// Need to prevent world readable files or lib/pq will complain.
-		if err := filepath.Walk(c.localCertsDir, func(path string, info fs.FileInfo, err error) error {
-			if info.IsDir() {
-				return nil
-			}
-			return os.Chmod(path, 0600)
-		}); err != nil {
+		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error {
+	var err error
+	c.localCertsDir, err = ioutil.TempDir("", "roachtest-certs")
+	if err != nil {
+		return err
+	}
+	// `roachprod get` behaves differently with `--local` depending on whether
+	// the target dir exists. With `--local`, it'll put the files into the
+	// existing dir. Without `--local`, it'll create a new subdir to house the
+	// certs. Bypass that distinction (which should be fixed independently, but
+	// that might cause fallout) by using a non-existing dir here.
+	c.localCertsDir = filepath.Join(c.localCertsDir, "certs")
+	// Get the certs from the first node.
+	if err := c.Get(ctx, c.l, "./certs", c.localCertsDir, c.Node(node)); err != nil {
+		return errors.Wrap(err, "cluster.StartE")
+	}
+	// Need to prevent world readable files or lib/pq will complain.
+	return filepath.Walk(c.localCertsDir, func(path string, info fs.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		return os.Chmod(path, 0600)
+	})
 }
 
 // Start is like StartE() except that it will fatal the test on error.
@@ -2355,6 +2359,10 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 
 func (c *clusterImpl) IsLocal() bool {
 	return c.name == "local"
+}
+
+func (c *clusterImpl) IsSecure() bool {
+	return c.localCertsDir != ""
 }
 
 // Extend extends the cluster's expiration by d.

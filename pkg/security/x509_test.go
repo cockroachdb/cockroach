@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -86,14 +87,15 @@ func TestGenerateCertLifetime(t *testing.T) {
 
 	// Create a Client certificate expiring in 4 days. Should get reduced to the CA lifetime.
 	clientDuration := time.Hour * 96
-	_, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, security.TestUserName())
+	_, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, security.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID})
 	if !testutils.IsError(err, "CA lifetime is .*, shorter than the requested .*") {
 		t.Fatal(err)
 	}
 
 	// Try again, but expiring before the CA cert.
 	clientDuration = time.Hour * 24
-	clientBytes, err := security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, security.TestUserName())
+	clientBytes, err := security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, security.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID})
+
 	if err != nil {
 		t.Fatal(err)
 	}

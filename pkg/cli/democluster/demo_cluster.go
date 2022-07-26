@@ -1066,19 +1066,9 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 	); err != nil {
 		return err
 	}
-	// Create a certificate for the root user.
-	if err := security.CreateClientPair(
-		certsDir,
-		caKeyPath,
-		demoCtx.DefaultKeySize,
-		demoCtx.DefaultCertLifetime,
-		false, /* overwrite */
-		security.RootUserName(),
-		false, /* generatePKCS8Key */
-	); err != nil {
-		return err
-	}
 
+	// rootUserScope contains the tenant IDs the root user is allowed to access.
+	rootUserScope := []roachpb.TenantID{roachpb.SystemTenantID}
 	if demoCtx.Multitenant {
 		tenantCAKeyPath := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
 		// Create a CA key for the tenants.
@@ -1104,12 +1094,13 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 				"localhost",
 				"*.local",
 			}
+			tenantID := uint64(i + 2)
 			pair, err := security.CreateTenantPair(
 				certsDir,
 				tenantCAKeyPath,
 				demoCtx.DefaultKeySize,
 				demoCtx.DefaultCertLifetime,
-				uint64(i+2),
+				tenantID,
 				hostAddrs,
 			)
 			if err != nil {
@@ -1119,11 +1110,26 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 				return err
 			}
 			if err := security.CreateTenantSigningPair(
-				certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, uint64(i+2),
+				certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, tenantID,
 			); err != nil {
 				return err
 			}
+			rootUserScope = append(rootUserScope, roachpb.MakeTenantID(tenantID))
 		}
+	}
+	// Create a certificate for the root user. This certificate will be scoped to the
+	// system tenant and all other tenants created as a part of the demo.
+	if err := security.CreateClientPair(
+		certsDir,
+		caKeyPath,
+		demoCtx.DefaultKeySize,
+		demoCtx.DefaultCertLifetime,
+		false, /* overwrite */
+		security.RootUserName(),
+		rootUserScope,
+		false, /* generatePKCS8Key */
+	); err != nil {
+		return err
 	}
 	return nil
 }
