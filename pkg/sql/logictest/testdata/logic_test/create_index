@@ -403,3 +403,18 @@ CREATE INDEX ON opclasses(b blah_ops)
 # inverted, even if the type is invertible.
 statement error operator class "blah_ops" does not exist
 CREATE INDEX ON opclasses(c blah_ops)
+
+# This subtest ensures that creating a hash-sharded index results
+# in a *virtual* computed shard column.
+subtest shard_column_should_be_virtual
+
+statement ok
+CREATE TABLE t_shard_col_must_be_virtual(i INT PRIMARY KEY, j INT NOT NULL);
+
+statement ok
+CREATE INDEX idx ON t_shard_col_must_be_virtual(j) USING HASH WITH (bucket_count=16);
+
+query T
+SELECT attgenerated FROM pg_attribute WHERE attrelid = 't_shard_col_must_be_virtual'::regclass AND attname = 'crdb_internal_j_shard_16'
+----
+v
