@@ -12,7 +12,9 @@ import (
 	"context"
 	fmt "fmt"
 	"math"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -69,7 +71,7 @@ type systemBackupConfiguration struct {
 	// migrationFunc performs the necessary migrations on the system table data in
 	// the crdb_temp staging table before it is loaded into the actual system
 	// table.
-	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string) error
+	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
 	// customRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
@@ -185,12 +187,13 @@ func settingsRestoreFunc(
 // by TestAllSystemTablesHaveBackupConfig.
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.UsersTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.ZonesTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "id".
 		// The zones table should be restored before the user data so that the range
 		// allocator properly distributes ranges during the restore.
+		migrationFunc:     rekeySystemTable("id"),
 		restoreBeforeData: true,
 	},
 	systemschema.SettingsTable.GetName(): {
@@ -198,29 +201,30 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// been restored. This is because we do not want to overwrite the clusters'
 		// settings before all other user and system data has been restored.
 		restoreInOrder:               math.MaxInt32,
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 		customRestoreFunc:            settingsRestoreFunc,
 	},
 	systemschema.LocationsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.RoleMembersTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.RoleOptionsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.UITable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.CommentsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "object_id".
+		migrationFunc:                rekeySystemTable("object_id"),
 	},
 	systemschema.JobsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.ScheduledJobsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.TableStatisticsTable.GetName(): {
 		// Table statistics are backed up in the backup descriptor for now.
@@ -290,7 +294,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.DatabaseRoleSettingsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "database_id".
+		migrationFunc:                rekeySystemTable("database_id"),
 	},
 	systemschema.TenantUsageTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
@@ -302,7 +307,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.TenantSettingsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 		customRestoreFunc:            tenantSettingsTableRestoreFunc,
 	},
 	systemschema.SpanCountTable.GetName(): {
@@ -313,8 +318,31 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.SystemExternalConnectionsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
+}
+
+func rekeySystemTable(
+	colName string,
+) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, jobspb.DescRewriteMap) error {
+	return func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
+		toRekey := make(descpb.IDs, 0, len(rekeys))
+		for i := range rekeys {
+			toRekey = append(toRekey, i)
+		}
+		sort.Sort(toRekey)
+
+		executor := execCtx.InternalExecutor
+		for _, old := range toRekey {
+			// TODO(dt): batch 10+ updates at once if >10 in the map.
+			q := fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", tempTableName, colName, colName)
+			_, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q, rekeys[old].ID, old)
+			if err != nil {
+				return errors.Wrapf(err, "remapping %s", tempTableName)
+			}
+		}
+		return nil
+	}
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
