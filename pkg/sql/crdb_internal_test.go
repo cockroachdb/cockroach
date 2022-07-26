@@ -566,6 +566,9 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		),
 	)
 
+	// Enable the queueing mechanism of the flow scheduler.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
+
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "test", "public", "foo")
 	tableKey.Store(execCfg.Codec.TablePrefix(tableID))
