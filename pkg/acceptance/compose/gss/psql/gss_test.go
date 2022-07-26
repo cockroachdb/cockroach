@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -148,6 +149,7 @@ func TestGSS(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run("libpq", func(t *testing.T) {
+				skip.WithIssue(t, 84978)
 				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require krbspn=postgres/gss_cockroach_1.gss_default", tc.user))
 				if err != nil {
 					t.Fatal(err)
