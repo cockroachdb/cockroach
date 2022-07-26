@@ -80,6 +80,10 @@ type sstIterator struct {
 // NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
 // assumes was written by pebble `sstable.Writer`and contains keys which use
 // Cockroach's MVCC format.
+//
+// NewSSTIterator will be deprecated. Callers should use NewPebbleSSTIterator
+// instead. It is worthwhile to run a benchmark after the refactor, to ensure
+// the PebbleSSTIterator doesn't cause a significant regression.
 func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
 		Comparer: EngineComparer,
@@ -95,9 +99,10 @@ func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
 //
-// TODO(erikgrinaker): When this gets support for iterating over range keys, all
-// call sites that use ComputeStatsForRange() must be updated to enable range
-// keys for the iterators.
+// NewMemSSTIterator will be deprecated. Callers should use
+// NewPebbleMemSSTIterator instead. It is worthwhile to run a benchmark after
+// the refactor, to ensure the PebbleSSTIterator doesn't cause a significant
+// regression.
 func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
 		Comparer: EngineComparer,
