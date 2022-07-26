@@ -147,7 +147,7 @@ func registerGopg(r registry.Registry) {
 			// We pipe the test output into go-junit-report tool which will output
 			// it in XML format.
 			fmt.Sprintf(`cd %s &&
-							GOPATH=%s go get -u github.com/jstemmer/go-junit-report &&
+							GOPATH=%s go install github.com/jstemmer/go-junit-report@latest &&
 							cat %s | %s/bin/go-junit-report`,
 				destPath, goPath, resultsFilePath, goPath),
 		)
