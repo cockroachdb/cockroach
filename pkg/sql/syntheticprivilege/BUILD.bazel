@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "syntheticprivilege",
     srcs = [
+        "constants.go",
         "global_privilege.go",
         "synthetic_privilege_registry.go",
         "vtable_privilege.go",
@@ -14,13 +15,10 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/privilege",
         "//pkg/sql/privilegeobject",
-        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
