@@ -111,7 +111,7 @@ func (desc *wrapper) GetParentSchemaID() descpb.ID {
 
 // IndexKeysPerRow implements the TableDescriptor interface.
 func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
-	if desc.PrimaryIndex.ID == idx.GetID() {
+	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
 		return len(desc.Families)
 	}
 	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
