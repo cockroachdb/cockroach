@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -184,7 +185,7 @@ func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 	t *testing.T, eng storage.Engine, raftAppliedIndex uint64, flush bool,
 ) {
 	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
-		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, nil, nil))
+		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
 	if flush {

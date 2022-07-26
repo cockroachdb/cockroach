@@ -82,9 +82,7 @@ func (rsl StateLoader) Load(
 	s.LeaseAppliedIndex = as.LeaseAppliedIndex
 	ms := as.RangeStats.ToStats()
 	s.Stats = &ms
-	if as.RaftClosedTimestamp != nil {
-		s.RaftClosedTimestamp = *as.RaftClosedTimestamp
-	}
+	s.RaftClosedTimestamp = as.RaftClosedTimestamp
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
@@ -134,9 +132,16 @@ func (rsl StateLoader) Save(
 			return enginepb.MVCCStats{}, err
 		}
 	}
-	rai, lai, rait, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, state.RaftAppliedIndexTerm,
-		&state.RaftClosedTimestamp
-	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, ct, nil); err != nil {
+	if err := rsl.SetRangeAppliedState(
+		ctx,
+		readWriter,
+		state.RaftAppliedIndex,
+		state.LeaseAppliedIndex,
+		state.RaftAppliedIndexTerm,
+		ms,
+		state.RaftClosedTimestamp,
+		nil,
+	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return *ms, nil
@@ -188,17 +193,12 @@ func (rsl StateLoader) LoadMVCCStats(
 // The applied indices and the stats used to be stored separately in different
 // keys. We now deem those keys to be "legacy" because they have been replaced
 // by the range applied state key.
-//
-// TODO(andrei): raftClosedTimestamp is a pointer to avoid an allocation when
-// putting it in RangeAppliedState. Once RangeAppliedState.RaftClosedTimestamp
-// is made non-nullable (see comments on the field), this argument should be
-// taken by value.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
 	newMS *enginepb.MVCCStats,
-	raftClosedTimestamp *hlc.Timestamp,
+	raftClosedTimestamp hlc.Timestamp,
 	asAlloc *enginepb.RangeAppliedState, // optional
 ) error {
 	if asAlloc == nil {
@@ -209,10 +209,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RaftAppliedIndex:     appliedIndex,
 		LeaseAppliedIndex:    leaseAppliedIndex,
 		RangeStats:           newMS.ToPersistentStats(),
+		RaftClosedTimestamp:  raftClosedTimestamp,
 		RaftAppliedIndexTerm: appliedIndexTerm,
-	}
-	if raftClosedTimestamp != nil && !raftClosedTimestamp.IsEmpty() {
-		as.RaftClosedTimestamp = raftClosedTimestamp
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStatsForRange.
@@ -239,7 +237,7 @@ func (rsl StateLoader) SetMVCCStats(
 
 // SetClosedTimestamp overwrites the closed timestamp.
 func (rsl StateLoader) SetClosedTimestamp(
-	ctx context.Context, readWriter storage.ReadWriter, closedTS *hlc.Timestamp,
+	ctx context.Context, readWriter storage.ReadWriter, closedTS hlc.Timestamp,
 ) error {
 	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
