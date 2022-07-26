@@ -1,3 +1,8 @@
+# LogicTest: !local-prepared
+# We turn off the local-prepared mode because this test depends on
+# multi-statement statements being run in single batches, which is not
+# doable with prepared statements.
+
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,

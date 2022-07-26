@@ -75,6 +75,7 @@ go_library(
         "regexp_cache.go",
         "region.go",
         "rename.go",
+        "replace_scalars.go",
         "returning.go",
         "revoke.go",
         "role_spec.go",

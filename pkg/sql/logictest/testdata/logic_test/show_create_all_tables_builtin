@@ -383,7 +383,6 @@ USE test_schema;
 query T
 BEGIN;
 SELECT crdb_internal.show_create_all_tables('test_schema');
-COMMIT;
 ----
 CREATE TABLE sc1.t (
     x INT8 NULL,
@@ -397,10 +396,10 @@ CREATE TABLE sc2.t (
 );
 
 query T
+COMMIT;
 BEGIN;
 SELECT * FROM sc1.t;
 SELECT crdb_internal.show_create_all_tables('test_schema');
-COMMIT;
 ----
 CREATE TABLE sc1.t (
     x INT8 NULL,
@@ -412,3 +411,6 @@ CREATE TABLE sc2.t (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
+
+statement ok
+COMMIT
