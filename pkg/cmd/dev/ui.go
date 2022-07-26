@@ -127,7 +127,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			if err := copyBuildOutputToWorkspace(d /* ossOnly */, isOss); err != nil {
+			if err := arrangeFilesForWatchers(d /* ossOnly */, isOss); err != nil {
 				log.Fatalf("failed to arrange files for watchers: %v", err)
 				return err
 			}
@@ -323,10 +323,9 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 	return cleanCmd
 }
 
-// copyBuildOutputToWorkspace moves files from Bazel's build output directory
+// arrangeFilesForWatchers moves files from Bazel's build output directory
 // into the locations they'd be found during a non-Bazel build, so that test
-// watchers and developer tooling can successfully operate outside of the Bazel
-// sandbox.
+// watchers can successfully operate outside of the Bazel sandbox.
 //
 // Unfortunately, Bazel's reliance on symlinks conflicts with Jest's refusal to
 // traverse symlinks during `--watch` mode. Ibazel is unable to keep `jest`
@@ -334,12 +333,12 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 // kill Jest when a file changes defeat the purpose of Jest's watch mode, and
 // makes devs pay the cost of node + jest startup times after every file change.
 // Similar issues apply to webpack's watch-mode, as compiled output doesn't
-// exist outside of the Bazel sandbox. As a workaround, copyBuildOutputToWorkspace
+// exist outside of the Bazel sandbox. As a workaround, arrangeFilesForWatchers
 // copies files out of the Bazel sandbox and allows Jest or webpack (in watch
 // mode) to be executed from directly within a pkg/ui/workspaces/... directory.
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
-func copyBuildOutputToWorkspace(d *dev, ossOnly bool) error {
+func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
 	bazelBin, err := d.getBazelBin(d.cli.Context())
 	if err != nil {
 		return err
@@ -377,21 +376,6 @@ func copyBuildOutputToWorkspace(d *dev, ossOnly bool) error {
 		}
 	}
 
-	// Delete eslint-plugin output tree that was previously copied out of the sandbox
-	err = d.os.RemoveAll(filepath.Join(dstDirs.eslintPlugin, "dist"))
-	if err != nil {
-		return err
-	}
-
-	// Copy the eslint-plugin output tree back out of the sandbox
-	err = d.os.CopyAll(
-		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "eslint-plugin-crdb", "dist"),
-		filepath.Join(dstDirs.eslintPlugin, "dist"),
-	)
-	if err != nil {
-		return err
-	}
-
 	// Delete cluster-ui output tree that was previously copied out of the sandbox
 	err = d.os.RemoveAll(filepath.Join(dstDirs.clusterUI, "dist"))
 	if err != nil {
@@ -403,22 +387,6 @@ func copyBuildOutputToWorkspace(d *dev, ossOnly bool) error {
 		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "cluster-ui", "dist"),
 		filepath.Join(dstDirs.clusterUI, "dist"),
 	)
-	if err != nil {
-		return err
-	}
-
-	// Delete db-console output tree that was previously copied out of the sandbox
-	err = d.os.RemoveAll(filepath.Join(dstDirs.dbConsole, "dist"))
-	if err != nil {
-		return err
-	}
-
-	// Copy the db-console output tree back out of the sandbox
-	err = d.os.CopyAll(
-		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console", "dist"),
-		filepath.Join(dstDirs.dbConsole, "dist"),
-	)
-
 	if err != nil {
 		return err
 	}
@@ -470,7 +438,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					return err
 				}
 
-				err = copyBuildOutputToWorkspace(d /* ossOnly */, false)
+				err = arrangeFilesForWatchers(d /* ossOnly */, false)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
