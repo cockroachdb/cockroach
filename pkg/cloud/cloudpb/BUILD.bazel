@@ -9,7 +9,6 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -21,7 +20,7 @@ go_proto_library(
     proto = ":cloudpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/roachpb",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

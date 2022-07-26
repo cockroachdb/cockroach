@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.cloud.cloudpb;
 option go_package = "cloudpb";
 
-import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
 enum ExternalStorageProvider {
