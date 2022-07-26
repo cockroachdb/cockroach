@@ -72,7 +72,7 @@ func registerGORM(r registry.Registry) {
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
 		if err := repeatRunE(
-			ctx, t, c, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
+			ctx, t, c, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath),
 		); err != nil {
 			t.Fatal(err)
 		}

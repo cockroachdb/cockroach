@@ -70,7 +70,7 @@ func registerLibPQ(r registry.Registry) {
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
 		err = repeatRunE(ctx, t, c, node, "install go-junit-report",
-			fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
+			fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath),
 		)
 		require.NoError(t, err)
 
