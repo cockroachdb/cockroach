@@ -440,7 +440,8 @@ func (dn *dockerNode) startContainer(
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: volSetting,
+		Binds:       volSetting,
+		NetworkMode: "roachnet",
 		PortBindings: map[nat.Port][]nat.PortBinding{
 			nat.Port(hostPort):      {{HostIP: hostIP, HostPort: hostPort}},
 			nat.Port(cockroachPort): {{HostIP: hostIP, HostPort: cockroachPort}},
