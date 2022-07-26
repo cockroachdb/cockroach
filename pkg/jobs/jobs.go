@@ -116,6 +116,10 @@ type Record struct {
 	CreatedBy *CreatedByInfo
 }
 
+// ImplementsJobRecords is to enable the declaration of the interface
+// jobrecords.JobRecords.
+func (r *Record) ImplementsJobRecords() {}
+
 // AppendDescription appends description to this records Description with a
 // ';' separator.
 func (r *Record) AppendDescription(description string) {
