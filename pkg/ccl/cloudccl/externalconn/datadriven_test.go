@@ -63,6 +63,12 @@ func TestDataDriven(t *testing.T) {
 				externalConnTestCluster.InitializeTenant(ctx, tenantID)
 
 			case "exec-sql":
+				if d.HasArg("user") {
+					var user string
+					d.ScanArgs(t, "user", &user)
+					resetToRootUser := externalConnTestCluster.SetSQLDBForUser(tenantID, user)
+					defer resetToRootUser()
+				}
 				if err := tenant.ExecWithErr(d.Input); err != nil {
 					return fmt.Sprint(err.Error())
 				}
