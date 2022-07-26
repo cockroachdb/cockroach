@@ -142,11 +142,11 @@ type kvBatchSnapshotStrategy struct {
 // multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
 // that handles chunking SSTs and persisting them to disk.
 type multiSSTWriter struct {
-	st        *cluster.Settings
-	scratch   *SSTSnapshotStorageScratch
-	currSST   storage.SSTWriter
-	keyRanges []rditer.KeyRange
-	currRange int
+	st       *cluster.Settings
+	scratch  *SSTSnapshotStorageScratch
+	currSST  storage.SSTWriter
+	keySpans []roachpb.Span
+	currSpan int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
@@ -158,13 +158,13 @@ func newMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
 	scratch *SSTSnapshotStorageScratch,
-	keyRanges []rditer.KeyRange,
+	keySpans []roachpb.Span,
 	sstChunkSize int64,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		st:           st,
 		scratch:      scratch,
-		keyRanges:    keyRanges,
+		keySpans:     keySpans,
 		sstChunkSize: sstChunkSize,
 	}
 	if err := msstw.initSST(ctx); err != nil {
@@ -181,7 +181,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRawRange(
-		msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+		msstw.keySpans[msstw.currSpan].Key, msstw.keySpans[msstw.currSpan].EndKey); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -194,13 +194,13 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 		return errors.Wrap(err, "failed to finish sst")
 	}
 	msstw.dataSize += msstw.currSST.DataSize
-	msstw.currRange++
+	msstw.currSpan++
 	msstw.currSST.Close()
 	return nil
 }
 
 func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
-	for msstw.keyRanges[msstw.currRange].End.Compare(key.Key) <= 0 {
+	for msstw.keySpans[msstw.currSpan].EndKey.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -210,8 +210,8 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Compare(key.Key) > 0 {
-		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+	if msstw.keySpans[msstw.currSpan].Key.Compare(key.Key) > 0 {
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keySpans)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
@@ -225,7 +225,7 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	if start.Compare(end) >= 0 {
 		return errors.AssertionFailedf("start key %s must be before end key %s", end, start)
 	}
-	for msstw.keyRanges[msstw.currRange].End.Compare(start) <= 0 {
+	for msstw.keySpans[msstw.currSpan].EndKey.Compare(start) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -235,10 +235,10 @@ func (msstw *multiSSTWriter) PutRangeKey(
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Compare(start) > 0 ||
-		msstw.keyRanges[msstw.currRange].End.Compare(end) < 0 {
+	if msstw.keySpans[msstw.currSpan].Key.Compare(start) > 0 ||
+		msstw.keySpans[msstw.currSpan].EndKey.Compare(end) < 0 {
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
-			roachpb.Span{Key: start, EndKey: end}, msstw.keyRanges)
+			roachpb.Span{Key: start, EndKey: end}, msstw.keySpans)
 	}
 	if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
 		return errors.Wrap(err, "failed to put range key in sst")
@@ -247,12 +247,12 @@ func (msstw *multiSSTWriter) PutRangeKey(
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
-	if msstw.currRange < len(msstw.keyRanges) {
+	if msstw.currSpan < len(msstw.keySpans) {
 		for {
 			if err := msstw.finalizeSST(ctx); err != nil {
 				return 0, err
 			}
-			if msstw.currRange >= len(msstw.keyRanges) {
+			if msstw.currSpan >= len(msstw.keySpans) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
@@ -270,20 +270,20 @@ func (msstw *multiSSTWriter) Close() {
 // Receive implements the snapshotStrategy interface.
 //
 // NOTE: This function assumes that the point and range (e.g. MVCC range
-// tombstone) KV pairs are sent grouped by the following key ranges in order:
+// tombstone) KV pairs are sent grouped by the following key spans in order:
 //
-// 1. Replicated range-id local key range
-// 2. Range-local key range
-// 3. Two lock-table key ranges (optional)
-// 4. User key range
+// 1. Replicated range-id local key span.
+// 2. Range-local key span.
+// 3. Two lock-table key spans (optional).
+// 4. User key span.
 //
-// For each key range above, all point keys are sent first (in sorted order) and
+// For each key span above, all point keys are sent first (in sorted order) and
 // then all range keys (in sorted order), possibly mixed in the same batch.
-// However, we currently only expect to see range keys in the user key range.
+// However, we currently only expect to see range keys in the user key span.
 //
-// This allows building individual SSTs per key range containing all point/range
-// KVs for that key range, without the SSTs spanning across wide swaths of the
-// key space across to the next key range.
+// This allows building individual SSTs per key span containing all point/range
+// KVs for that key span, without the SSTs spanning across wide swaths of the
+// key space across to the next key span.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context,
 	stream incomingSnapshotStream,
@@ -294,7 +294,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
-	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
+	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
 	if err != nil {
 		return noSnap, err
@@ -356,7 +356,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
-			// we did not receive any key-value pairs for some of the key ranges, but
+			// we did not receive any key-value pairs for some of the key spans, but
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			dataSize, err := msstw.Finish(ctx)
@@ -403,11 +403,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// bytesSent is updated as key-value batches are sent with sendBatch. It does
 	// not reflect the log entries sent (which are never sent in newer versions of
 	// CRDB, as of VersionUnreplicatedTruncatedState).
-	bytesSent := int64(0)
-
-	// Iterate over all keys (point keys and range keys) using the provided
-	// iterator and stream out batches of key-values.
+	var bytesSent int64
 	var kvs, rangeKVs int
+
+	// Iterate over all keys (point keys and range keys) and stream out batches of
+	// key-values.
 	var b storage.Batch
 	defer func() {
 		if b != nil {
@@ -427,57 +427,61 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	iter := snap.Iter
-	var ok bool
-	var err error
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		// NB: EngineReplicaDataIterator will never expose point/range keys
-		// together: it first iterates over all point keys in a key range, then over
-		// all range keys in a key range, then moves onto the next key range.
-		hasPoint, hasRange := iter.HasPointAndRange()
-
-		if hasPoint {
-			kvs++
-			var unsafeKey storage.EngineKey
-			if unsafeKey, err = iter.UnsafeKey(); err != nil {
-				return 0, err
-			}
-			unsafeValue := iter.UnsafeValue()
-			if b == nil {
-				b = kvSS.newBatch()
-			}
-			if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
-				return 0, err
-			}
-			if int64(b.Len()) >= kvSS.batchSize {
-				if err = flushBatch(); err != nil {
-					return 0, err
-				}
-			}
+	maybeFlushBatch := func() error {
+		if int64(b.Len()) >= kvSS.batchSize {
+			return flushBatch()
 		}
+		return nil
+	}
 
-		if hasRange {
-			bounds, err := iter.RangeBounds()
-			if err != nil {
-				return 0, err
-			}
-			for _, rkv := range iter.RangeKeys() {
-				rangeKVs++
-				if b == nil {
-					b = kvSS.newBatch()
-				}
-				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-				if err != nil {
-					return 0, err
-				}
-				if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
-					if err = flushBatch(); err != nil {
-						return 0, err
+	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			var err error
+			switch keyType {
+			case storage.IterKeyTypePointsOnly:
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					kvs++
+					if b == nil {
+						b = kvSS.newBatch()
+					}
+					key, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					if err = b.PutEngineKey(key, iter.UnsafeValue()); err != nil {
+						return err
+					}
+					if err = maybeFlushBatch(); err != nil {
+						return err
 					}
 				}
+
+			case storage.IterKeyTypeRangesOnly:
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, rkv := range iter.EngineRangeKeys() {
+						rangeKVs++
+						if b == nil {
+							b = kvSS.newBatch()
+						}
+						err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+						if err != nil {
+							return err
+						}
+						if err = maybeFlushBatch(); err != nil {
+							return err
+						}
+					}
+				}
+
+			default:
+				return errors.AssertionFailedf("unexpected key type %v", keyType)
 			}
-		}
-	}
+			return err
+		})
 	if err != nil {
 		return 0, err
 	}
@@ -672,7 +676,7 @@ func (s *Store) canAcceptSnapshotLocked(
 		return nil, existingDestroyStatus.err
 	}
 
-	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
+	// We have a key span [desc.StartKey,desc.EndKey) which we want to apply a
 	// snapshot for. Is there a conflicting existing placeholder or an
 	// overlapping range?
 	if err := s.checkSnapshotOverlapLocked(ctx, snapHeader); err != nil {

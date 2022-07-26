@@ -442,27 +442,26 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	snapshot := db.NewSnapshot()
 	defer snapshot.Close()
 
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snapshot, debugCtx.replicated)
-	defer iter.Close()
-	results := 0
-	var ok bool
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
-			// TODO(erikgrinaker): For now, just skip range keys. We should print
-			// them.
-			continue
-		}
-		var key storage.EngineKey
-		if key, err = iter.UnsafeKey(); err != nil {
-			break
-		}
-		kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
-		results++
-		if results == debugCtx.maxResults {
-			break
-		}
-	}
-	return err
+	var results int
+	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated,
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			if keyType == storage.IterKeyTypeRangesOnly {
+				// TODO(erikgrinaker): We should handle range keys, but we skip them for now.
+				return nil
+			}
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				var key storage.EngineKey
+				if key, err = iter.UnsafeEngineKey(); err != nil {
+					return err
+				}
+				kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
+				results++
+				if results == debugCtx.maxResults {
+					return iterutil.StopIteration()
+				}
+			}
+			return err
+		})
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{

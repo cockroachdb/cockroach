@@ -285,10 +285,10 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		StartKey: roachpb.RKey("d"),
 		EndKey:   roachpb.RKeyMax,
 	}
-	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
+	keySpans := rditer.MakeReplicatedKeySpans(&desc)
 
 	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, keyRanges, 0,
+		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
 	)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
@@ -305,12 +305,12 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	// Construct an SST file for each of the key ranges and write a rangedel
 	// tombstone that spans from Start to End.
 	var expectedSSTs [][]byte
-	for _, r := range keyRanges {
+	for _, s := range keySpans {
 		func() {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 			defer sst.Close()
-			err := sst.ClearRawRange(r.Start, r.End)
+			err := sst.ClearRawRange(s.Key, s.EndKey)
 			require.NoError(t, err)
 			err = sst.Finish()
 			require.NoError(t, err)
