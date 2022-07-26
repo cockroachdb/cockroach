@@ -2479,7 +2479,7 @@ func (r *restoreResumer) restoreSystemTables(
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
-					systemTable.stagingTableName); err != nil {
+					systemTable.stagingTableName, details.DescriptorRewrites); err != nil {
 					return err
 				}
 
