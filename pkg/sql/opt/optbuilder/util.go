@@ -244,18 +244,29 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	dst.id = src.id
 }
 
-// shouldCreateDefaultColumn decides if we need to create a default
-// column and default label for a function expression.
-// Returns true if the function's return type is not an empty tuple and
-// doesn't declare any tuple labels.
+// shouldCreateDefaultColumn decides if we need to create a default column and
+// default label for a function expression. Returns true if the function's
+// return type is not an empty tuple and doesn't declare any tuple labels.
 func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 	if texpr.ResolvedType() == types.EmptyTuple {
 		// This is only to support crdb_internal.unary_table().
 		return false
 	}
 
-	// We need to create a default column with a default name when
-	// the function return type doesn't declare any return labels.
+	if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
+		if funcExpr.Func.FunctionReference.(*tree.FunctionDefinition).Name == "unnest" {
+			// Special case for unnest functions: we should create a default column in
+			// the case when there is one input argument, since this implies there
+			// will be one output column. This is necessary because the type of the
+			// single column output by unnest in this case may be a tuple with labels,
+			// which breaks the assumption made below.
+			return len(funcExpr.Exprs) == 1
+		}
+	}
+
+	// We need to create a default column with a default name when the function
+	// return type doesn't declare any return labels. This logic assumes that any
+	// SRF that has a labeled tuple as a return type returns multiple columns.
 	return len(texpr.ResolvedType().TupleLabels()) == 0
 }
 

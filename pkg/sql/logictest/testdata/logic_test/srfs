@@ -1248,3 +1248,25 @@ SELECT * FROM unnest(NULL, NULL)
 
 query error pq: column reference "unnest" is ambiguous
 SELECT unnest FROM unnest(array[1,2], array[3,4,5])
+
+# Regression test for #58438 - handle the case when unnest outputs a tuple with
+# labels. The unnest should not panic.
+statement ok
+CREATE TABLE t58438(a INT, b INT);
+
+statement ok
+INSERT INTO t58438 VALUES (1, 2), (3, 4), (5, 6);
+
+query T rowsort
+SELECT unnest(ARRAY[t58438.*]) FROM t58438;
+----
+(1,2)
+(3,4)
+(5,6)
+
+query II rowsort
+SELECT (x).* FROM (SELECT unnest(ARRAY[t58438.*]) FROM t58438) v(x);
+----
+1  2
+3  4
+5  6
