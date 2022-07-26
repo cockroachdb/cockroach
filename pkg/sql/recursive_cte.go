@@ -12,10 +12,12 @@ package sql
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // recursiveCTENode implements the logic for a recursive CTE:
@@ -32,6 +34,8 @@ type recursiveCTENode struct {
 	initial planNode
 
 	genIterationFn exec.RecursiveCTEIterationFn
+	// iterationCount tracks the number of invocations of genIterationFn.
+	iterationCount int
 
 	label string
 
@@ -139,7 +143,11 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := runPlanInsidePlan(params, newPlan.(*planComponents), rowResultWriter(n)); err != nil {
+	n.iterationCount++
+	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
+	ctx, sp := tracing.ChildSpan(params.ctx, opName)
+	defer sp.Finish()
+	if err := runPlanInsidePlan(ctx, params, newPlan.(*planComponents), rowResultWriter(n)); err != nil {
 		return false, err
 	}
 

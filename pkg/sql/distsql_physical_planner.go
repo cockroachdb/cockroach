@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -155,10 +154,6 @@ const (
 // a replica for a given range. It is exported so that it may be overwritten
 // during initialization by CCL code to enable follower reads.
 var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
-
-// If true, the plan diagram (in JSON) is logged for each plan (used for
-// debugging).
-var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //

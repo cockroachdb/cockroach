@@ -306,6 +306,7 @@ CREATE TABLE public.statement_statistics (
 	statistics JSONB NOT NULL,
 	plan JSONB NOT NULL,
 	crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)) STORED,
+	index_recommendations STRING[] NOT NULL DEFAULT ARRAY[]:::STRING[],
 	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, transaction_fingerprint_id ASC, plan_hash ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8),
 	INDEX fingerprint_stats_idx (fingerprint_id ASC, transaction_fingerprint_id ASC)
 );

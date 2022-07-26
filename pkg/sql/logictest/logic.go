@@ -538,8 +538,6 @@ type testClusterConfig struct {
 	allowSplitAndScatter bool
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
-	// if non-empty, overrides the default experimental DistSQL planning mode.
-	overrideExperimentalDistSQLPlanning string
 	// if set, queries using distSQL processors or vectorized operators that can
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
@@ -765,12 +763,6 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:                                "local-spec-planning",
-		numNodes:                            1,
-		overrideDistSQLMode:                 "off",
-		overrideExperimentalDistSQLPlanning: "on",
-	},
-	{
 		name:                "fakedist",
 		numNodes:            3,
 		useFakeSpanResolver: true,
@@ -792,13 +784,6 @@ var logicTestConfigs = []testClusterConfig{
 		skipShort:           true,
 	},
 	{
-		name:                                "fakedist-spec-planning",
-		numNodes:                            3,
-		useFakeSpanResolver:                 true,
-		overrideDistSQLMode:                 "on",
-		overrideExperimentalDistSQLPlanning: "on",
-	},
-	{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
@@ -814,12 +799,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode: "on",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
-	},
-	{
-		name:                                "5node-spec-planning",
-		numNodes:                            5,
-		overrideDistSQLMode:                 "on",
-		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
 		// 3node-tenant is a config that runs the test as a SQL tenant. This config
@@ -1008,18 +987,15 @@ var (
 	defaultConfigNames = []string{
 		"local",
 		"local-vec-off",
-		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"fakedist-spec-planning",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
 		"5node-disk",
-		"5node-spec-planning",
 	}
 	// threeNodeTenantDefaultConfigName is a special alias for all 3-node tenant
 	// configs.
@@ -2017,14 +1993,6 @@ func (t *logicTest) newCluster(
 			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		); err != nil {
 			t.Fatal(err)
-		}
-
-		if cfg.overrideExperimentalDistSQLPlanning != "" {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = $1::string", cfg.overrideExperimentalDistSQLPlanning,
-			); err != nil {
-				t.Fatal(err)
-			}
 		}
 
 		// Update the default AS OF time for querying the system.table_statistics

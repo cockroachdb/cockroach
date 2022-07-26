@@ -506,8 +506,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	if logPlanDiagram {
-		log.VEvent(ctx, 3, "creating plan diagram for logging")
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()

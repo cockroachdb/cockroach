@@ -1,5 +1,3 @@
-# LogicTest: !fakedist-spec-planning
-
 statement ok
 CREATE USER bar; CREATE USER all_user_db; CREATE USER all_user_schema
 

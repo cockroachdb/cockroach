@@ -8,7 +8,12 @@
 
 package schemafeed
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+)
 
 const TestingAllEventFilter = "testing"
 
@@ -34,4 +39,10 @@ func PrintTableEventType(t tableEventType) string {
 		}
 	}
 	return strings.Join(strs, "|")
+}
+
+func CreateChangefeedTargets(tableID descpb.ID) changefeedbase.Targets {
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{TableID: tableID})
+	return targets
 }
