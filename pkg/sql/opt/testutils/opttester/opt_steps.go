@@ -132,18 +132,25 @@ func (os *optSteps) Next() error {
 
 		if fo.lastAppliedSource == nil {
 			// This was a normalization that created a new memo group.
-			fo2.RestrictToExpr(fo.LookupPath(fo.lastAppliedTarget))
+			path := fo.LookupPath(fo.lastAppliedTarget)
+			if path == nil {
+				// If the path is nil, skip this step. This can happen when an
+				// expression that is not in the memo is normalized.
+				os.steps++
+				return nil
+			}
+			fo2.RestrictToExpr(path)
 		} else if fo.lastAppliedTarget == nil {
 			// This was an exploration rule that didn't add any expressions to the
 			// group, so only ancestor groups need to be suppressed.
-			path := fo.LookupPath(fo.lastAppliedSource)
+			path := fo.MustLookupPath(fo.lastAppliedSource)
 			fo2.RestrictToExpr(path[:len(path)-1])
 		} else {
 			// This was an exploration rule that added one or more expressions to
 			// an existing group. Suppress all other members of the group.
 			member := fo.lastAppliedTarget.(memo.RelExpr)
 			for member != nil {
-				fo2.RestrictToExpr(fo.LookupPath(member))
+				fo2.RestrictToExpr(fo.MustLookupPath(member))
 				member = member.NextExpr()
 			}
 		}
