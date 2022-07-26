@@ -586,6 +586,9 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 		),
 	)
 
+	// Enable the queueing mechanism of the flow scheduler.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
+
 	// Disable the execution of all remote flows and shorten the timeout.
 	const maxRunningFlows = 0
 	const flowStreamTimeout = 1 // in seconds

@@ -86,6 +86,10 @@ func TestClusterFlow(t *testing.T) {
 		return span
 	}
 
+	// Enable the queueing mechanism of the flow scheduler.
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
+
 	// successful indicates whether the flow execution is successful.
 	for _, successful := range []bool{true, false} {
 		// Set up table readers on three hosts feeding data into a join reader on
@@ -378,15 +382,9 @@ func TestTenantClusterFlow(t *testing.T) {
 		return span
 	}
 
+	// Enable the queueing mechanism of the flow scheduler.
 	sqlDB := sqlutils.MakeSQLRunner(podConns[0])
-	rows := sqlDB.Query(t, "SELECT num FROM test.t")
-	defer rows.Close()
-	for rows.Next() {
-		var key int
-		if err := rows.Scan(&key); err != nil {
-			t.Fatal(err)
-		}
-	}
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
 
 	// successful indicates whether the flow execution is successful.
 	for _, successful := range []bool{true, false} {

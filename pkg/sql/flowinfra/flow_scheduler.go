@@ -71,6 +71,7 @@ type FlowScheduler struct {
 	stopper    *stop.Stopper
 	flowDoneCh chan Flow
 	metrics    *execinfra.DistSQLMetrics
+	sv         *settings.Values
 
 	mu struct {
 		syncutil.Mutex
@@ -126,12 +127,13 @@ func NewFlowScheduler(
 		AmbientContext: ambient,
 		stopper:        stopper,
 		flowDoneCh:     make(chan Flow, flowDoneChanSize),
+		sv:             &settings.SV,
 	}
 	fs.mu.queue = list.New()
 	maxRunningFlows := getMaxRunningFlows(settings)
 	fs.mu.runningFlows = make(map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo, maxRunningFlows)
 	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
-	settingMaxRunningFlows.SetOnChange(&settings.SV, func(ctx context.Context) {
+	settingMaxRunningFlows.SetOnChange(fs.sv, func(ctx context.Context) {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(getMaxRunningFlows(settings)))
 	})
 	return fs
@@ -142,13 +144,27 @@ func (fs *FlowScheduler) Init(metrics *execinfra.DistSQLMetrics) {
 	fs.metrics = metrics
 }
 
+var flowSchedulerQueueingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.flow_scheduler_queueing.enabled",
+	"determines whether the flow scheduler imposes the limit on the maximum "+
+		"number of concurrent remote DistSQL flows that a single node can have "+
+		"(the limit is determined by the sql.distsql.max_running_flows setting)",
+	false,
+)
+
 // canRunFlow returns whether the FlowScheduler can run the flow. If true is
 // returned, numRunning is also incremented.
 // TODO(radu): we will have more complex resource accounting (like memory).
 //  For now we just limit the number of concurrent flows.
-func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
+func (fs *FlowScheduler) canRunFlow() bool {
 	// Optimistically increase numRunning to account for this new flow.
 	newNumRunning := atomic.AddInt32(&fs.atomics.numRunning, 1)
+	if !flowSchedulerQueueingEnabled.Get(fs.sv) {
+		// The queueing behavior of the flow scheduler is disabled, so we can
+		// run this flow without checking against the maxRunningFlows counter).
+		return true
+	}
 	if newNumRunning <= atomic.LoadInt32(&fs.atomics.maxRunningFlows) {
 		// Happy case. This flow did not bring us over the limit, so return that the
 		// flow can be run and is accounted for in numRunning.
@@ -204,7 +220,7 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.metrics.FlowsScheduled.Inc(1)
 			telemetry.Inc(sqltelemetry.DistSQLFlowsScheduled)
-			if fs.canRunFlow(f) {
+			if fs.canRunFlow() {
 				return fs.runFlowNow(ctx, f, false /* locked */)
 			}
 			fs.mu.Lock()
