@@ -625,6 +625,13 @@ func (s spanSetWriter) PutMVCCRangeKey(
 	return s.w.PutMVCCRangeKey(rangeKey, value)
 }
 
+func (s spanSetWriter) PutRawMVCCRangeKey(rangeKey storage.MVCCRangeKey, value []byte) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.PutRawMVCCRangeKey(rangeKey, value)
+}
+
 func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	if !s.spansOnly {
 		panic("cannot do timestamp checking for PutEngineRangeKey")
