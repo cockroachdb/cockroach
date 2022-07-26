@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
@@ -31,6 +32,10 @@ type SSTSnapshotStorage struct {
 	engine  storage.Engine
 	limiter *rate.Limiter
 	dir     string
+	mu      struct {
+		syncutil.Mutex
+		rangeRefCount map[roachpb.RangeID]int
+	}
 }
 
 // NewSSTSnapshotStorage creates a new SST snapshot storage.
@@ -39,6 +44,10 @@ func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnap
 		engine:  engine,
 		limiter: limiter,
 		dir:     filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
+		mu: struct {
+			syncutil.Mutex
+			rangeRefCount map[roachpb.RangeID]int
+		}{rangeRefCount: make(map[roachpb.RangeID]int)},
 	}
 }
 
@@ -47,9 +56,13 @@ func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnap
 func (s *SSTSnapshotStorage) NewScratchSpace(
 	rangeID roachpb.RangeID, snapUUID uuid.UUID,
 ) *SSTSnapshotStorageScratch {
+	s.mu.Lock()
+	s.mu.rangeRefCount[rangeID]++
+	s.mu.Unlock()
 	snapDir := filepath.Join(s.dir, strconv.Itoa(int(rangeID)), snapUUID.String())
 	return &SSTSnapshotStorageScratch{
 		storage: s,
+		rangeID: rangeID,
 		snapDir: snapDir,
 	}
 }
@@ -59,14 +72,38 @@ func (s *SSTSnapshotStorage) Clear() error {
 	return s.engine.RemoveAll(s.dir)
 }
 
+// scratchClosed is called when an SSTSnapshotStorageScratch created by this
+// SSTSnapshotStorage is closed. This method handles any cleanup of range
+// directories if all SSTSnapshotStorageScratches corresponding to a range
+// have closed.
+func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val := s.mu.rangeRefCount[rangeID]
+	if val <= 0 {
+		panic("inconsistent scratch ref count")
+	}
+	val--
+	s.mu.rangeRefCount[rangeID] = val
+	if val == 0 {
+		delete(s.mu.rangeRefCount, rangeID)
+		// Suppressing an error here is okay, as orphaned directories are at worst
+		// a performance issue when we later walk directories in pebble.Capacity()
+		// but not a correctness issue.
+		_ = s.engine.RemoveAll(filepath.Join(s.dir, strconv.Itoa(int(rangeID))))
+	}
+}
+
 // SSTSnapshotStorageScratch keeps track of the SST files incrementally created
 // when receiving a snapshot. Each scratch is associated with a specific
 // snapshot.
 type SSTSnapshotStorageScratch struct {
 	storage    *SSTSnapshotStorage
+	rangeID    roachpb.RangeID
 	ssts       []string
 	snapDir    string
 	dirCreated bool
+	closed     bool
 }
 
 func (s *SSTSnapshotStorageScratch) filename(id int) string {
@@ -87,6 +124,9 @@ func (s *SSTSnapshotStorageScratch) createDir() error {
 func (s *SSTSnapshotStorageScratch) NewFile(
 	ctx context.Context, bytesPerSync int64,
 ) (*SSTSnapshotStorageFile, error) {
+	if s.closed {
+		return nil, errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
+	}
 	id := len(s.ssts)
 	filename := s.filename(id)
 	s.ssts = append(s.ssts, filename)
@@ -103,6 +143,9 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 // the provided SST when it is finished using it. If the provided SST is empty,
 // then no file will be created and nothing will be written.
 func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) error {
+	if s.closed {
+		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
+	}
 	if len(data) == 0 {
 		return nil
 	}
@@ -129,8 +172,13 @@ func (s *SSTSnapshotStorageScratch) SSTs() []string {
 	return s.ssts
 }
 
-// Clear removes the directory and SSTs created for a particular snapshot.
-func (s *SSTSnapshotStorageScratch) Clear() error {
+// Close removes the directory and SSTs created for a particular snapshot.
+func (s *SSTSnapshotStorageScratch) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	defer s.storage.scratchClosed(s.rangeID)
 	return s.storage.engine.RemoveAll(s.snapDir)
 }
 
@@ -156,6 +204,9 @@ func (f *SSTSnapshotStorageFile) ensureFile() error {
 		if err := f.scratch.createDir(); err != nil {
 			return err
 		}
+	}
+	if f.scratch.closed {
+		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
 	}
 	var err error
 	if f.bytesPerSync > 0 {
