@@ -230,7 +230,7 @@ SHOW GRANTS ON TABLE t7;
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t7          admin     ALL             true
 test           public       t7          root      ALL             true
-test           public       t7          testuser  ALL             false
+test           public       t7          testuser  ALL             true
 
 statement ok
 GRANT SELECT ON TABLE t7 TO testuser
@@ -251,7 +251,7 @@ SHOW GRANTS ON TABLE t8;
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t8          admin     ALL             true
 test           public       t8          root      ALL             true
-test           public       t8          testuser  ALL             false
+test           public       t8          testuser  ALL             true
 
 statement ok
 GRANT SELECT ON TABLE t8 TO testuser

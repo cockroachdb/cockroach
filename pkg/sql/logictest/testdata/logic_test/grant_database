@@ -144,9 +144,39 @@ SHOW GRANTS ON b.t
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 b              public       t           admin     ALL             true
 b              public       t           root      ALL             true
-b              public       t           testuser  ALL             false
+b              public       t           testuser  ALL             true
 
 # Calling SHOW GRANTS on an invalid user should error out.
 
 statement error role/user "invaliduser" does not exist
 SHOW GRANTS FOR invaliduser
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+user root
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement ok
+GRANT testuser to owner_grant_option_child
+
+statement ok
+ALTER USER testuser WITH createdb
+
+user testuser
+
+statement ok
+CREATE DATABASE owner_grant_option
+
+statement ok
+GRANT CONNECT ON DATABASE owner_grant_option TO owner_grant_option_child
+
+query TTTB colnames
+SHOW GRANTS ON DATABASE owner_grant_option
+----
+database_name       grantee                   privilege_type  is_grantable
+owner_grant_option  admin                     ALL             true
+owner_grant_option  owner_grant_option_child  CONNECT         true
+owner_grant_option  public                    CONNECT         false
+owner_grant_option  root                      ALL             true
