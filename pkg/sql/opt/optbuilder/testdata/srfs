@@ -965,3 +965,38 @@ with &1 (data)
       │         └── filters (true)
       └── aggregations
            └── count-rows [as=count_rows:8]
+
+# Regression test for #58438 - handle the case when unnest outputs a tuple with
+# labels. The unnest should not panic.
+exec-ddl
+CREATE TABLE t58438(a INT, b INT);
+----
+
+build
+SELECT unnest(ARRAY[t58438.*]) FROM t58438;
+----
+project
+ ├── columns: unnest:6
+ └── project-set
+      ├── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 unnest:6
+      ├── scan t58438
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── zip
+           └── unnest(ARRAY[((a:1, b:2) AS a, b)])
+
+build
+SELECT (x).* FROM (SELECT unnest(ARRAY[t58438.*]) FROM t58438) v(x);
+----
+project
+ ├── columns: a:7 b:8
+ ├── project
+ │    ├── columns: unnest:6
+ │    └── project-set
+ │         ├── columns: t58438.a:1 t58438.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 unnest:6
+ │         ├── scan t58438
+ │         │    └── columns: t58438.a:1 t58438.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── zip
+ │              └── unnest(ARRAY[((t58438.a:1, t58438.b:2) AS a, b)])
+ └── projections
+      ├── (unnest:6).a [as=a:7]
+      └── (unnest:6).b [as=b:8]
