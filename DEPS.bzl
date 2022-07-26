@@ -8327,13 +8327,15 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_google_cloud_go_storage",
-        build_file_proto_mode = "disable_global",
-        importpath = "cloud.google.com/go/storage",
-        vcs = "git",
-        remote = "https://github.com/rhu713/google-cloud-go",  # Custom fork.
-        commit = "07b084208f40f176f50ed9814c5d694c7a250da4",  # Custom commit.
-    )
+            name = "com_google_cloud_go_storage",
+            build_file_proto_mode = "disable_global",
+            importpath = "cloud.google.com/go/storage",
+            sha256 = "c3bf2fd07f08cc5deca8fe6bc71172c7bd92d46517ba5598e6f4ac60e5feded1",
+            strip_prefix = "google-cloud-go-07b084208f40f176f50ed9814c5d694c7a250da4/storage",
+            urls = [
+                "https://github.com/rhu713/google-cloud-go/archive/07b084208f40f176f50ed9814c5d694c7a250da4.zip",
+            ],
+        )
     go_repository(
         name = "com_lukechampine_uint128",
         build_file_proto_mode = "disable_global",
