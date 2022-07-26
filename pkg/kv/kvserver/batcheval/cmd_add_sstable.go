@@ -418,11 +418,7 @@ func EvalAddSSTable(
 				break
 			}
 			for _, rkv := range rangeIter.RangeKeys() {
-				mvccValue, err := storage.DecodeMVCCValue(rkv.Value)
-				if err != nil {
-					return result.Result{}, err
-				}
-				if err = readWriter.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+				if err = readWriter.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
 					return result.Result{}, err
 				}
 				if sstToReqTS.IsSet() {
