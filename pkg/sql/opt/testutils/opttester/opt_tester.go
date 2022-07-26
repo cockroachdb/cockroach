@@ -1712,7 +1712,11 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 	}
 
 	if before == after {
-		altHeader("%s (no changes)\n", os.LastRuleName())
+		msg := "no changes"
+		if os.LastRuleName().IsNormalize() {
+			msg = "normalization of expression outside of memo"
+		}
+		altHeader("%s (%s)\n", os.LastRuleName(), msg)
 		return
 	}
 
