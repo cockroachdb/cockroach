@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cacheutil",
+    srcs = ["cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/cacheutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "cacheutil_test",
+    srcs = ["cache_test.go"],
+    embed = [":cacheutil"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

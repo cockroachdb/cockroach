@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -507,6 +508,19 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 
 	return p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
+	)
+}
+
+// BumpPrivilegesTableVersion increases the table version for the
+// privileges table.
+func (p *planner) BumpPrivilegesTableVersion(ctx context.Context) error {
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, syntheticprivilege.SystemPrivilegesTableName, true, tree.ResolveAnyTableKind)
+	if err != nil {
+		return err
+	}
+
+	return p.writeSchemaChange(
+		ctx, tableDesc, descpb.InvalidMutationID, "updating version for system.privileges table",
 	)
 }
 

@@ -124,6 +124,7 @@ var systemTables = []string{
 	systemschema.SpanConfigurationsTableSchema,
 	systemschema.TenantSettingsTableSchema,
 	systemschema.SpanCountTableSchema,
+	systemschema.SystemPrivilegeTableSchema,
 }
 
 func init() {
