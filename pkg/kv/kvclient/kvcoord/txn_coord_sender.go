@@ -345,11 +345,6 @@ func newLeafTxnCoordSender(
 	tcf *TxnCoordSenderFactory, tis *roachpb.LeafTxnInputState,
 ) kv.TxnSender {
 	txn := &tis.Txn
-	// 19.2 roots might have this flag set. In 20.1, the flag is only set by the
-	// server and terminated by the client in the span refresher interceptor. If
-	// the root is a 19.2 node, we reset the flag because it only confuses
-	// that interceptor and provides no benefit.
-	txn.WriteTooOld = false
 	txn.AssertInitialized(context.TODO())
 
 	if txn.Status != roachpb.PENDING {
