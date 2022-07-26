@@ -8330,11 +8330,9 @@ def go_deps():
         name = "com_google_cloud_go_storage",
         build_file_proto_mode = "disable_global",
         importpath = "cloud.google.com/go/storage",
-        sha256 = "fb7b2e6ffe19ef64c8ccd809a64896e551137bfeb7a9af973dab8ab39da211ec",
-        strip_prefix = "cloud.google.com/go/storage@v1.21.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/storage/com_google_cloud_go_storage-v1.21.0.zip",
-        ],
+        vcs = "git",
+        remote = "https://github.com/rhu713/google-cloud-go",  # Custom fork.
+        commit = "07b084208f40f176f50ed9814c5d694c7a250da4",  # Custom commit.
     )
     go_repository(
         name = "com_lukechampine_uint128",
