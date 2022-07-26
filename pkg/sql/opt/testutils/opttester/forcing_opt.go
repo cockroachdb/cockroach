@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/errors"
 )
 
 // forcingOptimizer is a wrapper around an Optimizer which adds low-level
@@ -122,9 +123,20 @@ func (fo *forcingOptimizer) Optimize() opt.Expr {
 	return expr
 }
 
-// LookupPath returns the path of the given node.
+// LookupPath returns the path of the given node. If a path is not found, it
+// returns nil.
 func (fo *forcingOptimizer) LookupPath(target opt.Expr) []memoLoc {
 	return fo.groups.FindPath(fo.o.Memo().RootExpr(), target)
+}
+
+// MustLookupPath returns the path of the given node. If a path is not found, it
+// panics.
+func (fo *forcingOptimizer) MustLookupPath(target opt.Expr) []memoLoc {
+	path := fo.LookupPath(target)
+	if path == nil {
+		panic(errors.AssertionFailedf("could not find path to expr (%s)", target.Op()))
+	}
+	return path
 }
 
 // RestrictToExpr sets up the optimizer to restrict the result to only those
