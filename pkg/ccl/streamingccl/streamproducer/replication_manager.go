@@ -72,7 +72,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.LogicalClusterID(), execCfg.Organization(), "REPLICATION")
+		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Organization(), "REPLICATION")
 	if enterpriseCheckErr != nil {
 		return nil, pgerror.Wrap(enterpriseCheckErr,
 			pgcode.InsufficientPrivilege, "replication requires enterprise license")

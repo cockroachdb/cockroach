@@ -252,8 +252,8 @@ func logEventInternalForSchemaChanges(
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		1,                                     /* depth: use this function as origin */
+		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
+		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{
 			targetID: int32(descID),
@@ -303,10 +303,10 @@ func logEventInternalForSQLStatements(
 		ctx,
 		execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		1+depth,                               /* depth */
-		opts,                                  /* eventLogOptions */
-		entries...,                            /* ...eventLogEntry */
+		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
+		1+depth,    /* depth */
+		opts,       /* eventLogOptions */
+		entries..., /* ...eventLogEntry */
 	)
 }
 
@@ -354,12 +354,12 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
 	}
-	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeID.SQLInstanceID())
+	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID())
 	return insertEventRecords(
 		ctx, l.execCfg.InternalExecutor,
 		l.txn,
-		int32(l.execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		1,                                       /* depth: use this function as origin */
+		int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
+		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{
 			targetID: int32(descID),
@@ -402,8 +402,8 @@ func LogEventForJobs(
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		1,                                     /* depth: use this function for vmodule filtering */
+		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
+		1, /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{event: event},
 	)
