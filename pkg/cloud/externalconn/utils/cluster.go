@@ -42,15 +42,55 @@ func NewHandle(t *testing.T, tc *testcluster.TestCluster) *Handle {
 	}
 }
 
+// SetSQLDBForUser sets the tenants' SQL runner to a PGURL connection using the
+// passed in `user`. The method returns a function that resets the tenants' SQL
+// runner to a PGURL connection for the root user.
+func (h *Handle) SetSQLDBForUser(tenantID roachpb.TenantID, user string) func() {
+	tenantState, ok := h.ts[tenantID]
+	if !ok {
+		h.t.Fatalf("tenant ID %d has not been initialized", tenantID)
+	}
+
+	resetToRootUser := func() {
+		tenantState.curDB = tenantState.userToDB[username.RootUserName().Normalized()]
+	}
+
+	if runner, ok := tenantState.userToDB[user]; ok {
+		tenantState.curDB = runner
+		return resetToRootUser
+	}
+
+	pgURL, cleanup := sqlutils.PGUrl(h.t, h.tc.Server(0).ServingSQLAddr(),
+		"TestBackupRestoreDataDriven", url.User(user))
+	userSQLDB, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(h.t, err)
+	tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
+	tenantState.userToDB[user] = tenantState.curDB
+	tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
+		require.NoError(h.t, userSQLDB.Close())
+		cleanup()
+	})
+
+	return resetToRootUser
+}
+
 // InitializeTenant initializes a tenant with the given ID, returning the
 // relevant tenant state.
 func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 	testServer := h.tc.Server(0)
-	tenantState := &Tenant{t: h.t}
+	tenantState := &Tenant{t: h.t, userToDB: make(map[string]*sqlutils.SQLRunner)}
 	if tenID == roachpb.SystemTenantID {
 		tenantState.TestTenantInterface = testServer
-		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
-		tenantState.cleanup = func() {} // noop
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "System",
+			url.User(username.RootUser))
+		userSQLDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(h.t, err)
+		tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
+		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
+		tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
+			require.NoError(h.t, userSQLDB.Close())
+			cleanupPGUrl()
+		})
 	} else {
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
@@ -63,11 +103,12 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(h.t, err)
 
-		tenantState.db = sqlutils.MakeSQLRunner(tenantSQLDB)
-		tenantState.cleanup = func() {
+		tenantState.curDB = sqlutils.MakeSQLRunner(tenantSQLDB)
+		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
+		tenantState.cleanupFns = append(tenantState.cleanupFns, func() {
 			require.NoError(h.t, tenantSQLDB.Close())
 			cleanupPGUrl()
-		}
+		})
 	}
 
 	h.ts[tenID] = tenantState
@@ -91,7 +132,9 @@ func (h *Handle) Tenants() []*Tenant {
 // Cleanup frees up internal resources.
 func (h *Handle) Cleanup() {
 	for _, tenantState := range h.ts {
-		tenantState.cleanup()
+		for _, cleanup := range tenantState.cleanupFns {
+			cleanup()
+		}
 	}
 	h.ts = nil
 }

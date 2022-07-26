@@ -373,7 +373,7 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 // Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		upgradeNodes(ctx, nodes, newVersion, t, u.c)
+		upgradeNodes(ctx, nodes, option.DefaultStartOpts(), newVersion, t, u.c)
 		// TODO(nvanbenschoten): add upgrade qualification step. What should we
 		// test? We could run logictests. We could add custom logic here. Maybe
 		// this should all be pushed to nightly migration tests instead.
@@ -383,6 +383,7 @@ func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionSt
 func upgradeNodes(
 	ctx context.Context,
 	nodes option.NodeListOption,
+	startOpts option.StartOpts,
 	newVersion string,
 	t test.Test,
 	c cluster.Cluster,
@@ -411,7 +412,6 @@ func upgradeNodes(
 
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
-		startOpts := option.DefaultStartOpts()
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 	}
 }
