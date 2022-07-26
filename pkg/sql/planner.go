@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -31,7 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -879,4 +883,132 @@ func (p *planner) QueryIteratorEx(
 // IsActive implements the Planner interface.
 func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 	return p.execCfg.Settings.Version.IsActive(ctx, key)
+}
+
+// SynthesizePrivilegeDescriptorFromSystemPrivilegesTable is part of the Planner interface.
+func (p *planner) SynthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+	ctx context.Context,
+	privilegeObjectName string,
+	privilegeObjectPath string,
+	privilegeObjectType privilege.ObjectType,
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+	var tableVersions []descpb.DescriptorVersion
+	cache := p.ExecCfg().SyntheticPrivilegeCache
+	var found bool
+	found, privileges, retErr = func() (bool, *catpb.PrivilegeDescriptor, error) {
+		cache.Lock()
+		defer cache.Unlock()
+		systemPrivilegesTableName := tree.NewTableNameWithSchema("system", "public", "privileges")
+		_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(), systemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return false, nil, err
+		}
+		version := desc.GetVersion()
+		tableVersions = []descpb.DescriptorVersion{version}
+		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
+			val, ok := cache.GetValueLocked(privilegeObjectPath)
+			if ok {
+				privilegeDescriptor := val.(*catpb.PrivilegeDescriptor)
+				return true, privilegeDescriptor, nil
+			}
+
+		}
+		return false, nil, nil
+	}()
+
+	if found {
+		return privileges, retErr
+	}
+
+	val, err := cache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (interface{}, error) {
+		query := fmt.Sprintf(
+			`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
+			catconstants.SystemPrivilegeTableName,
+			privilegeObjectPath)
+
+		it, err := p.QueryIteratorEx(ctx, `get-system-privileges`,
+			sessiondata.NodeUserSessionDataOverride, query)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			retErr = errors.CombineErrors(retErr, it.Close())
+		}()
+
+		privileges = &catpb.PrivilegeDescriptor{}
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				break
+			}
+
+			user := tree.MustBeDString(it.Cur()[0])
+			privArr := tree.MustBeDArray(it.Cur()[1])
+			var privilegeStrings []string
+			for _, elem := range privArr.Array {
+				privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
+			}
+
+			grantOptionArr := tree.MustBeDArray(it.Cur()[2])
+			var grantOptionStrings []string
+			for _, elem := range grantOptionArr.Array {
+				grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
+			}
+			privs, err := privilege.ListFromStrings(privilegeStrings)
+			if err != nil {
+				return nil, err
+			}
+			grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
+			if err != nil {
+				return nil, err
+			}
+			privsWithGrantOption := privilege.ListFromBitField(
+				privs.ToBitField()&grantOptions.ToBitField(),
+				privilegeObjectType,
+			)
+			privsWithoutGrantOption := privilege.ListFromBitField(
+				privs.ToBitField()&^privsWithGrantOption.ToBitField(),
+				privilegeObjectType,
+			)
+			privileges.Grant(
+				username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+				privsWithGrantOption,
+				true, /* withGrantOption */
+			)
+			privileges.Grant(
+				username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+				privsWithoutGrantOption,
+				false, /* withGrantOption */
+			)
+		}
+
+		// To avoid having to insert a row for public for each virtual
+		// table into system.privileges, we assume that if there is
+		// NO entry for public in the PrivilegeDescriptor, Public has
+		// grant. If there is an empty row for Public, then public
+		// does not have grant.
+		// TODO(richardjcai): Do a migration for this instead.
+		if privilegeObjectType == privilege.VirtualTable {
+			if _, found := privileges.FindUser(username.PublicRoleName()); !found {
+				privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
+			}
+		}
+
+		// We use InvalidID to skip checks on the root/admin roles having
+		// privileges.
+		if err := privileges.Validate(descpb.InvalidID, privilegeObjectType, privilegeObjectName, privilege.GetValidPrivilegesForObject(privilegeObjectType)); err != nil {
+			return nil, err
+		}
+		return privileges, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
+	return val.(*catpb.PrivilegeDescriptor), nil
 }

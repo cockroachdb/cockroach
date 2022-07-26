@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -328,6 +329,16 @@ type Planner interface {
 
 	// IsActive returns if the version specified by key is active.
 	IsActive(ctx context.Context, key clusterversion.Key) bool
+
+	// SynthesizePrivilegeDescriptorFromSystemPrivilegesTable synthesizes a
+	// PrivilegeDescriptor given a SyntheticPrivilegeObject's path
+	// from system.privileges.
+	SynthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+		ctx context.Context,
+		privilegeObjectName string,
+		privilegeObjectPath string,
+		privilegeObjectType privilege.ObjectType,
+	) (*catpb.PrivilegeDescriptor, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

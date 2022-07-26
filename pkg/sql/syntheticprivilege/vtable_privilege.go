@@ -42,7 +42,7 @@ func (p *VirtualTablePrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, planner, p)
+		return planner.SynthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, p.GetName(), p.GetPath(), p.GetObjectType())
 	}
 	return catpb.NewPrivilegeDescriptor(
 		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),

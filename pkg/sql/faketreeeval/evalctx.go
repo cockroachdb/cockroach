@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -292,6 +293,16 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 // ExecutorConfig is part of the Planner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
+}
+
+// SynthesizePrivilegeDescriptorFromSystemPrivilegesTable is part of the Planner interface.
+func (*DummyEvalPlanner) SynthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+	ctx context.Context,
+	privilegeObjectName string,
+	privilegeObjectPath string,
+	privilegeObjectType privilege.ObjectType,
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+	return nil, nil
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}

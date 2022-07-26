@@ -110,6 +110,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				}
 			}
 		} else {
+
 			// Handle revoke case.
 			for _, user := range n.grantees {
 				syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption)
@@ -171,7 +172,8 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		}
 	}
 
-	return nil
+	// Bump table version to invalidate cache.
+	return params.p.BumpPrivilegesTableVersion(params.ctx)
 }
 
 func (*changeNonDescriptorBackedPrivilegesNode) Next(runParams) (bool, error) { return false, nil }
