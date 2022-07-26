@@ -8330,10 +8330,10 @@ def go_deps():
             name = "com_google_cloud_go_storage",
             build_file_proto_mode = "disable_global",
             importpath = "cloud.google.com/go/storage",
-            sha256 = "c3bf2fd07f08cc5deca8fe6bc71172c7bd92d46517ba5598e6f4ac60e5feded1",
-            strip_prefix = "google-cloud-go-07b084208f40f176f50ed9814c5d694c7a250da4/storage",
+            sha256 = "6fb0441f9f09a4a3703d3176d73a012545f701c4e0a5298150c202762d95d860",
+            strip_prefix = "google-cloud-go-cafb3c5b7ac3cc2236dec19bfaa5824da21fea8c/storage",
             urls = [
-                "https://github.com/rhu713/google-cloud-go/archive/07b084208f40f176f50ed9814c5d694c7a250da4.zip",
+                "https://github.com/rhu713/google-cloud-go/archive/cafb3c5b7ac3cc2236dec19bfaa5824da21fea8c.zip",
             ],
         )
     go_repository(
