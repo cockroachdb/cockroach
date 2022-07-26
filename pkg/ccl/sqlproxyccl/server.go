@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -166,12 +165,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 
 	for {
-		origConn, err := ln.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			return err
-		}
-		conn := &proxyConn{
-			Conn: origConn,
 		}
 
 		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-serve", func(ctx context.Context) {
@@ -217,44 +213,4 @@ func (s *Server) AwaitNoConnections(ctx context.Context) <-chan struct{} {
 	})
 
 	return c
-}
-
-// proxyConn is a SQL connection into the proxy.
-type proxyConn struct {
-	net.Conn
-
-	mu struct {
-		syncutil.Mutex
-		closed   bool
-		closedCh chan struct{}
-	}
-}
-
-// Done returns a channel that's closed when the connection is closed.
-func (c *proxyConn) done() <-chan struct{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.mu.closedCh == nil {
-		c.mu.closedCh = make(chan struct{})
-		if c.mu.closed {
-			close(c.mu.closedCh)
-		}
-	}
-	return c.mu.closedCh
-}
-
-// Close closes the connection.
-// Any blocked Read or Write operations will be unblocked and return errors.
-// The connection's Done channel will be closed. This overrides net.Conn.Close.
-func (c *proxyConn) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.mu.closed {
-		return nil
-	}
-	if c.mu.closedCh != nil {
-		close(c.mu.closedCh)
-	}
-	c.mu.closed = true
-	return c.Conn.Close()
 }

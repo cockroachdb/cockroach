@@ -426,10 +426,9 @@ func TestProxyTLSClose(t *testing.T) {
 	require.NoError(t, runTestQuery(ctx, conn))
 
 	// Cut the connection.
-	incomingConn, ok := proxyIncomingConn.Load().(*proxyConn)
+	incomingConn, ok := proxyIncomingConn.Load().(net.Conn)
 	require.True(t, ok)
 	require.NoError(t, incomingConn.Close())
-	<-incomingConn.done() // should immediately proceed
 	_ = conn.Close(ctx)
 
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())

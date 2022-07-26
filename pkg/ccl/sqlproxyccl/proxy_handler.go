@@ -289,7 +289,7 @@ func newProxyHandler(
 
 // handle is called by the proxy server to handle a single incoming client
 // connection.
-func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
+func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
 	connRecievedTime := timeutil.Now()
 
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
