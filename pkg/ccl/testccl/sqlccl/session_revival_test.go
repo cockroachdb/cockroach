@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -43,8 +44,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)
-	_, err = mainDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true`)
-	require.NoError(t, err)
+	sql.AllowSessionRevival.Override(ctx, &tenant.ClusterSettings().SV, true)
 
 	var token string
 	t.Run("generate token", func(t *testing.T) {
