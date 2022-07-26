@@ -706,14 +706,14 @@ func (*Replica) sha512(
 		// TODO(sumeer): When we have replicated locks other than exclusive locks,
 		// we will probably not have any interleaved intents so we could stop
 		// using MVCCKeyAndIntentsIterKind and consider all locks here.
-		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
+		for _, span := range rditer.MakeReplicatedKeySpansExceptLockTable(&desc) {
 			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: span.Start,
-				UpperBound: span.End,
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
 			})
 			spanMS, err := storage.ComputeStatsForRangeWithVisitors(
-				iter, span.Start, span.End, 0 /* nowNanos */, pointKeyVisitor, rangeKeyVisitor)
+				iter, span.Key, span.EndKey, 0 /* nowNanos */, pointKeyVisitor, rangeKeyVisitor)
 			iter.Close()
 			if err != nil {
 				return nil, err

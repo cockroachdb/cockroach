@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1717,44 +1718,42 @@ func getExpectedSnapshotSizeBytes(
 	}
 	defer snap.Close()
 
-	totalBytes := int64(0)
-	var b storage.Batch
-	defer func() {
-		b.Close()
-	}()
-	b = originStore.Engine().NewUnindexedBatch(true)
-	iter := snap.Iter
-	var ok bool
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		hasPoint, hasRange := iter.HasPointAndRange()
-		if hasPoint {
-			var unsafeKey storage.EngineKey
-			if unsafeKey, err = iter.UnsafeKey(); err != nil {
-				return 0, err
-			}
-			if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
-				return 0, err
-			}
-		}
-		if hasRange {
-			bounds, err := iter.RangeBounds()
-			if err != nil {
-				return 0, err
-			}
-			for _, rkv := range iter.RangeKeys() {
-				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-				if err != nil {
-					return 0, err
+	b := originStore.Engine().NewUnindexedBatch(true)
+	defer b.Close()
+
+	err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			var err error
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				switch keyType {
+				case storage.IterKeyTypePointsOnly:
+					unsafeKey, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
+						return err
+					}
+
+				case storage.IterKeyTypeRangesOnly:
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, rkv := range iter.EngineRangeKeys() {
+						err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+						if err != nil {
+							return err
+						}
+					}
+
+				default:
+					return errors.Errorf("unexpected key type %v", keyType)
 				}
 			}
-		}
-	}
-	if err != nil {
-		return 0, err
-	}
-	totalBytes += int64(b.Len())
-
-	return totalBytes, nil
+			return err
+		})
+	return int64(b.Len()), err
 }
 
 // Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and

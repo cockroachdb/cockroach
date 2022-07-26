@@ -497,10 +497,8 @@ type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
-	// The RocksDB snapshot that will be streamed from.
+	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
-	// The complete range iterator for the snapshot to stream.
-	Iter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
 	// Allows access the original Replica's sideloaded storage. Note that
@@ -525,7 +523,6 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.Iter.Close()
 	s.EngineSnap.Close()
 	if s.onClose != nil {
 		s.onClose()
@@ -598,15 +595,10 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
 	}
 
-	// Intentionally let this iterator and the snapshot escape so that the
-	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snap, true /* replicatedOnly */)
-
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
 		EngineSnap:     snap,
-		Iter:           iter,
 		State:          state,
 		SnapUUID:       snapUUID,
 		RaftSnap: raftpb.Snapshot{
@@ -746,11 +738,11 @@ func clearRangeData(
 	rangeIDLocalOnly bool,
 	mustClearRange bool,
 ) error {
-	var keyRanges []rditer.KeyRange
+	var keySpans []roachpb.Span
 	if rangeIDLocalOnly {
-		keyRanges = []rditer.KeyRange{rditer.MakeRangeIDLocalKeyRange(desc.RangeID, false)}
+		keySpans = []roachpb.Span{rditer.MakeRangeIDLocalKeySpan(desc.RangeID, false)}
 	} else {
-		keyRanges = rditer.MakeAllKeyRanges(desc)
+		keySpans = rditer.MakeAllKeySpans(desc)
 	}
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
@@ -761,8 +753,8 @@ func clearRangeData(
 		clearRangeFn = storage.ClearRangeWithHeuristic
 	}
 
-	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(reader, writer, keyRange.Start, keyRange.End); err != nil {
+	for _, keySpan := range keySpans {
+		if err := clearRangeFn(reader, writer, keySpan.Key, keySpan.EndKey); err != nil {
 			return err
 		}
 	}
@@ -1092,11 +1084,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	// NB: we don't clear RangeID local key ranges here. That happens
+	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
-	getKeyRanges := rditer.MakeReplicatedKeyRangesExceptRangeID
-	keyRanges := getKeyRanges(desc)
-	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges...)
+	getKeySpans := rditer.MakeReplicatedKeySpansExceptRangeID
+	keySpans := getKeySpans(desc)
+	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -1140,15 +1132,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			}
 		}
 
-		srKeyRanges := getKeyRanges(sr.Desc())
+		srKeySpans := getKeySpans(sr.Desc())
 		// Compute the total key space covered by the current replica and all
 		// subsumed replicas.
-		for i := range srKeyRanges {
-			if srKeyRanges[i].Start.Compare(totalKeyRanges[i].Start) < 0 {
-				totalKeyRanges[i].Start = srKeyRanges[i].Start
+		for i := range srKeySpans {
+			if srKeySpans[i].Key.Compare(totalKeySpans[i].Key) < 0 {
+				totalKeySpans[i].Key = srKeySpans[i].Key
 			}
-			if srKeyRanges[i].End.Compare(totalKeyRanges[i].End) > 0 {
-				totalKeyRanges[i].End = srKeyRanges[i].End
+			if srKeySpans[i].EndKey.Compare(totalKeySpans[i].EndKey) > 0 {
+				totalKeySpans[i].EndKey = srKeySpans[i].EndKey
 			}
 		}
 	}
@@ -1166,8 +1158,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// Since the merge is the first operation to happen, a follower could be down
 	// before it completes. It is reasonable for a snapshot for r1 from S3 to
 	// subsume both r1 and r2 in S1.
-	for i := range keyRanges {
-		if totalKeyRanges[i].End.Compare(keyRanges[i].End) > 0 {
+	for i := range keySpans {
+		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
 				ctx, r.ClusterSettings(), subsumedReplSSTFile,
@@ -1176,8 +1168,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
-				keyRanges[i].End,
-				totalKeyRanges[i].End,
+				keySpans[i].EndKey,
+				totalKeySpans[i].EndKey,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err
@@ -1199,9 +1191,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// Extending to the left implies that either we merged "to the left" (we
 		// don't), or that we're applying a snapshot for another range (we don't do
 		// that either). Something is severely wrong for this to happen.
-		if totalKeyRanges[i].Start.Compare(keyRanges[i].Start) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key range: %v; total key range %v",
-				keyRanges[i], totalKeyRanges[i])
+		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
+			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
+				keySpans[i], totalKeySpans[i])
 		}
 	}
 	return nil

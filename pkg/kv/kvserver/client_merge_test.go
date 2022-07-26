@@ -3761,48 +3761,65 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// ultimately keep the last one.
 		sendingEngSnapshot := sendingEng.NewSnapshot()
 		defer sendingEngSnapshot.Close()
-		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.Desc)
-		it := rditer.NewReplicaEngineDataIterator(
-			inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */)
-		defer it.Close()
 
-		// Write a range deletion tombstone to each of the SSTs then put in the
-		// kv entries from the sender of the snapshot.
+		// Write a Pebble range deletion tombstone to each of the SSTs then put in
+		// the kv entries from the sender of the snapshot.
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 
-		ok, err := it.SeekStart()
-		require.NoError(t, err)
-		for _, r := range keyRanges {
-			sstFile := &storage.MemFile{}
-			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
-			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
-				return err
-			}
-
-			// Keep adding kv data to the SST until the key exceeds the
-			// bounds of the range, then proceed to the next range.
-			for ; ok && err == nil; ok, err = it.Next() {
-				var key storage.EngineKey
-				if key, err = it.UnsafeKey(); err != nil {
-					return err
-				}
-				if r.End.Compare(key.Key) <= 0 {
-					break
-				}
-				if err := sst.PutEngineKey(key, it.UnsafeValue()); err != nil {
-					return err
-				}
-			}
-			if err != nil {
-				return err
-			}
-			if err := sst.Finish(); err != nil {
-				return err
-			}
-			sst.Close()
-			expectedSSTs = append(expectedSSTs, sstFile.Data())
+		type sstFileWriter struct {
+			span   roachpb.Span
+			file   *storage.MemFile
+			writer storage.SSTWriter
 		}
+		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
+		sstFileWriters := map[string]sstFileWriter{}
+		for _, span := range keySpans {
+			file := &storage.MemFile{}
+			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
+			if err := writer.ClearRawRange(span.Key, span.EndKey); err != nil {
+				return err
+			}
+			sstFileWriters[string(span.Key)] = sstFileWriter{
+				span:   span,
+				file:   file,
+				writer: writer,
+			}
+		}
+
+		err := rditer.IterateReplicaKeySpans(inSnap.Desc, sendingEngSnapshot, true, /* replicatedOnly */
+			func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+				fw, ok := sstFileWriters[string(span.Key)]
+				if !ok || !fw.span.Equal(span) {
+					return errors.Errorf("unexpected span %s", span)
+				}
+				var err error
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					var key storage.EngineKey
+					if key, err = iter.UnsafeEngineKey(); err != nil {
+						return err
+					}
+					if err := fw.writer.PutEngineKey(key, iter.UnsafeValue()); err != nil {
+						return err
+					}
+				}
+				if err != nil {
+					return err
+				}
+				return nil
+			})
+		if err != nil {
+			return err
+		}
+
+		for _, span := range keySpans {
+			fw := sstFileWriters[string(span.Key)]
+			if err := fw.writer.Finish(); err != nil {
+				return err
+			}
+			expectedSSTs = append(expectedSSTs, fw.file.Data())
+		}
+
 		if len(expectedSSTs) != 5 {
 			return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
 				5, len(expectedSSTs))
@@ -3817,8 +3834,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
-			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false /* replicatedOnly */)
-			if err := sst.ClearRawRange(r.Start, r.End); err != nil {
+			s := rditer.MakeRangeIDLocalKeySpan(rangeID, false /* replicatedOnly */)
+			if err := sst.ClearRawRange(s.Key, s.EndKey); err != nil {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
@@ -3843,8 +3860,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			StartKey: roachpb.RKey(keyD),
 			EndKey:   roachpb.RKey(keyEnd),
 		}
-		r := rditer.MakeUserKeyRange(&desc)
-		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, r.Start, r.End); err != nil {
+		s := rditer.MakeUserKeySpan(&desc)
+		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, s.Key, s.EndKey); err != nil {
 			return err
 		}
 		if err = sst.Finish(); err != nil {
