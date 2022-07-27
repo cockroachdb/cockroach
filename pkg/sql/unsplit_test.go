@@ -207,8 +207,8 @@ func TestUnsplitAt(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !rng.GetStickyBit().IsEmpty() {
-					t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.unsplitStmt, rng.GetStickyBit())
+				if !rng.StickyBit.IsEmpty() {
+					t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.unsplitStmt, rng.StickyBit)
 				}
 			}
 			if err := rows.Err(); err != nil {

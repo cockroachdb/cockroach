@@ -887,7 +887,7 @@ func (tc *TestCluster) waitForNewReplicas(
 			desc := repl.Desc()
 			if replDesc, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
 				return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
-			} else if waitForVoter && replDesc.GetType() != roachpb.VOTER_FULL {
+			} else if waitForVoter && replDesc.Type != roachpb.VOTER_FULL {
 				return errors.Errorf("target store %d not yet voter in range descriptor %v", target.StoreID, desc)
 			}
 		}
@@ -983,10 +983,10 @@ func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
 	require.NoError(t, err)
 	replDesc, ok := afterDesc.GetReplicaDescriptor(voterTarget.StoreID)
 	require.True(t, ok)
-	require.Equal(t, roachpb.NON_VOTER, replDesc.GetType())
+	require.Equal(t, roachpb.NON_VOTER, replDesc.Type)
 	replDesc, ok = afterDesc.GetReplicaDescriptor(nonVoterTarget.StoreID)
 	require.True(t, ok)
-	require.Equal(t, roachpb.VOTER_FULL, replDesc.GetType())
+	require.Equal(t, roachpb.VOTER_FULL, replDesc.Type)
 
 	return afterDesc
 }

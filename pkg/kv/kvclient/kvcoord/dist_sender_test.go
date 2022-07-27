@@ -585,7 +585,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 
 	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[1]
 	recognizedLeaseHolderIncoming := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[2]
-	recognizedLeaseHolderIncoming.Type = roachpb.ReplicaTypeVoterIncoming()
+	recognizedLeaseHolderIncoming.Type = roachpb.VOTER_INCOMING
 	unrecognizedLeaseHolder := roachpb.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
@@ -712,7 +712,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 					// initial range descriptor, not the one returned in the NLHE, i.e.
 					// it won't have the non-nil type.
 					expRetryReplica := *tc.expLeaseholder
-					expRetryReplica.Type = nil
+					expRetryReplica.Type = 0
 					require.Equal(t, expRetryReplica, retryReplica)
 				} else {
 					require.Nil(t, rng.Lease())
