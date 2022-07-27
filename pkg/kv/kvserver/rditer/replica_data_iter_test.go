@@ -148,52 +148,53 @@ func verifyRDReplicatedOnlyMVCCIter(
 			}, hlc.Timestamp{WallTime: 42})
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaMVCCDataIterator(desc, readWriter, ReplicaDataIteratorOptions{
-			Reverse:  reverse,
-			IterKind: storage.MVCCKeyAndIntentsIterKind,
-			KeyTypes: storage.IterKeyTypePointsAndRanges,
-		})
-		defer iter.Close()
-		next := iter.Next
-		if reverse {
-			next = iter.Prev
-		}
 		var rangeStart roachpb.Key
 		actualKeys := []storage.MVCCKey{}
 		actualRanges := []storage.MVCCRangeKey{}
-		for {
-			ok, err := iter.Valid()
-			require.NoError(t, err)
-			if !ok {
-				break
-			}
-			p, r := iter.HasPointAndRange()
-			if p {
-				if !reverse {
-					actualKeys = append(actualKeys, iter.Key())
-				} else {
-					actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+		err := IterateMVCCReplicaKeySpans(desc, readWriter, IterateOptions{
+			CombineRangesAndPoints: false,
+			Reverse:                reverse,
+		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			for {
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
 				}
-			}
-			if r {
-				rangeKeys := iter.RangeKeys().Clone()
-				if !rangeKeys.Bounds.Key.Equal(rangeStart) {
-					rangeStart = rangeKeys.Bounds.Key.Clone()
+				p, r := iter.HasPointAndRange()
+				if p {
 					if !reverse {
-						for _, v := range rangeKeys.Versions {
-							actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
-						}
+						actualKeys = append(actualKeys, iter.Key())
 					} else {
-						for i := rangeKeys.Len() - 1; i >= 0; i-- {
-							actualRanges = append([]storage.MVCCRangeKey{
-								rangeKeys.AsRangeKey(rangeKeys.Versions[i])},
-								actualRanges...)
+						actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+					}
+				}
+				if r {
+					rangeKeys := iter.RangeKeys().Clone()
+					if !rangeKeys.Bounds.Key.Equal(rangeStart) {
+						rangeStart = rangeKeys.Bounds.Key.Clone()
+						if !reverse {
+							for _, v := range rangeKeys.Versions {
+								actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
+							}
+						} else {
+							for i := rangeKeys.Len() - 1; i >= 0; i-- {
+								actualRanges = append([]storage.MVCCRangeKey{
+									rangeKeys.AsRangeKey(rangeKeys.Versions[i]),
+								}, actualRanges...)
+							}
 						}
 					}
 				}
+				if reverse {
+					iter.Prev()
+				} else {
+					iter.Next()
+				}
 			}
-			next()
-		}
+			return nil
+		})
+		require.NoError(t, err, "visitor failed")
 		require.Equal(t, expectedKeys, actualKeys)
 		require.Equal(t, expectedRangeKeys, actualRanges)
 	}

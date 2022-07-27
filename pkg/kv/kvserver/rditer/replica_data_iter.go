@@ -55,7 +55,7 @@ type ReplicaMVCCDataIterator struct {
 // MakeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
 func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return makeRangeKeySpans(d, false /* replicatedOnly */)
+	return makeRangeKeySpans(d, false /* ReplicatedOnly */)
 }
 
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
@@ -69,7 +69,7 @@ func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 // 3. Lock-table key spans.
 // 4. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return makeRangeKeySpans(d, true /* replicatedOnly */)
+	return makeRangeKeySpans(d, true /* ReplicatedOnly */)
 }
 
 func makeRangeKeySpans(d *roachpb.RangeDescriptor, replicatedOnly bool) []roachpb.Span {
@@ -97,7 +97,7 @@ func makeRangeKeySpans(d *roachpb.RangeDescriptor, replicatedOnly bool) []roachp
 // 3. User key span.
 func MakeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
-		MakeRangeIDLocalKeySpan(d.RangeID, true /* replicatedOnly */),
+		MakeRangeIDLocalKeySpan(d.RangeID, true /* ReplicatedOnly */),
 		makeRangeLocalKeySpan(d),
 		MakeUserKeySpan(d),
 	}
@@ -125,7 +125,7 @@ func MakeReplicatedKeySpansExceptRangeID(d *roachpb.RangeDescriptor) []roachpb.S
 }
 
 // MakeRangeIDLocalKeySpan returns the range-id local key span. If
-// replicatedOnly is true, then it returns only the replicated keys, otherwise,
+// ReplicatedOnly is true, then it returns only the replicated keys, otherwise,
 // it only returns both the replicated and unreplicated keys.
 func MakeRangeIDLocalKeySpan(rangeID roachpb.RangeID, replicatedOnly bool) roachpb.Span {
 	var prefixFn func(roachpb.RangeID) roachpb.Key
@@ -388,6 +388,63 @@ func IterateReplicaKeySpans(
 				UpperBound: span.EndKey,
 			})
 			ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
+			if err == nil && ok {
+				err = visitor(iter, span, keyType)
+			}
+			iter.Close()
+			if err != nil {
+				return iterutil.Map(err)
+			}
+		}
+	}
+	return nil
+}
+
+// IterateOptions instructs how points and ranges should be presented to visitor
+// and if iterators should be visited in forward or reverse order.
+// Reverse iterator are also positioned at the end of the range prior to being
+// passed to visitor.
+type IterateOptions struct {
+	CombineRangesAndPoints bool
+	Reverse                bool
+}
+
+// IterateMVCCReplicaKeySpans iterates over replica's key spans in the similar
+// way to IterateReplicaKeySpans, but uses MVCCIterator and gives additional
+// options to create reverse iterators and to combine keys are ranges.
+func IterateMVCCReplicaKeySpans(
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	options IterateOptions,
+	visitor func(storage.MVCCIterator, roachpb.Span, storage.IterKeyType) error,
+) error {
+	if !reader.ConsistentIterators() {
+		panic("reader must provide consistent iterators")
+	}
+	spans := MakeReplicatedKeySpansExceptLockTable(desc)
+	if options.Reverse {
+		spanMax := len(spans) - 1
+		for i := 0; i < len(spans)/2; i++ {
+			spans[spanMax-i], spans[i] = spans[i], spans[spanMax-i]
+		}
+	}
+	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
+	if options.CombineRangesAndPoints {
+		keyTypes = []storage.IterKeyType{storage.IterKeyTypePointsAndRanges}
+	}
+	for _, span := range spans {
+		for _, keyType := range keyTypes {
+			iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
+				KeyTypes:   keyType,
+			})
+			if options.Reverse {
+				iter.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))
+			} else {
+				iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+			}
+			ok, err := iter.Valid()
 			if err == nil && ok {
 				err = visitor(iter, span, keyType)
 			}
