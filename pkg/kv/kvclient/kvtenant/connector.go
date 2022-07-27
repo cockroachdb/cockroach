@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,6 +76,10 @@ type Connector interface {
 	// KVAccessor provides access to the subset of the cluster's span configs
 	// applicable to secondary tenants.
 	spanconfig.KVAccessor
+
+	// KVAccessor provides a tenant with access to the parts of the key visualizer subsystem
+	// that live in kv.
+	keyvisualizer.KVAccessor
 
 	// OverridesMonitor provides access to tenant cluster setting overrides.
 	settingswatcher.OverridesMonitor
