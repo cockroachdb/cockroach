@@ -155,7 +155,6 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 	} else {
 		eb := execbuilder.New(newExecFactory(p), &p.optPlanningCtx.optimizer,
 			nf.Memo(), &oc, &remaining, evalCtx, false)
-		eb.SetSearchPath(semaCtx.SearchPath)
 		expr, err := eb.BuildScalar()
 		if err != nil {
 			return nil, nil, err

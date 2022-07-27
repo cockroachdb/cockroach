@@ -213,21 +213,6 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
-// SetSearchPath configures this builder to use specified search path.
-func (b *Builder) SetSearchPath(sp tree.SearchPath) {
-	// TODO(mgartner): The customFnResolver and wrapFunctionOverride could
-	// probably be replaced by a custom implementation of tree.FunctionResolver.
-	if customFnResolver, ok := sp.(tree.CustomFunctionDefinitionResolver); ok {
-		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
-			fd := customFnResolver.Resolve(fnName)
-			if fd == nil {
-				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
-			}
-			return tree.ResolvableFunctionReference{FunctionReference: fd}
-		}
-	}
-}
-
 func (b *Builder) wrapFunction(fnName string) tree.ResolvableFunctionReference {
 	if b.wrapFunctionOverride != nil {
 		return b.wrapFunctionOverride(fnName)

@@ -217,7 +217,8 @@ func newExprEval(
 	evalCtx = nil // From this point, only e.evalCtx should be used.
 
 	// Configure semantic context.
-	e.semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	e.semaCtx.SearchPath = &sessiondata.DefaultSearchPath
+	e.semaCtx.FunctionResolver = &CDCFunctionResolver{}
 	e.semaCtx.Properties.Require("cdc",
 		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
 	)
@@ -703,7 +704,8 @@ const rejectInvalidCDCExprs = (tree.RejectAggregates | tree.RejectGenerators |
 // newSemaCtx returns new tree.SemaCtx configured for cdc without type resolver.
 func newSemaCtx() *tree.SemaContext {
 	sema := tree.MakeSemaContext()
-	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	sema.SearchPath = &sessiondata.DefaultSearchPath
+	sema.FunctionResolver = &CDCFunctionResolver{}
 	sema.Properties.Require("cdc", rejectInvalidCDCExprs)
 	return &sema
 }
