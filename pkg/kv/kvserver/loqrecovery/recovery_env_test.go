@@ -267,14 +267,13 @@ func buildReplicaDescriptorFromTestData(
 		replica.Generation = roachpb.RangeGeneration(maxReplicaID)
 	}
 	desc := roachpb.RangeDescriptor{
-		RangeID:                        replica.RangeID,
-		StartKey:                       startKey,
-		EndKey:                         endKey,
-		InternalReplicas:               replicas,
-		NextReplicaID:                  maxReplicaID + 1,
-		Generation:                     replica.Generation,
-		DeprecatedGenerationComparable: nil,
-		StickyBit:                      nil,
+		RangeID:          replica.RangeID,
+		StartKey:         startKey,
+		EndKey:           endKey,
+		InternalReplicas: replicas,
+		NextReplicaID:    maxReplicaID + 1,
+		Generation:       replica.Generation,
+		StickyBit:        nil,
 	}
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),

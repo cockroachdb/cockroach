@@ -64,7 +64,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			pt.init(&stmt, &p.instrumentation)
 			opc := &p.optPlanningCtx
 			opc.p.stmt = stmt
-			opc.reset()
+			opc.reset(ctx)
 
 			memo, err := opc.buildExecMemo(ctx)
 			if err != nil {

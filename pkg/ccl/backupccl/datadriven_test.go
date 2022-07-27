@@ -413,6 +413,12 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 
+			case "switch-server":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				lastCreatedServer = name
+				return ""
+
 			case "exec-sql":
 				server := lastCreatedServer
 				user := "root"

@@ -9,7 +9,7 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo/bar';
 
 inspect-system-table
 ----
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
 
 # Try to create another External Connection with the same name.
 exec-sql
@@ -24,8 +24,8 @@ CREATE EXTERNAL CONNECTION bar123 AS 'nodelocal://1/baz';
 
 inspect-system-table
 ----
-bar123 STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/baz"}}}
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+bar123 STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/baz"}}, "provider": "nodelocal"}
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
 
 # Drop an External Connection that does not exist.
 exec-sql
@@ -38,7 +38,7 @@ DROP EXTERNAL CONNECTION bar123;
 
 inspect-system-table
 ----
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}}
+foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
 
 exec-sql
 DROP EXTERNAL CONNECTION foo;
@@ -70,7 +70,7 @@ CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
 
 inspect-system-table
 ----
-privileged STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo"}}}
+privileged STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo"}}, "provider": "nodelocal"}
 
 exec-sql
 REVOKE SYSTEM EXTERNALCONNECTION FROM testuser;

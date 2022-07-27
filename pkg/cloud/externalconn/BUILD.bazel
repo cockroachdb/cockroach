@@ -5,12 +5,15 @@ go_library(
     name = "externalconn",
     srcs = [
         "connection.go",
+        "connection_storage.go",
         "impl_registry.go",
         "record.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/kv",
         "//pkg/security/username",
