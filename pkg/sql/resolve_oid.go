@@ -27,7 +27,7 @@ import (
 // ResolveOIDFromString is part of tree.TypeResolver.
 func (p *planner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
-) (*tree.DOid, error) {
+) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
 	return resolveOID(
 		ctx, p.Txn(),
 		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
@@ -38,7 +38,7 @@ func (p *planner) ResolveOIDFromString(
 // ResolveOIDFromOID is part of tree.TypeResolver.
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
-) (*tree.DOid, error) {
+) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
 	return resolveOID(
 		ctx, p.Txn(),
 		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
@@ -52,10 +52,10 @@ func resolveOID(
 	ie sqlutil.InternalExecutor,
 	resultType *types.T,
 	toResolve tree.Datum,
-) (*tree.DOid, error) {
+) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
 	info, ok := regTypeInfos[resultType.Oid()]
 	if !ok {
-		return nil, pgerror.Newf(
+		return nil, true, pgerror.Newf(
 			pgcode.InvalidTextRepresentation,
 			"invalid input syntax for type %s: %q",
 			resultType,
@@ -73,20 +73,20 @@ func resolveOID(
 	results, err := ie.QueryRow(ctx, "queryOid", txn, q, toResolve)
 	if err != nil {
 		if errors.HasType(err, (*tree.MultipleResultsError)(nil)) {
-			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
+			return nil, false, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one %s named %s", info.objName, toResolve)
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if results.Len() == 0 {
-		return nil, pgerror.Newf(info.errType,
+		return nil, true, pgerror.Newf(info.errType,
 			"%s %s does not exist", info.objName, toResolve)
 	}
 	return tree.NewDOidWithName(
 		results[0].(*tree.DOid).DInt,
 		resultType,
 		tree.AsStringWithFlags(results[1], tree.FmtBareStrings),
-	), nil
+	), true, nil
 }
 
 // regTypeInfo contains details on a pg_catalog table that has a reg* type.
