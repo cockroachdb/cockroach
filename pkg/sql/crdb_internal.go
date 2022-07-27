@@ -6233,20 +6233,60 @@ func populateClusterLocksWithFilter(
 var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.node_execution_insights (
-	session_id               STRING NOT NULL,
-	transaction_id           UUID NOT NULL,
-	statement_id             STRING NOT NULL,
-	statement_fingerprint_id BYTES NOT NULL
+	session_id                 STRING NOT NULL,
+	txn_id                     UUID NOT NULL,
+	txn_fingerprint_id         BYTES NOT NULL,
+	stmt_id                    STRING NOT NULL,
+	stmt_fingerprint_id        BYTES NOT NULL,
+	query                      STRING NOT NULL,
+	status                     STRING NOT NULL,
+	start_time                 TIMESTAMP NOT NULL,
+	end_time                   TIMESTAMP NOT NULL,
+	full_scan                  BOOL NOT NULL,
+	user_name                  STRING NOT NULL,
+	app_name                   STRING NOT NULL,
+	database_name              STRING NOT NULL,
+	plan_gist                  STRING NOT NULL,
+	rows_read                  INT8 NOT NULL,
+	rows_written               INT8 NOT NULL,
+	priority                   FLOAT NOT NULL,
+	retries                    INT8 NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		p.extendedEvalCtx.statsProvider.IterateInsights(ctx, func(
-			ctx context.Context, o *insights.Insight,
+			ctx context.Context, insight *insights.Insight,
 		) {
+			startTimestamp, errTimestamp := tree.MakeDTimestamp(insight.Statement.StartTime, time.Nanosecond)
+			if errTimestamp != nil {
+				err = errors.CombineErrors(err, errTimestamp)
+				return
+			}
+
+			endTimestamp, errTimestamp := tree.MakeDTimestamp(insight.Statement.EndTime, time.Nanosecond)
+			if errTimestamp != nil {
+				err = errors.CombineErrors(err, errTimestamp)
+				return
+			}
+
 			err = errors.CombineErrors(err, addRow(
-				tree.NewDString(hex.EncodeToString(o.Session.ID.GetBytes())),
-				tree.NewDUuid(tree.DUuid{UUID: o.Transaction.ID}),
-				tree.NewDString(hex.EncodeToString(o.Statement.ID.GetBytes())),
-				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(o.Statement.FingerprintID)))),
+				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
+				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
+				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
+				tree.NewDString(hex.EncodeToString(insight.Statement.ID.GetBytes())),
+				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Statement.FingerprintID)))),
+				tree.NewDString(insight.Statement.Query),
+				tree.NewDString(insight.Statement.Status),
+				startTimestamp,
+				endTimestamp,
+				tree.MakeDBool(tree.DBool(insight.Statement.FullScan)),
+				tree.NewDString(insight.Statement.User),
+				tree.NewDString(insight.Statement.ApplicationName),
+				tree.NewDString(insight.Statement.Database),
+				tree.NewDString(insight.Statement.PlanGist),
+				tree.NewDInt(tree.DInt(insight.Statement.RowsRead)),
+				tree.NewDInt(tree.DInt(insight.Statement.RowsWritten)),
+				tree.NewDFloat(tree.DFloat(insight.Transaction.UserPriority)),
+				tree.NewDInt(tree.DInt(insight.Statement.Retries)),
 			))
 		})
 		return err
