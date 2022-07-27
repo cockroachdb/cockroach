@@ -197,6 +197,9 @@ type ServerConfig struct {
 
 	// RangeStatsFetcher is used to fetch range stats for keys.
 	RangeStatsFetcher eval.RangeStatsFetcher
+
+	// *sql.ExecutorConfig exposed as an interface (due to dependency cycles).
+	ExecutorConfig interface{}
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

@@ -118,23 +118,6 @@ func (ref *ResolvableFunctionReference) Resolve(
 	}
 }
 
-// CustomBuiltinFunctionWrapper in an interface providing custom WrapFunction
-// functionality. This is hack only being used by CDC to inject CDC custom
-// builtin functions. It's not recommended to implement this interface for more
-// purpose and this interface could be deleted.
-//
-// TODO(Chengxiong): consider getting rid of this hack entirely and use function
-// resolver instead. Previously, CDC utilized search path as a interface hack to
-// do the same thing. This interface makes the concept not relevant to search
-// path anymore and also makes the purpose more specific on "Builtin" functions.
-// However, it's ideal to get rid of this hack and use function resolver
-// instead. One issue need to be addressed is that "WrapFunction" always look at
-// builtin functions. So, the FunctionReferenceResolver interface might need to
-// be extended to have a specific path for builtin functions.
-type CustomBuiltinFunctionWrapper interface {
-	WrapFunction(name string) (*ResolvedFunctionDefinition, error)
-}
-
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved
 // function from a built-in function name. Helper for grammar rules and
 // execbuilder.
