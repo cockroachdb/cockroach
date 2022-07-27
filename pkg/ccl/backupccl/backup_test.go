@@ -10168,3 +10168,52 @@ func TestBackupLatestInBaseDirectory(t *testing.T) {
 	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
 	sqlDB.Exec(t, query)
 }
+
+// This tests checks that backups do not contain spans of views.
+func TestBackupDoNotIncludeViewSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+	kvDB := tc.Server(0).DB()
+
+	// Generate some testdata and back it up.
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "CREATE TABLE d.t (k INT, a INT, b INT)")
+	sqlDB.Exec(t, "INSERT INTO d.t VALUES(1, 100, 101), (2, 200, 202)")
+	sqlDB.Exec(t, "CREATE VIEW d.tview AS SELECT k, b FROM d.t")
+	sqlDB.Exec(t, `BACKUP DATABASE d INTO $1`, localFoo)
+
+	res := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, localFoo)
+	if len(res) != 1 {
+		t.Fatal("expected 1 backup")
+	}
+
+	// Read the backup manifest.
+	var backupManifest backuppb.BackupManifest
+	{
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, "foo", res[0][0], backupbase.BackupManifestName))
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if backupinfo.IsGZipped(backupManifestBytes) {
+			backupManifestBytes, err = backupinfo.DecompressData(context.Background(), nil, backupManifestBytes)
+			require.NoError(t, err)
+		}
+		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Verify that the manifest doesn't contain any spans that intersect the span
+	// for the view.
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "tview")
+	viewSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
+
+	for _, sp := range backupManifest.Spans {
+		if sp.Overlaps(viewSpan) {
+			t.Fatalf("backup span %v overlaps view span %v", sp, viewSpan)
+		}
+	}
+}

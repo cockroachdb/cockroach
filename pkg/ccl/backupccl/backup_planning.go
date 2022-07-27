@@ -95,6 +95,10 @@ func forEachPublicIndexTableSpan(
 	codec keys.SQLCodec,
 	f func(span roachpb.Span),
 ) {
+	if !table.IsPhysicalTable() {
+		return
+	}
+
 	table.ForEachPublicIndex(func(idx *descpb.IndexDescriptor) {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.ID}
 		if added[key] {
