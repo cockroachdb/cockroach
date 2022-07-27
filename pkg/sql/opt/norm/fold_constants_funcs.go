@@ -601,8 +601,7 @@ func (c *CustomFuncs) FunctionReturnType(private *memo.FunctionPrivate) *types.T
 }
 
 // FoldFunction evaluates a function expression with constant inputs. It returns
-// a constant expression as long as the function is contained in the
-// FoldFunctionAllowlist, and the evaluation causes no error. Otherwise, it
+// a constant expression as long as the evaluation causes no error. Otherwise, it
 // returns ok=false.
 func (c *CustomFuncs) FoldFunction(
 	args memo.ScalarListExpr, private *memo.FunctionPrivate,
@@ -610,6 +609,10 @@ func (c *CustomFuncs) FoldFunction(
 	// Non-normal function classes (aggregate, window, generator) cannot be
 	// folded into a single constant.
 	if private.Properties.Class != tree.NormalClass {
+		return nil, false
+	}
+
+	if private.Overload.InhibitStableFolds {
 		return nil, false
 	}
 

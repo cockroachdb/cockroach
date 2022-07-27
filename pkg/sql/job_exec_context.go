@@ -11,15 +11,10 @@
 package sql
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -72,19 +67,6 @@ func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 }
 func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
-// ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
-func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
-	ctx context.Context,
-	req SpanConstraintRequirement,
-	tn *tree.TableName,
-	desc catalog.TableDescriptor,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
-	filter tree.Expr,
-) ([]roachpb.Span, tree.Expr, error) {
-	return e.p.ConstrainPrimaryIndexSpanByExpr(ctx, req, tn, desc, evalCtx, semaCtx, filter)
-}
-
 // JobExecContext provides the execution environment for a job. It is what is
 // passed to the Resume/OnFailOrCancel/OnPauseRequested methods of a jobs's
 // Resumer to give that resumer access to things like ExecutorCfg, LeaseMgr,
@@ -95,7 +77,6 @@ func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
 // (though note that ExtendedEvalContext may transitively include methods that
 // close over/expect a txn so use it with caution).
 type JobExecContext interface {
-	SpanConstrainer
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
