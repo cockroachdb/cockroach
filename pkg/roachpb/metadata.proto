@@ -265,12 +265,6 @@ message RangeDescriptor {
   // replica applying the merge is.
   optional int64 generation = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "RangeGeneration"];
 
-  // This field is not used any more, but we need to maintain it in 20.2 because
-  // 20.1 nodes need descriptors to round-trip through 20.2 nodes and compare
-  // Equal() when they come back. 20.2 nodes know to ignore this field when
-  // comparing, so the field can be removed in 21.1.
-  optional bool deprecated_generation_comparable = 8;
-
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note
@@ -287,6 +281,8 @@ message RangeDescriptor {
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // disabling the merge queue.
   optional util.hlc.Timestamp sticky_bit = 7;
+
+  reserved 8;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
