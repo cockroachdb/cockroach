@@ -18,7 +18,7 @@ type RangeFeedMessage struct {
 	// RangeFeed event this message holds.
 	*roachpb.RangeFeedEvent
 
-	// The span of the rangefeed registration that overlaps with SST span if
-	// event has an underlying roachpb.RangeFeedSSTable event.
+	// The span of the rangefeed registration that overlaps with the key or span
+	// in the RangeFeed event.
 	RegisteredSpan roachpb.Span
 }
