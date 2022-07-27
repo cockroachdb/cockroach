@@ -1,0 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keyvissubscriber",
+    srcs = ["boundary_subscriber.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissubscriber",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/keyvisualizer/keyvispb",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+    ],
+)
+
+get_x_data(name = "get_x_data")
