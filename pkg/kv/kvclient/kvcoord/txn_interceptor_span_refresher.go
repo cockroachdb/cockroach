@@ -220,13 +220,6 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	}
 	br, pErr := sr.wrapped.SendLocked(ctx, ba)
 
-	// 19.2 servers might give us an error with the WriteTooOld flag set. This
-	// interceptor wants to always terminate that flag. In the case of an error,
-	// we can just ignore it.
-	if pErr != nil && pErr.GetTxn() != nil {
-		pErr.GetTxn().WriteTooOld = false
-	}
-
 	if pErr == nil && br.Txn.WriteTooOld {
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and

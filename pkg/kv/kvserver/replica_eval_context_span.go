@@ -13,8 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -23,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -232,21 +229,6 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentClosedTimestamp(ctx context.Cont
 // interface.
 func (rec *SpanSetReplicaEvalContext) GetClosedTimestampOlderThanStorageSnapshot() hlc.Timestamp {
 	return rec.i.GetClosedTimestampOlderThanStorageSnapshot()
-}
-
-// GetExternalStorage returns an ExternalStorage object, based on
-// information parsed from a URI, stored in `dest`.
-func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
-	ctx context.Context, dest cloudpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
-	return rec.i.GetExternalStorage(ctx, dest)
-}
-
-// GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
-func (rec *SpanSetReplicaEvalContext) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user username.SQLUsername,
-) (cloud.ExternalStorage, error) {
-	return rec.i.GetExternalStorageFromURI(ctx, uri, user)
 }
 
 // RevokeLease stops the replica from using its current lease.
