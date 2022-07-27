@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -83,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
@@ -3729,6 +3731,13 @@ type KVAdmissionController interface {
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
 	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
+	// SnapshotIngested informs admission control about a range snapshot
+	// ingestion.
+	SnapshotIngested(storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats)
+	// FollowerStoreWriteBytes informs admission control about writes
+	// replicated to a raft follower, that have not been subject to admission
+	// control.
+	FollowerStoreWriteBytes(storeID roachpb.StoreID, followerWriteBytes apply.FollowerStoreWriteBytes)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -3912,4 +3921,30 @@ func (n KVAdmissionControllerImpl) SetTenantWeightProvider(
 			}
 		}
 	}()
+}
+
+// SnapshotIngested implements the KVAdmissionController itnerface.
+func (n KVAdmissionControllerImpl) SnapshotIngested(
+	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
+) {
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	if storeAdmissionQ == nil {
+		return
+	}
+	storeAdmissionQ.StatsToIgnore(ingestStats)
+}
+
+// FollowerStoreWriteBytes implements the KVAdmissionController interface.
+func (n KVAdmissionControllerImpl) FollowerStoreWriteBytes(
+	storeID roachpb.StoreID, followerWriteBytes apply.FollowerStoreWriteBytes,
+) {
+	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
+		return
+	}
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	if storeAdmissionQ == nil {
+		return
+	}
+	storeAdmissionQ.BypassedWorkDone(
+		followerWriteBytes.NumCommands, followerWriteBytes.StoreWorkDoneInfo)
 }

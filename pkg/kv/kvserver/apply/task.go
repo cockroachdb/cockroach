@@ -13,6 +13,7 @@ package apply
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -229,6 +230,37 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxInde
 		}
 		return nil
 	})
+}
+
+// FollowerStoreWriteBytes captures writes done to a store by a replica that
+// is not the leaseholder. These are used for admission control.
+type FollowerStoreWriteBytes struct {
+	NumCommands int64
+	admission.StoreWorkDoneInfo
+}
+
+// GetFollowerStoreWriteBytesForCommittedEntries returns stats about writes
+// committed to a store by a replica that is not the leaseholder.
+func (t *Task) GetFollowerStoreWriteBytesForCommittedEntries(
+	ctx context.Context,
+) FollowerStoreWriteBytes {
+	var wb FollowerStoreWriteBytes
+	iter := t.dec.NewCommandIter()
+	err := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
+		if !cmd.IsLocal() {
+			writeBytes, ingestedBytes := cmd.GetStoreWriteByteSizes()
+			wb.NumCommands++
+			wb.WriteBytes += writeBytes
+			wb.IngestedBytes += ingestedBytes
+		}
+		return nil
+	})
+	if err != nil {
+		// The func passed to forEachCmdIter never returns an error, so this is a
+		// bug.
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned by iter"))
+	}
+	return wb
 }
 
 // SetMaxBatchSize sets the maximum application batch size. If 0, no limit
