@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -281,9 +282,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
+	execCfg := ca.flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
-		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
+		ctx, execCfg, ca.spec, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ca.sink, ca.metrics, ca.knobs)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -618,10 +620,6 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
-}
-
-func (ca *changeAggregator) isSinkless() bool {
-	return ca.spec.JobID == 0
 }
 
 const (
