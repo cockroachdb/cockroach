@@ -125,7 +125,7 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 var restoreAtNow = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore_at_current_time.enabled",
-	"write restored data at the current timestamp",
+	"write restored data at the current timestamp (ignored until 22.1 finalization)",
 	true,
 )
 
@@ -405,12 +405,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
-	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
-	if writeAtBatchTS && !evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
-		return roachpb.BulkOpSummary{}, errors.Newf(
-			"cannot use %s until version %s", restoreAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
-		)
-	}
+	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV) &&
+		evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable)
 
 	// If the system tenant is restoring a guest tenant span, we don't want to
 	// forward all the restored data to now, as there may be importing tables in
