@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -193,6 +194,7 @@ type Provider interface {
 type RecordedStmtStats struct {
 	SessionID            clusterunique.ID
 	StatementID          clusterunique.ID
+	TransactionID        uuid.UUID
 	AutoRetryCount       int
 	RowsAffected         int
 	ParseLatency         float64
@@ -209,6 +211,11 @@ type RecordedStmtStats struct {
 	PlanGist             string
 	StatementError       error
 	IndexRecommendations []string
+	Query                string
+	StartTime            time.Time
+	EndTime              time.Time
+	FullScan             bool
+	SessionData          *sessiondata.SessionData
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
