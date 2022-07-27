@@ -1899,7 +1899,7 @@ type granterWithStoreWriteDone interface {
 // all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these
 // cumulative values are mutually consistent.
 type storeAdmissionStats struct {
-	// Total admission requests that called AdmittedWorkDone.
+	// Total requests that called AdmittedWorkDone or BypassedWorkDone.
 	admittedCount uint64
 	// Sum of StoreWorkDoneInfo.WriteBytes.
 	//
@@ -1909,6 +1909,27 @@ type storeAdmissionStats struct {
 	writeAccountedBytes uint64
 	// Sum of StoreWorkDoneInfo.IngestedBytes.
 	ingestedAccountedBytes uint64
+	// statsToIgnore represents stats that we should exclude from token
+	// consumption, and estimation of per-work-tokens. Currently, this is
+	// limited to range snapshot ingestion. These are likely to usually land in
+	// levels lower than L0, so may not fit the existing per-work-tokens model
+	// well. Additionally, we do not want large range snapshots to consume a
+	// huge number of tokens (see
+	// https://github.com/cockroachdb/cockroach/pull/80914 for justification --
+	// that PR is closer to the final solution, and this is a step in that
+	// direction).
+	statsToIgnore struct {
+		pebble.IngestOperationStats
+	}
+	// aux represents additional information carried for informational purposes
+	// (e.g. for logging).
+	aux struct {
+		// These bypassed numbers are already included in the corresponding
+		// {admittedCount, writeAccountedBytes, ingestedAccountedBytes}.
+		bypassedCount                  uint64
+		writeBypassedAccountedBytes    uint64
+		ingestedBypassedAccountedBytes uint64
+	}
 }
 
 // storeRequestEstimates are estimates that the storeRequester should use for
@@ -2473,16 +2494,22 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	// NB: "≈" indicates smoothed quantities.
 	p.Printf("compaction score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
-	p.Printf("L0 growth %s (write %s ingest %s): ", ib(res.aux.intL0AddedBytes),
-		ib(res.aux.perWorkTokensAux.intL0WriteBytes), ib(res.aux.perWorkTokensAux.intL0IngestedBytes))
+	p.Printf("L0 growth %s (write %s ingest %s ignored %s): ", ib(res.aux.intL0AddedBytes),
+		ib(res.aux.perWorkTokensAux.intL0WriteBytes), ib(res.aux.perWorkTokensAux.intL0IngestedBytes),
+		ib(res.aux.perWorkTokensAux.intL0IgnoredIngestedBytes))
 	// Writes to L0 that we expected because requests told admission control.
 	// This is the "easy path", from an estimation perspective, if all regular
 	// writes accurately tell us what they write, and all ingests tell us what
 	// they ingest and all of ingests into L0.
-	p.Printf("requests %d with ", res.aux.perWorkTokensAux.intWorkCount)
-	p.Printf("%s acc-write + ", ib(res.aux.perWorkTokensAux.intL0WriteAccountedBytes))
+	p.Printf("requests %d (%d bypassed) with ", res.aux.perWorkTokensAux.intWorkCount,
+		res.aux.perWorkTokensAux.intBypassedWorkCount)
+	p.Printf("%s acc-write (%s bypassed) + ",
+		ib(res.aux.perWorkTokensAux.intL0WriteAccountedBytes),
+		ib(res.aux.perWorkTokensAux.intL0WriteBypassedAccountedBytes))
 	// Ingestion bytes that we expected because requests told admission control.
-	p.Printf("%s acc-ingest + ", ib(res.aux.perWorkTokensAux.intL0IngestedAccountedBytes))
+	p.Printf("%s acc-ingest (%s bypassed) + ",
+		ib(res.aux.perWorkTokensAux.intL0IngestedAccountedBytes),
+		ib(res.aux.perWorkTokensAux.intL0IngestedBypassedAccountedBytes))
 	// The models we are fitting to compute tokens based on the reported size of
 	// the write and ingest.
 	p.Printf("write-model %.2fx+%s (smoothed %.2fx+%s) + ",

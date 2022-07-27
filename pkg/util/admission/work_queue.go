@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -1633,16 +1634,42 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	if !h.admissionEnabled {
 		return nil
 	}
-	{
-		q.mu.Lock()
-		q.mu.stats.admittedCount++
-		q.mu.stats.writeAccountedBytes += uint64(doneInfo.WriteBytes)
-		q.mu.stats.ingestedAccountedBytes += uint64(doneInfo.IngestedBytes)
-		q.mu.Unlock()
-	}
+	q.updateStoreAdmissionStats(1, doneInfo, false)
 	additionalTokens := q.granter.storeWriteDone(h.writeTokens, doneInfo)
 	q.q.adjustTenantTokens(h.tenantID, additionalTokens)
 	return nil
+}
+
+// BypassedWorkDone is called for follower writes, so that admission control
+// can (a) adjust remaining tokens, (b) account for this in the per-work token
+// estimation model.
+func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
+	q.updateStoreAdmissionStats(uint64(workCount), doneInfo, true)
+	_ = q.granter.storeWriteDone(0, doneInfo)
+}
+
+// StatsToIgnore is called for range snapshot ingestion -- see the comment in
+// storeAdmissionStats.
+func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+	q.mu.Lock()
+	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
+	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	q.mu.Unlock()
+}
+
+func (q *StoreWorkQueue) updateStoreAdmissionStats(
+	workCount uint64, doneInfo StoreWorkDoneInfo, bypassed bool,
+) {
+	q.mu.Lock()
+	q.mu.stats.admittedCount += workCount
+	q.mu.stats.writeAccountedBytes += uint64(doneInfo.WriteBytes)
+	q.mu.stats.ingestedAccountedBytes += uint64(doneInfo.IngestedBytes)
+	if bypassed {
+		q.mu.stats.aux.bypassedCount += workCount
+		q.mu.stats.aux.writeBypassedAccountedBytes += uint64(doneInfo.WriteBytes)
+		q.mu.stats.aux.ingestedBypassedAccountedBytes += uint64(doneInfo.IngestedBytes)
+	}
+	q.mu.Unlock()
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.

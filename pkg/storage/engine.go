@@ -901,6 +901,10 @@ type Engine interface {
 	// IngestExternalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
 	IngestExternalFiles(ctx context.Context, paths []string) error
+	// IngestExternalFilesWithStats is a variant of IngestExternalFiles that
+	// additionally returns ingestion stats.
+	IngestExternalFilesWithStats(
+		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
