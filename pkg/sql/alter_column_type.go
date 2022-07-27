@@ -170,7 +170,7 @@ func alterColumnTypeGeneral(
 					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
-			pgcode.FeatureNotSupported)
+			pgcode.ExperimentalFeature)
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
