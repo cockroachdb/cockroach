@@ -36,7 +36,7 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "the test is too slow under stressrace")
+	skip.UnderStress(t, "the query might take longer than timeout under stress making the test flaky")
 
 	vecFDsLimit := 8
 	envutil.TestSetEnv(t, "COCKROACH_VEC_MAX_OPEN_FDS", strconv.Itoa(vecFDsLimit))

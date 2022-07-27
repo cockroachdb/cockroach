@@ -1,11 +1,4 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in licenses/BSD-golang.txt.
-
-// Portions of this file are additionally subject to the following
-// license and copyright.
-//
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -15,21 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sort
+// Copyright 2022 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-import (
-	"math/bits"
-	"sort"
+// {{/*
+//go:build execgen_template
+// +build execgen_template
 
-	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-)
+// */}}
 
-// The next few sorting functions are largely unmodified
-// from the GO standard library implementation, save for occasional
-// cancellation checks.
-//
-// TODO(itsbilal): Consider referencing the RowContainer pointer type
-// directly instead of redirecting all calls through sort.Interface.
+package colexec
+
+import "math/bits"
+
+// This file is copied from the Go standard library's sort
+// implementation, found in https://golang.org/src/sort/sort.go. The only
+// modifications are to template each function into each sort_* struct, so
+// that the sort methods can be called without incurring any interface overhead
+// for the Swap and Less methods.
 
 type sortedHint int // hint for pdqsort when choosing the pivot
 
@@ -54,52 +51,57 @@ func nextPowerOfTwo(length int) uint {
 	return uint(1 << shift)
 }
 
+// {{range .}}
+// {{$nulls := .Nulls}}
+// {{range .DirOverloads}}
+// {{$dir := .DirString}}
+// {{range .FamilyOverloads}}
+// {{range .WidthOverloads}}
+
 // insertionSort sorts data[a:b] using insertion sort.
-func insertionSort(data sort.Interface, a, b int) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) insertionSort(a, b int) {
 	for i := a + 1; i < b; i++ {
-		for j := i; j > a && data.Less(j, j-1); j-- {
-			data.Swap(j, j-1)
+		for j := i; j > a && p.Less(j, j-1); j-- {
+			p.Swap(j, j-1)
 		}
 	}
 }
 
 // siftDown implements the heap property on data[lo:hi].
 // first is an offset into the array where the root of the heap lies.
-func siftDown(data sort.Interface, lo, hi, first int) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) siftDown(lo, hi, first int) {
 	root := lo
 	for {
 		child := 2*root + 1
 		if child >= hi {
 			break
 		}
-		if child+1 < hi && data.Less(first+child, first+child+1) {
+		if child+1 < hi && p.Less(first+child, first+child+1) {
 			child++
 		}
-		if !data.Less(first+root, first+child) {
+		if !p.Less(first+root, first+child) {
 			return
 		}
-		data.Swap(first+root, first+child)
+		p.Swap(first+root, first+child)
 		root = child
 	}
 }
 
-func heapSort(data sort.Interface, a, b int, cancelChecker *cancelchecker.CancelChecker) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) heapSort(a, b int) {
 	first := a
 	lo := 0
 	hi := b - a
 
 	// Build heap with greatest element at top.
 	for i := (hi - 1) / 2; i >= 0; i-- {
-		if cancelChecker.Check() != nil {
-			return
-		}
-		siftDown(data, i, hi, first)
+		p.cancelChecker.Check()
+		p.siftDown(i, hi, first)
 	}
 
 	// Pop elements, largest first, into end of data.
 	for i := hi - 1; i >= 0; i-- {
-		data.Swap(first, first+i)
-		siftDown(data, lo, i, first)
+		p.Swap(first, first+i)
+		p.siftDown(lo, i, first)
 	}
 }
 
@@ -109,7 +111,7 @@ func heapSort(data sort.Interface, a, b int, cancelChecker *cancelchecker.Cancel
 // C++ implementation: https://github.com/orlp/pdqsort
 // Rust implementation: https://docs.rs/pdqsort/latest/pdqsort/
 // limit is the number of allowed bad (very unbalanced) pivots before falling back to heapsort.
-func pdqsort(data sort.Interface, a, b, limit int, cancelChecker *cancelchecker.CancelChecker) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) pdqsort(a, b, limit int) {
 	const maxInsertion = 12
 
 	var (
@@ -121,30 +123,26 @@ func pdqsort(data sort.Interface, a, b, limit int, cancelChecker *cancelchecker.
 		length := b - a
 
 		if length <= maxInsertion {
-			insertionSort(data, a, b)
+			p.insertionSort(a, b)
 			return
 		}
 
 		// Fall back to heapsort if too many bad choices were made.
 		if limit == 0 {
-			heapSort(data, a, b, cancelChecker)
+			p.heapSort(a, b)
 			return
 		}
 
 		// If the last partitioning was imbalanced, we need to breaking patterns.
 		if !wasBalanced {
-			breakPatterns(data, a, b)
+			p.breakPatterns(a, b)
 			limit--
 		}
 
-		// Short-circuit sort if necessary.
-		if cancelChecker.Check() != nil {
-			return
-		}
-
-		pivot, hint := choosePivot(data, a, b)
+		p.cancelChecker.Check()
+		pivot, hint := p.choosePivot(a, b)
 		if hint == decreasingHint {
-			reverseRange(data, a, b)
+			p.reverseRange(a, b)
 			// The chosen pivot was pivot-a elements after the start of the array.
 			// After reversing it is pivot-a elements before the end of the array.
 			// The idea came from Rust's implementation.
@@ -154,31 +152,31 @@ func pdqsort(data sort.Interface, a, b, limit int, cancelChecker *cancelchecker.
 
 		// The slice is likely already sorted.
 		if wasBalanced && wasPartitioned && hint == increasingHint {
-			if partialInsertionSort(data, a, b) {
+			if p.partialInsertionSort(a, b) {
 				return
 			}
 		}
 
 		// Probably the slice contains many duplicate elements, partition the slice into
 		// elements equal to and elements greater than the pivot.
-		if a > 0 && !data.Less(a-1, pivot) {
-			mid := partitionEqual(data, a, b, pivot)
+		if a > 0 && !p.Less(a-1, pivot) {
+			mid := p.partitionEqual(a, b, pivot)
 			a = mid
 			continue
 		}
 
-		mid, alreadyPartitioned := partition(data, a, b, pivot)
+		mid, alreadyPartitioned := p.partition(a, b, pivot)
 		wasPartitioned = alreadyPartitioned
 
 		leftLen, rightLen := mid-a, b-mid
 		balanceThreshold := length / 8
 		if leftLen < rightLen {
 			wasBalanced = leftLen >= balanceThreshold
-			pdqsort(data, a, mid, limit, cancelChecker)
+			p.pdqsort(a, mid, limit)
 			a = mid + 1
 		} else {
 			wasBalanced = rightLen >= balanceThreshold
-			pdqsort(data, mid+1, b, limit, cancelChecker)
+			p.pdqsort(mid+1, b, limit)
 			b = mid
 		}
 	}
@@ -188,59 +186,61 @@ func pdqsort(data sort.Interface, a, b, limit int, cancelChecker *cancelchecker.
 // Let p = data[pivot]
 // Moves elements in data[a:b] around, so that data[i]<p and data[j]>=p for i<newpivot and j>newpivot.
 // On return, data[newpivot] = p
-func partition(data sort.Interface, a, b, pivot int) (newpivot int, alreadyPartitioned bool) {
-	data.Swap(a, pivot)
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) partition(
+	a, b, pivot int,
+) (newpivot int, alreadyPartitioned bool) {
+	p.Swap(a, pivot)
 	i, j := a+1, b-1 // i and j are inclusive of the elements remaining to be partitioned
 
-	for i <= j && data.Less(i, a) {
+	for i <= j && p.Less(i, a) {
 		i++
 	}
-	for i <= j && !data.Less(j, a) {
+	for i <= j && !p.Less(j, a) {
 		j--
 	}
 	if i > j {
-		data.Swap(j, a)
+		p.Swap(j, a)
 		return j, true
 	}
-	data.Swap(i, j)
+	p.Swap(i, j)
 	i++
 	j--
 
 	for {
-		for i <= j && data.Less(i, a) {
+		for i <= j && p.Less(i, a) {
 			i++
 		}
-		for i <= j && !data.Less(j, a) {
+		for i <= j && !p.Less(j, a) {
 			j--
 		}
 		if i > j {
 			break
 		}
-		data.Swap(i, j)
+		p.Swap(i, j)
 		i++
 		j--
 	}
-	data.Swap(j, a)
+	p.Swap(j, a)
 	return j, false
 }
 
 // partitionEqual partitions data[a:b] into elements equal to data[pivot] followed by elements greater than data[pivot].
 // It assumed that data[a:b] does not contain elements smaller than the data[pivot].
-func partitionEqual(data sort.Interface, a, b, pivot int) (newpivot int) {
-	data.Swap(a, pivot)
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) partitionEqual(a, b, pivot int) (newpivot int) {
+	p.Swap(a, pivot)
 	i, j := a+1, b-1 // i and j are inclusive of the elements remaining to be partitioned
 
 	for {
-		for i <= j && !data.Less(a, i) {
+		for i <= j && !p.Less(a, i) {
 			i++
 		}
-		for i <= j && data.Less(a, j) {
+		for i <= j && p.Less(a, j) {
 			j--
 		}
 		if i > j {
 			break
 		}
-		data.Swap(i, j)
+		p.Swap(i, j)
 		i++
 		j--
 	}
@@ -248,14 +248,14 @@ func partitionEqual(data sort.Interface, a, b, pivot int) (newpivot int) {
 }
 
 // partialInsertionSort partially sorts a slice, returns true if the slice is sorted at the end.
-func partialInsertionSort(data sort.Interface, a, b int) bool {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) partialInsertionSort(a, b int) bool {
 	const (
 		maxSteps         = 5  // maximum number of adjacent out-of-order pairs that will get shifted
 		shortestShifting = 50 // don't shift any elements on short arrays
 	)
 	i := a + 1
 	for j := 0; j < maxSteps; j++ {
-		for i < b && !data.Less(i, i-1) {
+		for i < b && !p.Less(i, i-1) {
 			i++
 		}
 
@@ -267,24 +267,24 @@ func partialInsertionSort(data sort.Interface, a, b int) bool {
 			return false
 		}
 
-		data.Swap(i, i-1)
+		p.Swap(i, i-1)
 
 		// Shift the smaller one to the left.
 		if i-a >= 2 {
 			for j := i - 1; j >= 1; j-- {
-				if !data.Less(j, j-1) {
+				if !p.Less(j, j-1) {
 					break
 				}
-				data.Swap(j, j-1)
+				p.Swap(j, j-1)
 			}
 		}
 		// Shift the greater one to the right.
 		if b-i >= 2 {
 			for j := i + 1; j < b; j++ {
-				if !data.Less(j, j-1) {
+				if !p.Less(j, j-1) {
 					break
 				}
-				data.Swap(j, j-1)
+				p.Swap(j, j-1)
 			}
 		}
 	}
@@ -293,7 +293,7 @@ func partialInsertionSort(data sort.Interface, a, b int) bool {
 
 // breakPatterns scatters some elements around in an attempt to break some patterns
 // that might cause imbalanced partitions in quicksort.
-func breakPatterns(data sort.Interface, a, b int) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) breakPatterns(a, b int) {
 	length := b - a
 	if length >= 8 {
 		random := xorshift(length)
@@ -304,7 +304,7 @@ func breakPatterns(data sort.Interface, a, b int) {
 			if other >= length {
 				other -= length
 			}
-			data.Swap(idx, a+other)
+			p.Swap(idx, a+other)
 		}
 	}
 }
@@ -314,7 +314,7 @@ func breakPatterns(data sort.Interface, a, b int) {
 // [0,8): chooses a static pivot.
 // [8,shortestNinther): uses the simple median-of-three method.
 // [shortestNinther,∞): uses the Tukey ninther method.
-func choosePivot(data sort.Interface, a, b int) (pivot int, hint sortedHint) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) choosePivot(a, b int) (pivot int, hint sortedHint) {
 	const (
 		shortestNinther = 50
 		maxSwaps        = 4 * 3
@@ -332,12 +332,12 @@ func choosePivot(data sort.Interface, a, b int) (pivot int, hint sortedHint) {
 	if l >= 8 {
 		if l >= shortestNinther {
 			// Tukey ninther method, the idea came from Rust's implementation.
-			i = medianAdjacent(data, i, &swaps)
-			j = medianAdjacent(data, j, &swaps)
-			k = medianAdjacent(data, k, &swaps)
+			i = p.medianAdjacent(i, &swaps)
+			j = p.medianAdjacent(j, &swaps)
+			k = p.medianAdjacent(k, &swaps)
 		}
 		// Find the median among i, j, k and stores it into j.
-		j = median(data, i, j, k, &swaps)
+		j = p.median(i, j, k, &swaps)
 	}
 
 	switch swaps {
@@ -351,8 +351,8 @@ func choosePivot(data sort.Interface, a, b int) (pivot int, hint sortedHint) {
 }
 
 // order2 returns x,y where data[x] <= data[y], where x,y=a,b or x,y=b,a.
-func order2(data sort.Interface, a, b int, swaps *int) (int, int) {
-	if data.Less(b, a) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) order2(a, b int, swaps *int) (int, int) {
+	if p.Less(b, a) {
 		*swaps++
 		return b, a
 	}
@@ -360,36 +360,29 @@ func order2(data sort.Interface, a, b int, swaps *int) (int, int) {
 }
 
 // median returns x where data[x] is the median of data[a],data[b],data[c], where x is a, b, or c.
-func median(data sort.Interface, a, b, c int, swaps *int) int {
-	a, b = order2(data, a, b, swaps)
-	b, _ = order2(data, b, c, swaps)
-	_, b = order2(data, a, b, swaps)
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) median(a, b, c int, swaps *int) int {
+	a, b = p.order2(a, b, swaps)
+	b, _ = p.order2(b, c, swaps)
+	_, b = p.order2(a, b, swaps)
 	return b
 }
 
 // medianAdjacent finds the median of data[a - 1], data[a], data[a + 1] and stores the index into a.
-func medianAdjacent(data sort.Interface, a int, swaps *int) int {
-	return median(data, a-1, a, a+1, swaps)
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) medianAdjacent(a int, swaps *int) int {
+	return p.median(a-1, a, a+1, swaps)
 }
 
-func reverseRange(data sort.Interface, a, b int) {
+func (p *sort_TYPE_DIR_HANDLES_NULLSOp) reverseRange(a, b int) {
 	i := a
 	j := b - 1
 	for i < j {
-		data.Swap(i, j)
+		p.Swap(i, j)
 		i++
 		j--
 	}
 }
 
-// Sort sorts data.
-// It makes one call to data.Len to determine n, and O(n*log(n)) calls to
-// data.Less and data.Swap. The sort is not guaranteed to be stable.
-func Sort(data sort.Interface, cancelChecker *cancelchecker.CancelChecker) {
-	n := data.Len()
-	if n <= 1 {
-		return
-	}
-	limit := bits.Len(uint(n))
-	pdqsort(data, 0, n, limit, cancelChecker)
-}
+// {{end}}
+// {{end}}
+// {{end}}
+// {{end}}
