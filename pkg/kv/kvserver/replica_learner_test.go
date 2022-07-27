@@ -47,14 +47,14 @@ import (
 )
 
 func predIncoming(rDesc roachpb.ReplicaDescriptor) bool {
-	return rDesc.GetType() == roachpb.VOTER_INCOMING
+	return rDesc.Type == roachpb.VOTER_INCOMING
 }
 func predOutgoing(rDesc roachpb.ReplicaDescriptor) bool {
-	return rDesc.GetType() == roachpb.VOTER_OUTGOING
+	return rDesc.Type == roachpb.VOTER_OUTGOING
 }
 
 func predDemotingToLearner(rDesc roachpb.ReplicaDescriptor) bool {
-	return rDesc.GetType() == roachpb.VOTER_DEMOTING_LEARNER
+	return rDesc.Type == roachpb.VOTER_DEMOTING_LEARNER
 }
 
 type replicationTestKnobs struct {

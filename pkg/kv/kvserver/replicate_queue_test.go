@@ -1152,7 +1152,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 				if !ok {
 					return errors.Newf("no replica found on store %d", store)
 				}
-				if typ := replDesc.GetType(); typ != roachpb.VOTER_FULL {
+				if typ := replDesc.Type; typ != roachpb.VOTER_FULL {
 					return errors.Newf("replica on store %d does not match expectation;"+
 						" expected VOTER_FULL, got %s", typ)
 				}
@@ -1162,7 +1162,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 				if !ok {
 					return errors.Newf("no replica found on store %d", store)
 				}
-				if typ := replDesc.GetType(); typ != roachpb.NON_VOTER {
+				if typ := replDesc.Type; typ != roachpb.NON_VOTER {
 					return errors.Newf("replica on store %d does not match expectation;"+
 						" expected NON_VOTER, got %s", typ)
 				}

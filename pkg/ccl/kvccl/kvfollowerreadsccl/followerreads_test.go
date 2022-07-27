@@ -660,7 +660,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
-		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.ReplicaTypeNonVoter()},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
 	}, entry.Desc().Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was

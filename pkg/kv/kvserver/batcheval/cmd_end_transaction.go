@@ -707,11 +707,7 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		if !sbt.StickyBit.IsEmpty() {
-			newDesc.StickyBit = &sbt.StickyBit
-		} else {
-			newDesc.StickyBit = nil
-		}
+		newDesc.StickyBit = sbt.StickyBit
 		var res result.Result
 		res.Replicated.State = &kvserverpb.ReplicaState{
 			Desc: &newDesc,

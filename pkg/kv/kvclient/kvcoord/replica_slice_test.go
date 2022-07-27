@@ -74,8 +74,7 @@ func TestNewReplicaSlice(t *testing.T) {
 	require.Equal(t, 3, rs.Len())
 
 	// Check that learners are not included.
-	typLearner := roachpb.LEARNER
-	rd.InternalReplicas[2].Type = &typLearner
+	rd.InternalReplicas[2].Type = roachpb.LEARNER
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
@@ -84,8 +83,7 @@ func TestNewReplicaSlice(t *testing.T) {
 	require.Equal(t, 2, rs.Len())
 
 	// Check that non-voters are included iff we ask for them to be.
-	typNonVoter := roachpb.NON_VOTER
-	rd.InternalReplicas[2].Type = &typNonVoter
+	rd.InternalReplicas[2].Type = roachpb.NON_VOTER
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllExtantReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())

@@ -111,7 +111,7 @@ func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) er
 			continue
 		}
 
-		if !desc.GetStickyBit().IsEmpty() {
+		if !desc.StickyBit.IsEmpty() {
 			// Swallow "key is not the start of a range" errors because it would mean
 			// that the sticky bit was removed and merged concurrently. DROP TABLE
 			// should not fail because of this.
