@@ -1022,9 +1022,9 @@ sort
       │    │    └── filters
       │    │         └── id:24 = transactiondetails.cardid:4 [outer=(4,24), constraints=(/4: (/NULL - ]; /24: (/NULL - ]), fd=(4)==(24), (24)==(4)]
       │    └── projections
-      │         ├── quantity:5 * transactiondetails.sellprice:6::DECIMAL [as=column47:47, outer=(5,6), immutable]
-      │         ├── quantity:5 * transactiondetails.buyprice:7::DECIMAL [as=column49:49, outer=(5,7), immutable]
-      │         ├── quantity:5 * (transactiondetails.sellprice:6::DECIMAL - transactiondetails.buyprice:7::DECIMAL) [as=column51:51, outer=(5-7), immutable]
+      │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column47:47, outer=(5,6), immutable]
+      │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column49:49, outer=(5,7), immutable]
+      │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column51:51, outer=(5-7), immutable]
       │         └── extract('day', transactiondate:3) [as=column53:53, outer=(3), stable]
       └── aggregations
            ├── sum [as=sum:48, outer=(47)]
@@ -1572,7 +1572,7 @@ update cardsinfo [as=ci]
       │              └── q:37
       └── projections
            ├── assignment-cast: DECIMAL(10,4) [as=discountbuyprice_cast:53, outer=(23,25), immutable]
-           │    └── buyprice:23::DECIMAL - discount:25::DECIMAL
+           │    └── buyprice:23 - discount:25
            ├── CAST(NULL AS STRING) [as=notes_default:50]
            ├── 0 [as=oldinventory_default:51]
            └── COALESCE(sum_int:47, 0) [as=actualinventory_new:49, outer=(47)]

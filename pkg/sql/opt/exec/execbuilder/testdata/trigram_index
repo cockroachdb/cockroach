@@ -270,3 +270,31 @@ vectorized: true
           missing stats
           table: a@a_b_idx
           spans: 1 span
+
+# Test that trigram indexes accelerate even when the datatype is non-String.
+statement ok
+CREATE TABLE b (
+  a VARCHAR,
+  INVERTED INDEX(a gin_trgm_ops)
+)
+
+query T
+EXPLAIN SELECT * FROM b WHERE a % 'foob'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: a % 'foob'
+│
+└── • index join
+    │ table: b@b_pkey
+    │
+    └── • inverted filter
+        │ inverted column: a_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: b@b_a_idx
+              spans: 2 spans

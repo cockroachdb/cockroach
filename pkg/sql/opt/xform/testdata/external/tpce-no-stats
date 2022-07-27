@@ -94,7 +94,7 @@ sort
       │    │    │    │         └── s_symb:21 = tr_s_symb:41 [outer=(21,41), constraints=(/21: (/NULL - ]; /41: (/NULL - ]), fd=(21)==(41), (41)==(21)]
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── tr_qty:42::INT8 * tr_bid_price:43::DECIMAL [as=column54:54, outer=(42,43), immutable]
+      │    │         └── tr_qty:42 * tr_bid_price:43 [as=column54:54, outer=(42,43), immutable]
       │    └── aggregations
       │         └── sum [as=sum:55, outer=(54)]
       │              └── column54:54
@@ -221,7 +221,7 @@ sort
       │    │    │    └── filters
       │    │    │         └── in_id:49 = co_in_id:37 [outer=(37,49), constraints=(/37: (/NULL - ]; /49: (/NULL - ]), fd=(37)==(49), (49)==(37)]
       │    │    └── projections
-      │    │         └── tr_qty:11::INT8 * tr_bid_price:12::DECIMAL [as=column54:54, outer=(11,12), immutable]
+      │    │         └── tr_qty:11 * tr_bid_price:12 [as=column54:54, outer=(11,12), immutable]
       │    └── aggregations
       │         └── sum [as=sum:55, outer=(54)]
       │              └── column54:54
@@ -383,7 +383,7 @@ top-k
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
+      │    │         └── hs_qty:11 * lt_price:16 [as=column21:21, outer=(11,16), immutable]
       │    └── aggregations
       │         ├── sum [as=sum:22, outer=(21)]
       │         │    └── column21:21
@@ -461,7 +461,7 @@ top-k
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
+      │    │         └── hs_qty:11 * lt_price:16 [as=column21:21, outer=(11,16), immutable]
       │    └── aggregations
       │         ├── sum [as=sum:22, outer=(21)]
       │         │    └── column21:21
@@ -888,8 +888,8 @@ project
  │    │    │    └── filters
  │    │    │         └── symb:9 = dm_s_symb:11 [outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
  │    │    └── projections
- │    │         ├── s_num_out:31 * dm_close:12::DECIMAL [as=column43:43, outer=(12,31), immutable]
- │    │         └── s_num_out:31 * lt_price:20::DECIMAL [as=column45:45, outer=(20,31), immutable]
+ │    │         ├── s_num_out:31 * dm_close:12 [as=column43:43, outer=(12,31), immutable]
+ │    │         └── s_num_out:31 * lt_price:20 [as=column45:45, outer=(20,31), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:44, outer=(43)]
  │         │    └── column43:43
@@ -970,8 +970,8 @@ project
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         ├── s_num_out:31 * dm_close:12::DECIMAL [as=column43:43, outer=(12,31), immutable]
- │    │         └── s_num_out:31 * lt_price:20::DECIMAL [as=column45:45, outer=(20,31), immutable]
+ │    │         ├── s_num_out:31 * dm_close:12 [as=column43:43, outer=(12,31), immutable]
+ │    │         └── s_num_out:31 * lt_price:20 [as=column45:45, outer=(20,31), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:44, outer=(43)]
  │         │    └── column43:43
@@ -1076,8 +1076,8 @@ project
  │    │    │    └── filters
  │    │    │         └── symb:35 = dm_s_symb:37 [outer=(35,37), constraints=(/35: (/NULL - ]; /37: (/NULL - ]), fd=(35)==(37), (37)==(35)]
  │    │    └── projections
- │    │         ├── s_num_out:57 * dm_close:38::DECIMAL [as=column69:69, outer=(38,57), immutable]
- │    │         └── s_num_out:57 * lt_price:46::DECIMAL [as=column71:71, outer=(46,57), immutable]
+ │    │         ├── s_num_out:57 * dm_close:38 [as=column69:69, outer=(38,57), immutable]
+ │    │         └── s_num_out:57 * lt_price:46 [as=column71:71, outer=(46,57), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:70, outer=(69)]
  │         │    └── column69:69
@@ -1177,8 +1177,8 @@ project
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         ├── s_num_out:57 * dm_close:38::DECIMAL [as=column69:69, outer=(38,57), immutable]
- │    │         └── s_num_out:57 * lt_price:46::DECIMAL [as=column71:71, outer=(46,57), immutable]
+ │    │         ├── s_num_out:57 * dm_close:38 [as=column69:69, outer=(38,57), immutable]
+ │    │         └── s_num_out:57 * lt_price:46 [as=column71:71, outer=(46,57), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:70, outer=(69)]
  │         │    └── column69:69
@@ -1261,8 +1261,8 @@ project
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         ├── s_num_out:28 * dm_close:9::DECIMAL [as=column40:40, outer=(9,28), immutable]
- │    │         └── s_num_out:28 * lt_price:17::DECIMAL [as=column42:42, outer=(17,28), immutable]
+ │    │         ├── s_num_out:28 * dm_close:9 [as=column40:40, outer=(9,28), immutable]
+ │    │         └── s_num_out:28 * lt_price:17 [as=column42:42, outer=(17,28), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:41, outer=(40)]
  │         │    └── column40:40
@@ -1339,8 +1339,8 @@ project
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         ├── s_num_out:28 * dm_close:9::DECIMAL [as=column40:40, outer=(9,28), immutable]
- │    │         └── s_num_out:28 * lt_price:17::DECIMAL [as=column42:42, outer=(17,28), immutable]
+ │    │         ├── s_num_out:28 * dm_close:9 [as=column40:40, outer=(9,28), immutable]
+ │    │         └── s_num_out:28 * lt_price:17 [as=column42:42, outer=(17,28), immutable]
  │    └── aggregations
  │         ├── sum [as=sum:41, outer=(40)]
  │         │    └── column40:40
@@ -2866,7 +2866,7 @@ project
  └── projections
       └── cast: FLOAT8 [as=float8:24, outer=(6), immutable, subquery]
            └── plus
-                ├── ca_bal:6::DECIMAL
+                ├── ca_bal:6
                 └── subquery
                      └── project
                           ├── columns: ca_assets:23
@@ -2897,7 +2897,7 @@ project
                           │    │    │    │    └── fd: ()-->(9), (10)-->(11)
                           │    │    │    └── filters (true)
                           │    │    └── projections
-                          │    │         └── hs_qty:11::INT8 * lt_price:16::DECIMAL [as=column21:21, outer=(11,16), immutable]
+                          │    │         └── hs_qty:11 * lt_price:16 [as=column21:21, outer=(11,16), immutable]
                           │    └── aggregations
                           │         └── sum [as=sum:22, outer=(21)]
                           │              └── column21:21
@@ -3704,7 +3704,7 @@ update holding_summary
       │    └── fd: ()-->(6-8)
       └── projections
            └── assignment-cast: INT4 [as=hs_qty_cast:12, outer=(8), immutable]
-                └── hs_qty:8::INT8 + 10
+                └── hs_qty:8 + 10
 
 # Q5
 opt
@@ -3835,7 +3835,7 @@ update holding
       │    └── fd: ()-->(9-14)
       └── projections
            └── assignment-cast: INT4 [as=h_qty_cast:18, outer=(14), immutable]
-                └── h_qty:14::INT8 + 10
+                └── h_qty:14 + 10
 
 # Q9
 opt
@@ -4287,7 +4287,7 @@ with &2 (update_trade_commission)
       │    │         │    └── fd: ()-->(60,63,64)
       │    │         └── projections
       │    │              ├── assignment-cast: DECIMAL(12,2) [as=b_comm_total_cast:69, outer=(64), immutable]
-      │    │              │    └── b_comm_total:64::DECIMAL + 5E+1
+      │    │              │    └── b_comm_total:64 + 5E+1
       │    │              └── b_num_trades:63 + 1 [as=b_num_trades_new:68, outer=(63), immutable]
       │    └── projections
       │         └── 1 [as="?column?":70]
@@ -4515,7 +4515,7 @@ with &2 (insert_settlement)
            │         │    └── fd: ()-->(71-76)
            │         └── projections
            │              └── assignment-cast: DECIMAL(12,2) [as=ca_bal_cast:80, outer=(76), immutable]
-           │                   └── customer_account.ca_bal:76::DECIMAL + 1E+2
+           │                   └── customer_account.ca_bal:76 + 1E+2
            └── projections
                 └── customer_account.ca_bal:68::FLOAT8 [as=ca_bal:82, outer=(68), immutable]
 
@@ -5866,7 +5866,7 @@ update exchange
       │    └── fd: (10)-->(11-16)
       └── projections
            └── assignment-cast: VARCHAR(150) [as=ex_desc_cast:20, outer=(15), immutable]
-                └── CASE ex_desc:15 NOT LIKE '%LAST UPDATED%' WHEN true THEN (ex_desc:15::STRING || ' LAST UPDATED ') || '2017-05-10 13:00:00' ELSE substring(ex_desc:15, 1, length(ex_desc:15) - 19) || '2017-05-10 13:00:00' END
+                └── CASE ex_desc:15 NOT LIKE '%LAST UPDATED%' WHEN true THEN (ex_desc:15 || ' LAST UPDATED ') || '2017-05-10 13:00:00' ELSE substring(ex_desc:15, 1, length(ex_desc:15) - 19) || '2017-05-10 13:00:00' END
 
 # Q11
 opt

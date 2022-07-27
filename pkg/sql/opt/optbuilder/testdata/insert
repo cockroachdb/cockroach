@@ -1221,7 +1221,7 @@ insert decimals
       │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │              └── c_default:11
       │    │    └── projections
-      │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
+      │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
       │    └── projections
       │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │              └── d_comp:13
@@ -1266,7 +1266,7 @@ insert decimals
       │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │              └── c_default:11
       │    │    └── projections
-      │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
+      │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
       │    └── projections
       │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │              └── d_comp:13
@@ -1432,7 +1432,7 @@ insert assn_cast_comp
       │    │              └── column4:13
       │    └── projections
       │         ├── column2:11 + 10 [as=i_comp_comp:15]
-      │         └── d_cast:14::DECIMAL + 2.5 [as=d_comp_comp:16]
+      │         └── d_cast:14 + 2.5 [as=d_comp_comp:16]
       └── projections
            ├── assignment-cast: INT2 [as=i_comp_cast:17]
            │    └── i_comp_comp:15

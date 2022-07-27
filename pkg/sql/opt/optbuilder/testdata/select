@@ -198,7 +198,7 @@ project
  ├── scan kv
  │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  └── projections
-      └── v:2::STRING || 'foo' [as=r:5]
+      └── v:2 || 'foo' [as=r:5]
 
 build
 SELECT lower(v) FROM kv
