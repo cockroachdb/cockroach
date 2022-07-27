@@ -895,14 +895,42 @@ CREATE TABLE crdb_internal.node_distsql_flows (
 )  {}  {}
 CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
-   transaction_id UUID NOT NULL,
-   statement_id STRING NOT NULL,
-   statement_fingerprint_id BYTES NOT NULL
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL
 )  CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
-   transaction_id UUID NOT NULL,
-   statement_id STRING NOT NULL,
-   statement_fingerprint_id BYTES NOT NULL
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,
@@ -1450,7 +1478,7 @@ CREATE VIEW crdb_internal.statement_statistics (
         FROM
           system.statement_statistics
     )
-  LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
   GROUP BY
     aggregated_ts,
     fingerprint_id,
@@ -1509,7 +1537,7 @@ CREATE VIEW crdb_internal.statement_statistics (
         FROM
           system.statement_statistics
     )
-  LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
   GROUP BY
     aggregated_ts,
     fingerprint_id,

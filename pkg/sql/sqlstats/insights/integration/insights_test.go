@@ -60,8 +60,9 @@ func TestInsightsIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 
+	queryDelayInSeconds := 2 * latencyThreshold.Seconds()
 	// Execute a "long-running" statement, running longer than our latencyThreshold.
-	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", 2*latencyThreshold.Seconds())
+	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", queryDelayInSeconds)
 	require.NoError(t, err)
 
 	// Eventually see one recorded insight.
@@ -73,6 +74,29 @@ func TestInsightsIntegration(t *testing.T) {
 		if count != 1 {
 			return fmt.Errorf("expected 1, but was %d", count)
 		}
+		return nil
+	}, 1*time.Second)
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"status, "+
+			"start_time, "+
+			"end_time, "+
+			"full_scan "+
+			"FROM crdb_internal.node_execution_insights")
+
+		var query, status string
+		var startInsights, endInsights time.Time
+		var fullScan bool
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan)
+
+		require.NoError(t, err)
+		require.Equal(t, "SELECT pg_sleep($1)", query)
+		require.Equal(t, "completed", status)
+		require.GreaterOrEqual(t, endInsights.Sub(startInsights).Seconds(), queryDelayInSeconds)
+
 		return nil
 	}, 1*time.Second)
 }
