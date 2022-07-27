@@ -148,52 +148,53 @@ func verifyRDReplicatedOnlyMVCCIter(
 			}, hlc.Timestamp{WallTime: 42})
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaMVCCDataIterator(desc, readWriter, ReplicaDataIteratorOptions{
-			Reverse:  reverse,
-			IterKind: storage.MVCCKeyAndIntentsIterKind,
-			KeyTypes: storage.IterKeyTypePointsAndRanges,
-		})
-		defer iter.Close()
-		next := iter.Next
-		if reverse {
-			next = iter.Prev
-		}
 		var rangeStart roachpb.Key
 		actualKeys := []storage.MVCCKey{}
 		actualRanges := []storage.MVCCRangeKey{}
-		for {
-			ok, err := iter.Valid()
-			require.NoError(t, err)
-			if !ok {
-				break
-			}
-			p, r := iter.HasPointAndRange()
-			if p {
-				if !reverse {
-					actualKeys = append(actualKeys, iter.Key())
-				} else {
-					actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+		err := IterateMVCCReplicaKeySpans(desc, readWriter, IterateOptions{
+			CombineRangesAndPoints: false,
+			Reverse:                reverse,
+		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			for {
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
 				}
-			}
-			if r {
-				rangeKeys := iter.RangeKeys().Clone()
-				if !rangeKeys.Bounds.Key.Equal(rangeStart) {
-					rangeStart = rangeKeys.Bounds.Key.Clone()
+				p, r := iter.HasPointAndRange()
+				if p {
 					if !reverse {
-						for _, v := range rangeKeys.Versions {
-							actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
-						}
+						actualKeys = append(actualKeys, iter.Key())
 					} else {
-						for i := rangeKeys.Len() - 1; i >= 0; i-- {
-							actualRanges = append([]storage.MVCCRangeKey{
-								rangeKeys.AsRangeKey(rangeKeys.Versions[i])},
-								actualRanges...)
+						actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+					}
+				}
+				if r {
+					rangeKeys := iter.RangeKeys().Clone()
+					if !rangeKeys.Bounds.Key.Equal(rangeStart) {
+						rangeStart = rangeKeys.Bounds.Key
+						if !reverse {
+							for _, v := range rangeKeys.Versions {
+								actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
+							}
+						} else {
+							for i := rangeKeys.Len() - 1; i >= 0; i-- {
+								actualRanges = append([]storage.MVCCRangeKey{
+									rangeKeys.AsRangeKey(rangeKeys.Versions[i]),
+								}, actualRanges...)
+							}
 						}
 					}
 				}
+				if reverse {
+					iter.Prev()
+				} else {
+					iter.Next()
+				}
 			}
-			next()
-		}
+			return nil
+		})
+		require.NoError(t, err, "visitor failed")
 		require.Equal(t, expectedKeys, actualKeys)
 		require.Equal(t, expectedRangeKeys, actualRanges)
 	}
@@ -521,5 +522,176 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 				require.NoError(b, err)
 			}
 		}
+	}
+}
+
+func TestIterateMVCCReplicaKeySpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up a new engine and write a single range key across the entire span.
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	require.NoError(t, eng.PutMVCCRangeKey(storage.MVCCRangeKey{
+		StartKey:  keys.MinKey.Next(),
+		EndKey:    keys.MaxKey,
+		Timestamp: hlc.Timestamp{WallTime: 10},
+	}, storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("a1"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("a2"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("b1"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("b2"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("c1"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+	require.NoError(t,
+		eng.PutMVCC(storage.MVCCKey{Key: roachpb.Key("c2"), Timestamp: hlc.Timestamp{WallTime: 1}},
+			storage.MVCCValue{}))
+
+	// Use a snapshot for the iteration, because we need consistent
+	// iterators.
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+
+	// Iterate over three range descriptors, both replicated and unreplicated.
+	for _, d := range []struct {
+		desc roachpb.RangeDescriptor
+		pts  []roachpb.Key
+	}{
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  1,
+				StartKey: roachpb.RKey("a"),
+				EndKey:   roachpb.RKey("b"),
+			},
+			pts: []roachpb.Key{
+				roachpb.Key("a1"),
+				roachpb.Key("a2"),
+			},
+		},
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  2,
+				StartKey: roachpb.RKey("b"),
+				EndKey:   roachpb.RKey("c"),
+			},
+			pts: []roachpb.Key{
+				roachpb.Key("b1"),
+				roachpb.Key("b2"),
+			},
+		},
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  3,
+				StartKey: roachpb.RKey("c"),
+				EndKey:   roachpb.RKey("d"),
+			},
+			pts: []roachpb.Key{
+				roachpb.Key("c1"),
+				roachpb.Key("c2"),
+			},
+		},
+	} {
+		t.Run(d.desc.KeySpan().String(), func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+				// Each iteration would go through all spans because we usa a single
+				// range key covering all spans of all ranges.
+				expectedSpans := MakeReplicatedKeySpansExceptLockTable(&d.desc)
+				if reverse {
+					for i, j := 0, len(expectedSpans)-1; i < j; i, j = i+1, j-1 {
+						expectedSpans[i], expectedSpans[j] = expectedSpans[j], expectedSpans[i]
+					}
+				}
+				points := append([]roachpb.Key(nil), d.pts...)
+				if reverse {
+					for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+						points[i], points[j] = points[j], points[i]
+					}
+				}
+				advance := func(iter storage.MVCCIterator) {
+					if reverse {
+						iter.Prev()
+					} else {
+						iter.Next()
+					}
+				}
+				t.Run("sequential", func(t *testing.T) {
+					var actualSpans []roachpb.Span
+					var actualPoints []roachpb.Key
+					require.NoError(t, IterateMVCCReplicaKeySpans(&d.desc, snapshot,
+						IterateOptions{CombineRangesAndPoints: false, Reverse: reverse},
+						func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+							if keyType == storage.IterKeyTypePointsOnly {
+								for {
+									ok, err := iter.Valid()
+									require.NoError(t, err)
+									if !ok {
+										break
+									}
+									p, r := iter.HasPointAndRange()
+									require.False(t, r, "unexpected ranges found")
+									require.True(t, p, "no points found")
+									actualPoints = append(actualPoints, iter.UnsafeKey().Key.Clone())
+									advance(iter)
+								}
+							}
+							if keyType == storage.IterKeyTypeRangesOnly {
+								// We only count spans for range keys for simplicity. They should
+								// register since we have a single range key spanning all key
+								// space.
+								actualSpans = append(actualSpans, span.Clone())
+
+								p, r := iter.HasPointAndRange()
+								require.True(t, r, "no ranges found")
+								require.False(t, p, "unexpected points found")
+								rk := iter.RangeBounds()
+								require.True(t, span.Contains(rk), "found range key is not contained to iterator span")
+								advance(iter)
+								ok, err := iter.Valid()
+								require.NoError(t, err)
+								require.False(t, ok)
+							}
+							return nil
+						}))
+					require.Equal(t, points, actualPoints)
+					require.Equal(t, expectedSpans, actualSpans)
+				})
+
+				t.Run("combined", func(t *testing.T) {
+					var actualSpans []roachpb.Span
+					var actualPoints []roachpb.Key
+					require.NoError(t, IterateMVCCReplicaKeySpans(&d.desc, snapshot, IterateOptions{CombineRangesAndPoints: true, Reverse: reverse},
+						func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+							actualSpans = append(actualSpans, span.Clone())
+							_, r := iter.HasPointAndRange()
+							require.True(t, r, "must have range")
+							rk := iter.RangeBounds()
+							require.True(t, span.Contains(rk), "found range key is not contained to iterator span")
+							for {
+								ok, err := iter.Valid()
+								require.NoError(t, err)
+								if !ok {
+									break
+								}
+								if p, _ := iter.HasPointAndRange(); p {
+									actualPoints = append(actualPoints, iter.UnsafeKey().Key.Clone())
+								}
+								advance(iter)
+							}
+							return nil
+						}))
+					require.Equal(t, points, actualPoints)
+					require.Equal(t, expectedSpans, actualSpans)
+				})
+			})
+		})
 	}
 }
