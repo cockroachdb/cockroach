@@ -30,6 +30,10 @@ func TypeIDToOID(id DescID) oid.Oid {
 	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
 }
 
+func FuncIDToOID(id DescID) oid.Oid {
+	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
+}
+
 // ColumnID is a custom type for Column IDs.
 type ColumnID uint32
 

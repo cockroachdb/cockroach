@@ -139,8 +139,12 @@ type Catalog interface {
 
 	// ResolveFunction resolves a function by name.
 	ResolveFunction(
-		name *tree.UnresolvedName, path tree.SearchPath,
-	) (*tree.FunctionDefinition, error)
+		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	) (*tree.ResolvedFunctionDefinition, error)
+
+	ResolveFunctionByOID(
+		ctx context.Context, oid oid.Oid,
+	) (*tree.Overload, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

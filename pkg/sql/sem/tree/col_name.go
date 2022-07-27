@@ -10,7 +10,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/types"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
 // GetRenderColName computes a name for a result column.
 // A name specified with AS takes priority, otherwise a name
@@ -64,7 +68,7 @@ func ComputeColNameInternal(sp SearchPath, target Expr) (int, string, error) {
 	case *FuncExpr:
 		// TODO(mgartner): Plumb a function resolver here, or determine that the
 		// function should have already been resolved.
-		fd, err := e.Func.Resolve(sp, nil /* resolver */)
+		fd, err := e.Func.Resolve(context.Background(), sp, nil /* resolver */)
 		if err != nil {
 			return 0, "", err
 		}

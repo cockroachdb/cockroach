@@ -175,6 +175,15 @@ type Overload struct {
 
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
+
+	// IsUDF is set to true when this is a user-defined function overload.
+	IsUDF bool
+	// UDFContainsOnlySignature is set to true for Overload signatures cached in a
+	// Schema descriptor.
+	UDFContainsOnlySignature bool
+	// ReturnSet is set to true when a user-defined function is defined to return
+	// a set of values.
+	ReturnSet bool
 }
 
 // params implements the overloadImpl interface.
@@ -1195,4 +1204,16 @@ func formatCandidates(prefix string, candidates []overloadImpl) string {
 		buf.WriteByte('\n')
 	}
 	return buf.String()
+}
+
+func getFuncSig(expr *FuncExpr, typedInputExprs []TypedExpr, desiredType *types.T) string {
+	typeNames := make([]string, 0, len(expr.Exprs))
+	for _, expr := range typedInputExprs {
+		typeNames = append(typeNames, expr.ResolvedType().String())
+	}
+	var desStr string
+	if desiredType.Family() != types.AnyFamily {
+		desStr = fmt.Sprintf(" (desired <%s>)", desiredType)
+	}
+	return fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 }

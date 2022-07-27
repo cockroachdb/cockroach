@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -148,4 +149,8 @@ func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescr
 
 func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
 	return descpb.SchemaDescriptor_Function{}, false
+}
+
+func (p synthetic) GetPrefixedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool) {
+	return nil, false
 }

@@ -73,7 +73,7 @@ const (
 
 //go:generate stringer -type=StatementType
 const (
-	// DDL (Data Definition Language) deals with database schemas and descriptions.
+	// DDL (Data Overloads Language) deals with database schemas and descriptions.
 	TypeDDL StatementType = iota
 	// DML (Data Manipulation Language) deals with data manipulation and it is used to
 	// store, modify, retrieve, delete and update data in a database.

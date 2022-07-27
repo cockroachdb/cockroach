@@ -71,7 +71,7 @@ And here is an example:
     On    Expr
   }
 
-Definition Tags
+Overloads Tags
 
 A "definition tag" is an opaque identifier that describes some property of the
 defined node. Definitions can have multiple tags or no tags at all, and the

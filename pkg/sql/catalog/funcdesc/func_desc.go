@@ -17,12 +17,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 var _ catalog.Descriptor = (*immutable)(nil)
@@ -446,4 +451,98 @@ func (desc *immutable) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return desc.GetPrivileges(), nil
+}
+
+func (desc *immutable) FuncDesc() *descpb.FunctionDescriptor {
+	return &desc.FunctionDescriptor
+}
+
+func (desc *immutable) ContainsUserDefinedTypes() bool {
+	for _, arg := range desc.Args {
+		if arg.Type.UserDefined() {
+			return true
+		}
+	}
+	return desc.ReturnType.Type.UserDefined()
+}
+
+func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
+	ret = &tree.Overload{
+		Oid:        catid.FuncIDToOID(desc.ID),
+		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
+		ReturnSet:  desc.ReturnType.ReturnSet,
+		Body:       desc.FunctionBody,
+		IsUDF:      true,
+	}
+
+	argTypes := make(tree.ArgTypes, 0, len(desc.Args))
+	for _, arg := range desc.Args {
+		argTypes = append(
+			argTypes,
+			struct {
+				Name string
+				Typ  *types.T
+			}{Name: arg.Name, Typ: arg.Type},
+		)
+	}
+	ret.Types = argTypes
+	ret.Volatility, err = desc.getOverloadVolatility()
+	if err != nil {
+		return nil, err
+	}
+	ret.NullableArgs, err = desc.getOverloadNullableArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func (desc *immutable) getOverloadVolatility() (volatility.V, error) {
+	var ret volatility.V
+	switch desc.Volatility {
+	case catpb.Function_VOLATILE:
+		ret = volatility.Volatile
+	case catpb.Function_STABLE:
+		ret = volatility.Stable
+	case catpb.Function_IMMUTABLE:
+		ret = volatility.Immutable
+	default:
+		return 0, errors.Newf("unknown volatility")
+	}
+	if desc.LeakProof {
+		if desc.Volatility != catpb.Function_IMMUTABLE {
+			return 0, errors.Newf("function %d is leakproof but not immutable", desc.ID)
+		}
+		ret = volatility.Leakproof
+	}
+	return ret, nil
+}
+
+func (desc *immutable) getOverloadNullableArgs() (bool, error) {
+	switch desc.NullInputBehavior {
+	case catpb.Function_CALLED_ON_NULL_INPUT:
+		return true, nil
+	case catpb.Function_RETURNS_NULL_ON_NULL_INPUT, catpb.Function_STRICT:
+		return false, nil
+	default:
+		return false, errors.Newf("unknown null input behavior")
+	}
+}
+
+// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID. OID of a
+// UDF must be greater CockroachPredefinedOIDMax. The function returns an error
+// if the given OID is less than or equal to CockroachPredefinedOIDMax.
+func UserDefinedFunctionOIDToID(oid oid.Oid) (descpb.ID, error) {
+	if descpb.ID(oid) <= oidext.CockroachPredefinedOIDMax {
+		return 0, errors.Newf(
+			"user-define function OID %d is not greater than predefined max: %d.",
+			oid, oidext.CockroachPredefinedOIDMax,
+		)
+	}
+	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax, nil
+}
+
+func IsOIDUserDefinedFunc(oid oid.Oid) bool {
+	return descpb.ID(oid) > oidext.CockroachPredefinedOIDMax
 }

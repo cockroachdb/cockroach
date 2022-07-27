@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -37,7 +40,7 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
 // immutable wraps a Schema descriptor and provides methods on it.
 type immutable struct {
-	descpb.SchemaDescriptor
+	wrapper
 
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
@@ -46,6 +49,15 @@ type immutable struct {
 	// changed represents how the descriptor was changed after
 	// RunPostDeserializationChanges.
 	changes catalog.PostDeserializationChanges
+}
+
+type wrapper struct {
+	descpb.SchemaDescriptor
+	// prefixedFuncDefs works a cache of function definition which contains a list
+	// of overloadImpl interface implementation. This helps to avoid converting a
+	// function signature protobuf to a ResolvedFunctionDefinition over and over
+	// again.
+	prefixedFuncDefs map[string]*tree.ResolvedFunctionDefinition
 }
 
 func (desc *immutable) SchemaKind() catalog.ResolvedSchemaKind {
@@ -57,9 +69,59 @@ func (desc *immutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.immutable", desc)
 }
 
+// GetFunction implements the SchemaDescriptor interface.
 func (desc *immutable) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
 	fn, found := desc.Functions[name]
 	return fn, found
+}
+
+// GetPrefixedFuncDefinition implements the SchemaDescriptor interface.
+func (desc *immutable) GetPrefixedFuncDefinition(
+	name string,
+) (*tree.ResolvedFunctionDefinition, bool) {
+	if desc.prefixedFuncDefs == nil {
+		desc.prefixedFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
+	}
+
+	if funcDef, ok := desc.prefixedFuncDefs[name]; ok {
+		return funcDef, true
+	}
+
+	funcDescPb, found := desc.GetFunction(name)
+	if !found {
+		return nil, false
+	}
+	funcDef := &tree.ResolvedFunctionDefinition{
+		Name:           name,
+		ExplicitSchema: true,
+		Overloads:      make([]*tree.PrefixedOverload, 0, len(funcDescPb.Overloads)),
+	}
+	for _, o := range funcDescPb.Overloads {
+		overload := &tree.Overload{
+			Oid: catid.FuncIDToOID(o.ID),
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				return o.ReturnType
+			},
+			IsUDF:                    true,
+			UDFContainsOnlySignature: true,
+		}
+		argTypes := make(tree.ArgTypes, 0, len(o.ArgTypes))
+		for _, argType := range o.ArgTypes {
+			argTypes = append(
+				argTypes,
+				struct {
+					Name string
+					Typ  *types.T
+				}{Typ: argType},
+			)
+		}
+		overload.Types = argTypes
+		prefixedOverload := tree.MakePrefixedOverload(desc.GetName(), overload)
+		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
+	}
+
+	desc.prefixedFuncDefs[name] = funcDef
+	return funcDef, true
 }
 
 // SkipNamespace implements the descriptor interface.
@@ -398,6 +460,9 @@ func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_Function
 		newOverloads := append(overloads.Overloads, f)
 		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: newOverloads}
 	}
+
+	// Invalidate the ResolvedFunctionDefinition cache for this function name.
+	delete(desc.prefixedFuncDefs, name)
 }
 
 // GetObjectType implements the PrivilegeObject interface.

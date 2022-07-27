@@ -11,10 +11,14 @@
 package tree
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // Function names are used in expressions in the FuncExpr node.
@@ -35,7 +39,15 @@ type FunctionReferenceResolver interface {
 	// the input of this method, so that we can try to narrow down the scope of
 	// overloads a bit earlier and decrease the possibility of ambiguous error
 	// on function properties.
-	ResolveFunction(name *UnresolvedName, path SearchPath) (*FunctionDefinition, error)
+	ResolveFunction(
+		ctx context.Context, name *UnresolvedName, path SearchPath,
+	) (*ResolvedFunctionDefinition, error)
+
+	// ResolveFunctionByOID looks up a function overload by using a given oid.
+	// Error is thrown if there is no function with the same oid.
+	ResolveFunctionByOID(
+		ctx context.Context, oid oid.Oid,
+	) (*Overload, error)
 }
 
 // ResolvableFunctionReference implements the editable reference call of a
@@ -44,26 +56,52 @@ type ResolvableFunctionReference struct {
 	FunctionReference
 }
 
-// Resolve converts a ResolvableFunctionReference into a *FunctionDefinition. If
-// the reference has already been resolved, it simply returns the definition. If
-// a FunctionReferenceResolver is provided, it will be used to resolve the
-// function definition. Otherwise, the default resolution of
-// UnresolvedName.ResolveFunction is used.
+// Resolve converts a ResolvableFunctionReference into a
+// *ResolvedFunctionDefinition:
+// (1) If the reference has already been resolved (already a
+// ResolvedFunctionDefinition), it simply returns the definition.
+// (2) If the reference is a FunctionDefinition (builtin function), it converts
+// it into a ResolvedFunctionDefinition by prefixing overloads with proper
+// schema name.
+// (3) If the reference is a UnresolvedName.
+// (3.1) If a FunctionReferenceResolver is provided, it will be used to resolve
+// the function definition.
+// (3.2) Otherwise, builtin functions are searched by default.
 func (ref *ResolvableFunctionReference) Resolve(
-	path SearchPath, resolver FunctionReferenceResolver,
-) (*FunctionDefinition, error) {
+	ctx context.Context, path SearchPath, resolver FunctionReferenceResolver,
+) (*ResolvedFunctionDefinition, error) {
+	// TODO(Chengxiong): need to handle if resolver is a nil.
 	switch t := ref.FunctionReference.(type) {
-	case *FunctionDefinition:
+	case *ResolvedFunctionDefinition:
 		return t, nil
-	case *UnresolvedName:
-		var fd *FunctionDefinition
-		var err error
-		if resolver == nil {
-			// Use the default resolution logic if there is no resolver.
-			fd, err = t.ResolveFunction(path)
-		} else {
-			fd, err = resolver.ResolveFunction(t, path)
+	case *FunctionDefinition:
+		// TODO(Chengxiong): get rid of FunctionDefinition entirely.
+		parts := strings.Split(t.Name, ".")
+		if len(parts) > 2 {
+			// In theory, this should not happen since all builtin functions are
+			// defined within virtual schema and don't belong to any database catalog.
+			return nil, errors.AssertionFailedf("invalid builtin function name: %q", t.Name)
 		}
+		schema := catconstants.PgCatalogName
+		if len(parts) == 2 {
+			schema = parts[0]
+		}
+		fd := PrefixBuiltinFunctionDefinition(t, schema)
+		ref.FunctionReference = fd
+		return fd, nil
+	case *UnresolvedName:
+		if resolver == nil {
+			fn, err := t.ToFunctionName()
+			if err != nil {
+				return nil, err
+			}
+			def, err := GetBuiltinFuncDefinitionOrFail(fn, path)
+			if err != nil {
+				return nil, err
+			}
+			return def, nil
+		}
+		fd, err := resolver.ResolveFunction(ctx, t, path)
 		if err != nil {
 			return nil, err
 		}
@@ -77,6 +115,9 @@ func (ref *ResolvableFunctionReference) Resolve(
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved
 // function from a built-in function name. Helper for grammar rules and
 // execbuilder.
+//
+// TODO(Chengxiong): get rid of FunctionDefinition entirely and use
+// ResolvedFunctionDefinition instead.
 func WrapFunction(n string) ResolvableFunctionReference {
 	fd, ok := FunDefs[n]
 	if !ok {
@@ -95,5 +136,6 @@ type FunctionReference interface {
 var _ FunctionReference = &UnresolvedName{}
 var _ FunctionReference = &FunctionDefinition{}
 
-func (*UnresolvedName) functionReference()     {}
-func (*FunctionDefinition) functionReference() {}
+func (*UnresolvedName) functionReference()             {}
+func (*FunctionDefinition) functionReference()         {}
+func (*ResolvedFunctionDefinition) functionReference() {}

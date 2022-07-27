@@ -68,7 +68,9 @@ func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType 
 	// with names matching below are allowed. If a user defined a user-defined
 	// function with the same name, we'll assume references to the function
 	// within an AOST clause refer to the built-in overload.
-	def, err := fe.Func.Resolve(searchPath, nil /* resolver */)
+	// TODO(Chengxiong) fix this with a proper resolver
+	def, err := fe.Func.Resolve(context.Background(), searchPath, nil /* resolver */)
+
 	if err != nil {
 		return funcTypeInvalid
 	}

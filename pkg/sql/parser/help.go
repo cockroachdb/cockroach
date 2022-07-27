@@ -96,44 +96,45 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	// A resolver is not needed because we do not provide contextual help
 	// messages for user-defined functions.
-	d, err := f.Resolve(tree.EmptySearchPath, nil /* resolver */)
-	if err != nil {
-		return 1
-	}
-
-	msg := HelpMessage{
-		Function: f.String(),
-		HelpMessageBody: HelpMessageBody{
-			Category: d.Category,
-			SeeAlso:  docs.URL("functions-and-operators.html"),
-		},
-	}
-
-	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 0, 0, 1, ' ', 0)
-
-	// Each function definition contains one or more overloads. We need
-	// to extract them all; moreover each overload may have a different
-	// documentation, so we need to also combine the descriptions
-	// together.
-	lastInfo := ""
-	for i, b := range d.Definition {
-		if b.Info != "" && b.Info != lastInfo {
-			if i > 0 {
-				fmt.Fprintln(w, "---")
-			}
-			fmt.Fprintf(w, "\n%s\n\n", b.Info)
-			fmt.Fprintln(w, "Signature")
-		}
-		lastInfo = b.Info
-
-		simplifyRet := d.Class == tree.GeneratorClass
-		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature(simplifyRet))
-	}
-	_ = w.Flush()
-	msg.Text = buf.String()
-
-	sqllex.(*lexer).SetHelp(msg)
+	// TODO(Chengxiong): Fix this by using GetBuiltinProps.
+	//d, err := f.Resolve(tree.EmptySearchPath, nil /* resolver */)
+	//if err != nil {
+	//	return 1
+	//}
+	//
+	//msg := HelpMessage{
+	//	Function: f.String(),
+	//	HelpMessageBody: HelpMessageBody{
+	//		Category: d.Category,
+	//		SeeAlso:  docs.URL("functions-and-operators.html"),
+	//	},
+	//}
+	//
+	//var buf bytes.Buffer
+	//w := tabwriter.NewWriter(&buf, 0, 0, 1, ' ', 0)
+	//
+	//// Each function definition contains one or more overloads. We need
+	//// to extract them all; moreover each overload may have a different
+	//// documentation, so we need to also combine the descriptions
+	//// together.
+	//lastInfo := ""
+	//for i, b := range d.Overloads {
+	//	if b.Info != "" && b.Info != lastInfo {
+	//		if i > 0 {
+	//			fmt.Fprintln(w, "---")
+	//		}
+	//		fmt.Fprintf(w, "\n%s\n\n", b.Info)
+	//		fmt.Fprintln(w, "Signature")
+	//	}
+	//	lastInfo = b.Info
+	//
+	//	simplifyRet := d.Class == tree.GeneratorClass
+	//	fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature(simplifyRet))
+	//}
+	//_ = w.Flush()
+	//msg.Text = buf.String()
+	//
+	//sqllex.(*lexer).SetHelp(msg)
 	return 1
 }
 

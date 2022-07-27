@@ -16,6 +16,7 @@
 package seqexpr
 
 import (
+	"context"
 	"go/constant"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -55,7 +56,9 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 	// function should have already been resolved.
 	// TODO(chengxiong): Since we have funcExpr here, it's possible to narrow down
 	// overloads by using input types.
-	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath, nil /* resolver */)
+
+	// TODO(Chengxiong): Fix this with proper resolver and context.
+	def, err := funcExpr.Func.Resolve(context.Background(), tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +70,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	if hasSequenceArguments {
 		found := false
-		for _, overload := range def.Definition {
+		for _, overload := range def.Overloads {
 			// Find the overload that matches funcExpr.
 			if len(funcExpr.Exprs) == overload.Types.Length() {
 				found = true

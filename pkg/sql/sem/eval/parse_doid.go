@@ -70,15 +70,21 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		for i := 0; i < len(substrs); i++ {
 			name.Parts[i] = substrs[len(substrs)-1-i]
 		}
-		funcDef, err := name.ResolveFunction(&ctx.SessionData().SearchPath)
+		un, err := name.ToUnresolvedObjectName(tree.NoAnnotation)
 		if err != nil {
 			return nil, err
 		}
-		if len(funcDef.Definition) > 1 {
+		fn := un.ToFunctionName()
+		funcDef, err := tree.GetBuiltinFuncDefinition(&fn, &ctx.SessionData().SearchPath)
+
+		if err != nil {
+			return nil, err
+		}
+		if len(funcDef.Overloads) > 1 {
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one function named '%s'", funcDef.Name)
 		}
-		overload := funcDef.Definition[0]
+		overload := funcDef.Overloads[0].GetOverload()
 		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
 	case oid.T_regtype:
 		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)

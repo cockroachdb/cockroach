@@ -11,6 +11,8 @@
 package transform
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -35,7 +37,7 @@ func (v *isAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 		}
 		// TODO(mgartner): Plumb a function resolver here, or determine that the
 		// function should have already been resolved.
-		fd, err := t.Func.Resolve(&v.searchPath, nil /* resolver */)
+		fd, err := t.Func.Resolve(context.Background(), &v.searchPath, nil /* resolver */)
 		if err != nil {
 			return false, expr
 		}

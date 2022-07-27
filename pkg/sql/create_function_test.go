@@ -17,15 +17,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -218,6 +224,50 @@ SELECT nextval(105:::REGCLASS);`,
 	tDB.Exec(t, "SET use_declarative_schema_changer = on")
 	_, err = sqlDB.Exec("DROP TABLE t CASCADE ")
 	require.Equal(t, "pq: unimplemented: function descriptor not supported in declarative schema changer", err.Error())
+
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
+
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+		planner, cleanup := sql.NewInternalPlanner(
+			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+		)
+		defer cleanup()
+		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		// Set "defaultdb" as current database.
+		ec.SessionData().Database = "defaultdb"
+		searchPathArray := ec.SessionData().SearchPath.GetPathArray()
+
+		funcResolver := planner.(tree.FunctionReferenceResolver)
+		fname := tree.UnresolvedName{NumParts: 1, Star: false}
+		fname.Parts[0] = "f"
+		path := sessiondata.MakeSearchPath(searchPathArray)
+		funcDef, err := funcResolver.ResolveFunction(ctx, &fname, &path)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(funcDef.Overloads))
+		require.True(t, funcDef.Overloads[0].UDFContainsOnlySignature)
+		require.True(t, funcDef.Overloads[0].IsUDF)
+		require.Equal(t, 100110, int(funcDef.Overloads[0].Oid))
+
+		overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
+		require.NoError(t, err)
+		require.Equal(t, `SELECT a FROM defaultdb.public.t;
+SELECT b FROM defaultdb.public.t@t_idx_b;
+SELECT c FROM defaultdb.public.t@t_idx_c;
+SELECT a FROM defaultdb.public.v;
+SELECT nextval(105:::REGCLASS);`, overload.Body)
+		require.True(t, overload.IsUDF)
+		require.False(t, overload.UDFContainsOnlySignature)
+		require.Equal(t, 1, len(overload.Types.Types()))
+		require.Equal(t, types.UserDefinedTypeMetadata{}, overload.Types.Types()[0].TypeMeta)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestCreateFunctionWithTableImplicitType(t *testing.T) {

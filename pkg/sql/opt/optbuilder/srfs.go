@@ -96,11 +96,11 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		}
 		texpr := inScope.resolveType(expr, types.Any)
 
-		var def *tree.FunctionDefinition
+		var def *tree.ResolvedFunctionDefinition
 		funcExpr, ok := texpr.(*tree.FuncExpr)
 		if ok {
 			if def, err = funcExpr.Func.Resolve(
-				b.semaCtx.SearchPath, b.semaCtx.FunctionResolver,
+				b.ctx, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver,
 			); err != nil {
 				panic(err)
 			}
