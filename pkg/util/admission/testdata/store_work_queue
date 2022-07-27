@@ -4,7 +4,7 @@ init
 print
 ----
 closed epoch: 0 tenantHeap len: 0
-stats:{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0}
+stats:{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:1}
 
 set-try-get-return-value v=true
@@ -23,7 +23,7 @@ set-store-request-estimates write-tokens=100
 ----
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
-stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0}
+stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 admit id=2 tenant=55 priority=0 create-time-millis=1 bypass=false
@@ -41,7 +41,7 @@ print
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 100, w: 1, fifo: -128
-stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0}
+stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-try-get-return-value v=false
@@ -61,7 +61,7 @@ closed epoch: 0 tenantHeap len: 1 top tenant: 57
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 0]
-stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0}
+stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 granted
@@ -76,7 +76,7 @@ closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0}
+stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 work-done id=3 ingested-bytes=1000000 additional-tokens=50000
@@ -89,7 +89,7 @@ closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000}
+stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-store-request-estimates write-tokens=10000
@@ -98,7 +98,7 @@ closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000}
+stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
 work-done id=4 write-bytes=2000 ingested-bytes=1000 additional-tokens=2000
@@ -111,5 +111,23 @@ closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-stats:{admittedCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000}
+stats:{admittedCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+estimates:{writeTokens:10000}
+
+bypassed-work-done work-count=10 write-bytes=1000 ingested-bytes=1000000
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+estimates:{writeTokens:10000}
+
+stats-to-ignore ingested-bytes=12000 ingested-into-L0-bytes=9000
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
