@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -456,4 +459,22 @@ func randEncDatumRow(rng *rand.Rand, desc catalog.TableDescriptor) (row rowenc.E
 		}
 	}
 	return row
+}
+
+func mkPkKey(t *testing.T, tableID descpb.ID, vals ...int) roachpb.Key {
+	t.Helper()
+
+	// Encode index id, then each value.
+	key, err := keyside.Encode(
+		keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+		tree.NewDInt(tree.DInt(1)), encoding.Ascending)
+
+	require.NoError(t, err)
+	for _, v := range vals {
+		d := tree.NewDInt(tree.DInt(v))
+		key, err = keyside.Encode(key, d, encoding.Ascending)
+		require.NoError(t, err)
+	}
+
+	return key
 }

@@ -168,12 +168,6 @@ type Builder struct {
 	// ScanCounts records the number of times scans were used in the query.
 	ScanCounts [exec.NumScanCountTypes]int
 
-	// wrapFunctionOverride overrides default implementation to return resolvable
-	// function reference for function with specified function name.
-	// The default can be overridden by calling SetBuiltinFuncWrapper method to provide
-	// custom search path implementation.
-	wrapFunctionOverride func(fnName string) tree.ResolvableFunctionReference
-
 	// builtScans collects all scans in the operation tree so post-build checking
 	// for non-local execution can be done.
 	builtScans []*memo.ScanExpr
@@ -258,27 +252,15 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
-// SetBuiltinFuncWrapper configures this builder to use specified function resolver.
-func (b *Builder) SetBuiltinFuncWrapper(resolver tree.FunctionReferenceResolver) {
-	// TODO(mgartner): The customFnResolver and wrapFunctionOverride could
-	// probably be replaced by a custom implementation of tree.FunctionResolver.
-	if customFnResolver, ok := resolver.(tree.CustomBuiltinFunctionWrapper); ok {
-		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
-			fd, err := customFnResolver.WrapFunction(fnName)
-			if err != nil {
-				panic(err)
-			}
-			if fd == nil {
-				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
-			}
-			return tree.ResolvableFunctionReference{FunctionReference: fd}
-		}
-	}
-}
-
 func (b *Builder) wrapFunction(fnName string) tree.ResolvableFunctionReference {
-	if b.wrapFunctionOverride != nil {
-		return b.wrapFunctionOverride(fnName)
+	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
+		unresolved := tree.MakeUnresolvedName(fnName)
+		fnDef, err := b.catalog.ResolveFunction(
+			context.Background(), &unresolved, &b.evalCtx.SessionData().SearchPath)
+		if err != nil {
+			panic(err)
+		}
+		return tree.ResolvableFunctionReference{FunctionReference: fnDef}
 	}
 	return tree.WrapFunction(fnName)
 }
