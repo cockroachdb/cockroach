@@ -108,6 +108,17 @@ func TestTelemetryLogging(t *testing.T) {
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE u(x int);")
+	db.Exec(t, "INSERT INTO u SELECT generate_series(1, 100);")
+	// Use INJECT STATISTICS instead of ANALYZE to avoid test flakes.
+	db.Exec(t, `ALTER TABLE u INJECT STATISTICS '[{
+      "avg_size": 3,
+      "columns": ["x"],
+      "created_at": "2022-07-28 12:54:13.915054",
+      "distinct_count": 100,
+      "null_count": 0,
+      "row_count": 100
+  }]';`)
 
 	// Testing Cases:
 	// - entries that are NOT sampled
@@ -127,61 +138,115 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedSkipped         []int // Expected skipped query count per expected log line.
 		expectedUnredactedTags  []string
 		expectedApplicationName string
+		expectedFullScan        bool
+		expectedStatsAvailable  bool
+		expectedRead            bool
+		expectedWrite           bool
 	}{
 		{
 			// Test case with statement that is not of type DML.
 			// Even though the queries are executed within the required
 			// elapsed interval, we should still see that they were all
 			// logged since  we log all statements that are not of type DML.
-			"truncate-table-query",
-			"TRUNCATE t;",
-			"TRUNCATE TABLE t",
-			[]float64{1, 1.1, 1.2, 2},
-			`TRUNCATE TABLE`,
-			1,
-			[]int{0, 0, 0, 0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "truncate-table-query",
+			query:                   "TRUNCATE t;",
+			queryNoConstants:        "TRUNCATE TABLE t",
+			execTimestampsSeconds:   []float64{1, 1.1, 1.2, 2},
+			expectedLogStatement:    `TRUNCATE TABLE`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0, 0, 0, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  false,
+			expectedRead:            false,
+			expectedWrite:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
 			// The first statement should be logged.
-			"select-*-limit-1-query",
-			"SELECT * FROM t LIMIT 1;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{3},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
-			1,
-			[]int{0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-1-query",
+			query:                   "SELECT * FROM t LIMIT 1;",
+			queryNoConstants:        "SELECT * FROM t LIMIT _",
+			execTimestampsSeconds:   []float64{3},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  false,
+			expectedRead:            false,
+			expectedWrite:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
 			// Two timestamps are within the required elapsed interval,
 			// thus 2 log statements are expected, with 2 skipped queries.
-			"select-*-limit-2-query",
-			"SELECT * FROM t LIMIT 2;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{4, 4.1, 4.2, 5},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
-			1,
-			[]int{0, 2},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-2-query",
+			query:                   "SELECT * FROM u LIMIT 2;",
+			queryNoConstants:        "SELECT * FROM u LIMIT _",
+			execTimestampsSeconds:   []float64{4, 4.1, 4.2, 5},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹2›`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0, 2},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
 			// Once required time has elapsed, the next statement should be logged.
-			"select-*-limit-3-query",
-			"SELECT * FROM t LIMIT 3;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹3›`,
-			10,
-			[]int{0, 3, 0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-3-query",
+			query:                   "SELECT * FROM u LIMIT 3;",
+			queryNoConstants:        "SELECT * FROM u LIMIT _",
+			execTimestampsSeconds:   []float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹3›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0, 3, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+		},
+		{
+			// Test case with a full scan.
+			// The first statement should be logged.
+			name:                    "select-x-query",
+			query:                   "SELECT x FROM u;",
+			queryNoConstants:        "SELECT x FROM u",
+			execTimestampsSeconds:   []float64{7},
+			expectedLogStatement:    `SELECT x FROM \"\".\"\".u`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        true,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+		},
+		{
+			// Test case with a write.
+			// The first statement should be logged.
+			name:                    "update-u-query",
+			query:                   "UPDATE u SET x = 5 WHERE x > 50 RETURNING x;",
+			queryNoConstants:        "UPDATE u SET x = _ WHERE x > _ RETURNING x",
+			execTimestampsSeconds:   []float64{8},
+			expectedLogStatement:    `UPDATE \"\".\"\".u SET x = ‹5› WHERE x > ‹50› RETURNING x`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        true,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           true,
 		},
 	}
 
@@ -286,6 +351,72 @@ func TestTelemetryLogging(t *testing.T) {
 				stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, false, true, databaseName)
 				if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
 					t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
+				}
+				maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
+				foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
+				if tc.expectedFullScan && !foundFullScan {
+					t.Errorf("expected to find MaxFullScanRowsEstimate but none was found in: %s", e.Message)
+				} else if !tc.expectedFullScan && foundFullScan {
+					t.Errorf("expected not to find MaxFullScanRowsEstimate but it was found in: %s", e.Message)
+				}
+				totalScanRowsRe := regexp.MustCompile("\"TotalScanRowsEstimate\":[0-9]*")
+				outputRowsRe := regexp.MustCompile("\"OutputRowsEstimate\":[0-9]*")
+				statsAvailableRe := regexp.MustCompile("\"StatsAvailable\":(true|false)")
+				nanosSinceStatsCollectedRe := regexp.MustCompile("\"NanosSinceStatsCollected\":[0-9]*")
+				if tc.expectedStatsAvailable {
+					if !totalScanRowsRe.MatchString(e.Message) {
+						t.Errorf("expected to find TotalScanRowsEstimate but none was found in: %s", e.Message)
+					}
+					if !outputRowsRe.MatchString(e.Message) {
+						t.Errorf("expected to find OutputRowsEstimate but none was found in: %s", e.Message)
+					}
+					if !statsAvailableRe.MatchString(e.Message) {
+						t.Errorf("expected to find StatsAvailable but none was found in: %s", e.Message)
+					}
+					if !nanosSinceStatsCollectedRe.MatchString(e.Message) {
+						t.Errorf("expected to find NanosSinceStatsCollected but none was found in: %s", e.Message)
+					}
+				} else {
+					if totalScanRowsRe.MatchString(e.Message) {
+						t.Errorf("expected not to find TotalScanRowsEstimate but it was found in: %s", e.Message)
+					}
+					if outputRowsRe.MatchString(e.Message) {
+						t.Errorf("expected not to find OutputRowsEstimate but it was found in: %s", e.Message)
+					}
+					if statsAvailableRe.MatchString(e.Message) {
+						t.Errorf("expected not to find StatsAvailable but it was found in: %s", e.Message)
+					}
+					if nanosSinceStatsCollectedRe.MatchString(e.Message) {
+						t.Errorf("expected not to find NanosSinceStatsCollected but it was found in: %s", e.Message)
+					}
+				}
+				BytesReadRe := regexp.MustCompile("\"BytesRead\":[0-9]*")
+				RowsReadRe := regexp.MustCompile("\"RowsRead\":[0-9]*")
+				if tc.expectedRead {
+					if !BytesReadRe.MatchString(e.Message) {
+						t.Errorf("expected to find BytesRead but none was found in: %s", e.Message)
+					}
+					if !RowsReadRe.MatchString(e.Message) {
+						t.Errorf("expected to find RowsRead but none was found in: %s", e.Message)
+					}
+				} else {
+					if BytesReadRe.MatchString(e.Message) {
+						t.Errorf("expected not to find BytesRead but it was found in: %s", e.Message)
+					}
+					if RowsReadRe.MatchString(e.Message) {
+						t.Errorf("expected not to find RowsRead but it was found in: %s", e.Message)
+					}
+
+				}
+				RowsWrittenRe := regexp.MustCompile("\"RowsWritten\":[0-9]*")
+				if tc.expectedWrite {
+					if !RowsWrittenRe.MatchString(e.Message) {
+						t.Errorf("expected to find RowsWritten but none was found in: %s", e.Message)
+					}
+				} else {
+					if RowsWrittenRe.MatchString(e.Message) {
+						t.Errorf("expected not to find RowsWritten but it was found in: %s", e.Message)
+					}
 				}
 			}
 		}

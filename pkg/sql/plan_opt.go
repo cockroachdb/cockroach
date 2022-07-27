@@ -623,6 +623,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
+		planTop.instrumentation.totalScanRows = bld.TotalScanRows
+		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
@@ -641,6 +644,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
+		planTop.instrumentation.totalScanRows = bld.TotalScanRows
+		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
@@ -648,6 +654,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}
 	planTop.instrumentation.costEstimate = float64(mem.RootExpr().(memo.RelExpr).Cost())
+	available := mem.RootExpr().(memo.RelExpr).Relational().Stats.Available
+	planTop.instrumentation.statsAvailable = available
+	if available {
+		planTop.instrumentation.outputRows = mem.RootExpr().(memo.RelExpr).Relational().Stats.RowCount
+	}
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
