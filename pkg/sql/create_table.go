@@ -2340,7 +2340,7 @@ func newTableDesc(
 			creationTime,
 			privileges,
 			affected,
-			&params.p.semaCtx,
+			params.p.SemaCtx(),
 			params.EvalContext(),
 			params.SessionData(),
 			n.Persistence,
@@ -2363,6 +2363,10 @@ func newTableDesc(
 
 	// Row level TTL tables require a scheduled job to be created as well.
 	if ttl := ret.RowLevelTTL; ttl != nil {
+		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, ret, params.p.SemaCtx(), &n.Table); err != nil {
+			return nil, err
+		}
+
 		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
 			params.ExecCfg(),

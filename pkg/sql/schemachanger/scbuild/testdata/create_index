@@ -85,7 +85,7 @@ CREATE INDEX id4
 - [[ColumnName:{DescID: 104, Name: crdb_internal_id_name_shard_8, ColumnID: 4}, PUBLIC], ABSENT]
   {columnId: 4, name: crdb_internal_id_name_shard_8, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, PUBLIC], ABSENT]
-  {columnId: 4, computeExpr: {expr: 'mod(fnv32(crdb_internal.datums_to_bytes(id, name)), 8:::INT8)'}, isVirtual: true, tableId: 104, type: {family: IntFamily, oid: 23, width: 32}}
+  {columnId: 4, computeExpr: {expr: 'mod(fnv32(crdb_internal.datums_to_bytes(id, name)), 8:::INT8)', referencedColumnIds: [1, 2]}, isVirtual: true, tableId: 104, type: {family: IntFamily, oid: 23, width: 32}}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]

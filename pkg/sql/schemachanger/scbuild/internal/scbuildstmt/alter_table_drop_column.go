@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -31,13 +32,13 @@ func alterTableDropColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
 ) {
 	checkSafeUpdatesForDropColumn(b)
-	checkRowLevelTTLColumn(b, tn, tbl, n)
-	checkRegionalByRowColumnConflict(b, tbl, n)
-	b.IncrementSchemaChangeAlterCounter("table", "drop_column")
 	col, elts, done := resolveColumnForDropColumn(b, tn, tbl, n)
 	if done {
 		return
 	}
+	checkRowLevelTTLColumn(b, tn, tbl, n, col)
+	checkRegionalByRowColumnConflict(b, tbl, n)
+	b.IncrementSchemaChangeAlterCounter("table", "drop_column")
 	checkColumnNotInaccessible(col, n)
 	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
 }
@@ -60,7 +61,11 @@ func checkSafeUpdatesForDropColumn(b BuildCtx) {
 }
 
 func checkRowLevelTTLColumn(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	n *tree.AlterTableDropColumn,
+	colToDrop *scpb.Column,
 ) {
 	var rowLevelTTL *scpb.RowLevelTTL
 	publicTargets := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
@@ -69,7 +74,11 @@ func checkRowLevelTTLColumn(
 	) {
 		rowLevelTTL = e
 	})
-	if n.Column == colinfo.TTLDefaultExpirationColumnName && rowLevelTTL != nil {
+
+	if rowLevelTTL == nil {
+		return
+	}
+	if rowLevelTTL.DurationExpr != "" && n.Column == colinfo.TTLDefaultExpirationColumnName {
 		panic(errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
@@ -79,6 +88,26 @@ func checkRowLevelTTLColumn(
 			"use ALTER TABLE %s RESET (ttl) instead",
 			tn,
 		))
+	}
+	if rowLevelTTL.ExpirationExpr != "" {
+		expr, err := parser.ParseExpr(string(rowLevelTTL.ExpirationExpr))
+		if err != nil {
+			// At this point, we should be able to parse the expiration expression.
+			panic(errors.WithAssertionFailure(err))
+		}
+		wrappedExpr := b.WrapExpression(tbl.TableID, expr)
+		if descpb.ColumnIDs(wrappedExpr.ReferencedColumnIDs).Contains(colToDrop.ColumnID) {
+			panic(errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					`cannot drop column %q referenced by row-level TTL expiration expression %q`,
+					n.Column,
+					rowLevelTTL.ExpirationExpr,
+				),
+				"use ALTER TABLE %s SET (ttl_expiration_expression = ...) to change the expression",
+				tn,
+			))
+		}
 	}
 }
 

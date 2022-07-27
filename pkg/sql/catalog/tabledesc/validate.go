@@ -784,6 +784,16 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	})
 
 	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
+	if desc.HasRowLevelTTL() {
+		// ValidateTTLExpirationExpr is called separately from ValidateRowLevelTTL
+		// because it can only be called on an initialized table descriptor.
+		// ValidateRowLevelTTL is also used before the table descriptor is fully
+		// initialized to validate the storage parameters.
+		if err := ValidateTTLExpirationExpr(desc, desc.GetRowLevelTTL().ExpirationExpr); err != nil {
+			vea.Report(err)
+			return
+		}
+	}
 
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON

@@ -377,7 +377,7 @@ func newTypeT(t *types.T) scpb.TypeT {
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *scpb.Expression {
+func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scpb.Expression {
 	// We will serialize and reparse the expression, so that type information
 	// annotations are directly embedded inside, otherwise while parsing the
 	// expression table record implicit types will not be correctly detected
@@ -413,7 +413,7 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 			// Validate that no cross DB type references will exist here.
 			// Determine the parent database ID, since cross database references are
 			// disallowed.
-			_, _, parentNamespace := scpb.FindNamespace(b.QueryByID(parentID))
+			_, _, parentNamespace := scpb.FindNamespace(b.QueryByID(tableID))
 			if desc.GetParentID() != parentNamespace.DatabaseID {
 				typeName := tree.MakeTypeNameWithPrefix(b.descCache[id].prefix, desc.GetName())
 				panic(pgerror.Newf(
@@ -466,10 +466,26 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 			}
 		}
 	}
+	cachedDesc, ok := b.descCache[tableID]
+	if !ok {
+		panic(errors.AssertionFailedf("failed to get descriptor for table %d", tableID))
+	}
+	tableDesc, ok := cachedDesc.desc.(catalog.TableDescriptor)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"descriptor %d should be a table but is %v",
+			tableID, cachedDesc.desc.DescriptorType(),
+		))
+	}
+	ids, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+	if err != nil {
+		panic(err)
+	}
 	ret := &scpb.Expression{
-		Expr:            catpb.Expression(tree.Serialize(expr)),
-		UsesSequenceIDs: seqIDs.Ordered(),
-		UsesTypeIDs:     typeIDs.Ordered(),
+		Expr:                catpb.Expression(tree.Serialize(expr)),
+		UsesSequenceIDs:     seqIDs.Ordered(),
+		UsesTypeIDs:         typeIDs.Ordered(),
+		ReferencedColumnIDs: ids.Ordered(),
 	}
 	return ret
 }
