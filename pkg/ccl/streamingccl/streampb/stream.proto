@@ -71,6 +71,7 @@ message StreamEvent {
   message Batch {
     repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
+    repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
   }
 
   // Checkpoint represents stream checkpoint.
