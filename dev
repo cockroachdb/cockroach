@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+if [[ $EUID -eq 0 ]]; then
+  echo "dev cannot be run as root or with sudo"
+  exit 1
+fi
+
 set -euo pipefail
 
 # Bump this counter to force rebuilding `dev` on all machines.

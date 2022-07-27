@@ -410,7 +410,7 @@ func (sd *storedDescriptors) getAllDescriptors(
 		return nstree.Catalog{}, err
 	}
 	// There could be tables with user defined types that need hydrating.
-	if err := HydrateGivenDescriptors(ctx, cat.OrderedDescriptors()); err != nil {
+	if err := hydrateCatalog(ctx, cat.Catalog); err != nil {
 		// If we ran into an error hydrating the types, that means that we
 		// have some sort of corrupted descriptor state. Rather than disable
 		// uses of getAllDescriptors, just log the error.

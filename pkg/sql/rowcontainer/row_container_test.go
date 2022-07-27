@@ -599,6 +599,18 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 					}
 					expectedRow := sortedRows.rows[i]
 					if readRow.GetIdx() != expectedRow.GetIdx() {
+						// Check whether both rows are equal.
+						cmp, err := compareIndexedRows(&evalCtx, expectedRow, readRow, ordering)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if cmp == 0 {
+							// The rows are equal, and since we don't use a
+							// stable sort, this is allowed. The ordering going
+							// forward will differ so there is no point in
+							// proceeding.
+							return
+						}
 						t.Fatalf("read row has different idx that what we expect")
 					}
 					for col, expectedDatum := range expectedRow.Row {
@@ -852,7 +864,13 @@ func (n *rowsSorter) Less(i, j int) bool {
 
 func (n *rowsSorter) Compare(i, j int) (int, error) {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
-	for _, o := range n.ordering {
+	return compareIndexedRows(n.evalCtx, ra, rb, n.ordering)
+}
+
+func compareIndexedRows(
+	evalCtx *eval.Context, ra, rb eval.IndexedRow, ordering colinfo.ColumnOrdering,
+) (int, error) {
+	for _, o := range ordering {
 		da, err := ra.GetDatum(o.ColIdx)
 		if err != nil {
 			return 0, err
@@ -861,7 +879,7 @@ func (n *rowsSorter) Compare(i, j int) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if c := da.Compare(n.evalCtx, db); c != 0 {
+		if c := da.Compare(evalCtx, db); c != 0 {
 			if o.Direction != encoding.Ascending {
 				return -c, nil
 			}
