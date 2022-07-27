@@ -72,6 +72,11 @@ type Backup struct {
 	// explicitly specified by the user, then this will be set during BACKUP
 	// planning once the destination has been resolved.
 	Subdir Expr
+
+	// IsDryRun is set to true if the caller wants to plan a backup but not
+	// persist and run it as a job. This field is for internal use and is only
+	// used on the creation of a backup schedule.
+	IsDryRun bool
 }
 
 var _ Statement = &Backup{}
