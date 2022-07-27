@@ -150,6 +150,10 @@ type FunctionProperties struct {
 	// since its definition is to pick out the JSON attributes within the input
 	// that match, by name, to the columns in the aliased record type.
 	ReturnsRecordType bool
+
+	// InhibitStableFolds indicates that this function should not be constant
+	// folded, even when it is possible to do so.
+	InhibitStableFolds bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in
