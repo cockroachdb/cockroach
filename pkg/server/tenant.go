@@ -127,6 +127,9 @@ func startTenantInternal(
 	httpAddr string,
 	_ error,
 ) {
+
+	log.Info(ctx, "tenantstartup")
+
 	err := ApplyTenantLicense()
 	if err != nil {
 		return nil, nil, nil, "", "", err
@@ -441,6 +444,7 @@ func makeTenantSQLServerArgs(
 	}
 	resolver := kvtenant.AddressResolver(tenantConnect)
 	nodeDialer := nodedialer.New(rpcContext, resolver)
+	//tenantConnect.TenantRanges()
 
 	provider := kvtenant.TokenBucketProvider(tenantConnect)
 	if tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); ok &&

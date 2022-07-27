@@ -3645,6 +3645,7 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
 }
 
+
 // Implementation of the storeForTruncator interface.
 type storeForTruncatorImpl Store
 
