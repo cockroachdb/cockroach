@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
+        "//pkg/util/cancelchecker",
         "//pkg/util/errorutil",
         "//pkg/util/log",
         "//pkg/util/treeprinter",
