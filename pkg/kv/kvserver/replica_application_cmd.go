@@ -125,6 +125,19 @@ func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	return c.AckOutcomeAndFinish(ctx)
 }
 
+// getStoreWriteByteSizes returns the size of the writes to the store:
+// writeBytes is the size of the WriteBatch if any, and ingestedBytes is the
+// size of the sstable to ingest, if any.
+func (c *replicatedCmd) getStoreWriteByteSizes() (writeBytes int64, ingestedBytes int64) {
+	if c.raftCmd.WriteBatch != nil {
+		writeBytes = int64(len(c.raftCmd.WriteBatch.Data))
+	}
+	if c.raftCmd.ReplicatedEvalResult.AddSSTable != nil {
+		ingestedBytes = int64(len(c.raftCmd.ReplicatedEvalResult.AddSSTable.Data))
+	}
+	return writeBytes, ingestedBytes
+}
+
 // Rejected implements the apply.CheckedCommand interface.
 func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil
