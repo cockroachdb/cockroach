@@ -13,6 +13,10 @@ package server
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
+
 	"net/http"
 	"os"
 	"path/filepath"
@@ -135,6 +139,12 @@ type Server struct {
 	decomNodeMap    *decommissioningNodeMap
 	authentication  *authenticationServer
 	migrationServer *migrationServer
+
+	// XXX: keyVisualizerServer
+	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
+	spanStatsServer	  *SpanStatsServer
+
+
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 	// The Obserability Server, used by the Observability Service to subscribe to
@@ -672,6 +682,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
+		RangefeedFactory: 		  rangeFeedFactory,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -774,6 +785,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 
+	spanStatsServer := &SpanStatsServer{}
+	spanStatsAccessor := spanstatskvaccessor.New(spanStatsServer)
+
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory && spec.Path != "" {
@@ -829,6 +843,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
+		spanStatsAccessor:        spanStatsAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -930,6 +945,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
+		spanStatsServer: 				spanStatsServer,
 	}
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
@@ -1173,6 +1189,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// subscribe to CRDB data. Note that the server will reject RPCs until
 	// SetResourceInfo is called later.
 	obspb.RegisterObsServer(s.grpc.Server, s.obsServer)
+
+	// Register the KeyVisualizer Server
+	s.spanStatsServer.server = s
+	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
+
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.

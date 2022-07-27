@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"net"
 	"net/url"
 	"reflect"
@@ -1310,6 +1311,9 @@ type ExecutorConfig struct {
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
+
+
+	SpanStatsConsumer	keyvisualizer.SpanStatsConsumer
 
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.

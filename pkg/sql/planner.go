@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -563,6 +564,10 @@ func (p *planner) MigrationJobDeps() upgrade.JobDeps {
 // SpanConfigReconciler returns the spanconfig.Reconciler.
 func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
 	return p.execCfg.SpanConfigReconciler
+}
+
+func (p *planner) SpanStatsConsumer() keyvisualizer.SpanStatsConsumer {
+	return p.execCfg.SpanStatsConsumer
 }
 
 // GetTypeFromValidSQLSyntax implements the eval.Planner interface.

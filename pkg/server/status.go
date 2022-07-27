@@ -18,6 +18,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"io"
 	"net/http"
 	"os"
@@ -2567,6 +2568,57 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 		return serverpb.HotRangesResponse_NodeResponse{ErrorMessage: err.Error()}
 	}
 	return resp
+}
+
+func (s *statusServer) KeyVisSamples(
+	ctx context.Context, req *serverpb.KeyVisSamplesRequest,
+) (*serverpb.KeyVisSamplesResponse, error) {
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+
+	// serve samples between time window
+	// the client can just query everything
+	// then, the browser an conditionally render the keysapce and samples based
+	//on the chosen time window
+	// filter keyspace by samples.
+
+	uniqueKeys, err := keyvisstorage.ReadKeys(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	prettyForKeyString := make(map[string]string)
+	prettyForUUID := make(map[string]string)
+	sorted := make([]string, 0)
+	sortedPretty := make([]string, 0)
+
+	for keyUUID, keyBytes := range uniqueKeys {
+		s := string(keyBytes)
+		pretty := keyBytes.String()
+		prettyForKeyString[s] = pretty
+		sorted = append(sorted, s)
+		prettyForUUID[keyUUID] = pretty
+	}
+
+	sort.Strings(sorted)
+	for _, s := range sorted {
+		sortedPretty = append(sortedPretty, prettyForKeyString[s])
+	}
+
+	// read samples
+	samples, err := keyvisstorage.ReadSamples(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.KeyVisSamplesResponse{
+		PrettyKeyForUuid: prettyForUUID,
+		SortedPrettyKeys: sortedPretty,
+		Samples:          samples,
+	}, nil
 }
 
 // Range returns rangeInfos for all nodes in the cluster about a specific

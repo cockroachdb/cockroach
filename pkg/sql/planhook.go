@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -112,6 +113,7 @@ type PlanHookState interface {
 		schemaID descpb.ID) error
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
+	SpanStatsConsumer() keyvisualizer.SpanStatsConsumer
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 	Txn() *kv.Txn
 }

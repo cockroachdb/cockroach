@@ -270,7 +270,7 @@ const (
 	WaitedForDelRangeInGCJob
 	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
 	RangefeedUseOneStreamPerNode
-	// NoNonMVCCAddSSTable adds a migration which waits for all
+	// NoNonMVCCAddSSTable adds a migration whizch waits for all
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	NoNonMVCCAddSSTable

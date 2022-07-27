@@ -1,0 +1,68 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+syntax = "proto3";
+package cockroach.keyvisualizer.keyvispb;
+option go_package = "keyvispb";
+
+import "kv/kvserver/spanstats/spanstatspb/span_stats.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+
+
+message SaveBoundariesRequest {
+  roachpb.TenantID tenant = 1;
+  repeated roachpb.Span boundaries = 2;
+}
+message SaveBoundariesResponse {}
+
+message GetSamplesRequest {
+  roachpb.TenantID tenant = 1;
+  util.hlc.Timestamp start = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end = 3 [(gogoproto.nullable) = false];
+}
+
+message GetSamplesResponse {
+  repeated kv.kvserver.spanstats.spanstatspb.Sample samples = 1;
+}
+
+message GetTenantRangesRequest {
+  roachpb.TenantID tenant = 1;
+}
+
+message GetTenantRangesResponse {
+  repeated roachpb.Span boundaries = 1;
+}
+
+service KeyVisualizer {
+
+  rpc GetTenantRanges(GetTenantRangesRequest) returns
+    (GetTenantRangesResponse) {}
+
+  // SaveBoundaries is issued by the tenant. The responding node is
+  // responsible for persisting these boundaries to a system table, so that
+  // all stores may be notified about a tenant's updated collection boundaries
+  // via rangefeed.
+  rpc SaveBoundaries(SaveBoundariesRequest) returns (SaveBoundariesResponse) {}
+
+  // GetSamplesFromAllNodes is issued by the tenant.
+  rpc GetSamplesFromAllNodes(GetSamplesRequest) returns (GetSamplesResponse) {}
+
+  // GetSamplesFromNode is issued as part of the fan-out to collect samples
+  // from all stores across the cluster. It is issued by the node that serves
+  // the `GetSamplesFromAllNodes` rpc.
+  rpc GetSamplesFromNode(GetSamplesRequest) returns (GetSamplesResponse) {}
+
+}

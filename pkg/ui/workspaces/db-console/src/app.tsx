@@ -84,6 +84,7 @@ import InsightsOverviewPage from "src/views/insights/insightsOverview";
 import TransactionInsightDetailsPageConnected from "src/views/insights/transactionInsightDetailsPageConnected";
 import StatementInsightDetailsPageConnected from "src/views/insights/statementInsightDetailsPageConnected";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
+import KeyVisualizerPage from "src/views/keyVisualizer";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -335,7 +336,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     path="/debug/hotranges/:node_id"
                     component={HotRanges}
                   />
-
+                  <Route exact path={`/keyvisualizer`} component={KeyVisualizerPage} />
                   <Route path="/raft">
                     <Raft>
                       <Switch>

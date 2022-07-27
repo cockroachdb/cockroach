@@ -1,0 +1,247 @@
+package server
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanstats/spanstatspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+)
+
+func getTenantRanges(
+	ctx context.Context,
+	db *kv.DB,
+	tenantID roachpb.TenantID,
+) ([]*roachpb.Span, error) {
+
+	tenantPrefix := keys.MakeTenantPrefix(tenantID)
+	tenantKeySpan := roachpb.Span{
+		Key:    tenantPrefix,
+		EndKey: tenantPrefix.PrefixEnd(),
+	}
+
+	spans := make([]*roachpb.Span, 0)
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		rangeKVs, err := kvclient.ScanMetaKVs(ctx, txn, tenantKeySpan)
+		if err != nil {
+			return err
+		}
+
+		for _, rangeKV := range rangeKVs {
+			var desc roachpb.RangeDescriptor
+			if err := rangeKV.ValueProto(&desc); err != nil {
+				return err
+			}
+
+			spans = append(spans, &roachpb.Span{
+				Key:    roachpb.Key(desc.StartKey),
+				EndKey: roachpb.Key(desc.EndKey),
+			})
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return spans, nil
+}
+
+type SpanStatsServer struct {
+	server *Server
+}
+
+var _ keyvispb.KeyVisualizerServer = &SpanStatsServer{}
+
+func (s *SpanStatsServer) GetTenantRanges(
+	ctx context.Context, req *keyvispb.GetTenantRangesRequest,
+) (*keyvispb.GetTenantRangesResponse, error) {
+
+	ranges, err := getTenantRanges(ctx, s.server.db, *req.Tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &keyvispb.GetTenantRangesResponse{Boundaries: ranges}
+	return res, nil
+}
+
+func (s *SpanStatsServer) SaveBoundaries(
+	ctx context.Context,
+	req *keyvispb.SaveBoundariesRequest,
+) (*keyvispb.SaveBoundariesResponse, error) {
+
+	encoded, err := protoutil.Marshal(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := fmt.Sprintf("UPSERT INTO system.span_stats_tenant_boundaries (" +
+		"tenant_id, boundaries) VALUES (%d, x'%s')", req.Tenant.ToUint64(),
+		hex.EncodeToString(encoded))
+
+	_, err = s.server.sqlServer.internalExecutor.ExecEx(
+		ctx,
+		"upsert tenant boundaries",
+		nil,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		stmt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &keyvispb.SaveBoundariesResponse{}, nil
+}
+
+func (s *SpanStatsServer) dialNode(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+) (keyvispb.KeyVisualizerClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	rpcConnection := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass)
+	conn, err := rpcConnection.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return keyvispb.NewKeyVisualizerClient(conn), nil
+}
+
+// GetSamplesFromAllNodes is issued by the tenant.
+func (s *SpanStatsServer) GetSamplesFromAllNodes(
+	ctx context.Context,
+	req *keyvispb.GetSamplesRequest,
+) (*keyvispb.GetSamplesResponse, error) {
+
+	// dial each node and GetSamplesFromNode
+	// multiple samples can be returned from each node,
+	// but for now, assume that only one sample will be returned.
+	responsesByNodeID := make(map[roachpb.NodeID]keyvispb.GetSamplesResponse)
+	globalStats := make([]*spanstatspb.SpanStats, 0)
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		c := client.(keyvispb.KeyVisualizerClient)
+		stats, err := c.GetSamplesFromNode(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return stats, err
+	}
+
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		nodeResponse := resp.(*keyvispb.GetSamplesResponse)
+		responsesByNodeID[nodeID] = *nodeResponse
+	}
+
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		log.Errorf(ctx, "could not get span stats sample for node %d: %s", nodeID, err.Error())
+	}
+
+	err := s.server.status.iterateNodes(ctx, "iterating nodes for span stats", dialFn, nodeFn, responseFn, errorFn)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, samples := range responsesByNodeID {
+		for _, spanStat := range samples.Samples[0].SpanStats {
+			globalStats = append(globalStats, spanStat)
+		}
+	}
+
+	// We set the timestamp here, because for now,
+	// collectors are not keeping historical samples.
+	timestamp := hlc.NewClockWithSystemTimeSource(0).Now()
+	samples := []*spanstatspb.Sample{{
+		SampleTime: &timestamp,
+		SpanStats:  uniqueStats(globalStats),
+	}}
+
+	res := &keyvispb.GetSamplesResponse{Samples: samples}
+	return res, nil
+}
+
+// GetSamplesFromNode is issued as part of the fan-out to collect samples
+// from all stores across the cluster. It is issued by the node that serves
+// the `GetSamplesFromAllNodes` rpc.
+func (s *SpanStatsServer) GetSamplesFromNode(
+	ctx context.Context,
+	req *keyvispb.GetSamplesRequest,
+) (*keyvispb.GetSamplesResponse, error) {
+
+	localStats := make([]*spanstatspb.SpanStats, 0)
+	err := s.server.node.stores.VisitStores(func(s *kvserver.Store) error {
+		samples, err := s.GetSpanStatsCollector().GetSamples(*req.Tenant)
+		if err != nil {
+			return err
+		}
+
+		stats := samples[0]
+		for _, stat := range stats.SpanStats {
+			localStats = append(localStats, stat)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(zachlite): Right now,
+	// this response assumes the collector is only returning a single sample.
+	// Eventually, this function should find unique stats from the corresponding
+	// samples.
+	// The timestamps should originate from the collector.
+	samples := []*spanstatspb.Sample{{
+		SampleTime: nil,
+		SpanStats:  uniqueStats(localStats),
+	}}
+
+	res := &keyvispb.GetSamplesResponse{Samples: samples}
+	return res, nil
+}
+
+func uniqueStats(stats []*spanstatspb.SpanStats) []*spanstatspb.SpanStats {
+	unique := make(map[string]*spanstatspb.SpanStats)
+
+	for _, stat := range stats {
+		spanAsString := stat.Span.String()
+		if uniqueStat, ok := unique[spanAsString]; ok {
+			uniqueStat.Requests += stat.Requests
+		} else {
+			unique[spanAsString] = &spanstatspb.SpanStats{
+				Span:     stat.Span,
+				Requests: stat.Requests,
+			}
+		}
+	}
+
+	ret := make([]*spanstatspb.SpanStats, 0)
+	for _, stat := range unique {
+		ret = append(ret, stat)
+	}
+	return ret
+}

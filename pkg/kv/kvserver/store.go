@@ -14,6 +14,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector"
+	kvclientrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -744,6 +747,7 @@ type Store struct {
 	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsReader  spanconfig.ProtectedTSReader
 	ctSender           *sidetransport.Sender
+	spanStatsCollector keyvisualizer.SpanStatsCollector
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -1075,6 +1079,7 @@ type StoreConfig struct {
 	// tests.
 	KVMemoryMonitor        *mon.BytesMonitor
 	RangefeedBudgetFactory *rangefeed.BudgetFactory
+	RangefeedFactory			 *kvclientrangefeed.Factory
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
@@ -1222,6 +1227,8 @@ func NewStore(
 		math.MaxInt64,
 		cfg.Settings,
 	)
+
+	s.spanStatsCollector = spanstatscollector.New(s.cfg.Clock, s.cfg.RangefeedFactory)
 
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
@@ -2059,6 +2066,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
+	}
+
+	if err := s.spanStatsCollector.Start(ctx, s.stopper); err != nil {
+		return err
 	}
 
 	// Connect rangefeeds to closed timestamp updates.
@@ -3625,6 +3636,11 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+
+func (s *Store) GetSpanStatsCollector() keyvisualizer.SpanStatsCollector {
+	return s.spanStatsCollector
 }
 
 // Implementation of the storeForTruncator interface.

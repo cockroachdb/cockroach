@@ -12,6 +12,7 @@ package kvtenantccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"io"
 	"math/rand"
 	"sort"
@@ -95,6 +96,7 @@ type Connector struct {
 type client struct {
 	roachpb.InternalClient
 	serverpb.StatusClient
+	keyvispb.KeyVisualizerClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -435,6 +437,7 @@ func (c *Connector) Regions(
 }
 
 // TenantRanges implements the serverpb.TenantStatusServer interface
+// XXX: need this.
 func (c *Connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
 ) (resp *serverpb.TenantRangesResponse, _ error) {
@@ -483,6 +486,42 @@ func (c *Connector) TokenBucket(
 		return resp, nil
 	}
 	return nil, ctx.Err()
+}
+
+func (c *Connector) GetKeyVisualizerSamples(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	start hlc.Timestamp,
+	end hlc.Timestamp,
+) (samples *keyvispb.GetSamplesResponse, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error = nil
+		samples, err = c.GetSamplesFromAllNodes(ctx, &keyvispb.GetSamplesRequest{
+			Tenant: &tenantID,
+			Start:  start,
+			End:    end,
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return samples, nil
+}
+
+func (c *Connector) GetTenantRanges(ctx context.Context,
+	tenantID roachpb.TenantID) (*keyvispb.GetTenantRangesResponse, error) {
+	// TODO(zachlite): implement to support secondary tenants
+	return nil, nil
+}
+
+func (c *Connector) UpdateBoundaries(ctx context.Context,
+	id roachpb.TenantID, boundaries []*roachpb.Span) (*keyvispb.
+		SaveBoundariesResponse, error) {
+	// TODO(zachlite): implement to support secondary tenants
+	return nil, nil
 }
 
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
@@ -636,6 +675,7 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 			return &client{
 				InternalClient: roachpb.NewInternalClient(conn),
 				StatusClient:   serverpb.NewStatusClient(conn),
+				KeyVisualizerClient: keyvispb.NewKeyVisualizerClient(conn),
 			}, nil
 		}
 	}

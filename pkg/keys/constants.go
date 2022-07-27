@@ -467,6 +467,7 @@ const (
 	SQLInstancesTableID                 = 46
 	SpanConfigurationsTableID           = 47
 	RoleIDSequenceID                    = 48
+	SpanStatsTenantBoundariesTableID    = 49
 )
 
 // CommentType the type of the schema object on which a comment has been
