@@ -13,9 +13,13 @@ package tabledesc
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
 )
 
@@ -59,6 +63,30 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 		if err := ValidateTTLRowStatsPollInterval("ttl_row_stats_poll_interval", ttl.RowStatsPollInterval); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ValidateTTLExpirationExpr validates that the ttl_expiration_expression
+// only references existing columns.
+func ValidateTTLExpirationExpr(
+	desc catalog.TableDescriptor, expirationExpr catpb.Expression,
+) error {
+	if expirationExpr == "" {
+		return nil
+	}
+	expr, err := parser.ParseExpr(string(expirationExpr))
+	if err != nil {
+		return errors.Wrapf(err, "ttl_expiration_expression %q must be a valid expression", expirationExpr)
+	}
+	// Ideally, we would also call schemaexpr.ValidateTTLExpirationExpression
+	// here, but that requires a SemaCtx which we don't have here.
+	valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.Newf("row-level TTL expiration expression %q refers to unknown columns", expirationExpr)
 	}
 	return nil
 }
