@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -596,6 +597,27 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 					}))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
+
+			case "bypassed-work-done":
+				var workCount, writeBytes, ingestedBytes int
+				d.ScanArgs(t, "work-count", &workCount)
+				d.ScanArgs(t, "write-bytes", &writeBytes)
+				d.ScanArgs(t, "ingested-bytes", &ingestedBytes)
+				q.BypassedWorkDone(int64(workCount), StoreWorkDoneInfo{
+					WriteBytes:    int64(writeBytes),
+					IngestedBytes: int64(ingestedBytes),
+				})
+				return printQueue()
+
+			case "stats-to-ignore":
+				var ingestedBytes, ingestedIntoL0Bytes int
+				d.ScanArgs(t, "ingested-bytes", &ingestedBytes)
+				d.ScanArgs(t, "ingested-into-L0-bytes", &ingestedIntoL0Bytes)
+				q.StatsToIgnore(pebble.IngestOperationStats{
+					Bytes:                     uint64(ingestedBytes),
+					ApproxIngestedIntoL0Bytes: uint64(ingestedIntoL0Bytes),
+				})
+				return printQueue()
 
 			case "print":
 				return printQueue()
