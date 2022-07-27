@@ -297,6 +297,7 @@ SHOW GRANTS ON TYPE testuser_db.greeting_usage;
 ----
 testuser_db public greeting_usage admin ALL true
 testuser_db public greeting_usage root ALL true
+testuser_db public greeting_usage testuser ALL true
 
 query-sql
 SHOW GRANTS ON testuser_db.testtable_greeting_usage;
@@ -515,54 +516,63 @@ SHOW GRANTS ON DATABASE testdb
 testdb admin ALL true
 testdb public CONNECT false
 testdb root ALL true
+testdb testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.testtable_simple
 ----
 testdb public testtable_simple admin ALL true
 testdb public testtable_simple root ALL true
+testdb public testtable_simple testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc
 ----
 testdb sc admin ALL true
 testdb sc root ALL true
+testdb sc testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public
 ----
 testdb public admin ALL true
 testdb public root ALL true
+testdb public testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.sc.othertable
 ----
 testdb sc othertable admin ALL true
 testdb sc othertable root ALL true
+testdb sc othertable testuser ALL true
 
 query-sql
 SHOW GRANTS ON TYPE greeting_usage;
 ----
 testdb public greeting_usage admin ALL true
 testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.testtable_greeting_usage;
 ----
 testdb public testtable_greeting_usage admin ALL true
 testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser ALL true
 
 query-sql
 SHOW GRANTS ON TYPE greeting_owner;
 ----
 testdb public greeting_owner admin ALL true
 testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.testtable_greeting_owner;
 ----
 testdb public testtable_greeting_owner admin ALL true
 testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
 
 # Ensure that testuser is the owner of the restored database/schemas.
 query-sql

@@ -652,6 +652,12 @@ func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashRelListExpr(val []RelExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i])
+	}
+}
+
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -1051,6 +1057,18 @@ func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {
 
 func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
+}
+
+func (h *hasher) IsRelListExprEqual(l, r []RelExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {

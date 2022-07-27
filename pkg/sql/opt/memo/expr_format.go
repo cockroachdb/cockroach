@@ -867,6 +867,12 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
+	formatUDFBody := func(udf *UDFExpr, tp treeprinter.Node) {
+		for i := range udf.Body {
+			f.formatExpr(udf.Body[i], tp)
+		}
+	}
+
 	f.Buffer.Reset()
 	if label != "" {
 		f.Buffer.WriteString(label)
@@ -919,6 +925,13 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		for i, n := 0, scalar.ChildCount(); i < n; i++ {
 			f.formatExpr(scalar.Child(i), tp)
 		}
+		return
+
+	case opt.UDFOp:
+		udf := scalar.(*UDFExpr)
+		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
+		tp = tp.Child(f.Buffer.String())
+		formatUDFBody(udf, tp)
 		return
 	}
 
@@ -976,6 +989,13 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			intercepted = true
 		}
 	}
+	if udf, ok := scalar.(*UDFExpr); ok {
+		// A UDF function body will be printed after the scalar props, so
+		// pre-emptively set intercepted=true to avoid the default
+		// formatScalarPrivate formatting below.
+		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
+		intercepted = true
+	}
 	if !intercepted {
 		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
 		f.formatScalarPrivate(scalar)
@@ -986,6 +1006,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteByte(']')
 	}
 	tp = tp.Child(f.Buffer.String())
+
+	if udf, ok := scalar.(*UDFExpr); ok {
+		// Always print UDF function body.
+		formatUDFBody(udf, tp)
+	}
 
 	if !intercepted {
 		for i, n := 0, scalar.ChildCount(); i < n; i++ {
@@ -1510,9 +1535,6 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s,%s,%s", t.JoinType, t.LeftEq, t.RightEq)
 
 	case *FunctionPrivate:
-		fmt.Fprintf(f.Buffer, " %s", t.Name)
-
-	case *UserDefinedFunctionPrivate:
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
 	case *WindowsItemPrivate:

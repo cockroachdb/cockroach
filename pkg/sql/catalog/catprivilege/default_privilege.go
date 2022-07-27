@@ -307,6 +307,9 @@ func foldPrivileges(
 		return
 	}
 	if privileges.HasAllPrivileges(role.Role, targetObject.ToObjectType()) {
+		// Even though the owner's ALL privileges are implicit, we still need this
+		// because it's possible to modify the default privileges to be more
+		// fine-grained than ALL.
 		user := privileges.FindOrCreateUser(role.Role)
 		if user.WithGrantOption == 0 {
 			setRoleHasAllOnTargetObject(defaultPrivilegesForRole, true, targetObject)
@@ -335,6 +338,9 @@ func expandPrivileges(
 		return
 	}
 	if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, targetObject) {
+		// Even though the owner's ALL privileges are implicit, we still need this
+		// because it's possible to modify the default privileges to be more
+		// fine-grained than ALL.
 		privileges.Grant(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL}, false /* withGrantOption */)
 		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, false, targetObject)
 	}
@@ -353,19 +359,6 @@ func GetUserPrivilegesForObject(
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  username.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
-		})
-	}
-	// If ForAllRoles is specified, we can return early.
-	// ForAllRoles is not a real role and does not have implicit default privileges
-	// for itself.
-	if !p.IsExplicitRole() {
-		return userPrivileges
-	}
-	userProto := p.GetExplicitRole().UserProto
-	if GetRoleHasAllPrivilegesOnTargetObject(&p, targetObject) {
-		return append(userPrivileges, catpb.UserPrivileges{
-			UserProto:  userProto,
-			Privileges: privilege.ALL.Mask(),
 		})
 	}
 	return userPrivileges

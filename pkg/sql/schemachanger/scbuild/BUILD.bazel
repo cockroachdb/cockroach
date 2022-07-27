@@ -58,7 +58,7 @@ go_library(
 
 go_test(
     name = "scbuild_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "builder_test.go",
         "main_test.go",
