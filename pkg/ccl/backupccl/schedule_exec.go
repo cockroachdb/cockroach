@@ -70,8 +70,16 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 
 	// Sanity check: backup should be detached.
-	if !backupStmt.Options.Detached {
-		backupStmt.Options.Detached = true
+	forceDetached := false
+	if backupStmt.Options.Detached == nil {
+		forceDetached = true
+	}
+	boolVal, _ := backupStmt.Options.Detached.(*tree.DBool)
+	if boolVal == nil || boolVal == tree.DBoolFalse {
+		forceDetached = true
+	}
+	if forceDetached {
+		backupStmt.Options.Detached = tree.DBoolTrue
 		log.Warningf(ctx, "force setting detached option for backup schedule %d",
 			sj.ScheduleID())
 	}

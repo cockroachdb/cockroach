@@ -426,6 +426,28 @@ func backupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	detached := false
+	if backupStmt.Options.Detached != nil {
+		// Can't defer processing of detachedFn since we need that value now, but
+		// use the same type checking regardless.
+		detachedFn, err := p.TypeAsBool(ctx, backupStmt.Options.Detached, "BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		detached, err = detachedFn()
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
+	revisionHistoryFn := func() (bool, error) { return false, nil } // Defaults to false.
+	if backupStmt.Options.CaptureRevisionHistory != nil {
+		revisionHistoryFn, err = p.TypeAsBool(ctx, backupStmt.Options.CaptureRevisionHistory, "BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	encryptionParams := jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
 
 	var pwFn func() (string, error)
@@ -464,7 +486,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnIsSingleStmt || backupStmt.Options.Detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt || detached) {
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
@@ -529,12 +551,14 @@ func backupPlanHook(
 			}
 		}
 
-		var revisionHistory bool
-		if backupStmt.Options.CaptureRevisionHistory {
+		revisionHistory, err := revisionHistoryFn()
+		if err != nil {
+			return err
+		}
+		if revisionHistory {
 			if err := requireEnterprise(p.ExecCfg(), "revision_history"); err != nil {
 				return err
 			}
-			revisionHistory = true
 		}
 
 		var targetDescs []catalog.Descriptor
@@ -633,7 +657,7 @@ func backupPlanHook(
 		}
 		plannerTxn := p.Txn()
 
-		if backupStmt.Options.Detached {
+		if detached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
@@ -674,7 +698,7 @@ func backupPlanHook(
 		return sj.ReportExecutionResults(ctx, resultsCh)
 	}
 
-	if backupStmt.Options.Detached {
+	if detached {
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
