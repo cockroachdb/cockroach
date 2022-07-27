@@ -23,16 +23,18 @@ const (
 	// SSTableEvent indicates that the SSTable field of an event holds an updated
 	// SSTable which needs to be ingested.
 	SSTableEvent
+	// DeleteRangeEvent indicates that the DeleteRange field of an event holds a
+	// DeleteRange which needs to be ingested.
+	DeleteRangeEvent
 	// CheckpointEvent indicates that GetResolvedSpans will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
-	// GenerationEvent indicates that the stream should start ingesting with the
-	// updated topology.
-	GenerationEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
 // field indicates which other fields are meaningful.
+// TODO(casper): refactor this to use a protobuf message type that has one of
+// union of event types below.
 type Event interface {
 	// Type specifies which accessor will be meaningful.
 	Type() EventType
@@ -40,8 +42,11 @@ type Event interface {
 	// GetKV returns a KV event if the EventType is KVEvent.
 	GetKV() *roachpb.KeyValue
 
-	// GetSSTable returns a SSTable event if the EventType is SSTable.
+	// GetSSTable returns a AddSSTable event if the EventType is SSTableEvent.
 	GetSSTable() *roachpb.RangeFeedSSTable
+
+	// GetDeleteRange returns a DeleteRange event if the EventType is DeleteRangeEvent.
+	GetDeleteRange() *roachpb.RangeFeedDeleteRange
 
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
@@ -70,6 +75,11 @@ func (kve kvEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
+// GetDeleteRange implements the Event interface.
+func (kve kvEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+	return nil
+}
+
 // GetResolvedSpans implements the Event interface.
 func (kve kvEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return nil
@@ -95,12 +105,49 @@ func (sste sstableEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return &sste.sst
 }
 
+// GetDeleteRange implements the Event interface.
+func (sste sstableEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+	return nil
+}
+
 // GetResolvedSpans implements the Event interface.
 func (sste sstableEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return nil
 }
 
 var _ Event = sstableEvent{}
+
+// delRangeEvent is a DeleteRange event that needs to be ingested.
+type delRangeEvent struct {
+	delRange roachpb.RangeFeedDeleteRange
+}
+
+// Type implements the Event interface.
+func (dre delRangeEvent) Type() EventType {
+	return DeleteRangeEvent
+}
+
+// GetKV implements the Event interface.
+func (dre delRangeEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (dre delRangeEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+	return nil
+}
+
+// GetDeleteRange implements the Event interface.
+func (dre delRangeEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+	return &dre.delRange
+}
+
+// GetResolvedSpans implements the Event interface.
+func (dre delRangeEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+	return nil
+}
+
+var _ Event = delRangeEvent{}
 
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
@@ -125,34 +172,14 @@ func (ce checkpointEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
+// GetDeleteRange implements the Event interface.
+func (ce checkpointEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+	return nil
+}
+
 // GetResolvedSpans implements the Event interface.
 func (ce checkpointEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
 	return &ce.resolvedSpans
-}
-
-// generationEvent indicates that the topology of the stream has changed.
-type generationEvent struct{}
-
-var _ Event = generationEvent{}
-
-// Type implements the Event interface.
-func (ge generationEvent) Type() EventType {
-	return GenerationEvent
-}
-
-// GetKV implements the Event interface.
-func (ge generationEvent) GetKV() *roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (ge generationEvent) GetSSTable() *roachpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (ge generationEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
-	return nil
 }
 
 // MakeKVEvent creates an Event from a KV.
@@ -165,12 +192,12 @@ func MakeSSTableEvent(sst roachpb.RangeFeedSSTable) Event {
 	return sstableEvent{sst: sst}
 }
 
+// MakeDeleteRangeEvent creates an Event from a DeleteRange.
+func MakeDeleteRangeEvent(delRange roachpb.RangeFeedDeleteRange) Event {
+	return delRangeEvent{delRange: delRange}
+}
+
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
 func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
 	return checkpointEvent{resolvedSpans: resolvedSpans}
-}
-
-// MakeGenerationEvent creates an GenerationEvent.
-func MakeGenerationEvent() Event {
-	return generationEvent{}
 }

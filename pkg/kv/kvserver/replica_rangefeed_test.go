@@ -376,7 +376,6 @@ func TestReplicaRangefeed(t *testing.T) {
 		storage.MVCCValue{Value: expVal7q}))
 	require.NoError(t, sstWriter.Finish())
 
-	// Does this mean all ts in sst should be equal to the batch ts?
 	_, _, _, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		true /* ingestAsWrites */, ts7)

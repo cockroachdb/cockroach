@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -324,6 +325,10 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
 	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			if _, err := w.Write([]byte("42,42\n43,43\n")); err != nil {
@@ -378,6 +383,10 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
@@ -434,6 +443,10 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
@@ -488,6 +501,10 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
 	args := defaultTenantStreamingClustersArgs
@@ -532,6 +549,10 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 func TestTenantStreamingCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
 
 	ctx := context.Background()
 
@@ -821,4 +842,73 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 
 	// Ingestion job should succeed despite source failure due to the successful cutover
 	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func TestTenantStreamingDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
+	ctx := context.Background()
+	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	cleanUpTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanUpTenant())
+	}()
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Introduce a DeleteRange on t1 and t2.
+	checkDelRangeOnTable := func(table string, embeddedInSST bool) {
+		srcCodec := keys.MakeSQLCodec(c.args.srcTenantID)
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			c.srcSysServer.DB(), srcCodec, "d", table)
+		tableSpan := desc.PrimaryIndexSpan(srcCodec)
+
+		// Introduce a DelRange on the table span.
+		srcTimeBeforeDelRange := c.srcSysServer.Clock().Now()
+		// Put the DelRange in the SST.
+		if embeddedInSST {
+			batchHLCTime := c.srcSysServer.Clock().Now()
+			batchHLCTime.Logical = 0
+			data, start, end := storageutils.MakeSST(t, c.srcSysServer.ClusterSettings(), []interface{}{
+				storageutils.RangeKV(string(tableSpan.Key), string(tableSpan.EndKey), int(batchHLCTime.WallTime), ""),
+			})
+			_, _, _, err := c.srcSysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
+				false, hlc.Timestamp{}, nil, false, batchHLCTime)
+			require.NoError(t, err)
+		} else {
+			// Use DelRange directly.
+			// Inserted two out-of-order overlapping DelRanges to check if it works
+			// on multiple ranges keys in the same batch.
+			require.NoError(t, c.srcSysServer.DB().DelRangeUsingTombstone(ctx,
+				tableSpan.Key.Next(), tableSpan.EndKey))
+			require.NoError(t, c.srcSysServer.DB().DelRangeUsingTombstone(ctx,
+				tableSpan.Key, tableSpan.Key.Next().Next()))
+		}
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s", table))
+
+		// Point-in-time query, check if the DeleteRange is MVCC-compatible.
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s AS OF SYSTEM TIME %d",
+			table, srcTimeBeforeDelRange.WallTime))
+	}
+
+	// Test on two tables to check if the range keys sst batcher
+	// can work on multiple flushes.
+	checkDelRangeOnTable("t1", true /* embeddedInSST */)
+	checkDelRangeOnTable("t2", false /* embeddedInSST */)
 }

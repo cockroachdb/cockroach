@@ -14,7 +14,6 @@ import (
 	"math"
 	"net/url"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -321,61 +320,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		row, meta := out.Next()
 		require.Nil(t, row)
 		testutils.IsError(meta.Err, "this client always returns an error")
-	})
-
-	t.Run("stream ingestion processor shuts down gracefully on losing client connection", func(t *testing.T) {
-		events := []streamingccl.Event{streamingccl.MakeGenerationEvent()}
-		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{"foo": events},
-		}
-
-		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		partitions := []streamclient.PartitionInfo{{SubscriptionToken: streamclient.SubscriptionToken("foo")}}
-
-		processEventCh := make(chan struct{})
-		defer close(processEventCh)
-		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) error {
-			processEventCh <- struct{}{}
-			return nil
-		}}
-		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
-			partitions, startTime, []jobspb.ResolvedSpan{} /* checkpoint */, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */, streamingTestingKnob)
-		defer func() {
-			require.NoError(t, sip.forceClientForTests.Close(ctx))
-		}()
-		require.NoError(t, err)
-
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sip.Run(ctx)
-		}()
-
-		// The channel will block on read if the event has not been intercepted yet.
-		// Once it unblocks, we are guaranteed that the mockClient has sent the
-		// GenerationEvent and the processor has read it.
-		<-processEventCh
-
-		// The sip processor has received a GenerationEvent and is thus
-		// waiting for a cutover signal, so let's send one!
-		sip.cutoverCh <- struct{}{}
-
-		wg.Wait()
-		// Ensure that all the outputs are properly closed.
-		if !out.ProducerClosed() {
-			t.Fatalf("output RowReceiver not closed")
-		}
-
-		for {
-			// No metadata should have been produced since the processor
-			// should have been moved to draining state with a nil error.
-			row := out.NextNoMeta(t)
-			if row == nil {
-				break
-			}
-			t.Fatalf("more output rows than expected")
-		}
 	})
 }
 
