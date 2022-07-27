@@ -599,15 +599,6 @@ func (node *ShowSyntax) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.
-type ShowTransactionStatus struct {
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW TRANSACTION STATUS")
-}
-
 // ShowLastQueryStatistics represents a SHOW LAST QUERY STATS statement.
 type ShowLastQueryStatistics struct {
 	Columns NameList

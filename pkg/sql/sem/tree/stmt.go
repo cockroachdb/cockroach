@@ -1540,17 +1540,6 @@ func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
 func (*ShowSyntax) observerStatement() {}
 
 // StatementReturnType implements the Statement interface.
-func (*ShowTransactionStatus) StatementReturnType() StatementReturnType { return Rows }
-
-// StatementType implements the Statement interface.
-func (*ShowTransactionStatus) StatementType() StatementType { return TypeDML }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION STATUS" }
-
-func (*ShowTransactionStatus) observerStatement() {}
-
-// StatementReturnType implements the Statement interface.
 func (*ShowTransferState) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1988,7 +1977,6 @@ func (n *ShowTableStats) String() string                 { return AsString(n) }
 func (n *ShowTables) String() string                     { return AsString(n) }
 func (n *ShowTypes) String() string                      { return AsString(n) }
 func (n *ShowTraceForSession) String() string            { return AsString(n) }
-func (n *ShowTransactionStatus) String() string          { return AsString(n) }
 func (n *ShowTransactions) String() string               { return AsString(n) }
 func (n *ShowTransferState) String() string              { return AsString(n) }
 func (n *ShowUsers) String() string                      { return AsString(n) }

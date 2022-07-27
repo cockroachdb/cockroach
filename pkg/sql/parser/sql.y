@@ -6772,7 +6772,7 @@ show_transaction_stmt:
 | SHOW TRANSACTION STATUS
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTransactionStatus{}
+    $$.val = &tree.ShowVar{Name: "transaction_status"}
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
 

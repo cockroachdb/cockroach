@@ -1745,8 +1745,6 @@ func (ex *connExecutor) runObserverStatement(
 	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) error {
 	switch sqlStmt := ast.(type) {
-	case *tree.ShowTransactionStatus:
-		return ex.runShowTransactionState(ctx, res)
 	case *tree.ShowSavepointStatus:
 		return ex.runShowSavepointState(ctx, res)
 	case *tree.ShowSyntax:

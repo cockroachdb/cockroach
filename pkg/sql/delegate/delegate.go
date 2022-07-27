@@ -142,9 +142,6 @@ func TryDelegate(
 	case *tree.ShowZoneConfig:
 		return d.delegateShowZoneConfig(t)
 
-	case *tree.ShowTransactionStatus:
-		return d.delegateShowVar(&tree.ShowVar{Name: "transaction_status"})
-
 	case *tree.ShowSchedules:
 		return d.delegateShowSchedules(t)
 
