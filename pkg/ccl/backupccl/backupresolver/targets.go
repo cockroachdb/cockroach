@@ -39,6 +39,9 @@ type DescriptorsMatched struct {
 
 	// Explicitly requested DBs (e.g. DATABASE a).
 	RequestedDBs []catalog.DatabaseDescriptor
+
+	// A map of explicitly requested TablePatterns to their resolutions.
+	DescsByTablePattern map[tree.TablePattern]catalog.Descriptor
 }
 
 // MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting()
@@ -308,7 +311,8 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 // named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
 // used e.g. by RESTORE.
 //
-// This is guaranteed to not return duplicates.
+// This is guaranteed to not return duplicates, other than in DescsByTablePattern,
+// which will contain a descriptor for every element of targets.Tables.
 func DescriptorsMatchingTargets(
 	ctx context.Context,
 	currentDatabase string,
@@ -317,7 +321,9 @@ func DescriptorsMatchingTargets(
 	targets tree.TargetList,
 	asOf hlc.Timestamp,
 ) (DescriptorsMatched, error) {
-	ret := DescriptorsMatched{}
+	ret := DescriptorsMatched{
+		DescsByTablePattern: make(map[tree.TablePattern]catalog.Descriptor, len(targets.Tables)),
+	}
 
 	r, err := NewDescriptorResolver(descriptors)
 	if err != nil {
@@ -420,6 +426,7 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedSchemasByDBs := make(map[descpb.ID]map[string]struct{})
 	for _, pattern := range targets.Tables {
 		var err error
+		origPat := pattern
 		pattern, err = pattern.NormalizeTablePattern()
 		if err != nil {
 			return ret, err
@@ -458,6 +465,8 @@ func DescriptorsMatchingTargets(
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
 			}
+
+			ret.DescsByTablePattern[origPat] = descI
 
 			// If the parent database is not requested already, request it now.
 			parentID := tableDesc.GetParentID()
@@ -536,6 +545,9 @@ func DescriptorsMatchingTargets(
 				}
 				scMap := alreadyRequestedSchemasByDBs[dbID]
 				scMap[p.Schema()] = struct{}{}
+				ret.DescsByTablePattern[origPat] = prefix.Schema
+			} else {
+				ret.DescsByTablePattern[origPat] = prefix.Database
 			}
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
@@ -637,16 +649,16 @@ func LoadAllDescs(
 // TODO(ajwerner): adopt the collection here.
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
-) ([]catalog.Descriptor, []descpb.ID, error) {
+) ([]catalog.Descriptor, []descpb.ID, map[tree.TablePattern]catalog.Descriptor, error) {
 	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// This sorting was originally required to support interleaves.
@@ -655,5 +667,5 @@ func ResolveTargetsToDescriptors(
 	// that certain tests rely on.
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
 
-	return matched.Descs, matched.ExpandedDB, nil
+	return matched.Descs, matched.ExpandedDB, matched.DescsByTablePattern, nil
 }
