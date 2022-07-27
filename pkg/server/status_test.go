@@ -2206,6 +2206,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 			fullScanCount:     0,
 			databases:         []string{"roachblog"},
 		})
+
 	// Execute same fingerprint id statement on a different application
 	statements = []string{
 		`set application_name = 'second-app'`,
@@ -2335,6 +2336,35 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	for _, test := range testData {
 		testPath(test.path, test.expectedResult)
 	}
+
+	// Test fix for #83608. The stmt being below requested has a fingerprint id
+	// that is 15 chars in hexadecimal. We should be able to find this stmt now
+	// that we construct the filter using a bytes comparison instead of string.
+
+	statements = []string{
+		`set application_name = 'fix_83608'`,
+		`set database = defaultdb`,
+		`SELECT 1, 2, 3, 4`,
+	}
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+
+	selectQuery := "SELECT _, _, _, _"
+	fingerprintID = roachpb.ConstructStatementFingerprintID(selectQuery, false,
+		true, "defaultdb")
+
+	testPath(
+		fmt.Sprintf(`stmtdetails/%v`, fingerprintID),
+		resultValues{
+			query:             selectQuery,
+			totalCount:        1,
+			aggregatedTsCount: 1,
+			planHashCount:     1,
+			appNames:          []string{"fix_83608"},
+			fullScanCount:     0,
+			databases:         []string{"defaultdb"},
+		})
 }
 
 func TestListSessionsSecurity(t *testing.T) {
