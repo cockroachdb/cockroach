@@ -30,7 +30,7 @@ func init() {
 		return &newSchemaChangeResumer{
 			job: job,
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 }
 
 type newSchemaChangeResumer struct {

@@ -340,5 +340,5 @@ func init() {
 			job: job,
 		}
 	}
-	jobs.RegisterConstructor(jobspb.TypeSchemaChangeGC, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeSchemaChangeGC, createResumerFn, jobs.UsesTenantCostControl)
 }

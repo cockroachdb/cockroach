@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -131,6 +132,11 @@ func NewRegistry(
 // Start will start the polling loop for the Registry.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+
+	// Since background statement diagnostics collection is not under user
+	// control, exclude it from cost accounting and control.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	// NB: The only error that should occur here would be if the server were
 	// shutting down so let's swallow it.
 	_ = stopper.RunAsyncTask(ctx, "stmt-diag-poll", r.poll)

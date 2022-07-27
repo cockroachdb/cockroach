@@ -176,7 +176,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, UsesTenantCostControl)
 
 	record := Record{
 		Description: "fake job",
@@ -289,7 +289,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, UsesTenantCostControl)
 
 	record := Record{
 		Description: "fake job",
@@ -394,7 +394,7 @@ func TestJobControlByType(t *testing.T) {
 					return nil
 				},
 			}
-		})
+		}, UsesTenantCostControl)
 	}
 
 	for _, jobType := range allJobTypes {

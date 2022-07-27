@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -547,6 +548,11 @@ func StartJobSchedulerDaemon(
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 ) {
+	// Since the job scheduler system is not under user control, exclude it from
+	// from cost accounting and control. Individual jobs are not part of this
+	// exclusion.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	schedulerEnv := env
 	var daemonKnobs *TestingKnobs
 	if jobsKnobs, ok := cfg.TestingKnobs.(*TestingKnobs); ok {

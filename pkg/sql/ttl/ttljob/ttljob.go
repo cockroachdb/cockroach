@@ -749,6 +749,6 @@ func init() {
 			job: job,
 			st:  settings,
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 	jobs.MakeRowLevelTTLMetricsHook = makeRowLevelTTLAggMetrics
 }

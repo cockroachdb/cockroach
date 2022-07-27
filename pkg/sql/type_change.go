@@ -1348,5 +1348,5 @@ func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &typeChangeResumer{job: job}
 	}
-	jobs.RegisterConstructor(jobspb.TypeTypeSchemaChange, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeTypeSchemaChange, createResumerFn, jobs.UsesTenantCostControl)
 }

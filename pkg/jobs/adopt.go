@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -317,6 +318,12 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return err
 	}
 	resumeCtx, cancel := r.makeCtx()
+
+	// If the job's type was registered to disable tenant cost control, then
+	// exclude the job's costs from tenant accounting.
+	if opts, ok := options[payload.Type()]; ok && opts.disableTenantCostControl {
+		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
+	}
 
 	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {
 		return nil

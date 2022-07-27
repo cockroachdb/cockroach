@@ -4946,7 +4946,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
 		job, err := jobs.TestingCreateAndStartJob(ctx, registry, tc.Server(0).DB(), record)

@@ -190,5 +190,7 @@ func init() {
 		func(job *jobs.Job,
 			settings *cluster.Settings) jobs.Resumer {
 			return &streamIngestionResumer{job: job}
-		})
+		},
+		jobs.UsesTenantCostControl,
+	)
 }
