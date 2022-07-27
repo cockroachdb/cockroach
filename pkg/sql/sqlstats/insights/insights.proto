@@ -13,6 +13,7 @@ package cockroach.sql.insights;
 option go_package = "insights";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 
 message Session {
   bytes id = 1 [(gogoproto.customname) = "ID",
@@ -24,6 +25,11 @@ message Transaction {
   bytes id = 1 [(gogoproto.customname) = "ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false];
+  uint64 fingerprint_id = 2
+  [(gogoproto.customname) = "FingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.nullable) = false];
+  double user_priority = 3;
 }
 
 message Statement {
@@ -33,6 +39,19 @@ message Statement {
   uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
   double latency_in_seconds = 3;
+  string transaction_id = 4;
+  string query = 5;
+  string status = 6;
+  google.protobuf.Timestamp start_time = 7[(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 8 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bool full_scan = 9;
+  string user = 10;
+  string application_name = 11;
+  string database = 12;
+  string plan_gist = 13;
+  int64 rowsRead = 14;
+  int64 rowsWritten = 15;
+  int64 retries = 16;
 }
 
 message Insight {
