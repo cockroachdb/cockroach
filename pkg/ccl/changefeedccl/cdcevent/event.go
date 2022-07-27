@@ -11,15 +11,15 @@ package cdcevent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -43,6 +43,7 @@ type Metadata struct {
 	FamilyID         descpb.FamilyID          // Column family ID.
 	FamilyName       string                   // Column family name.
 	HasOtherFamilies bool                     // True if the table multiple families.
+	HasVirtual       bool                     // True if table has virtual columns.
 	SchemaTS         hlc.Timestamp            // Schema timestamp for table descriptor.
 }
 
@@ -55,6 +56,7 @@ type Decoder interface {
 // Row holds a row corresponding to an event.
 type Row struct {
 	*EventDescriptor
+	MvccTimestamp hlc.Timestamp // Mvcc timestamp of this row.
 
 	// datums is the new value of a changed table row.
 	datums rowenc.EncDatumRow
@@ -81,6 +83,11 @@ type Iterator interface {
 	Datum(fn DatumFn) error
 	// Col invokes fn for each column.
 	Col(fn ColumnFn) error
+}
+
+// EncDatums returns EncDatumRow.
+func (r Row) EncDatums() rowenc.EncDatumRow {
+	return r.datums
 }
 
 // ForEachKeyColumn returns Iterator for each key column
@@ -119,6 +126,23 @@ func (r Row) DatumAt(at int) (tree.Datum, error) {
 	return encDatum.Datum, nil
 }
 
+// CopyInto decodes and copies encdatums to specified tuple.
+func (r Row) CopyInto(tuple *tree.DTuple) error {
+	tupleTypes := tuple.ResolvedType().InternalType.TupleContents
+	if len(tupleTypes) != len(r.datums) {
+		return errors.AssertionFailedf("cannot copy row with %d datums into tuple with %d",
+			len(r.datums), len(tupleTypes))
+	}
+
+	for i, typ := range tupleTypes {
+		if err := r.datums[i].EnsureDecoded(typ, r.alloc); err != nil {
+			return errors.Wrapf(err, "error decoding column [%d] as type %s", i, typ)
+		}
+		tuple.D[i] = r.datums[i].Datum
+	}
+	return nil
+}
+
 // IsDeleted returns true if event corresponds to a deletion event.
 func (r Row) IsDeleted() bool {
 	return r.deleted
@@ -132,6 +156,31 @@ func (r Row) IsInitialized() bool {
 // HasValues returns true if event row has values to decode.
 func (r Row) HasValues() bool {
 	return r.datums != nil
+}
+
+// DebugString returns debug string describing event source.
+func (m Metadata) DebugString() string {
+	return fmt.Sprintf("{table: %d family: %d}", m.TableID, m.FamilyID)
+}
+
+// DebugString returns row string.
+func (r Row) DebugString() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Row%s{", r.Metadata.DebugString()))
+	first := true
+	err := r.ForAllColumns().Datum(func(d tree.Datum, col ResultColumn) error {
+		if !first {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(fmt.Sprintf("%s: %s", col.Name, d.String()))
+		first = false
+		return nil
+	})
+	if err != nil {
+		sb.WriteString(fmt.Sprintf("err: %s", err))
+	}
+	sb.WriteByte('}')
+	return sb.String()
 }
 
 // forEachColumn is a helper which invokes fn for reach column in the ordColumn list.
@@ -275,6 +324,9 @@ func NewEventDescriptor(
 	ord := 0
 	for _, col := range desc.PublicColumns() {
 		isInFamily := inFamily.Contains(col.GetID())
+		if col.IsVirtual() {
+			sd.HasVirtual = true
+		}
 		virtual := col.IsVirtual() && includeVirtualColumns
 		pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
 		if keyOnly {
@@ -345,11 +397,6 @@ func (d *EventDescriptor) EqualsWithUDTCheck(
 	return false, false
 }
 
-// HasUserDefinedTypes returns true if this descriptor contains user defined columns.
-func (d *EventDescriptor) HasUserDefinedTypes() bool {
-	return len(d.udtCols) > 0
-}
-
 // TableDescriptor returns underlying table descriptor.  This method is exposed
 // to make it easier to integrate with the rest of descriptor APIs; prefer to use
 // higher level methods/structs (e.g. Metadata) instead.
@@ -411,7 +458,7 @@ func getEventDescriptorCached(
 // NewEventDecoder returns key value decoder.
 func NewEventDecoder(
 	ctx context.Context,
-	cfg *execinfra.ServerConfig,
+	cfg *sql.ExecutorConfig,
 	targets changefeedbase.Targets,
 	includeVirtual bool,
 	keyOnly bool,
@@ -419,7 +466,7 @@ func NewEventDecoder(
 	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
-		cfg.LeaseManager.(*lease.Manager),
+		cfg.LeaseManager,
 		cfg.CollectionFactory,
 		cfg.DB,
 		targets,
@@ -469,6 +516,7 @@ func (d *eventDecoder) DecodeKV(
 
 	return Row{
 		EventDescriptor: ed,
+		MvccTimestamp:   kv.Value.Timestamp,
 		datums:          datums,
 		deleted:         isDeleted,
 		alloc:           &d.alloc,
@@ -522,11 +570,6 @@ func (d *eventDecoder) nextRow(ctx context.Context) (rowenc.EncDatumRow, bool, e
 		}
 	}
 	return datums, isDeleted, nil
-}
-
-// String returns debug string describing event source.
-func (m Metadata) String() string {
-	return fmt.Sprintf("{table: %d family: %d}", m.TableID, m.FamilyID)
 }
 
 type iter struct {
@@ -611,10 +654,10 @@ func MakeRowFromTuple(ctx context.Context, evalCtx *eval.Context, t *tree.DTuple
 			name = names[i]
 		}
 		r.AddValueColumn(name, d.ResolvedType())
-		if err := r.SetValueDatumAt(ctx, evalCtx, i, d); err != nil {
+		if err := r.SetValueDatumAt(i, d); err != nil {
 			if build.IsRelease() {
 				log.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
-				_ = r.SetValueDatumAt(ctx, evalCtx, i, tree.DNull)
+				_ = r.SetValueDatumAt(i, tree.DNull)
 			} else {
 				panic(err)
 			}

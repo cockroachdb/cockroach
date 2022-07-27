@@ -47,12 +47,12 @@ func TestResolveFunction(t *testing.T) {
 		},
 		{
 			testName:       "cdc name without schema",
-			fnName:         tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{"cdc_prev", "", "", ""}},
+			fnName:         tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{"cdc_mvcc_timestamp", "", "", ""}},
 			expectedSchema: "public",
 		},
 		{
 			testName:       "uppercase cdc name without schema",
-			fnName:         tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{"cdc_PREV", "", "", ""}},
+			fnName:         tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{"cdc_mVCC_timeStamp", "", "", ""}},
 			expectedSchema: "public",
 		},
 	}

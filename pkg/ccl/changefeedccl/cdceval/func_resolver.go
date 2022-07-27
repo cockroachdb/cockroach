@@ -12,15 +12,17 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
 // CDCFunctionResolver is a function resolver specific used by CDC expression
 // evaluation.
-type CDCFunctionResolver struct{}
+type CDCFunctionResolver struct {
+	prevRowFn *tree.ResolvedFunctionDefinition
+}
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (rs *CDCFunctionResolver) ResolveFunction(
@@ -31,28 +33,25 @@ func (rs *CDCFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 
-	if fn.ExplicitSchema {
-		// CDC functions don't have schema prefixes. So if given explicit schema
-		// name, we only need to look at other non-CDC builtin function.
-		funcDef, err := tree.GetBuiltinFuncDefinition(fn, path)
-		if err != nil {
-			return nil, err
-		}
-		if funcDef == nil {
-			return nil, errors.AssertionFailedf("function %s does not exist", fn.String())
-		}
-		return funcDef, nil
-	}
-
 	// Check CDC function first.
-	if cdcFuncDef, found := cdcFunctions[fn.Object()]; found {
+	cdcFuncDef, found := cdcFunctions[fn.Object()]
+	if !found {
+		// Try a bit harder
+		cdcFuncDef, found = cdcFunctions[strings.ToLower(fn.Object())]
+	}
+
+	if !found {
+		// Try internal cdc function.
+		if funDef := rs.resolveInternalCDCFn(name); funDef != nil {
+			return funDef, nil
+		}
+	}
+
+	if found && cdcFuncDef != useDefaultBuiltin {
 		return cdcFuncDef, nil
 	}
 
-	if cdcFuncDef, found := cdcFunctions[strings.ToLower(fn.Object())]; found {
-		return cdcFuncDef, nil
-	}
-
+	// Resolve builtin.
 	funcDef, err := tree.GetBuiltinFuncDefinition(fn, path)
 	if err != nil {
 		return nil, err
@@ -63,12 +62,6 @@ func (rs *CDCFunctionResolver) ResolveFunction(
 	return funcDef, nil
 }
 
-// WrapFunction implements the CustomBuiltinFunctionWrapper interface.
-func (rs *CDCFunctionResolver) WrapFunction(name string) (*tree.ResolvedFunctionDefinition, error) {
-	un := tree.MakeUnresolvedName(name)
-	return rs.ResolveFunction(context.Background(), &un, &sessiondata.DefaultSearchPath)
-}
-
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (rs *CDCFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
@@ -76,4 +69,42 @@ func (rs *CDCFunctionResolver) ResolveFunctionByOID(
 	// CDC doesn't support user defined function yet, so there's no need to
 	// resolve function by OID.
 	return "", nil, errors.AssertionFailedf("unimplemented yet")
+}
+
+// resolveInternalCDCFn resolves special internal functions we install for CDC.
+// Resolve functions which are used internally by CDC, but are not exposed to
+// end users.
+func (rs *CDCFunctionResolver) resolveInternalCDCFn(
+	name *tree.UnresolvedName,
+) *tree.ResolvedFunctionDefinition {
+	fnName := name.Parts[0]
+	switch name.NumParts {
+	case 1:
+	case 2:
+		if name.Parts[1] != "crdb_internal" {
+			return nil
+		}
+	default:
+		return nil
+	}
+
+	switch fnName {
+	case prevRowFnName.Parts[0]:
+		return rs.prevRowFn
+	}
+	return nil
+}
+
+func (rs *CDCFunctionResolver) setPrevFuncForEventDescriptor(
+	d *cdcevent.EventDescriptor,
+) *tree.DTuple {
+	if d == nil {
+		rs.prevRowFn = nil
+		return nil
+	}
+
+	tupleType := cdcPrevType(d)
+	rowTuple := tree.NewDTupleWithLen(tupleType, len(tupleType.InternalType.TupleContents))
+	rs.prevRowFn = makePrevRowFn(rowTuple.ResolvedType())
+	return rowTuple
 }

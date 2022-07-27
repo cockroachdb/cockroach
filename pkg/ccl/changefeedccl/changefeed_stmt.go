@@ -403,7 +403,8 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
+		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 	if err != nil {
 		return nil, err
 	}
@@ -429,33 +430,19 @@ func createChangefeedJobRecord(
 
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
-		normalized, _, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(), opts.KeyOnly(), opts.IsSet(changefeedbase.OptSplitColumnFamilies),
+		normalized, err := validateAndNormalizeChangefeedExpression(
+			ctx, p, opts, changefeedStmt.Select, targetDescs, targets, statementTime,
 		)
 		if err != nil {
 			return nil, err
 		}
-		needDiff, err := cdceval.SelectClauseRequiresPrev(ctx, *p.SemaCtx(), normalized)
-		if err != nil {
-			return nil, err
-		}
-		if needDiff {
+		if normalized.RequiresPrev() {
 			opts.ForceDiff()
 		}
 		// TODO: Set the default envelope to row here when using a sink and format
 		// that support it.
-		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
-
 		opts.SetDefaultEnvelope(changefeedbase.OptEnvelopeBare)
-
-		// TODO(#85143): do not enforce schema_change_policy='stop' for changefeed expressions.
-		schemachangeOptions, err := opts.GetSchemaChangeHandlingOptions()
-		if err != nil {
-			return nil, err
-		}
-		if schemachangeOptions.Policy != changefeedbase.OptSchemaChangePolicyStop {
-			return nil, errors.Errorf(`using "AS SELECT" requires option schema_change_policy='stop'`)
-		}
+		details.Select = cdceval.AsStringUnredacted(normalized)
 	}
 
 	// TODO(dan): In an attempt to present the most helpful error message to the
@@ -895,25 +882,31 @@ func validateDetailsAndOptions(
 
 // validateAndNormalizeChangefeedExpression validates and normalizes changefeed expressions.
 // This method modifies passed in select clause to reflect normalization step.
+// TODO(yevgeniy): Add virtual column support.
 func validateAndNormalizeChangefeedExpression(
 	ctx context.Context,
-	execCtx sql.PlanHookState,
+	execCtx sql.JobExecContext,
+	opts changefeedbase.StatementOptions,
 	sc *tree.SelectClause,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 	targets []jobspb.ChangefeedTargetSpecification,
-	includeVirtual bool,
-	keyOnly bool,
-	splitColFams bool,
-) (n cdceval.NormalizedSelectClause, target jobspb.ChangefeedTargetSpecification, _ error) {
+	statementTime hlc.Timestamp,
+) (*cdceval.NormalizedSelectClause, error) {
 	if len(descriptors) != 1 || len(targets) != 1 {
-		return n, target, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
 	}
 	var tableDescr catalog.TableDescriptor
 	for _, d := range descriptors {
 		tableDescr = d.(catalog.TableDescriptor)
 	}
-	return cdceval.NormalizeAndValidateSelectForTarget(
-		ctx, execCtx, tableDescr, targets[0], sc, includeVirtual, keyOnly, splitColFams)
+	splitColFams := opts.IsSet(changefeedbase.OptSplitColumnFamilies)
+	norm, err := cdceval.NormalizeExpression(
+		ctx, execCtx.ExecCfg(), execCtx.User(), execCtx.SessionData().SessionData,
+		tableDescr, statementTime, targets[0], sc, splitColFams)
+	if err != nil {
+		return nil, err
+	}
+	return norm, nil
 }
 
 type changefeedResumer struct {
