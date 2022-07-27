@@ -1,0 +1,82 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+syntax = "proto3";
+package cockroach.keyvisualizer.keyvispb;
+option go_package = "keyvispb";
+
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "util/hlc/timestamp.proto";
+
+// BoundaryUpdate is the payload of the rangefeed event in
+// keyvissubscriber.Subscriber.
+message BoundaryUpdate {
+  repeated roachpb.Span boundaries = 1;
+}
+
+
+message FlushSamplesRequest {
+  // A node_id of 0 indicates the server should issue a fan-out to all nodes.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // Boundaries don't technically need to be contiguous, but for now, the
+  // visualization doesn't know how to display spans that overlap.
+  // This does not need to be sorted.
+  repeated roachpb.Span boundaries = 2;
+}
+
+// SpanStats is used by the SpanStatsCollector to count the requests received
+// for a specific roachpb.Span.
+message SpanStats {
+  roachpb.Span span = 1;
+  uint64 requests = 2;
+}
+
+// Sample is a sample collected by the SpanStatsCollector. An array of Samples
+// comprise a keyvispb.FlushSamplesResponse.
+message Sample {
+  // TODO(zachlite): Add a sample_start time and sample_end time.
+  // This would enable consistency over periods of time where the key
+  // visualizer is disabled and we can't guarantee contiguous samples.
+  util.hlc.Timestamp sample_time = 1;
+
+  // span_stats does not need to be sorted lexicographically.
+  repeated SpanStats span_stats = 2;
+}
+
+message FlushSamplesResponse {
+  Sample samples = 1;
+}
+
+// The KeyVisualizer Service defines the RPCs that cross the Tenant / KV
+// boundary. A keyvispb.Sample contains the statistics collected on
+// behalf of a tenant during a collection period.
+service KeyVisualizer {
+
+  // FlushSamples gets the tenant's collected statistics from KV. It
+  // initiates a fan-out to all stores when FlushSamplesRequest.node_id is set
+  // to 0. Otherwise, it returns samples obtained from stores on the desired
+  // node. A FlushSamples call will reset the sample collection done in KV, and
+  // in effect marks the end of a sample period, and the beginning of the
+  // next one.
+  //
+  // Additionally, it provides the boundaries that the tenant wants
+  // statistics collected for. Samples returned are for the boundaries sent
+  // by the preceding FlushSamples call.
+  rpc FlushSamples(FlushSamplesRequest) returns (FlushSamplesResponse) {}
+
+}

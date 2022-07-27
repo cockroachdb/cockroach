@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -95,6 +96,7 @@ type Connector struct {
 type client struct {
 	roachpb.InternalClient
 	serverpb.StatusClient
+	keyvispb.KeyVisualizerClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -485,6 +487,16 @@ func (c *Connector) TokenBucket(
 	return nil, ctx.Err()
 }
 
+// FlushSamples implements the keyvisualizer.KVAccessor interface.
+func (c *Connector) FlushSamples(
+	ctx context.Context,
+	boundaries []*roachpb.Span,
+) (samples *keyvispb.FlushSamplesResponse, _ error) {
+	// TODO(zachlite): Implement key visualizer support for secondary tenants.
+	return nil, nil
+}
+
+
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
 func (c *Connector) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
@@ -634,8 +646,9 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient: roachpb.NewInternalClient(conn),
-				StatusClient:   serverpb.NewStatusClient(conn),
+				InternalClient:      roachpb.NewInternalClient(conn),
+				StatusClient:        serverpb.NewStatusClient(conn),
+				KeyVisualizerClient: keyvispb.NewKeyVisualizerClient(conn),
 			}, nil
 		}
 	}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -209,6 +210,18 @@ func (s *Store) SendWithWriteBytes(
 			// is considered last by the RangeCache.
 			if len(rangeInfos) > 0 {
 				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
+			}
+
+			if keyvissettings.Enabled.Get(&s.ClusterSettings().SV) {
+				for _, union := range ba.Requests {
+					arg := union.GetInner()
+					header := arg.Header()
+
+					// Tell the SpanStatsCollector about the request for this span.
+					s.spanStatsCollector.Increment(
+						roachpb.Span{Key: header.Key, EndKey: header.EndKey},
+					)
+				}
 			}
 
 			return br, writeBytes, nil

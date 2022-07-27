@@ -13,6 +13,7 @@ go_library(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
+        "//pkg/keyvisualizer/keyvispb",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvtenant",
