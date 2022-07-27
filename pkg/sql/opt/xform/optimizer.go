@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -52,8 +53,9 @@ type RuleSet = util.FastIntSet
 // expression must provide. The optimizer will return an Expr over the output
 // expression tree with the lowest cost.
 type Optimizer struct {
-	ctx     context.Context
-	evalCtx *eval.Context
+	ctx           context.Context
+	evalCtx       *eval.Context
+	cancelChecker cancelchecker.CancelChecker
 
 	// f is the factory that creates the normalized expressions during the first
 	// optimization phase.
@@ -125,6 +127,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		f:        o.f,
 		stateMap: make(map[groupStateKey]*groupState),
 	}
+	o.cancelChecker.Reset(ctx)
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
@@ -475,6 +478,14 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	state := o.ensureOptState(grp, required)
 	if state.fullyOptimized {
 		return state
+	}
+
+	// Check whether the optimization has been canceled (most likely due to a
+	// statement timeout). Internally, only every 1024th Check() call will poll
+	// on the Done channel, so this should only have negligible performance
+	// overhead.
+	if err := o.cancelChecker.Check(); err != nil {
+		panic(err)
 	}
 
 	state.passes++
