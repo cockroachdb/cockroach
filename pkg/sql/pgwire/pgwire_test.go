@@ -560,9 +560,9 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", username.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
-				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false).
-				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
+			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false, true).
+				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false, true).
+				Results("users", "primary", false, 3, "isRole", "N/A", true, false, true),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
 			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(38),

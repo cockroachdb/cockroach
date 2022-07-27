@@ -100,6 +100,8 @@ ORDER BY
 	return d.showTableDetails(n.Name, showCreateQuery)
 }
 
+// delegateShowIndexes implements SHOW INDEX FROM, SHOW INDEXES FROM, SHOW KEYS
+// FROM which returns all the indexes in the given table.
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
 	getIndexesQuery := `
@@ -111,7 +113,8 @@ SELECT
     column_name,
     direction,
     storing::BOOL,
-    implicit::BOOL`
+    implicit::BOOL,
+    is_visible::BOOL AS visible`
 
 	if n.WithComment {
 		getIndexesQuery += `,
@@ -135,7 +138,7 @@ WHERE
     AND table_schema=%[5]s
     AND table_name=%[2]s
 ORDER BY
-    1, 2, 3, 4, 5, 6, 7, 8;`
+    1, 2, 4;`
 
 	return d.showTableDetails(n.Table, getIndexesQuery)
 }

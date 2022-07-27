@@ -1154,19 +1154,20 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 					direction tree.Datum, isStored, isImplicit bool,
 				) error {
 					return addRow(
-						dbNameStr,                         // table_catalog
-						scNameStr,                         // table_schema
-						tbNameStr,                         // table_name
-						yesOrNoDatum(!index.IsUnique()),   // non_unique
-						scNameStr,                         // index_schema
-						tree.NewDString(index.GetName()),  // index_name
-						tree.NewDInt(tree.DInt(sequence)), // seq_in_index
-						tree.NewDString(colName),          // column_name
-						tree.DNull,                        // collation
-						tree.DNull,                        // cardinality
-						direction,                         // direction
-						yesOrNoDatum(isStored),            // storing
-						yesOrNoDatum(isImplicit),          // implicit
+						dbNameStr,                           // table_catalog
+						scNameStr,                           // table_schema
+						tbNameStr,                           // table_name
+						yesOrNoDatum(!index.IsUnique()),     // non_unique
+						scNameStr,                           // index_schema
+						tree.NewDString(index.GetName()),    // index_name
+						tree.NewDInt(tree.DInt(sequence)),   // seq_in_index
+						tree.NewDString(colName),            // column_name
+						tree.DNull,                          // collation
+						tree.DNull,                          // cardinality
+						direction,                           // direction
+						yesOrNoDatum(isStored),              // storing
+						yesOrNoDatum(isImplicit),            // implicit
+						yesOrNoDatum(!index.IsNotVisible()), // is_visible
 					)
 				}
 
