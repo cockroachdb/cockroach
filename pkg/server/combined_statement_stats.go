@@ -416,8 +416,9 @@ func getStatementDetailsQueryClausesAndArgs(
 	if err != nil {
 		return "", nil, err
 	}
-	args = append(args, strconv.FormatUint(fingerprintID, 16))
-	buffer.WriteString(fmt.Sprintf(" WHERE encode(fingerprint_id, 'hex') = $%d", len(args)))
+
+	args = append(args, sqlstatsutil.EncodeUint64ToBytes(fingerprintID))
+	buffer.WriteString(fmt.Sprintf(" WHERE fingerprint_id = $%d", len(args)))
 
 	// Filter out internal statements by app name.
 	buffer.WriteString(fmt.Sprintf(" AND app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
