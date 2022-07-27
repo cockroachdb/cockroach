@@ -32,7 +32,7 @@ type VirtualTablePrivilege struct {
 // VirtualTablePrivilege.
 const VirtualTablePrivilegeType = "VirtualTable"
 
-// GetPath implements the SyntheticPrivilegeObject interface.
+// GetPath implements the Object interface.
 func (p *VirtualTablePrivilege) GetPath() string {
 	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
 }

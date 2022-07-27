@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package privilegeobject
+package catalog
 
 import (
 	"context"
@@ -30,13 +30,4 @@ type PrivilegeObject interface {
 	// GetName returns the name of the object. For example, the name of a
 	// table, schema or database.
 	GetName() string
-}
-
-// SyntheticPrivilegeObject represents an object that has its privileges stored
-// in system.privileges.
-type SyntheticPrivilegeObject interface {
-	PrivilegeObject
-	// GetPath returns the path used to identify the object in
-	// system.privileges.
-	GetPath() string
 }

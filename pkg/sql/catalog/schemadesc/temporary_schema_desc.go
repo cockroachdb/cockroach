@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
@@ -47,7 +46,7 @@ type temporary struct {
 }
 
 var _ catalog.SchemaDescriptor = temporary{}
-var _ privilegeobject.PrivilegeObject = temporary{}
+var _ catalog.PrivilegeObject = temporary{}
 
 func (p temporary) GetID() descpb.ID       { return p.id }
 func (p temporary) GetName() string        { return p.name }
