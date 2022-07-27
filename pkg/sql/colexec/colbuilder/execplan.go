@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1990,8 +1991,27 @@ func planProjectionOperators(
 		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
 			return op, resultIdx, typs, err
 		}
+		leftExpr, rightExpr := t.TypedLeft(), t.TypedRight()
+		if t.Operator.Symbol == treebin.Concat {
+			// Concat requires special handling.
+			leftType, rightType := leftExpr.ResolvedType(), rightExpr.ResolvedType()
+			if leftType.Family() != rightType.Family() {
+				// When we have two different types, we perform the STRING
+				// concatenation.
+				if leftType.Family() == types.StringFamily {
+					// Need to cast the right expr to the STRING.
+					rightExpr = tree.NewTypedCastExpr(rightExpr, types.String)
+				} else if rightType.Family() == types.StringFamily {
+					// Need to cast the left expr to the STRING.
+					leftExpr = tree.NewTypedCastExpr(leftExpr, types.String)
+				} else {
+					// This is unexpected.
+					return op, resultIdx, typs, errors.New("neither LHS or RHS of Concat operation is a STRING")
+				}
+			}
+		}
 		return planProjectionExpr(
-			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
+			ctx, evalCtx, t.Operator, t.ResolvedType(), leftExpr, rightExpr,
 			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables, t.Fn.NullableArgs,
 		)
 	case *tree.CaseExpr:
