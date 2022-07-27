@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -550,4 +551,66 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
+}
+
+func TestTenantStreamingDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): now this has the same race issue with
+	// TestPartitionedStreamReplicationClient, please fix them together in the future.
+	skip.UnderRace(t, "disabled under race")
+
+	ctx := context.Background()
+	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	// initial scan
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+
+	// Introduce a DeleteRange on t1 and t2.
+	checkDelRangeOnTable := func(table string, embeddedInSST bool) {
+		srcCodec := keys.MakeSQLCodec(c.args.srcTenantID)
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			c.srcSysServer.DB(), srcCodec, "d", table)
+		tableSpan := desc.PrimaryIndexSpan(srcCodec)
+
+		// Introduce a DelRange on the table span.
+		srcTimeBeforeDelRange := c.srcSysServer.Clock().Now()
+		// Put the DelRange in the SST.
+		if embeddedInSST {
+			batchHLCTime := c.srcSysServer.Clock().Now()
+			batchHLCTime.Logical = 0
+			data, start, end := storageutils.MakeSST(t, c.srcSysServer.ClusterSettings(), []interface{}{
+				storageutils.RangeKV(string(tableSpan.Key), string(tableSpan.EndKey), int(batchHLCTime.WallTime), ""),
+			})
+			_, _, _, err := c.srcSysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
+				false, hlc.Timestamp{}, nil, false, batchHLCTime)
+			require.NoError(t, err)
+		} else {
+			// Use DelRange directly.
+			require.NoError(t, c.srcSysServer.DB().DelRangeUsingTombstone(ctx,
+				tableSpan.Key, tableSpan.EndKey))
+		}
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s", table))
+
+		// Point-in-time query, check if the DeleteRange is MVCC-compatible.
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.%s AS OF SYSTEM TIME %d",
+			table, srcTimeBeforeDelRange.WallTime))
+	}
+
+	// Test on two tables to check if the range keys sst batcher
+	// can work on multiple flushes.
+	checkDelRangeOnTable("t1", true /* embeddedInSST */)
+	checkDelRangeOnTable("t2", false /* embeddedInSST */)
 }
