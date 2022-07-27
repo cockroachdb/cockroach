@@ -857,6 +857,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
 		return stats, getNonDeterministicFailureExplanation(err), err
 	}
+	if r.store.cfg.KVAdmissionController != nil {
+		followerWriteBytes := appTask.GetFollowerStoreWriteBytesForCommittedEntries(ctx)
+		r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
+			r.store.StoreID(), followerWriteBytes)
+	}
 
 	// Separate the MsgApp messages from all other Raft message types so that we
 	// can take advantage of the optimization discussed in the Raft thesis under

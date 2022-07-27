@@ -125,6 +125,17 @@ func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	return c.AckOutcomeAndFinish(ctx)
 }
 
+// GetStoreWriteByteSizes implements the apply.Command interface.
+func (c *replicatedCmd) GetStoreWriteByteSizes() (writeBytes int64, ingestedBytes int64) {
+	if c.raftCmd.WriteBatch != nil {
+		writeBytes = int64(len(c.raftCmd.WriteBatch.Data))
+	}
+	if c.raftCmd.ReplicatedEvalResult.AddSSTable != nil {
+		ingestedBytes = int64(len(c.raftCmd.ReplicatedEvalResult.AddSSTable.Data))
+	}
+	return writeBytes, ingestedBytes
+}
+
 // Rejected implements the apply.CheckedCommand interface.
 func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil

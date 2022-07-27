@@ -64,8 +64,9 @@ func (c *cmd) AckErrAndFinish(_ context.Context, err error) error {
 	}
 	return nil
 }
-func (c *checkedCmd) Rejected() bool                { return c.rejected }
-func (c *checkedCmd) CanAckBeforeApplication() bool { return true }
+func (c *cmd) GetStoreWriteByteSizes() (writeBytes int64, ingestedBytes int64) { return 0, 0 }
+func (c *checkedCmd) Rejected() bool                                           { return c.rejected }
+func (c *checkedCmd) CanAckBeforeApplication() bool                            { return true }
 func (c *checkedCmd) AckSuccess(context.Context) error {
 	c.acked = true
 	if logging {

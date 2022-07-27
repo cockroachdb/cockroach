@@ -41,6 +41,10 @@ type Command interface {
 	// Either AckOutcomeAndFinish or AckErrAndFinish will be called exactly
 	// once per Command.
 	AckErrAndFinish(context.Context, error) error
+	// GetStoreWriteByteSizes returns the size of the writes to the store:
+	// writeBytes is the size of the WriteBatch if any, and ingestedBytes is the
+	// size of the sstable to ingest, if any.
+	GetStoreWriteByteSizes() (writeBytes int64, ingestedBytes int64)
 }
 
 // CheckedCommand is a command that has been checked to see whether it can
