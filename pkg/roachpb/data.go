@@ -1570,7 +1570,7 @@ func confChangeImpl(
 	checkExists := func(in ReplicaDescriptor) error {
 		for _, rDesc := range replicas {
 			if rDesc.ReplicaID == in.ReplicaID {
-				if a, b := in.GetType(), rDesc.GetType(); a != b {
+				if in.Type != rDesc.Type {
 					return errors.Errorf("have %s, but descriptor has %s", in, rDesc)
 				}
 				return nil
@@ -1593,7 +1593,7 @@ func confChangeImpl(
 			NodeID: uint64(rDesc.ReplicaID),
 		})
 
-		switch rDesc.GetType() {
+		switch rDesc.Type {
 		case VOTER_OUTGOING:
 			// If a voter is removed through joint consensus, it will
 			// be turned into an outgoing voter first.
@@ -1633,7 +1633,7 @@ func confChangeImpl(
 				return nil, err
 			}
 		default:
-			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
+			return nil, errors.Errorf("can't remove replica in state %v", rDesc.Type)
 		}
 	}
 
@@ -1646,7 +1646,7 @@ func confChangeImpl(
 		}
 
 		var changeType raftpb.ConfChangeType
-		switch rDesc.GetType() {
+		switch rDesc.Type {
 		case VOTER_FULL:
 			// We're adding a new voter.
 			changeType = raftpb.ConfChangeAddNode
@@ -1665,7 +1665,7 @@ func confChangeImpl(
 			// A voter that is demoting was just removed and re-added in the
 			// `removals` handler. We should not see it again here.
 			// A voter that's outgoing similarly has no reason to show up here.
-			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())
+			return nil, errors.Errorf("can't add replica in state %v", rDesc.Type)
 		}
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   changeType,
@@ -1679,7 +1679,7 @@ func confChangeImpl(
 	// descriptor already.
 	var enteringJoint bool
 	for _, rDesc := range replicas {
-		switch rDesc.GetType() {
+		switch rDesc.Type {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			enteringJoint = true
 		default:
@@ -1906,13 +1906,8 @@ func (l Lease) Equivalent(newL Lease) bool {
 	// Ignore the ReplicaDescriptor's type. This shouldn't affect lease
 	// equivalency because Raft state shouldn't be factored into the state of a
 	// Replica's lease. We don't expect a leaseholder to ever become a LEARNER
-	// replica, but that also shouldn't prevent it from extending its lease. The
-	// code also avoids a potential bug where an unset ReplicaType and a set
-	// VOTER ReplicaType are considered distinct and non-equivalent.
-	//
-	// Change this line to the following when ReplicaType becomes non-nullable:
-	//  l.Replica.Type, newL.Replica.Type = 0, 0
-	l.Replica.Type, newL.Replica.Type = nil, nil
+	// replica, but that also shouldn't prevent it from extending its lease.
+	l.Replica.Type, newL.Replica.Type = 0, 0
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	switch l.Type() {

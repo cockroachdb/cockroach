@@ -33,7 +33,7 @@ func TestTransportMoveToFront(t *testing.T) {
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
 	rd3Incoming := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3,
-		Type: roachpb.ReplicaTypeVoterIncoming()}
+		Type: roachpb.VOTER_INCOMING}
 	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {

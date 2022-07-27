@@ -68,7 +68,7 @@ func hasManuallySplitRangesInSpan(
 		if err := r.ValueProto(&desc); err != nil {
 			t.Fatal(err)
 		}
-		if !desc.GetStickyBit().IsEmpty() {
+		if !desc.StickyBit.IsEmpty() {
 			return true
 		}
 	}
@@ -94,7 +94,7 @@ func hasManuallySplitRangesOnIndex(
 		if err != nil {
 			continue
 		}
-		if indexID == descpb.IndexID(foundIndexID) && !desc.GetStickyBit().IsEmpty() {
+		if indexID == descpb.IndexID(foundIndexID) && !desc.StickyBit.IsEmpty() {
 			return true
 		}
 	}
@@ -147,7 +147,7 @@ func rangeIsManuallySplit(
 		if err := r.ValueProto(&desc); err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Equal(desc.StartKey.AsRawKey(), startKey) && !desc.GetStickyBit().IsEmpty() {
+		if bytes.Equal(desc.StartKey.AsRawKey(), startKey) && !desc.StickyBit.IsEmpty() {
 			return true
 		}
 	}

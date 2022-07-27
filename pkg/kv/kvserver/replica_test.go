@@ -13484,12 +13484,11 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		chgs := make([]internalReplicationChange, 0, len(typs))
 		rDescs := make([]roachpb.ReplicaDescriptor, 0, len(typs))
 		for i, typ := range typs {
-			typ := typ // local copy - we take addr below
 			rDesc := roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(i + 1),
 				NodeID:    roachpb.NodeID(100 * (1 + i)),
 				StoreID:   roachpb.StoreID(100 * (1 + i)),
-				Type:      &(typ.ReplicaType),
+				Type:      typ.ReplicaType,
 			}
 			if typ.ReplicaType != none {
 				rDescs = append(rDescs, rDesc)

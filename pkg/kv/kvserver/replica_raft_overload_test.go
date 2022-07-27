@@ -72,9 +72,9 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 							match[replicaID], err = strconv.ParseUint(matchS, 10, 64)
 							require.NoError(t, err)
 						}
-						typ := roachpb.ReplicaTypeVoterFull()
+						typ := roachpb.VOTER_FULL
 						if arg.Key == "learners" {
-							typ = roachpb.ReplicaTypeNonVoter()
+							typ = roachpb.NON_VOTER
 						}
 						replDesc := roachpb.ReplicaDescriptor{
 							NodeID:    roachpb.NodeID(id),
@@ -112,7 +112,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 						State:        tracker.StateReplicate,
 						Match:        match[replDesc.ReplicaID],
 						RecentActive: true,
-						IsLearner:    replDesc.GetType() == roachpb.LEARNER || replDesc.GetType() == roachpb.NON_VOTER,
+						IsLearner:    replDesc.Type == roachpb.LEARNER || replDesc.Type == roachpb.NON_VOTER,
 						Inflights:    tracker.NewInflights(1), // avoid NPE
 					}
 					m[uint64(replDesc.ReplicaID)] = pr
