@@ -1,0 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keyvissettings",
+    srcs = ["settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/settings"],
+)
+
+get_x_data(name = "get_x_data")
