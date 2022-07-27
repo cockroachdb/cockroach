@@ -220,8 +220,14 @@ func (b *Builder) buildScalar(
 		// select the right overload. The solution is to wrap any mismatched
 		// arguments with a CastExpr that preserves the static type.
 
-		left := reType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
-		right := reType(t.TypedRight(), t.ResolvedBinOp().RightType)
+		left := t.TypedLeft()
+		if left.ResolvedType() == types.Unknown {
+			left = reType(left, t.ResolvedBinOp().LeftType)
+		}
+		right := t.TypedRight()
+		if right.ResolvedType() == types.Unknown {
+			right = reType(right, t.ResolvedBinOp().RightType)
+		}
 		out = b.constructBinary(
 			treebin.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),

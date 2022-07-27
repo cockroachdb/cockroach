@@ -454,7 +454,7 @@ project
            │    └── fd: ()-->(12-20)
            └── projections
                 └── assignment-cast: DECIMAL(12,2) [as=w_ytd_cast:24, outer=(20), immutable]
-                     └── w_ytd:20::DECIMAL + 3860.61
+                     └── w_ytd:20 + 3860.61
 
 opt format=hide-qual
 UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
@@ -489,7 +489,7 @@ project
            │    └── fd: ()-->(14-24)
            └── projections
                 └── assignment-cast: DECIMAL(12,2) [as=d_ytd_cast:28, outer=(23), immutable]
-                     └── d_ytd:23::DECIMAL + 3860.61
+                     └── d_ytd:23 + 3860.61
 
 opt format=hide-qual
 SELECT c_id
@@ -582,11 +582,11 @@ project
  │         │    └── fd: ()-->(24-44)
  │         └── projections
  │              ├── assignment-cast: DECIMAL(12,2) [as=c_balance_cast:51, outer=(40), immutable]
- │              │    └── c_balance:40::DECIMAL - 3860.61
+ │              │    └── c_balance:40 - 3860.61
  │              ├── assignment-cast: DECIMAL(12,2) [as=c_ytd_payment_cast:52, outer=(41), immutable]
- │              │    └── c_ytd_payment:41::DECIMAL + 3860.61
+ │              │    └── c_ytd_payment:41 + 3860.61
  │              ├── assignment-cast: VARCHAR(500) [as=c_data_cast:53, outer=(24-26,37,44), immutable]
- │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44::STRING, 500) ELSE c_data:44::STRING END
+ │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500) ELSE c_data:44::STRING END
  │              └── c_payment_cnt:42 + 1 [as=c_payment_cnt_new:49, outer=(42), immutable]
  └── projections
       └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:54, outer=(14,21), immutable]
@@ -912,7 +912,7 @@ update customer
       │    └── fd: ()-->(26), (24,25)-->(27-44)
       └── projections
            ├── assignment-cast: DECIMAL(12,2) [as=c_balance_cast:49, outer=(25,40), immutable]
-           │    └── c_balance:40::DECIMAL + CASE c_d_id:25 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END
+           │    └── c_balance:40 + CASE c_d_id:25 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END
            └── c_delivery_cnt:43 + 1 [as=c_delivery_cnt_new:47, outer=(43), immutable]
 
 opt format=hide-qual

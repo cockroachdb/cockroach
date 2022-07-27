@@ -1018,9 +1018,9 @@ sort
       │    │    └── filters
       │    │         └── id:20 = transactiondetails.cardid:4 [outer=(4,20), constraints=(/4: (/NULL - ]; /20: (/NULL - ]), fd=(4)==(20), (20)==(4)]
       │    └── projections
-      │         ├── quantity:5 * transactiondetails.sellprice:6::DECIMAL [as=column39:39, outer=(5,6), immutable]
-      │         ├── quantity:5 * transactiondetails.buyprice:7::DECIMAL [as=column41:41, outer=(5,7), immutable]
-      │         ├── quantity:5 * (transactiondetails.sellprice:6::DECIMAL - transactiondetails.buyprice:7::DECIMAL) [as=column43:43, outer=(5-7), immutable]
+      │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6), immutable]
+      │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7), immutable]
+      │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column43:43, outer=(5-7), immutable]
       │         └── extract('day', transactiondate:3) [as=column45:45, outer=(3), stable]
       └── aggregations
            ├── sum [as=sum:40, outer=(39)]

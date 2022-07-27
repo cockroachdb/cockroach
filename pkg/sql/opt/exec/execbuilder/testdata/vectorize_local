@@ -332,15 +332,11 @@ EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 ----
 │
 └ Node 1
-  └ *colexecproj.projMultInt64Int64Op
-    └ *colexecbase.castInt2IntOp
-      └ *colexecbase.castInt2IntOp
-        └ *colexecsel.selEQInt64Int64Op
-          └ *colexecprojconst.projPlusInt64Int64ConstOp
-            └ *colexecproj.projPlusInt64Int64Op
-              └ *colexecbase.castInt4IntOp
-                └ *colexecbase.castInt4IntOp
-                  └ *colfetcher.ColBatchScan
+  └ *colexecproj.projMultInt16Int16Op
+    └ *colexecsel.selEQInt64Int64Op
+      └ *colexecprojconst.projPlusInt64Int64ConstOp
+        └ *colexecproj.projPlusInt32Int32Op
+          └ *colfetcher.ColBatchScan
 
 # Check that joinReader core is wrapped into the plan when vectorize is set to
 # `experimental_always` - that core is the only exception to disabling of
