@@ -216,6 +216,10 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemJobInfoTableMigration,
 	),
+	upgrade.NewPermanentSystemUpgrade("add tables and jobs to support persisting key visualizer samples",
+		toCV(clusterversion.V23_1KeyVisualizerTablesAndJobs),
+		keyVisualizerTablesMigration,
+	),
 }
 
 func init() {

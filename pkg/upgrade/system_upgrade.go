@@ -15,10 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/logtags"
@@ -108,6 +110,8 @@ type Cluster interface {
 type SystemDeps struct {
 	Cluster          Cluster
 	DB               *kv.DB
+	Settings         *cluster.Settings
+	JobRegistry      *jobs.Registry
 	InternalExecutor sqlutil.InternalExecutor
 	DistSender       *kvcoord.DistSender
 	Stopper          *stop.Stopper

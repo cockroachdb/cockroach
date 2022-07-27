@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatsconsumer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -273,6 +275,9 @@ type sqlServerArgs struct {
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
+
+	// Used by the tenant's key visualizer job.
+	spanStatsAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
@@ -1130,6 +1135,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			systemDeps = upgrade.SystemDeps{
 				Cluster:          c,
 				DB:               cfg.db,
+				Settings:         cfg.Settings,
+				JobRegistry:      jobRegistry,
 				InternalExecutor: cfg.circularInternalExecutor,
 				DistSender:       cfg.distSender,
 				Stopper:          cfg.stopper,
@@ -1200,6 +1207,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if cfg.sqlInstanceReader != nil {
 		waitForInstanceReaderStarted = cfg.sqlInstanceReader.WaitForStarted
 	}
+
+	if codec.ForSystemTenant() {
+		spanStatsConsumer := spanstatsconsumer.New(
+			roachpb.SystemTenantID,
+			cfg.spanStatsAccessor,
+			cfg.distSender,
+			cfg.Settings,
+			cfg.circularInternalExecutor,
+		)
+		execCfg.SpanStatsConsumer = spanStatsConsumer
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,

@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -252,6 +254,9 @@ type Node struct {
 	diskStatsMap diskStatsMap
 
 	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
+
+	// Used to collect samples for the key visualizer.
+	spanStatsCollector *spanstatscollector.SpanStatsCollector
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -390,6 +395,7 @@ func NewNode(
 		spanConfigAccessor:    spanConfigAccessor,
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
+		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 	}
 	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
 		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
@@ -547,6 +553,21 @@ func (n *Node) start(
 	// started earlier).
 	n.startGossiping(workersCtx, n.stopper)
 
+	var terminateCollector func() = nil
+
+	if keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
+		terminateCollector = n.enableSpanStatsCollector(ctx)
+	}
+
+	keyvissettings.Enabled.SetOnChange(&n.storeCfg.Settings.SV, func(ctx context.Context) {
+		enabled := keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV)
+		if enabled {
+			terminateCollector = n.enableSpanStatsCollector(ctx)
+		} else if terminateCollector != nil {
+			terminateCollector()
+		}
+	})
+
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
@@ -555,6 +576,16 @@ func (n *Node) start(
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
+}
+
+func (n *Node) enableSpanStatsCollector(ctx context.Context) func() {
+	collectorCtx, terminate := n.stopper.WithCancelOnQuiesce(ctx)
+	err := n.spanStatsCollector.Start(collectorCtx, n.stopper)
+	if err != nil {
+		log.Errorf(ctx, "error starting span stats collector: %v", err)
+		return nil
+	}
+	return terminate
 }
 
 // waitForAdditionalStoreInit blocks until all additional empty stores,
@@ -1121,6 +1152,18 @@ func (n *Node) batchInternal(
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
 		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
+	} else {
+		if keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
+			for _, union := range args.Requests {
+				arg := union.GetInner()
+				header := arg.Header()
+
+				// Tell the SpanStatsCollector about the request for this span.
+				n.spanStatsCollector.Increment(
+					roachpb.Span{Key: header.Key, EndKey: header.EndKey},
+				)
+			}
+		}
 	}
 	if br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
