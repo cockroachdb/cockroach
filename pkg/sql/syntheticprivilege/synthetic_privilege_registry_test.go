@@ -14,14 +14,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/stretchr/testify/require"
 )
 
 func TestParsePrivilegePath(t *testing.T) {
 	for _, tc := range []struct {
 		regex        string
-		expectedType privilegeobject.SyntheticPrivilegeObject
+		expectedType Object
 		error        string
 	}{
 		{

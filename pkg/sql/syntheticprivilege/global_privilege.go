@@ -28,7 +28,7 @@ type GlobalPrivilege struct{}
 // GlobalPrivilege.
 const GlobalPrivilegeObjectType = "Global"
 
-// GetPath implements the SyntheticPrivilegeObject interface.
+// GetPath implements the Object interface.
 func (p *GlobalPrivilege) GetPath() string {
 	return "/global/"
 }
