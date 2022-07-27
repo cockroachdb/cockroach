@@ -169,6 +169,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
+	upgrade.NewTenantUpgrade("add tables to support persisting key visualizer samples",
+		toCV(clusterversion.KeyVisualizerTables),
+		NoPrecondition,
+		keyVisualizerTablesMigration,
+	),
 }
 
 func init() {

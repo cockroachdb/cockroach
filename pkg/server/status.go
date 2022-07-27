@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2152,6 +2153,7 @@ func (s *statusServer) TenantRanges(
 
 	tID, ok := roachpb.TenantFromContext(ctx)
 	if !ok {
+		log.Infof(ctx, "COULD NOT FIND TENANT ID")
 		return nil, status.Error(codes.Internal, "no tenant ID found in context")
 	}
 
@@ -2566,6 +2568,54 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 		return serverpb.HotRangesResponse_NodeResponse{ErrorMessage: err.Error()}
 	}
 	return resp
+}
+
+func (s *statusServer) KeyVisSamples(
+	ctx context.Context, req *serverpb.KeyVisSamplesRequest,
+) (*serverpb.KeyVisSamplesResponse, error) {
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	uniqueKeys, err := keyvisstorage.ReadKeys(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	prettyForKeyString := make(map[string]string)
+	prettyForUUID := make(map[string]string)
+	sorted := make([]string, 0)
+	sortedPretty := make([]string, 0)
+
+	for keyUUID, keyBytes := range uniqueKeys {
+		s := string(keyBytes)
+		pretty := keyBytes.String()
+		prettyForKeyString[s] = pretty
+		sorted = append(sorted, s)
+		prettyForUUID[keyUUID] = pretty
+	}
+
+	sort.Strings(sorted)
+	for _, s := range sorted {
+		sortedPretty = append(sortedPretty, prettyForKeyString[s])
+	}
+
+	// read samples
+	samples, err := keyvisstorage.ReadSamples(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, sample := range samples {
+		log.Infof(ctx, "sample time: %v", sample.Timestamp)
+	}
+
+	return &serverpb.KeyVisSamplesResponse{
+		PrettyKeyForUuid: prettyForUUID,
+		SortedPrettyKeys: sortedPretty,
+		Samples:          samples,
+	}, nil
 }
 
 // Range returns rangeInfos for all nodes in the cluster about a specific

@@ -307,6 +307,7 @@
 /pkg/keysbase/               @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
 /pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
+/pkg/keyvisualizer/          @cockroachdb/kv-obs-prs
 /pkg/upgrade/                @cockroachdb/kv-prs-noreview @cockroachdb/sql-schema
 /pkg/multitenant/            @cockroachdb/multi-tenant
 /pkg/release/                @cockroachdb/dev-inf

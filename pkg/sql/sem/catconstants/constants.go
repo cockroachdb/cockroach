@@ -87,6 +87,10 @@ const (
 	SystemPrivilegeTableName               SystemTableName = "privileges"
 	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
 	RoleIDSequenceName                     SystemTableName = "role_id_seq"
+	SpanStatsUniqueKeys                    SystemTableName = "span_stats_unique_keys"
+	SpanStatsBuckets                       SystemTableName = "span_stats_buckets"
+	SpanStatsSamples                       SystemTableName = "span_stats_samples"
+	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
 )
 
 // Oid for virtual database and table.

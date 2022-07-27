@@ -317,6 +317,9 @@ const (
 	// TenantNames adds a name column to system.tenants.
 	TenantNames
 
+	// KeyVisualizerTables adds the system tables that support persisting key visualizer sample data.
+	KeyVisualizerTables
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -518,6 +521,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     KeyVisualizerTables,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************
