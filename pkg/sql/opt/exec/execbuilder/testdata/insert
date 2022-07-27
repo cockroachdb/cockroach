@@ -482,7 +482,7 @@ vectorized: true
                 │ estimated row count: 1,000 (missing stats)
                 │ render length: length(k)
                 │ render ?column?: 2
-                │ render column12: k::STRING || v::STRING
+                │ render column12: k || v
                 │
                 └── • scan
                       columns: (k, v)
