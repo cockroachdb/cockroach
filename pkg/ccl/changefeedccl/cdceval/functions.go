@@ -13,50 +13,63 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
-// In general, we want to only support functions that produce the same
-// value given the same data -- i.e. immutable functions.
-// However, we can provide reasonable overrides to a small set of stable
-// functions that make sense in the context of CDC.
-var supportedVolatileBuiltinFunctions = makeStringSet(
-	// These functions can be supported given that we set the statement and
-	// transaction timestamp to be equal to MVCC timestamp of the event.
-	"statement_timestamp",
-	"transaction_timestamp",
-	"timezone",
+// sentinel value indicating we should use default builtin
+// implementation.
+var useDefaultBuiltin *tree.ResolvedFunctionDefinition
+
+// cdcFunctions is a list of supported stable and immutable builtin functions.
+// Some builtin functions have alternative implementation.
+// This map also specifies the list of supported CDC specific function definitions.
+//
+// Any builtin stable (or volatile) function that accesses eval.Context will
+// have to have an override due to the fact that we should not manipulate
+// underlying eval.Context directly (this is due to the fact that DistSQL copies eval
+// context, and, in addition, eval.Context is not thread safe).
+// Instead, we have to do so through annotations object stored inside eval.Context.
+var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
+	// {statement,transaction}_timestamp  functions can be supported given that we
+	// set the statement and transaction timestamp to be equal to MVCC timestamp
+	// of the event. However, we provide our own override which uses annotation to
+	// return the MVCC timestamp of the update.
+	"statement_timestamp": makeBuiltinOverride(
+		tree.FunDefs["statement_timestamp"], timestampBuiltinOverloads...,
+	),
+	"transaction_timestamp": makeBuiltinOverride(
+		tree.FunDefs["transaction_timestamp"], timestampBuiltinOverloads...,
+	),
+
+	"timezone": useDefaultBuiltin,
 
 	// jsonb functions are stable because they depend on eval
 	// context DataConversionConfig
-	"jsonb_build_array",
-	"jsonb_build_object",
-	"to_json",
-	"to_jsonb",
-	"row_to_json",
+	"jsonb_build_array":  useDefaultBuiltin,
+	"jsonb_build_object": useDefaultBuiltin,
+	"to_json":            useDefaultBuiltin,
+	"to_jsonb":           useDefaultBuiltin,
+	"row_to_json":        useDefaultBuiltin,
 
 	// Misc functions that depend on eval context.
-	"overlaps",
-	"pg_collation_for",
-	"pg_typeof",
-	"quote_literal",
-	"quote_nullable",
+	"overlaps":         useDefaultBuiltin,
+	"pg_collation_for": useDefaultBuiltin,
+	"pg_typeof":        useDefaultBuiltin,
+	"quote_literal":    useDefaultBuiltin,
+	"quote_nullable":   useDefaultBuiltin,
 
 	// TODO(yevgeniy): Support geometry.
 	//"st_asgeojson",
 	//"st_estimatedextent",
-)
 
-// CDC Specific functions.
-// TODO(yevgeniy): Finalize function naming: e.g. cdc.is_delete() vs cdc_is_delete()
-var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	"cdc_is_delete": makeCDCBuiltIn(
 		"cdc_is_delete",
 		tree.Overload{
@@ -69,14 +82,19 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 				}
 				return tree.DBoolFalse, nil
 			},
-			Info:       "Returns true if the event is a deletion",
-			Volatility: volatility.Stable,
+			Info: "Returns true if the event is a deletion",
+			// NB: even though some cdc functions appear to be stable (e.g. cdc_is_delete()),
+			// we should not mark custom CDC functions as stable.  Doing so will cause
+			// optimizer to (constant) fold this function during optimization step -- something
+			// we definitely don't want to do because we need to evaluate those functions
+			// for each event.
+			Volatility: volatility.Volatile,
 		}),
 	"cdc_mvcc_timestamp": cdcTimestampBuiltin(
 		"cdc_mvcc_timestamp",
 		"Returns event MVCC HLC timestamp",
 		func(rowEvalCtx *rowEvalContext) hlc.Timestamp {
-			return rowEvalCtx.mvccTS
+			return rowEvalCtx.updatedRow.MvccTimestamp
 		},
 	),
 	"cdc_updated_timestamp": cdcTimestampBuiltin(
@@ -86,31 +104,12 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 			return rowEvalCtx.updatedRow.SchemaTS
 		},
 	),
-	"cdc_prev": makeCDCBuiltIn(
-		"cdc_prev",
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         prevRowAsJSON,
-			Info:       "Returns previous value of a row as JSONB",
-			Volatility: volatility.Stable,
-		}),
 }
 
-// TODO(yevgeniy): Implement additional functions (some ideas, not all should be implemented):
-//   * cdc_is_delete is easy; what about update? does update include new events?
-//   * cdc_is_new -- true if event is  a new row
-//   * tuple overload (or cdc_prev_tuple) to return previous value as a tuple
-//   * cdc_key -- effectively key_in_value where key columns returned as either a tuple or a json.
-//   * cdc_key_cols -- return key column names;
-//      * this can come in handy when working with jsonb; for example, emit previous JSONB excluding
-//        key columns can be done with `SELECT cdc_prev() - cdc_key_cols()
-//   * cdc_event_family_is(fam): return true if cdc event family is specified family; overload both for
-//     family ID and family name.
-//     function can be used to write complex conditionals when dealing with multi-family table(s)
+const cdcFnCategory = "CDC builtin"
 
 var cdcFnProps = &tree.FunctionProperties{
-	Category: "CDC builtin",
+	Category: cdcFnCategory,
 }
 
 func makeCDCBuiltIn(fnName string, overloads ...tree.Overload) *tree.ResolvedFunctionDefinition {
@@ -135,8 +134,13 @@ func cdcTimestampBuiltin(
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 					return eval.TimestampToDecimalDatum(tsFn(rowEvalCtx)), nil
 				},
-				Info:       doc,
-				Volatility: volatility.Stable,
+				Info: doc,
+				// NB: even though some cdc functions appear to be stable (e.g. cdc_is_delete()),
+				// we should not mark custom CDC functions as stable.  Doing so will cause
+				// optimizer to (constant) fold this function during optimization step -- something
+				// we definitely don't want to do because we need to evaluate those functions
+				// for each event.
+				Volatility: volatility.Volatile,
 			},
 		},
 	)
@@ -146,45 +150,193 @@ func cdcTimestampBuiltin(
 	return tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
 }
 
-func prevRowAsJSON(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
-	rec := rowEvalContextFromEvalContext(evalCtx)
-	if rec.memo.prevJSON != nil {
-		return rec.memo.prevJSON, nil
-	}
+// cdcPrevType returns a types.T for the tuple corresponding to the
+// event descriptor.
+func cdcPrevType(desc *cdcevent.EventDescriptor) *types.T {
+	tupleTypes := make([]*types.T, 0, len(desc.ResultColumns()))
+	tupleLabels := make([]string, 0, len(desc.ResultColumns()))
 
-	var prevJSON *tree.DJSON
-	if rec.prevRow.IsInitialized() {
-		b := jsonb.NewObjectBuilder(0)
-		if err := rec.prevRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-			j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
-			if err != nil {
-				return err
-			}
-			b.Add(col.Name, j)
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		prevJSON = tree.NewDJSON(b.Build())
-	} else {
-		prevJSON = tree.NewDJSON(jsonb.NullJSONValue)
+	for _, c := range desc.ResultColumns() {
+		// TODO(yevgeniy): Handle virtual columns in cdc_prev.
+		// In order to do this, we have to emit default expression with
+		// all named references replaced with tuple field access.
+		tupleLabels = append(tupleLabels, c.Name)
+		tupleTypes = append(tupleTypes, c.Typ)
 	}
-
-	rec.memo.prevJSON = prevJSON
-	return prevJSON, nil
+	return types.MakeLabeledTuple(tupleTypes, tupleLabels)
 }
 
-func makeStringSet(vals ...string) map[string]struct{} {
-	m := make(map[string]struct{}, len(vals))
-	for _, v := range vals {
-		m[v] = struct{}{}
+// makePrevRowFn creates a function to return a tuple corresponding
+// to the previous value of the row.
+func makePrevRowFn(retType *types.T) *tree.ResolvedFunctionDefinition {
+	return makeCDCBuiltIn(prevRowFnName.Parts[0],
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(retType),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				rec := rowEvalContextFromEvalContext(evalCtx)
+				return rec.prevRowTuple, nil
+			},
+			Info: "Returns previous value of a row as tuple",
+			// NB: even though some cdc functions appear to be stable (e.g. cdc_is_delete()),
+			// we should not mark custom CDC functions as stable.  Doing so will cause
+			// optimizer to (constant) fold this function during optimization step -- something
+			// we definitely don't want to do because we need to evaluate those functions
+			// for each event.
+			Volatility:       volatility.Volatile,
+			DistsqlBlocklist: true,
+		},
+	)
+}
+
+// The state of the previous row is made available via cdc_prev tuple.
+// This tuple is generated by rewriting expressions using cdc_prev
+// (i.e. row_to_json(cdc_prev.*)) to generate a table which returns
+// correctly typed tuple:
+//
+//	SELECT ... FROM tbl, (SELECT ((crdb_internal.cdc_prev_row()).*)) AS cdc_prev
+//
+// The crdb_internal.cdc_prev_row() function is in turn configured to return
+// previous row datums.
+const prevTupleName = "cdc_prev"
+
+var prevRowFnName = tree.MakeUnresolvedName("crdb_internal", "cdc_prev_row")
+
+// checkFunctionSupported checks if the function (expression) is supported.
+// Returns (possibly modified) function expression if supported; error otherwise.
+func checkFunctionSupported(
+	ctx context.Context, fnCall *tree.FuncExpr, semaCtx *tree.SemaContext,
+) (*tree.FuncExpr, error) {
+	if semaCtx.FunctionResolver == nil {
+		return nil, errors.AssertionFailedf("function resolver must be configured for CDC")
 	}
-	return m
+
+	// Returns function call expression, provided the function with specified
+	// name is supported.
+	cdcFunctionWithOverride := func(name string, fnCall *tree.FuncExpr) (*tree.FuncExpr, error) {
+		funDef, isSafe := cdcFunctions[name]
+		if !isSafe {
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", name)
+		}
+		if funDef != useDefaultBuiltin {
+			// Install our override
+			fnCall.Func = tree.ResolvableFunctionReference{FunctionReference: funDef}
+		}
+		return fnCall, nil
+	}
+
+	switch fn := fnCall.Func.FunctionReference.(type) {
+	case *tree.UnresolvedName:
+		funDef, err := semaCtx.FunctionResolver.ResolveFunction(ctx, fn, semaCtx.SearchPath)
+		if err != nil {
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fnCall.Func.String())
+		}
+		fnCall = &tree.FuncExpr{
+			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
+			Type:  fnCall.Type,
+			Exprs: fnCall.Exprs,
+		}
+		if _, isCDCFn := cdcFunctions[funDef.Name]; isCDCFn {
+			return fnCall, nil
+		}
+		return checkFunctionSupported(ctx, fnCall, semaCtx)
+	case *tree.ResolvedFunctionDefinition:
+		var fnVolatility volatility.V
+		for _, overload := range fn.Overloads {
+			// Aggregates, generators and window functions are not supported.
+			switch overload.Class {
+			case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
+				return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
+			}
+			if overload.Volatility > fnVolatility {
+				fnVolatility = overload.Volatility
+			}
+		}
+		if fnVolatility <= volatility.Immutable {
+			// Remaining immutable functions are safe.
+			return fnCall, nil
+		}
+
+		return cdcFunctionWithOverride(fn.Name, fnCall)
+	case *tree.FunctionDefinition:
+		switch fn.Class {
+		case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
+		}
+
+		var fnVolatility volatility.V
+		if fnCall.ResolvedOverload() != nil {
+			if _, isCDC := cdcFunctions[fn.Name]; isCDC {
+				return fnCall, nil
+			}
+			fnVolatility = fnCall.ResolvedOverload().Volatility
+		} else {
+			// Pick highest volatility overload.
+			for _, o := range fn.Definition {
+				if o.Volatility > fnVolatility {
+					fnVolatility = o.Volatility
+				}
+			}
+		}
+		if fnVolatility <= volatility.Immutable {
+			// Remaining immutable functions are safe.
+			return fnCall, nil
+		}
+
+		return cdcFunctionWithOverride(fn.Name, fnCall)
+	default:
+		return nil, errors.AssertionFailedf("unexpected function expression of type %T", fn)
+	}
 }
 
 // TestingEnableVolatileFunction allows functions with the given name (lowercase)
 // to be used in expressions if their volatility level would disallow them by default.
 // Used for testing.
 func TestingEnableVolatileFunction(fnName string) {
-	supportedVolatileBuiltinFunctions[fnName] = struct{}{}
+	cdcFunctions[fnName] = useDefaultBuiltin
+}
+
+// For some functions (specifically the volatile ones), we do
+// not want to use the provided builtin. Instead, we opt for
+// our own function definition.
+func makeBuiltinOverride(
+	builtin *tree.FunctionDefinition, overloads ...tree.Overload,
+) *tree.ResolvedFunctionDefinition {
+	props := builtin.FunctionProperties
+	override := tree.NewFunctionDefinition(builtin.Name, &props, overloads)
+	// The schema name is actually not important since CDC doesn't use any user
+	// defined functions. And, we're sure that we always return the first
+	// function definition found.
+	return tree.QualifyBuiltinFunctionDefinition(override, catconstants.PublicSchemaName)
+}
+
+// tree.Overload definitions for statement_timestamp and transaction_timestamp functions.
+var timestampBuiltinOverloads = []tree.Overload{
+	{
+		Types:             tree.ParamTypes{},
+		ReturnType:        tree.FixedReturnType(types.TimestampTZ),
+		PreferredOverload: true,
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
+			return tree.MakeDTimestampTZ(rowEvalCtx.updatedRow.MvccTimestamp.GoTime(), time.Microsecond)
+		},
+		Info: "Returns MVCC timestamp of the event",
+		// NB: Default builtin implementation uses volatility.Stable
+		// We override volatility to be Volatile so that function
+		// is not folded.
+		Volatility: volatility.Volatile,
+	},
+	{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Timestamp),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
+			return tree.MakeDTimestamp(rowEvalCtx.updatedRow.MvccTimestamp.GoTime(), time.Microsecond)
+		},
+		Info: "Returns MVCC timestamp of the event",
+		// NB: Default builtin implementation uses volatility.Stable
+		// We override volatility to be Volatile so that function
+		// is not folded.
+		Volatility: volatility.Volatile,
+	},
 }

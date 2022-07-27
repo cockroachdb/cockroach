@@ -201,6 +201,9 @@ type ServerConfig struct {
 	// AdmissionPacerFactory is used to integrate CPU-intensive work
 	// with elastic CPU control.
 	AdmissionPacerFactory admission.PacerFactory
+
+	// *sql.ExecutorConfig exposed as an interface (due to dependency cycles).
+	ExecutorConfig interface{}
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

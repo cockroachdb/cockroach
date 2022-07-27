@@ -21,15 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,17 +52,20 @@ CREATE TABLE foo (
   a INT, 
   b STRING, 
   c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
+  d STRING AS (concat(b, c)) VIRTUAL,
   e status DEFAULT 'inactive',
+  f STRING,
+  g STRING,
   PRIMARY KEY (b, a),
   FAMILY main (a, b, e),
-  FAMILY only_c (c)
+  FAMILY only_c (c),
+  FAMILY f_g_fam(f,g)
 )`)
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
-		projectionErr      string
+		evalErr            string
 
 		// current value expectations.
 		expectFiltered bool
@@ -85,22 +87,25 @@ CREATE TABLE foo (
 		return expectations[0], expectations[1:]
 	}
 
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
 	for _, tc := range []struct {
 		testName     string
 		familyName   string   // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
 		setupActions []string // SQL statements to execute before starting rangefeed.
 		actions      []string // SQL statements to execute after starting rangefeed.
-		predicate    string
-		predicateErr string // Expect to get an error when configuring predicates
+		stmt         string
+		expectErr    string // Expect to get an error when configuring predicates
 
 		expectMainFamily  []decodeExpectation
 		expectOnlyCFamily []decodeExpectation
+		expectFGFamily    []decodeExpectation
 	}{
 		{
 			testName:   "main/star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
-			predicate:  "SELECT * FROM _",
+			stmt:       "SELECT * FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"1st test", "1"},
@@ -112,7 +117,7 @@ CREATE TABLE foo (
 			testName:   "main/qualified_star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'qualified')"},
-			predicate:  "SELECT foo.* FROM _",
+			stmt:       "SELECT foo.* FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"qualified", "1"},
@@ -127,7 +132,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (2, '2nd test')",
 				"DELETE FROM foo WHERE a=2 AND b='2nd test'",
 			},
-			predicate: "SELECT *, cdc_is_delete() FROM _",
+			stmt: "SELECT *, cdc_is_delete() FROM foo WHERE 'hello' != 'world'",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"2nd test", "2"},
@@ -143,7 +148,7 @@ CREATE TABLE foo (
 			testName:   "main/projection",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (3, '3rd test')"},
-			predicate:  "SELECT e, a FROM _",
+			stmt:       "SELECT e, a FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"3rd test", "3"},
@@ -155,7 +160,7 @@ CREATE TABLE foo (
 			testName:   "main/projection_aliased",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (3, '3rd test')"},
-			predicate:  "SELECT bar.e, a FROM foo AS bar",
+			stmt:       "SELECT bar.e, a FROM foo AS bar",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"3rd test", "3"},
@@ -173,7 +178,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, e) VALUES (4, '4th test', 'closed')",
 				"INSERT INTO foo (a, b, e) VALUES (5, '4th test', 'inactive')",
 			},
-			predicate: "SELECT a FROM _ WHERE e IN ('open', 'inactive')",
+			stmt: "SELECT a FROM _ WHERE e IN ('open', 'inactive')",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectFiltered: true,
@@ -198,10 +203,24 @@ CREATE TABLE foo (
 			},
 		},
 		{
+			testName:   "main/select_udts",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b, e) VALUES (1, '4th test', 'closed')",
+			},
+			stmt: "SELECT a, 'inactive'::status as inactive, e FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"4th test", "1"},
+					allValues: map[string]string{"a": "1", "inactive": "inactive", "e": "closed"},
+				},
+			},
+		},
+		{
 			testName:   "main/same_column_many_times",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '5th test')"},
-			predicate:  "SELECT *, a, a as one_more, a FROM _",
+			stmt:       "SELECT *, a, a as one_more, a FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"5th test", "1"},
@@ -216,19 +235,21 @@ CREATE TABLE foo (
 			testName:   "main/no_col_c",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			predicate:  "SELECT *, c FROM _",
-			expectMainFamily: []decodeExpectation{
-				{
-					projectionErr: `column "c" does not exist`,
-					keyValues:     []string{"no_c", "1"},
-				},
-			},
+			stmt:       "SELECT a, c FROM _",
+			expectErr:  `column "foo.c" does not exist`,
+		},
+		{
+			testName:   "main/no_col_c_star",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
+			stmt:       "SELECT *, c FROM _",
+			expectErr:  `column "foo.c" does not exist`,
 		},
 		{
 			testName:   "main/non_primary_family_with_var_free",
 			familyName: "only_c",
 			actions:    []string{"INSERT INTO foo (a, b, c) VALUES (42, '6th test', 'c value')"},
-			predicate:  "SELECT sin(pi()/2) AS var_free, c, b ",
+			stmt:       "SELECT sin(pi()/2) AS var_free, c, b FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -242,13 +263,32 @@ CREATE TABLE foo (
 			},
 		},
 		{
+			testName:   "main/concat",
+			familyName: "f_g_fam",
+			actions: []string{
+				"INSERT INTO foo (a, b, f) VALUES (42, 'concat', 'hello')",
+			},
+			stmt: "SELECT a, b, f || f AS ff, g || g AS gg FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+			},
+			expectFGFamily: []decodeExpectation{
+				{
+					keyValues: []string{"concat", "42"},
+					allValues: map[string]string{"a": "42", "b": "concat", "ff": "hellohello", "gg": "NULL"},
+				},
+			},
+		},
+		{
 			testName:   "main/cdc_prev_select",
 			familyName: "only_c",
 			actions: []string{
 				"INSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value old')",
 				"UPSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value updated')",
 			},
-			predicate: "SELECT a, b, c, (CASE WHEN cdc_prev()->>'c' IS NULL THEN 'not there' ELSE cdc_prev()->>'c' END) AS old_c",
+			stmt: "SELECT a, b, c, (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -272,7 +312,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (123, 'select_if')",
 				"DELETE FROM foo where a=123",
 			},
-			predicate: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM _",
+			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM _",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"select_if", "123"},
@@ -290,7 +330,7 @@ CREATE TABLE foo (
 			actions: []string{
 				"INSERT INTO foo (a, b) VALUES (1, '   spaced out      ')",
 			},
-			predicate: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM _",
+			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM _",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"   spaced out      ", "1"},
@@ -298,49 +338,78 @@ CREATE TABLE foo (
 				},
 			},
 		},
+		// TODO(yevgeniy): enable this test.
+		// This requires adding support to "fetch" those magic system columns from
+		// row fetcher, or replace them with a function call.
+		//{
+		//	testName:   "main/magic_column",
+		//	familyName: "main",
+		//	actions: []string{
+		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
+		//	},
+		//	stmt: "SELECT a,  crdb_internal_mvcc_timestamp FROM foo",
+		//	expectMainFamily: []decodeExpectation{
+		//		{
+		//			keyValues: []string{"hello", "1"},
+		//			allValues: map[string]string{"a": "1", "crdb_internal_mvcc_timestamp": "xxx"},
+		//		},
+		//	},
+		//},
+		// {
+		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
+		//  // Issue #90421
+		//	testName:   "main/trigram",
+		//	familyName: "main",
+		//	actions: []string{
+		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
+		//	},
+		//	stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
+		//	expectMainFamily: []decodeExpectation{
+		//		{
+		//			keyValues: []string{"hello", "1"},
+		//			allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
+		//		},
+		//	},
+		//},
 		{
 			testName:   "main/btrim_wrong_type",
 			familyName: "main",
 			actions: []string{
 				"INSERT INTO foo (a, b) VALUES (1, '   spaced out      ')",
 			},
-			predicate: "SELECT btrim(a) FROM _",
-			expectMainFamily: []decodeExpectation{
-				{
-					keyValues:     []string{"   spaced out      ", "1"},
-					projectionErr: "unknown signature: btrim\\(int\\)",
-				},
-			},
+			stmt:      "SELECT btrim(a) FROM foo",
+			expectErr: "unknown signature: btrim\\(int\\)",
 		},
 		{
 			testName:   "main/contradiction",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'contradiction')"},
-			predicate:  "SELECT * FROM _ WHERE 1 > 2",
-			expectMainFamily: []decodeExpectation{
-				{
-					projectionErr: `filter .* is a contradiction`,
-					keyValues:     []string{"contradiction", "1"},
-				},
-			},
+			stmt:       "SELECT * FROM foo WHERE 1 > 2",
+			expectErr:  "does not match any rows",
 		},
 		{
-			testName:     "main/no_sleep",
-			familyName:   "main",
-			predicate:    "SELECT *, pg_sleep(86400) AS wake_up FROM _",
-			predicateErr: `function "pg_sleep" unsupported by CDC`,
+			testName:   "main/no_sleep",
+			familyName: "main",
+			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM _",
+			expectErr:  `function "pg_sleep" unsupported by CDC`,
 		},
 		{
-			testName:     "main/no_subselect",
-			familyName:   "main",
-			predicate:    "SELECT cdc_prev(), cdc_is_delete(123), (select column1 from (values (1,2,3))) FROM _",
-			predicateErr: `subquery expressions not supported by CDC`,
+			testName:   "main/no_subselect",
+			familyName: "main",
+			stmt:       "SELECT cdc_prev, cdc_is_delete(), (select column1 from (values (1,2,3))) FROM foo",
+			expectErr:  `sub-query expressions not supported by CDC`,
 		},
 		{
-			testName:     "main/no_subselect_in_where",
-			familyName:   "main",
-			predicate:    "SELECT cdc_prev() FROM _ WHERE a = 2 AND (select 3) = 3",
-			predicateErr: `subquery expressions not supported by CDC`,
+			testName:   "main/no_subselect_in_where",
+			familyName: "main",
+			stmt:       "SELECT cdc_prev FROM foo WHERE a = 2 AND (select 3) = 3",
+			expectErr:  `sub-query expressions not supported by CDC`,
+		},
+		{
+			testName:   "main/exists_subselect",
+			familyName: "main",
+			stmt:       "SELECT 1 FROM foo WHERE EXISTS (SELECT true)",
+			expectErr:  "sub-query expressions not supported by CDC",
 		},
 		{
 			testName:   "main/filter_many",
@@ -350,7 +419,7 @@ CREATE TABLE foo (
 					"(SELECT generate_series as x FROM generate_series(1, 100)) " +
 					"SELECT x, 'filter_many', x::string FROM s",
 			},
-			predicate:        "SELECT * FROM _ WHERE a % 33 = 0",
+			stmt:             "SELECT * FROM foo WHERE a % 33 = 0",
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
@@ -359,7 +428,7 @@ CREATE TABLE foo (
 						keyValues: []string{"filter_many", iStr},
 					}
 					if i%33 == 0 {
-						e.allValues = map[string]string{"c": iStr}
+						e.allValues = map[string]string{"a": iStr, "b": "filter_many", "c": iStr}
 					} else {
 						e.expectFiltered = true
 					}
@@ -377,14 +446,15 @@ CREATE TABLE foo (
 					"SELECT x, 'only_some_deleted_values', x::string FROM s",
 			},
 			actions:          []string{"DELETE FROM foo WHERE b='only_some_deleted_values'"},
-			predicate:        `SELECT * FROM _ WHERE cdc_is_delete() AND cast(cdc_prev()->>'a' as int) % 33 = 0`,
+			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND cdc_prev.a % 33 = 0`,
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
+					iStr := strconv.FormatInt(int64(i), 10)
 					e := decodeExpectation{
-						keyValues:      []string{"only_some_deleted_values", strconv.FormatInt(int64(i), 10)},
+						keyValues:      []string{"only_some_deleted_values", iStr},
 						expectFiltered: i%33 != 0,
-						allValues:      map[string]string{"c": "NULL"},
+						allValues:      map[string]string{"a": iStr, "b": "only_some_deleted_values", "c": "NULL"},
 					}
 					expectations = append(expectations, e)
 				}
@@ -394,30 +464,30 @@ CREATE TABLE foo (
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			sqlDB.Exec(t, "DELETE FROM foo WHERE true")
-
-			// Setup evaluator.
-			evaluator, err := makeEvaluator(t, s.ClusterSettings(), tc.predicate)
-			if tc.predicateErr != "" {
-				require.Regexp(t, tc.predicateErr, err)
-				return
-			}
-			require.NoError(t, err)
-
 			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 			if tc.familyName != "" {
 				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			}
 
 			targets := changefeedbase.Targets{}
-			targets.Add(changefeedbase.Target{
+			target := changefeedbase.Target{
 				Type:       targetType,
 				TableID:    desc.GetID(),
 				FamilyName: tc.familyName,
-			})
+			}
+			targets.Add(target)
 
-			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+			// Setup evaluator.
+			e, err := newEvaluatorWithNormCheck(&execCfg, desc, s.Clock().Now(), target, tc.stmt)
+			if tc.expectErr != "" {
+				require.Regexp(t, tc.expectErr, err, err)
+				return
+			}
+			require.NoError(t, err)
+			defer e.Close()
+
 			ctx := context.Background()
-			decoder, err := cdcevent.NewEventDecoder(ctx, &serverCfg, targets, false, false)
+			decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false)
 			require.NoError(t, err)
 
 			for _, action := range tc.setupActions {
@@ -431,7 +501,7 @@ CREATE TABLE foo (
 				sqlDB.Exec(t, action)
 			}
 
-			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
+			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily) + len(tc.expectFGFamily)
 			vals := readSortedRangeFeedValues(t, expectedEvents, popRow)
 			for _, v := range vals {
 				eventFamilyID, err := cdcevent.TestingGetFamilyIDFromKey(decoder, v.Key, v.Timestamp())
@@ -440,8 +510,10 @@ CREATE TABLE foo (
 				var expect decodeExpectation
 				if eventFamilyID == 0 {
 					expect, tc.expectMainFamily = popExpectation(t, tc.expectMainFamily)
-				} else {
+				} else if eventFamilyID == 1 {
 					expect, tc.expectOnlyCFamily = popExpectation(t, tc.expectOnlyCFamily)
+				} else {
+					expect, tc.expectFGFamily = popExpectation(t, tc.expectFGFamily)
 				}
 
 				updatedRow, err := decodeRowErr(decoder, &v, false)
@@ -455,25 +527,23 @@ CREATE TABLE foo (
 				prevRow := decodeRow(t, decoder, &v, true)
 				require.NoError(t, err)
 
+				require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow),
+					"isDelete=%t fid=%d", updatedRow.IsDeleted(), eventFamilyID)
+
+				projection, err := e.Eval(ctx, updatedRow, prevRow)
+				if expect.evalErr != "" {
+					require.Regexp(t, expect.evalErr, err)
+					continue
+				}
+				require.NoError(t, err)
+
 				if expect.expectFiltered {
-					require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow),
-						"isDelete=%t fid=%d", updatedRow.IsDeleted(), eventFamilyID)
-					matches, err := evaluator.MatchesFilter(ctx, updatedRow, v.Timestamp(), prevRow)
-					require.NoError(t, err)
-					require.False(t, matches, "keys: %v", slurpKeys(t, updatedRow))
+					require.False(t, projection.IsInitialized(), "keys: %v", slurpKeys(t, updatedRow))
 					continue
 				}
 
-				projection, err := evaluator.Projection(ctx, updatedRow, v.Timestamp(), prevRow)
-				if expect.projectionErr != "" {
-					require.Regexp(t, expect.projectionErr, err)
-					// Sanity check we get error for the row we expected to get an error for.
-					require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow))
-				} else {
-					require.NoError(t, err)
-					require.Equal(t, expect.keyValues, slurpKeys(t, projection))
-					require.Equal(t, expect.allValues, slurpValues(t, projection))
-				}
+				require.Equal(t, expect.keyValues, slurpKeys(t, projection))
+				require.Equal(t, expect.allValues, slurpValues(t, projection))
 			}
 		})
 	}
@@ -488,9 +558,14 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
-
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+	target := changefeedbase.Target{
+		TableID:    desc.GetID(),
+		FamilyName: desc.GetFamilies()[0].Name,
+	}
 	for fnCall, errFn := range map[string]string{
 		// Some volatile functions.
 		"version()":                            "version",
@@ -512,134 +587,31 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 		"crdb_internal.get_namespace_id()": "crdb_internal.get_namespace_id",
 	} {
 		t.Run(fmt.Sprintf("select/%s", errFn), func(t *testing.T) {
-			_, err := makeEvaluator(t, s.ClusterSettings(), fmt.Sprintf("SELECT %s", fnCall))
+			_, err := newEvaluatorWithNormCheck(&execCfg, desc, execCfg.Clock.Now(), target,
+				fmt.Sprintf("SELECT %s FROM foo", fnCall))
 			require.Regexp(t, fmt.Sprintf(`function "%s" unsupported by CDC`, errFn), err)
 		})
 
 		// Same thing, but with the WHERE clause
 		t.Run(fmt.Sprintf("where/%s", errFn), func(t *testing.T) {
-			_, err := makeEvaluator(t, s.ClusterSettings(),
-				fmt.Sprintf("SELECT 1 WHERE %s IS NOT NULL", fnCall))
+			_, err := newEvaluatorWithNormCheck(&execCfg, desc, s.Clock().Now(), target,
+				fmt.Sprintf("SELECT 1 FROM foo WHERE %s IS NOT NULL", fnCall))
 			require.Regexp(t, fmt.Sprintf(`function "%s" unsupported by CDC`, errFn), err)
 		})
 	}
 }
 
-func TestEvaluatesProjection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, ""+
-		"CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d INT, "+
-		"FAMILY most (a,b,c), FAMILY only_d (d))")
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
-	testRow := cdcevent.TestingMakeEventRow(desc, 0, randEncDatumRow(t, desc, 0), false)
-
-	verifyConstantsFolded := func(p *exprEval) {
-		for _, expr := range p.selectors {
-			_ = expr.(tree.Datum)
-		}
-	}
-
-	for _, tc := range []struct {
-		name        string
-		predicate   string
-		input       rowenc.EncDatumRow
-		expectErr   string
-		expectation map[string]string
-		verifyFold  bool
-	}{
-		{
-			name:        "constants",
-			predicate:   "SELECT 1, 2, 3",
-			expectation: map[string]string{"column_1": "1", "column_2": "2", "column_3": "3"},
-			verifyFold:  true,
-		},
-		{
-			name:        "constants_functions_and_aliases",
-			predicate:   "SELECT 0 as zero, abs(-2) two, 42",
-			expectation: map[string]string{"zero": "0", "two": "2", "column_3": "42"},
-			verifyFold:  true,
-		},
-		{
-			name:        "trig_fun",
-			predicate:   "SELECT cos(0), sin(pi()/2) as sin_90, 39 + pi()::int",
-			expectation: map[string]string{"cos": "1.0", "sin_90": "1.0", "column_3": "42"},
-			verifyFold:  true,
-		},
-		{
-			name:      "div_by_zero",
-			predicate: "SELECT 3 / sin(pi() - pi())  as result",
-			expectErr: "division by zero",
-		},
-		{
-			name:        "projection_with_bound_vars",
-			predicate:   "SELECT sqrt(a::float) + sin(pi()/2)  as result, foo.*",
-			input:       makeEncDatumRow(tree.NewDInt(4), tree.DNull, tree.DNull),
-			expectation: map[string]string{"result": "3.0", "a": "4", "b": "NULL", "c": "NULL"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			e, err := makeExprEval(t, s.ClusterSettings(), testRow.EventDescriptor, tc.predicate)
-			if tc.expectErr != "" {
-				require.Regexp(t, tc.expectErr, err)
-				return
-			}
-
-			require.NoError(t, err)
-			if tc.verifyFold {
-				verifyConstantsFolded(e)
-			}
-			row := testRow
-			if tc.input != nil {
-				row = cdcevent.TestingMakeEventRow(desc, 0, tc.input, false)
-			}
-
-			p, err := e.evalProjection(context.Background(), row, hlc.Timestamp{}, row)
-			require.NoError(t, err)
-			require.Equal(t, tc.expectation, slurpValues(t, p))
-		})
-	}
-}
-
-// makeEvaluator creates Evaluator and configures it with specified
-// select statement predicate.
-func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (*Evaluator, error) {
-	t.Helper()
-	s, err := parser.ParseOne(selectStr)
-	require.NoError(t, err)
-	slct := s.AST.(*tree.Select).Select.(*tree.SelectClause)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	return NewEvaluator(context.Background(), &evalCtx, slct)
-}
-
-func makeExprEval(
-	t *testing.T, st *cluster.Settings, ed *cdcevent.EventDescriptor, selectStr string,
-) (*exprEval, error) {
-	t.Helper()
-	e, err := makeEvaluator(t, st, selectStr)
-	require.NoError(t, err)
-
-	if err := e.initEval(context.Background(), ed); err != nil {
-		return nil, err
-	}
-	return e.evaluator, nil
-}
-
 func decodeRowErr(
 	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, prev bool,
 ) (cdcevent.Row, error) {
-	kv := roachpb.KeyValue{Key: v.Key}
+	keyVal := roachpb.KeyValue{Key: v.Key}
 	if prev {
-		kv.Value = v.PrevValue
+		keyVal.Value = v.PrevValue
 	} else {
-		kv.Value = v.Value
+		keyVal.Value = v.Value
 	}
-	return decoder.DecodeKV(context.Background(), kv, v.Timestamp(), false)
+	const keyOnly = false
+	return decoder.DecodeKV(context.Background(), keyVal, v.Timestamp(), keyOnly)
 }
 
 func decodeRow(
@@ -669,25 +641,18 @@ func slurpValues(t *testing.T, r cdcevent.Row) map[string]string {
 	return res
 }
 
-func randEncDatumRow(
-	t *testing.T, desc catalog.TableDescriptor, familyID descpb.FamilyID,
+func randEncDatumPrimaryFamily(
+	t *testing.T, desc catalog.TableDescriptor,
 ) (row rowenc.EncDatumRow) {
 	t.Helper()
 	rng, _ := randutil.NewTestRand()
 
-	family, err := desc.FindFamilyByID(familyID)
+	family, err := desc.FindFamilyByID(0)
 	require.NoError(t, err)
 	for _, colID := range family.ColumnIDs {
 		col, err := desc.FindColumnWithID(colID)
 		require.NoError(t, err)
 		row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
-	}
-	return row
-}
-
-func makeEncDatumRow(datums ...tree.Datum) (row rowenc.EncDatumRow) {
-	for _, d := range datums {
-		row = append(row, rowenc.EncDatum{Datum: d})
 	}
 	return row
 }
@@ -705,4 +670,41 @@ func readSortedRangeFeedValues(
 		return res[i].Key.Compare(res[j].Key) < 0
 	})
 	return res
+}
+
+// Evaluator gets constructed w/ normalization steps already performed.
+// This test utility function adds (usually un-needed)  normalization step
+// so that errors in expression can be picked up without calling evaluator.Eval().
+func newEvaluatorWithNormCheck(
+	execCfg *sql.ExecutorConfig,
+	desc catalog.TableDescriptor,
+	schemaTS hlc.Timestamp,
+	target changefeedbase.Target,
+	expr string,
+) (*Evaluator, error) {
+	sc, err := ParseChangefeedExpression(expr)
+	if err != nil {
+		return nil, err
+	}
+
+	const splitFamilies = true
+	norm, err := NormalizeExpression(
+		context.Background(), execCfg, username.RootUserName(), defaultDBSessionData, desc, schemaTS,
+		jobspb.ChangefeedTargetSpecification{
+			Type:       target.Type,
+			TableID:    target.TableID,
+			FamilyName: target.FamilyName,
+		},
+		sc, splitFamilies,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+}
+
+var defaultDBSessionData = sessiondatapb.SessionData{
+	Database:   "defaultdb",
+	SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 }

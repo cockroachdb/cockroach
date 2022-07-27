@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -65,7 +65,6 @@ type kvEventToRowConsumer struct {
 	decoder        cdcevent.Decoder
 	details        ChangefeedConfig
 	evaluator      *cdceval.Evaluator
-	safeExpr       string
 	encodingFormat changefeedbase.FormatType
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
@@ -85,20 +84,15 @@ type kvEventToRowConsumer struct {
 
 func newEventConsumer(
 	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
 	feed ChangefeedConfig,
 	spanFrontier *span.Frontier,
 	cursor hlc.Timestamp,
 	sink EventSink,
-	details ChangefeedConfig,
-	expr execinfrapb.Expression,
-	knobs TestingKnobs,
 	metrics *Metrics,
-	isSinkless bool,
+	knobs TestingKnobs,
 ) (eventConsumer, EventSink, error) {
-	cfg := flowCtx.Cfg
-	evalCtx := flowCtx.EvalCtx
-
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
 	if err != nil {
 		return nil, nil, err
@@ -130,6 +124,7 @@ func newEventConsumer(
 			if !ok {
 				tenantID = roachpb.SystemTenantID
 			}
+
 			pacer = cfg.AdmissionPacerFactory.NewPacer(
 				pacerRequestUnit,
 				admission.WorkInfo{
@@ -141,8 +136,9 @@ func newEventConsumer(
 			)
 		}
 
-		return newKVEventToRowConsumer(ctx, cfg, evalCtx, frontier, cursor, s,
-			encoder, details, expr, knobs, topicNamer, pacer)
+		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
+		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
+			encoder, feed, spec.Select, spec.User(), knobs, topicNamer, pacer)
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -160,6 +156,7 @@ func newEventConsumer(
 	// does not work for parquet format.
 	//
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds.
+	isSinkless := spec.JobID == 0
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
@@ -208,35 +205,28 @@ func makeHasher() hash.Hash32 {
 
 func newKVEventToRowConsumer(
 	ctx context.Context,
-	cfg *execinfra.ServerConfig,
-	evalCtx *eval.Context,
+	cfg *sql.ExecutorConfig,
 	frontier frontier,
 	cursor hlc.Timestamp,
 	sink EventSink,
 	encoder Encoder,
 	details ChangefeedConfig,
 	expr execinfrapb.Expression,
+	userName username.SQLUsername,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 	pacer *admission.Pacer,
-) (*kvEventToRowConsumer, error) {
+) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
 	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
-
 	if err != nil {
 		return nil, err
 	}
 
 	var evaluator *cdceval.Evaluator
-	var safeExpr string
 	if expr.Expr != "" {
-		expr, err := cdceval.ParseChangefeedExpression(expr.Expr)
-		if err != nil {
-			return nil, err
-		}
-		safeExpr = tree.AsString(expr)
-		evaluator, err = cdceval.NewEvaluator(ctx, evalCtx, expr)
+		evaluator, err = newEvaluator(cfg, userName, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -258,10 +248,20 @@ func newKVEventToRowConsumer(
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
-		safeExpr:             safeExpr,
 		encodingFormat:       encodingOpts.Format,
 		pacer:                pacer,
 	}, nil
+}
+
+func newEvaluator(
+	cfg *sql.ExecutorConfig, user username.SQLUsername, expr execinfrapb.Expression,
+) (*cdceval.Evaluator, error) {
+	sc, err := cdceval.ParseChangefeedExpression(expr.Expr)
+	if err != nil {
+		return nil, err
+	}
+
+	return cdceval.NewEvaluator(sc, cfg, user)
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
@@ -279,7 +279,8 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 		c.topicDescriptorCache[topic.GetTopicIdentifier()] = topic
 		return topic, nil
 	}
-	return noTopic{}, errors.AssertionFailedf("no TargetSpecification for row %s", eventMeta)
+	return noTopic{}, errors.AssertionFailedf("no TargetSpecification for row %s",
+		eventMeta.DebugString())
 }
 
 // ConsumeEvent manages kv event lifetime: parsing, encoding and event being emitted to the sink.
@@ -299,7 +300,6 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	schemaTimestamp := ev.KV().Value.Timestamp
 	prevSchemaTimestamp := schemaTimestamp
-	mvccTimestamp := ev.MVCCTimestamp()
 	keyOnly := c.details.Opts.KeyOnly()
 
 	if backfillTs := ev.BackfillTimestamp(); !backfillTs.IsEmpty() {
@@ -334,29 +334,34 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 
 	if c.evaluator != nil {
-		matches, err := c.evaluator.MatchesFilter(ctx, updatedRow, mvccTimestamp, prevRow)
+		projection, err := c.evaluator.Eval(ctx, updatedRow, prevRow)
 		if err != nil {
-			return errors.Wrapf(err, "while matching filter: %s", c.safeExpr)
+			return err
 		}
 
-		if !matches {
-			// TODO(yevgeniy): Add metrics
+		if !projection.IsInitialized() {
+			// Filter did not match.
+			// TODO(yevgeniy): Add metrics.
 			a := ev.DetachAlloc()
 			a.Release(ctx)
 			return nil
 		}
 
-		projection, err := c.evaluator.Projection(ctx, updatedRow, mvccTimestamp, prevRow)
-		if err != nil {
-			return errors.Wrapf(err, "while evaluating projection: %s", c.safeExpr)
-		}
-		updatedRow = projection
-
 		// Clear out prevRow.  Projection can already emit previous row; thus
 		// it would be superfluous to also encode prevRow.
-		prevRow = cdcevent.Row{}
+		updatedRow, prevRow = projection, cdcevent.Row{}
 	}
 
+	return c.encodeAndEmit(ctx, updatedRow, prevRow, schemaTimestamp, ev.DetachAlloc())
+}
+
+func (c *kvEventToRowConsumer) encodeAndEmit(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
+	schemaTS hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
 	topic, err := c.topicForEvent(updatedRow.Metadata)
 	if err != nil {
 		return err
@@ -368,15 +373,15 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	// it's forwarded before.
 	// TODO(dan): This should be an assertion once we're confident this can never
 	// happen under any circumstance.
-	if schemaTimestamp.LessEq(c.frontier.Frontier()) && !schemaTimestamp.Equal(c.cursor) {
+	if schemaTS.LessEq(c.frontier.Frontier()) && !schemaTS.Equal(c.cursor) {
 		log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
-			"or equal to the local frontier %s.", schemaTimestamp, c.frontier.Frontier())
+			"or equal to the local frontier %s.", schemaTS, c.frontier.Frontier())
 		return nil
 	}
 
 	evCtx := eventContext{
-		updated: schemaTimestamp,
-		mvcc:    mvccTimestamp,
+		updated: schemaTS,
+		mvcc:    updatedRow.MvccTimestamp,
 	}
 
 	if c.topicNamer != nil {
@@ -395,13 +400,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
-			ctx,
-			updatedRow,
-			prevRow,
-			topic,
-			schemaTimestamp,
-			mvccTimestamp,
-			ev.DetachAlloc(),
+			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp, alloc,
 		)
 	}
 	var keyCopy, valueCopy []byte
@@ -420,11 +419,10 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
-	a := ev.DetachAlloc()
-	a.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
+	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
 	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, a,
+		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
 	); err != nil {
 		return err
 	}
@@ -434,10 +432,12 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	return nil
 }
 
-// Close is a noop for the kvEventToRowConsumer because it
-// has no goroutines in flight.
+// Close closes this consumer.
 func (c *kvEventToRowConsumer) Close() error {
 	c.pacer.Close()
+	if c.evaluator != nil {
+		c.evaluator.Close()
+	}
 	return nil
 }
 
@@ -589,6 +589,7 @@ func (c *parallelEventConsumer) workerLoop(
 			log.Errorf(ctx, "closing consumer: %v", err)
 		}
 	}()
+
 	for {
 		select {
 		case <-ctx.Done():

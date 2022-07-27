@@ -11,6 +11,8 @@
 package norm
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -670,8 +673,7 @@ func (c *CustomFuncs) FunctionReturnType(private *memo.FunctionPrivate) *types.T
 }
 
 // FoldFunction evaluates a function expression with constant inputs. It returns
-// a constant expression as long as the function is contained in the
-// FoldFunctionAllowlist, and the evaluation causes no error. Otherwise, it
+// a constant expression as long as the evaluation causes no error. Otherwise, it
 // returns ok=false.
 func (c *CustomFuncs) FoldFunction(
 	args memo.ScalarListExpr, private *memo.FunctionPrivate,
@@ -690,7 +692,20 @@ func (c *CustomFuncs) FoldFunction(
 	for i := range exprs {
 		exprs[i] = memo.ExtractConstDatum(args[i])
 	}
-	funcRef := tree.WrapFunction(private.Name)
+
+	var funcRef tree.ResolvableFunctionReference
+	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
+		unresolved := tree.MakeUnresolvedName(private.Name)
+		def, err := c.f.catalog.ResolveFunction(
+			context.Background(), &unresolved,
+			&c.f.evalCtx.SessionData().SearchPath)
+		if err != nil {
+			panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(private.Name)))
+		}
+		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}
+	} else {
+		funcRef = tree.WrapFunction(private.Name)
+	}
 	fn := tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */
