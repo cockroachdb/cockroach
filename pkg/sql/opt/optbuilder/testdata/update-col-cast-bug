@@ -30,9 +30,9 @@ with &1 (cte)
            │    │    │    │    ├── columns: a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
            │    │    │    │    └── computed column expressions
            │    │    │    │         └── t.c:9
-           │    │    │    │              └── a:7::INT8 + b:8::INT8 [type=int]
+           │    │    │    │              └── a:7 + b:8 [type=int]
            │    │    │    └── projections
-           │    │    │         └── a:7::INT8 + b:8::INT8 [as=t.c:9, type=int]
+           │    │    │         └── a:7 + b:8 [as=t.c:9, type=int]
            │    │    └── projections
            │    │         └── subquery [as=a_new:16, type=int2]
            │    │              └── max1-row
@@ -51,7 +51,7 @@ with &1 (cte)
            │    │                        │         └── t.c:9 [as=c:15, type=int2]
            │    │                        └── 1 [type=int]
            │    └── projections
-           │         └── a_new:16::INT8 + b:8::INT8 [as=c_comp:17, type=int]
+           │         └── a_new:16 + b:8 [as=c_comp:17, type=int]
            └── projections
                 └── assignment-cast: INT2 [as=c_cast:18, type=int2]
                      └── c_comp:17 [type=int]
