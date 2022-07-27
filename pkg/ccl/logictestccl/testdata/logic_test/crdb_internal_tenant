@@ -8,9 +8,11 @@ SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
 query IT
 SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 ----
+0  defaultdb
 0  eventlog
 0  jobs
 0  locations
+0  privileges
 0  protected_ts_meta
 0  protected_ts_records
 0  role_members
