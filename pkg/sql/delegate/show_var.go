@@ -11,12 +11,8 @@
 package delegate
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -27,7 +23,6 @@ var ValidVars = make(map[string]struct{})
 
 // Show a session-local variable name.
 func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
-	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if name == "locality" {
@@ -40,19 +35,5 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 		)
 	}
 
-	if _, ok := ValidVars[name]; !ok {
-		// Custom options go to planNode.
-		if strings.Contains(name, ".") {
-			return nil, nil
-		}
-		return nil, pgerror.Newf(pgcode.UndefinedObject,
-			"unrecognized configuration parameter %q", origName)
-	}
-
-	varName := lexbase.EscapeSQLString(name)
-	nm := tree.Name(name)
-	return parse(fmt.Sprintf(
-		`SELECT value AS %[1]s FROM crdb_internal.session_variables WHERE variable = %[2]s`,
-		nm.String(), varName,
-	))
+	return nil, nil
 }
