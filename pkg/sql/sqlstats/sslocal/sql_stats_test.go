@@ -12,6 +12,7 @@ package sslocal_test
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"math"
 	"net/url"
 	"testing"
@@ -475,7 +476,15 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 					Query:       fingerprint,
 					ImplicitTxn: testCase.implicit,
 				},
-				sqlstats.RecordedStmtStats{},
+				sqlstats.RecordedStmtStats{
+					SessionData: &sessiondata.SessionData{
+						SessionData: sessiondatapb.SessionData{
+							UserProto:       username.RootUserName().EncodeProto(),
+							Database:        "defaultdb",
+							ApplicationName: "appname_findme",
+						},
+					},
+				},
 			)
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
@@ -576,7 +585,15 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 				stmtFingerprintID, err := statsCollector.RecordStatement(
 					ctx,
 					roachpb.StatementStatisticsKey{Query: fingerprint},
-					sqlstats.RecordedStmtStats{},
+					sqlstats.RecordedStmtStats{
+						SessionData: &sessiondata.SessionData{
+							SessionData: sessiondatapb.SessionData{
+								UserProto:       username.RootUserName().EncodeProto(),
+								Database:        "defaultdb",
+								ApplicationName: "appname_findme",
+							},
+						},
+					},
 				)
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
