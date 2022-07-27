@@ -63,6 +63,34 @@ message SampledQuery {
 
   // Statement fingerprint ID of the query.
   uint64 statement_fingerprint_id = 13 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty'];
+
+  // Maximum number of rows scanned by a full scan, as estimated by the
+  // optimizer.
+  double max_full_scan_rows_estimate = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Total number of rows read by all scans in the query, as estimated by the
+  // optimizer.
+  double total_scan_rows_estimate = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows output by the query, as estimated by the optimizer.
+  double output_rows_estimate = 16 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Whether table statistics were available to the optimizer when planning the
+  // query.
+  bool stats_available = 17 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The maximum number of nanoseconds that have passed since stats were
+  // collected on any table scanned by this query.
+  int64 nanos_since_stats_collected = 18 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of bytes read from disk.
+  int64 bytes_read = 19 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows read from disk.
+  int64 rows_read = 20 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows written.
+  int64 rows_written = 21 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CapturedIndexUsageStats

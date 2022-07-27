@@ -11,6 +11,8 @@
 package execbuilder
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -112,6 +114,18 @@ type Builder struct {
 
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
+
+	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
+	// estimated by the optimizer.
+	MaxFullScanRows float64
+
+	// TotalScanRows is the total number of rows read by all scans in the query,
+	// as estimated by the optimizer.
+	TotalScanRows float64
+
+	// NanosSinceStatsCollected is the maximum number of nanoseconds that have
+	// passed since stats were collected on any table scanned by this query.
+	NanosSinceStatsCollected time.Duration
 }
 
 // New constructs an instance of the execution node builder using the
