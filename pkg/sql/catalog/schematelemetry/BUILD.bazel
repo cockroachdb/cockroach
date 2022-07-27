@@ -30,6 +30,8 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",

@@ -12,7 +12,6 @@ package schematelemetry
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -21,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -59,9 +60,13 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	// Outside of tests, scan the catalog tables AS OF SYSTEM TIME slightly in the
 	// past. Schema telemetry is not latency-sensitive to the point where a few
 	// seconds matter.
-	aostDuration := -time.Second * 30
+	aostDuration := builtinconstants.DefaultFollowerReadDuration
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
+	} else if fn := builtins.EvalFollowerReadOffset; fn != nil {
+		if d, err := fn(p.ExtendedEvalContext().ClusterID, p.ExecCfg().Settings); err == nil {
+			aostDuration = d
+		}
 	}
 	asOf := p.ExecCfg().Clock.Now().Add(aostDuration.Nanoseconds(), 0)
 	events, err := CollectClusterSchemaForTelemetry(ctx, p.ExecCfg(), asOf)
