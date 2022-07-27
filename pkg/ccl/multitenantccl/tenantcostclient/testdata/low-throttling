@@ -1,0 +1,76 @@
+# Throttle at an extremely limited rate.
+
+# Wait for initial 10K RUs to be granted.
+wait-for-event
+token-bucket-response
+----
+
+# Set up throttling at just 1 RU/s.
+configure
+throttle: 1
+----
+
+# Issue 8K RU write to force fetch more RU.
+write bytes=8189952
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+2000.00 RU filling @ 1.00 RU/s
+
+# Issue another 4K RU write that should block.
+write bytes=4093952 label=w1
+----
+
+# Expect maximum maxTryAgainAfter value.
+timers
+----
+00:00:09.000
+00:16:40.000
+
+# Advance only 8 seconds, which isn't enough to trigger a token bucket request
+# in order to extend the trickle duration.
+advance wait=true
+8s
+----
+00:00:08.000
+
+not-completed label=w1
+----
+
+token-bucket
+----
+2008.00 RU filling @ 1.00 RU/s (4000.00 waiting RU)
+
+# Advance 1 more second, which should trigger a token bucket request to extend
+# the trickle duration. Note that the trickle grant will not have been fully
+# consumed at the time more is requested. The remainder will be rolled into the
+# new trickle grant (i.e. 1.10 RU/s rather than 1.00 RU/s).
+advance
+1s
+----
+00:00:09.000
+
+wait-for-event
+low-ru
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+2009.00 RU filling @ 1.10 RU/s (4000.00 waiting RU)
+
+advance
+1991s
+----
+00:33:20.000
+
+await label=w1
+----

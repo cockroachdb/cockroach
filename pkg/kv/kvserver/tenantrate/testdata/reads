@@ -1,11 +1,11 @@
 # This tests bursting and how requests above the burst limit put the limiter
-# into debt
+# into debt.
 
 init
 rate:  2
 burst: 4
-read:  { base: 1, perbyte: 0.1 }
-write: { base: 1, perbyte: 0.1 }
+read:  { perbatch: 1, perrequest: 1, perbyte: 0.1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -16,29 +16,43 @@ get_tenants
 [2#1, system#1]
 
 # Read the entire burst worth of bytes plus 0.4 which should put the limiter
-# in debt by 0.4. Also record a system read. We'll verify both show up in metrics.
+# in debt by 0.4. Also record a system read. We'll verify both show up in
+# metrics.
 
 record_read
-- { tenant: 2, readbytes: 34 }
-- { tenant: 1, readbytes: 10 }
+- { tenant: 2, readrequests: 1, readbytes: 24 }
+- { tenant: 1, readrequests: 1, readbytes: 10 }
 ----
 []
 
 # Verify that the above reads made it to the metrics.
 
 metrics
-kv_tenant_rate_limit_read_bytes_admitted
+kv_tenant_rate_limit_read_.*_admitted
 ----
-kv_tenant_rate_limit_read_bytes_admitted 44
-kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 34
+kv_tenant_rate_limit_read_batches_admitted 2
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 1
+kv_tenant_rate_limit_read_bytes_admitted 34
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 24
 kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 10
+kv_tenant_rate_limit_read_requests_admitted 2
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 1
 
-# Launch a request which will block because it needs 1 unit.
+# Launch a read request which will block because we're in debt.
 
 launch
 - { id: g1, tenant: 2 }
 ----
 [g1@2]
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
 
 timers
 ----
@@ -47,7 +61,7 @@ timers
 # Record more reads, putting the limiter further into debt.
 
 record_read
-- { tenant: 2, readbytes: 16 }
+- { tenant: 2, readrequests: 1, readbytes: 16 }
 ----
 [g1@2]
 
@@ -69,12 +83,12 @@ advance
 
 timers
 ----
-00:00:01.000
+00:00:02.000
 
 advance
-800ms
+1800ms
 ----
-00:00:01.001
+00:00:02.001
 
 await
 - g1

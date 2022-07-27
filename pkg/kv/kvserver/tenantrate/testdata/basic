@@ -1,8 +1,8 @@
 init
 rate:  1
-burst: 2
-read:  { base: 1, perbyte: 1 }
-write: { base: 1, perbyte: 1 }
+burst: 3
+read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 1 }
 ----
 00:00:00.000
 
@@ -13,13 +13,14 @@ get_tenants
 ----
 [2#2, 3#1, 5#3, system#1]
 
-# Launch two requests on behalf of tenant 2, one on behalf of 3, and one on
-# behalf of the system tenant.
+# Launch three requests on behalf of tenant 2, one on behalf of 3, and one on
+# behalf of the system tenant. Note that read requests do not consume quota;
+# only read responses do.
 
 launch
 - { id: g0, tenant: 1 }
 - { id: g1, tenant: 2 }
-- { id: g2, tenant: 2, iswrite: true }
+- { id: g2, tenant: 2, writerequests: 2 }
 - { id: g3, tenant: 3 }
 ----
 [g0@system, g1@2, g2@2, g3@3]
@@ -32,24 +33,43 @@ await
 ----
 []
 
-# Launch another read and another write request on behalf of tenant 2; they
-# will block because the burst limit only supports two requests.
+# Launch another write request on behalf of tenant 2; it will block because the
+# burst limit only supports three request units.
 
 launch
-- { id: g4, tenant: 2 }
-- { id: g5, tenant: 2, iswrite: true }
+- { id: g4, tenant: 2, writerequests: 1 }
 ----
-[g4@2, g5@2]
+[g4@2]
 
-# Ensure that it the above request was blocked by observing the timer it creates
-# to wait for available quota.
+# Ensure that the above request was blocked by observing the timer it creates to
+# wait for available quota.
 
 timers
 ----
-00:00:01.000
+00:00:02.000
 
 # Observe that the "current_blocked" counter has appropriate values to indicate
-# that there are two blocked request for tenant 2 and total.
+# that there is one blocked request for tenant 2 and total.
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+
+# Ensure that a read request will be blocked if there is no available quota
+# left. Note that we don't actually subtract the cost of the read until the
+# response, but we don't even want to attempt the read if there's no quota left.
+
+launch
+- { id: g5, tenant: 2 }
+----
+[g4@2, g5@2]
+
+# Observe that the "current_blocked" counter has been updated accordingly.
 
 metrics
 current_blocked
@@ -60,20 +80,30 @@ kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
 kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
 kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
 
-
 # Observe that the "requests_admitted" counters has appropriate values to
-# indicate that requests have been admitted.
+# indicate that write requests have been admitted, but that no read requests
+# have yet been admitted (since that happens during response).
 
 metrics
-kv_tenant_rate_limit_.*_requests_admitted
+kv_tenant_rate_limit_.*_(batches|requests)_admitted
 ----
-kv_tenant_rate_limit_read_requests_admitted 3
-kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 1
-kv_tenant_rate_limit_read_requests_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_read_batches_admitted 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_read_requests_admitted 0
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="3"} 0
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="5"} 0
-kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 1
-kv_tenant_rate_limit_write_requests_admitted 1
-kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_write_batches_admitted 1
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_write_requests_admitted 2
+kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 2
 kv_tenant_rate_limit_write_requests_admitted{tenant_id="3"} 0
 kv_tenant_rate_limit_write_requests_admitted{tenant_id="5"} 0
 kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
@@ -90,7 +120,6 @@ release_tenants
 metrics
 \{tenant_id="3"\}
 ----
-
 
 # Advance time to the point where there should be enough units for both
 # requests to go through.

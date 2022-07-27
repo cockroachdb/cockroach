@@ -6888,8 +6888,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	// Set an all-tenant override and a tenant-specific override.
 	// TODO(radu): use ALTER TENANT when available.
 	systemDB.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
-		(0, 'tenant_cost_model.kv_read_cost_per_megabyte', '123', 'f'),
-		(10, 'tenant_cost_model.kv_write_cost_per_megabyte', '456', 'f')`)
+		(0, 'tenant_cost_model.read_payload_cost_per_mebibyte', '123', 'f'),
+		(10, 'tenant_cost_model.write_payload_cost_per_mebibyte', '456', 'f')`)
 
 	systemDB.Exec(t, `BACKUP system.users TO 'nodelocal://1/users'`)
 	systemDB.CheckQueryResults(t, `SELECT manifest->>'tenants' FROM [SHOW BACKUP 'nodelocal://1/users' WITH as_json]`, [][]string{{"[]"}})
@@ -7080,8 +7080,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
 
 		// Verify cluster overrides.
-		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_read_cost_per_megabyte`, [][]string{{"123"}})
-		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_write_cost_per_megabyte`, [][]string{{"456"}})
+		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
+		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.write_payload_cost_per_mebibyte`, [][]string{{"456"}})
 
 		_, restoreConn11 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11), Existing: true},
@@ -7092,7 +7092,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant11.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
 
 		// Check the all-tenant override.
-		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_read_cost_per_megabyte`, [][]string{{"123"}})
+		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(20, true)`)
 
@@ -7106,7 +7106,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Tenant 20 gets results that matched the backed up tenant 11.
 		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
 		// Check the all-tenant override.
-		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_read_cost_per_megabyte`, [][]string{{"123"}})
+		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
 		// Remove tenant 11, then confirm restoring 11 over 10 fails.
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(11, true)`)

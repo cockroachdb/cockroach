@@ -331,12 +331,12 @@ func startTenantInternal(
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
-		userTimeMillis, _, err := status.GetCPUTime(ctx)
+		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
 		if err != nil {
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
 		return multitenant.ExternalUsage{
-			CPUSecs:           float64(userTimeMillis) * 1e-3,
+			CPUSecs:           float64(userTimeMillis+sysTimeMillis) * 1e-3,
 			PGWireEgressBytes: s.pgServer.BytesOut(),
 		}
 	}
@@ -636,28 +636,23 @@ func (noopTenantSideCostController) Start(
 	return nil
 }
 
-func (noopTenantSideCostController) OnRequestWait(
-	ctx context.Context, info tenantcostmodel.RequestInfo,
+func (noopTenantSideCostController) OnRequestWait(ctx context.Context) error {
+	return nil
+}
+
+func (noopTenantSideCostController) OnResponseWait(
+	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) error {
 	return nil
 }
 
-func (noopTenantSideCostController) OnResponse(
-	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-) {
-}
-
-func (noopTenantSideCostController) ExternalIOWriteWait(ctx context.Context, req int64) error {
+func (noopTenantSideCostController) OnExternalIOWait(
+	ctx context.Context, usage multitenant.ExternalIOUsage,
+) error {
 	return nil
 }
 
-func (noopTenantSideCostController) ExternalIOWriteSuccess(ctx context.Context, req int64) {
-}
-func (noopTenantSideCostController) ExternalIOWriteFailure(
-	ctx context.Context, used int64, unused int64,
+func (noopTenantSideCostController) OnExternalIO(
+	ctx context.Context, usage multitenant.ExternalIOUsage,
 ) {
-}
-
-func (noopTenantSideCostController) ExternalIOReadWait(ctx context.Context, req int64) error {
-	return nil
 }

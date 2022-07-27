@@ -141,8 +141,10 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		Consumption        struct {
 			RU                     float64 `yaml:"ru"`
 			KVRU                   float64 `yaml:"kvru"`
+			ReadBatches            uint64  `yaml:"read_batches"`
 			ReadReq                uint64  `yaml:"read_req"`
 			ReadBytes              uint64  `yaml:"read_bytes"`
+			WriteBatches           uint64  `yaml:"write_batches"`
 			WriteReq               uint64  `yaml:"write_req"`
 			WriteBytes             uint64  `yaml:"write_bytes"`
 			SQLPodsCPUUsage        float64 `yaml:"sql_pods_cpu_usage"`
@@ -177,8 +179,10 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                     args.Consumption.RU,
 			KVRU:                   args.Consumption.KVRU,
+			ReadBatches:            args.Consumption.ReadBatches,
 			ReadRequests:           args.Consumption.ReadReq,
 			ReadBytes:              args.Consumption.ReadBytes,
+			WriteBatches:           args.Consumption.WriteBatches,
 			WriteRequests:          args.Consumption.WriteReq,
 			WriteBytes:             args.Consumption.WriteBytes,
 			SQLPodsCPUSeconds:      args.Consumption.SQLPodsCPUUsage,

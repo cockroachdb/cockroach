@@ -35,33 +35,37 @@ func TestTokenBucket(t *testing.T) {
 	start := timeutil.Now()
 	ts := timeutil.NewManualTime(start)
 
-	ch := make(chan struct{}, 100)
-
 	var tb tokenBucket
-	tb.Init(ts.Now(), ch, 10 /* rate */, 100 /* available */)
+	tb.Init(ts.Now())
+	tb.Reconfigure(ts.Now(), tokenBucketReconfigureArgs{NewRate: 10, NewTokens: 100})
 
-	check := func(expected float64) {
+	check := func(expected string) {
 		t.Helper()
-		available := float64(tb.AvailableTokens(ts.Now()))
-		delta := math.Abs(available - expected)
-		if delta > 1e-5 {
-			t.Errorf("expected %g tokens, got %g", expected, available)
+		tb.update(ts.Now())
+		actual := tb.String(ts.Now())
+		if actual != expected {
+			t.Errorf("expected: %s\nactual: %s\n", expected, actual)
 		}
 	}
-	check(100)
+	check("100.00 RU filling @ 10.00 RU/s")
 
 	// Verify basic update.
 	ts.Advance(1 * time.Second)
-	check(110)
-
-	// Check RemoveTokens.
+	check("110.00 RU filling @ 10.00 RU/s")
+	// Check RemoveRU.
 	tb.RemoveTokens(ts.Now(), 200)
-	check(-90)
-
+	check("-70.00 RU filling @ 10.00 RU/s (20.00 waiting debt @ 10.00 RU/s)")
 	ts.Advance(1 * time.Second)
-	check(-80)
+	check("-70.00 RU filling @ 10.00 RU/s (10.00 waiting debt @ 10.00 RU/s)")
+	tb.RemoveTokens(ts.Now(), 5)
+	check("-70.00 RU filling @ 10.00 RU/s (15.00 waiting debt @ 7.50 RU/s)")
+	ts.Advance(1 * time.Second)
+	check("-67.50 RU filling @ 10.00 RU/s (7.50 waiting debt @ 7.50 RU/s)")
+	tb.RemoveTokens(ts.Now(), 5)
+	check("-67.50 RU filling @ 10.00 RU/s (12.50 waiting debt @ 6.25 RU/s)")
+
 	ts.Advance(15 * time.Second)
-	check(70)
+	check("70.00 RU filling @ 10.00 RU/s")
 
 	fulfill := func(amount tenantcostmodel.RU) {
 		t.Helper()
@@ -69,83 +73,49 @@ func TestTokenBucket(t *testing.T) {
 			t.Fatalf("failed to fulfill")
 		}
 	}
-	fulfill(50)
-	check(20)
-	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 40); ok {
+	fulfill(40)
+	check("30.00 RU filling @ 10.00 RU/s")
+
+	// TryAgainAfter should be the time to reach 60 RU.
+	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 60); ok {
 		t.Fatalf("fulfilled incorrectly")
-	} else if exp := 2 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
+	} else if exp := 3 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	check(20)
+	check("30.00 RU filling @ 10.00 RU/s")
 
-	// Check notification.
-	checkNoNotification := func() {
-		t.Helper()
-		select {
-		case <-ch:
-			t.Error("unexpected notification")
-		default:
-		}
-	}
-
-	checkNotification := func() {
-		t.Helper()
-		select {
-		case <-ch:
-		default:
-			t.Error("expected notification")
-		}
-	}
-
-	checkNoNotification()
-	args := tokenBucketReconfigureArgs{
-		NewRate:         10,
-		NotifyThreshold: 5,
-	}
-	tb.Reconfigure(ts.Now(), args)
-
-	checkNoNotification()
-	ts.Advance(1 * time.Second)
-	check(30)
-	fulfill(20)
-	// No notification: we did not go below the threshold.
-	checkNoNotification()
-	// Now we should get a notification.
-	fulfill(8)
-	checkNotification()
-	check(2)
-
-	// We only get one notification (until we Reconfigure or StartNotification).
-	fulfill(1)
-	checkNoNotification()
-
-	// Verify that we get notified when we block, even if the current amount is
-	// above the threshold.
-	args = tokenBucketReconfigureArgs{
-		NewTokens:       10,
-		NewRate:         10,
-		NotifyThreshold: 5,
-	}
-	tb.Reconfigure(ts.Now(), args)
-	check(11)
-	if ok, _ := tb.TryToFulfill(ts.Now(), 38); ok {
+	// Create massive debt and ensure that delay is = maxTryAgainAfterSeconds.
+	tb.RemoveTokens(ts.Now(), maxTryAgainAfterSeconds*10+60)
+	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 0); ok {
 		t.Fatalf("fulfilled incorrectly")
+	} else if exp := maxTryAgainAfterSeconds * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
+		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	checkNotification()
+	check("-10010.00 RU filling @ 10.00 RU/s (20.00 waiting debt @ 10.00 RU/s)")
+	ts.Advance(maxTryAgainAfterSeconds * time.Second)
+	check("-30.00 RU filling @ 10.00 RU/s")
 
-	args = tokenBucketReconfigureArgs{
-		NewTokens: 80,
-		NewRate:   1,
+	// Set zero rate.
+	args := tokenBucketReconfigureArgs{
+		NewRate: 0,
 	}
 	tb.Reconfigure(ts.Now(), args)
-	check(91)
-	ts.Advance(1 * time.Second)
+	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 0); ok {
+		t.Fatalf("fulfilled incorrectly")
+	} else if exp := maxTryAgainAfterSeconds * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
+		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
+	}
 
-	checkNoNotification()
-	tb.SetupNotification(ts.Now(), 50)
-	checkNoNotification()
-	fulfill(60)
-	checkNotification()
+	// Set infinite rate.
+	args = tokenBucketReconfigureArgs{
+		NewRate: tenantcostmodel.RU(math.Inf(1)),
+	}
+	tb.Reconfigure(ts.Now(), args)
+	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 0); ok {
+		t.Fatalf("fulfilled incorrectly")
+	} else if exp := time.Nanosecond; tryAgainAfter != exp {
+		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
+	}
 }
 
 // TestTokenBucketTryToFulfill verifies that the tryAgainAfter time returned by
@@ -166,7 +136,11 @@ func TestTokenBucketTryToFulfill(t *testing.T) {
 	for run := 0; run < runs; run++ {
 		var tb tokenBucket
 		clock := timeutil.NewManualTime(start)
-		tb.Init(clock.Now(), nil, randRU(1, 100), randRU(0, 500))
+		tb.Init(clock.Now())
+		tb.Reconfigure(clock.Now(), tokenBucketReconfigureArgs{
+			NewRate:   randRU(0, 500),
+			NewTokens: randRU(1, 100),
+		})
 
 		// Advance a random amount of time.
 		clock.Advance(randDuration(100 * time.Millisecond))
@@ -225,7 +199,8 @@ func TestTokenBucketDebt(t *testing.T) {
 	ts := timeutil.NewManualTime(start)
 
 	var tb tokenBucket
-	tb.Init(ts.Now(), nil, 100 /* rate */, 0 /* available */)
+	tb.Init(ts.Now())
+	tb.Reconfigure(start, tokenBucketReconfigureArgs{NewRate: 100})
 
 	const tickDuration = time.Millisecond
 	const debtPeriod = time.Second

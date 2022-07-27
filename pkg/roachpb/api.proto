@@ -2818,8 +2818,10 @@ message TenantSetting {
 message TenantConsumption {
   double r_u = 1;
   double kv_r_u = 8 [(gogoproto.customname) = "KVRU"];
+  uint64 read_batches = 11;
   uint64 read_requests = 2;
   uint64 read_bytes = 3;
+  uint64 write_batches = 12;
   uint64 write_requests = 4;
   uint64 write_bytes = 5;
   double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];

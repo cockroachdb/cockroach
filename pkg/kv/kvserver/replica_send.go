@@ -199,7 +199,7 @@ func (r *Replica) sendWithoutRangeID(
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 	}
 
-	r.recordImpactOnRateLimiter(ctx, br)
+	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, pErr
 }
 

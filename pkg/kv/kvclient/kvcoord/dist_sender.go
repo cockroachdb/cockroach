@@ -770,14 +770,6 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
-	var reqInfo tenantcostmodel.RequestInfo
-	if ds.kvInterceptor != nil {
-		reqInfo = tenantcostmodel.MakeRequestInfo(&ba)
-		if err := ds.kvInterceptor.OnRequestWait(ctx, reqInfo); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-	}
-
 	splitET := false
 	var require1PC bool
 	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
@@ -870,11 +862,6 @@ func (ds *DistSender) Send(
 		lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
 		lastHeader.CollectedSpans = reply.CollectedSpans
 		reply.BatchResponse_Header = lastHeader
-
-		if ds.kvInterceptor != nil {
-			respInfo := tenantcostmodel.MakeResponseInfo(reply)
-			ds.kvInterceptor.OnResponse(ctx, reqInfo, respInfo)
-		}
 	}
 
 	return reply, nil
@@ -1999,6 +1986,12 @@ func (ds *DistSender) sendToReplicas(
 	var sameReplicaRetries int
 	var prevReplica roachpb.ReplicaDescriptor
 
+	if ds.kvInterceptor != nil {
+		if err := ds.kvInterceptor.OnRequestWait(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
 	var ambiguousError error
@@ -2160,6 +2153,16 @@ func (ds *DistSender) sendToReplicas(
 						br.RangeInfos = nil
 					}
 				}
+
+				if ds.kvInterceptor != nil {
+					numReplicas := len(desc.Replicas().Descriptors())
+					reqInfo := tenantcostmodel.MakeRequestInfo(&ba, numReplicas)
+					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite())
+					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
+						return nil, err
+					}
+				}
+
 				return br, nil
 			}
 

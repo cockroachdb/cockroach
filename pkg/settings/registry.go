@@ -126,8 +126,14 @@ var retiredSettings = map[string]struct{}{
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
 
-	// removed as of 22.1.2 and 22.2.
-	"sql.ttl.range_batch_size": {},
+	// removed as of 22.1.2.
+	"tenant_cost_model.kv_read_request_cost":            {},
+	"tenant_cost_model.kv_read_cost_per_megabyte":       {},
+	"tenant_cost_model.kv_write_request_cost":           {},
+	"tenant_cost_model.kv_write_cost_per_megabyte":      {},
+	"tenant_cost_model.pod_cpu_second_cost":             {},
+	"tenant_cost_model.pgwire_egress_cost_per_megabyte": {},
+	"sql.ttl.range_batch_size":                          {},
 }
 
 // register adds a setting to the registry.

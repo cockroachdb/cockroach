@@ -932,6 +932,18 @@ var charts = []sectionDescription{
 				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
 			},
 			{
+				Title:       "Read Batches Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.read_batches_admitted"},
+			},
+			{
+				Title:       "Write Batches Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.write_batches_admitted"},
+			},
+			{
 				Title:       "Read Requests Admitted by Rate Limiter",
 				Downsampler: DescribeAggregator_MAX,
 				Percentiles: false,

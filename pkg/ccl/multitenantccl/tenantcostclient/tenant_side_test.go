@@ -88,44 +88,20 @@ type testState struct {
 	stopper    *stop.Stopper
 	provider   *testProvider
 	controller multitenant.TenantSideCostController
+	eventWait  *eventWaiter
 
 	// external usage values, accessed using atomic.
 	cpuUsage          time.Duration
 	pgwireEgressBytes int64
 
 	requestDoneCh map[string]chan struct{}
-
-	eventsCh chan event
 }
-
-type event struct {
-	time time.Time
-	typ  tenantcostclient.TestEventType
-}
-
-var _ tenantcostclient.TestInstrumentation = (*testState)(nil)
 
 var eventTypeStr = map[tenantcostclient.TestEventType]string{
 	tenantcostclient.TickProcessed:                "tick",
 	tenantcostclient.LowRUNotification:            "low-ru",
 	tenantcostclient.TokenBucketResponseProcessed: "token-bucket-response",
-	tenantcostclient.WaitingRUAccountedInCallback: "waiting-ru-accounted",
-}
-
-// Event is part of tenantcostclient.TestInstrumentation.
-func (ts *testState) Event(now time.Time, typ tenantcostclient.TestEventType) {
-	ev := event{
-		time: now,
-		typ:  typ,
-	}
-	select {
-	case ts.eventsCh <- ev:
-		if testing.Verbose() {
-			log.Infof(context.Background(), "event %s at %s\n", eventTypeStr[typ], now.Format(timeFormat))
-		}
-	default:
-		panic("events channel full")
-	}
+	tenantcostclient.TokenBucketResponseError:     "token-bucket-response-error",
 }
 
 const timeFormat = "15:04:05.000"
@@ -138,14 +114,14 @@ func (ts *testState) start(t *testing.T) {
 	ctx := context.Background()
 
 	ts.requestDoneCh = make(map[string]chan struct{})
-	ts.eventsCh = make(chan event, 10000)
 
 	ts.timeSrc = timeutil.NewManualTime(t0)
+	ts.eventWait = newEventWaiter(ts.timeSrc)
 
 	ts.settings = cluster.MakeTestingClusterSettings()
 	// Fix settings so that the defaults can be changed without updating the test.
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &ts.settings.SV, 10*time.Second)
-	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 0)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 10*time.Millisecond)
 
 	ts.stopper = stop.NewStopper()
 	var err error
@@ -155,7 +131,7 @@ func (ts *testState) start(t *testing.T) {
 		roachpb.MakeTenantID(5),
 		ts.provider,
 		ts.timeSrc,
-		ts,
+		ts.eventWait,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -183,10 +159,11 @@ func (ts *testState) stop() {
 }
 
 type cmdArgs struct {
-	bytes int64
-	label string
-
-	unused int64
+	count  int64
+	bytes  int64
+	repeat int64
+	label  string
+	wait   bool
 }
 
 func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
@@ -202,25 +179,53 @@ func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
 
 func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 	var res cmdArgs
+	res.count = 1
 	for _, args := range d.CmdArgs {
 		switch args.Key {
+		case "count":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for count")
+			}
+			val, err := strconv.Atoi(args.Vals[0])
+			if err != nil {
+				d.Fatalf(t, "invalid count value")
+			}
+			res.count = int64(val)
+
 		case "bytes":
 			v, err := parseBytesVal(args)
 			if err != nil {
 				d.Fatalf(t, err.Error())
 			}
 			res.bytes = v
-		case "unused":
-			v, err := parseBytesVal(args)
-			if err != nil {
-				d.Fatalf(t, err.Error())
+
+		case "repeat":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for repeat")
 			}
-			res.unused = v
+			val, err := strconv.Atoi(args.Vals[0])
+			if err != nil {
+				d.Fatalf(t, "invalid repeat value")
+			}
+			res.repeat = int64(val)
+
 		case "label":
 			if len(args.Vals) != 1 || args.Vals[0] == "" {
 				d.Fatalf(t, "label requires a value")
 			}
 			res.label = args.Vals[0]
+
+		case "wait":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for wait")
+			}
+			switch args.Vals[0] {
+			case "true":
+				res.wait = true
+			case "false":
+			default:
+				d.Fatalf(t, "invalid wait value")
+			}
 		}
 	}
 	return res
@@ -244,48 +249,39 @@ var testStateCommands = map[string]func(
 	"disable-external-ru-accounting": (*testState).disableRUAccounting,
 	"usage":                          (*testState).usage,
 	"configure":                      (*testState).configure,
+	"token-bucket":                   (*testState).tokenBucket,
+	"unblock-request":                (*testState).unblockRequest,
 }
 
-func (ts *testState) fireRequest(
-	t *testing.T, reqInfo tenantcostmodel.RequestInfo, respInfo tenantcostmodel.ResponseInfo,
-) chan struct{} {
-	ch := make(chan struct{})
-	go func() {
-		ctx := context.Background()
-		if err := ts.controller.OnRequestWait(ctx, reqInfo); err != nil {
-			t.Errorf("OnRequestWait error: %v", err)
+// runOperation invokes the given operation function on a background goroutine.
+// If label is empty, runOperation will synchronously wait for the operation to
+// complete. Otherwise, it will enter the label in the requestDoneCh map so that
+// the caller can wait for it to complete.
+func (ts *testState) runOperation(t *testing.T, d *datadriven.TestData, label string, op func()) {
+	runInBackground := func(op func()) chan struct{} {
+		ch := make(chan struct{})
+		go func() {
+			op()
+			close(ch)
+		}()
+		return ch
+	}
+
+	if label != "" {
+		// Async case.
+		if _, ok := ts.requestDoneCh[label]; ok {
+			d.Fatalf(t, "label %v already in use", label)
 		}
-		ts.controller.OnResponse(ctx, reqInfo, respInfo)
-		close(ch)
-	}()
-	return ch
-}
 
-func (ts *testState) syncRequest(
-	t *testing.T,
-	d *datadriven.TestData,
-	reqInfo tenantcostmodel.RequestInfo,
-	respInfo tenantcostmodel.ResponseInfo,
-) {
-	select {
-	case <-ts.fireRequest(t, reqInfo, respInfo):
-	case <-time.After(timeout):
-		d.Fatalf(t, "request timed out")
+		ts.requestDoneCh[label] = runInBackground(op)
+	} else {
+		// Sync case.
+		select {
+		case <-runInBackground(op):
+		case <-time.After(timeout):
+			d.Fatalf(t, "request timed out")
+		}
 	}
-}
-
-func (ts *testState) asyncRequest(
-	t *testing.T,
-	d *datadriven.TestData,
-	reqInfo tenantcostmodel.RequestInfo,
-	respInfo tenantcostmodel.ResponseInfo,
-	label string,
-) {
-	if _, ok := ts.requestDoneCh[label]; ok {
-		d.Fatalf(t, "label %v already in use", label)
-	}
-
-	ts.requestDoneCh[label] = ts.fireRequest(t, reqInfo, respInfo)
 }
 
 // request simulates processing a read or write. If a label is provided, the
@@ -293,42 +289,51 @@ func (ts *testState) asyncRequest(
 func (ts *testState) request(
 	t *testing.T, d *datadriven.TestData, isWrite bool, args cmdArgs,
 ) string {
-	var writeBytes, readBytes int64
-	if isWrite {
-		writeBytes = args.bytes
-	} else {
-		readBytes = args.bytes
+	ctx := context.Background()
+	repeat := args.repeat
+	if repeat == 0 {
+		repeat = 1
 	}
-	reqInfo := tenantcostmodel.TestingRequestInfo(isWrite, writeBytes)
-	respInfo := tenantcostmodel.TestingResponseInfo(readBytes)
-	if args.label == "" {
-		ts.syncRequest(t, d, reqInfo, respInfo)
-	} else {
-		ts.asyncRequest(t, d, reqInfo, respInfo, args.label)
+
+	for ; repeat > 0; repeat-- {
+		var writeCount, readCount, writeBytes, readBytes int64
+		if isWrite {
+			writeCount = args.count
+			writeBytes = args.bytes
+		} else {
+			readCount = args.count
+			readBytes = args.bytes
+		}
+		reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes)
+		respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes)
+		ts.runOperation(t, d, args.label, func() {
+			if err := ts.controller.OnRequestWait(ctx); err != nil {
+				t.Errorf("OnRequestWait error: %v", err)
+			}
+			if err := ts.controller.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
+				t.Errorf("OnResponseWait error: %v", err)
+			}
+		})
 	}
 	return ""
 }
 
 func (ts *testState) externalIngress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
-	bytesRead := args.bytes
-	if err := ts.controller.ExternalIOReadWait(context.Background(), bytesRead); err != nil {
-		t.Errorf("ExternalIOReadWait error: %s", err)
+	usage := multitenant.ExternalIOUsage{IngressBytes: args.bytes}
+	if err := ts.controller.OnExternalIOWait(context.Background(), usage); err != nil {
+		t.Errorf("OnExternalIOWait error: %s", err)
 	}
 	return ""
 }
 
 func (ts *testState) externalEgress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
 	ctx := context.Background()
-	bytesWritten := args.bytes
-	if err := ts.controller.ExternalIOWriteWait(ctx, args.bytes); err != nil {
-		t.Errorf("ExternalIOWriteWait error: %s", err)
-		return ""
-	}
-	if args.unused > 0 {
-		ts.controller.ExternalIOWriteFailure(ctx, bytesWritten-args.unused, args.unused)
-	} else {
-		ts.controller.ExternalIOWriteSuccess(ctx, bytesWritten)
-	}
+	usage := multitenant.ExternalIOUsage{EgressBytes: args.bytes}
+	ts.runOperation(t, d, args.label, func() {
+		if err := ts.controller.OnExternalIOWait(ctx, usage); err != nil {
+			t.Errorf("OnExternalIOWait error: %s", err)
+		}
+	})
 	return ""
 }
 
@@ -394,40 +399,50 @@ func (ts *testState) notCompleted(t *testing.T, d *datadriven.TestData, args cmd
 //  ----
 //  00:00:02.000
 //
+// An optional "wait" argument will cause advance to block until it receives a
+// tick event, indicating the clock change has been processed.
 func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	ctx := context.Background()
 	dur, err := time.ParseDuration(d.Input)
 	if err != nil {
 		d.Fatalf(t, "failed to parse input as duration: %v", err)
 	}
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.Infof(ctx, "Advance %v", dur)
+	}
 	ts.timeSrc.Advance(dur)
+	if args.wait {
+		// Wait for tick event.
+		ts.waitForEvent(t, &datadriven.TestData{Input: "tick"}, cmdArgs{})
+	}
 	return ts.timeSrc.Now().Format(timeFormat)
 }
 
-// waitForEvent waits until the tenant controller reports the given event type,
-// at the current time.
+// waitForEvent waits until the tenant controller reports the given event
+// type(s), at the current time.
 func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
 	typs := make(map[string]tenantcostclient.TestEventType)
 	for ev, evStr := range eventTypeStr {
 		typs[evStr] = ev
 	}
+
 	typ, ok := typs[d.Input]
 	if !ok {
 		d.Fatalf(t, "unknown event type %s (supported types: %v)", d.Input, typs)
 	}
 
-	now := ts.timeSrc.Now()
-	for {
-		select {
-		case ev := <-ts.eventsCh:
-			if ev.time == now && ev.typ == typ {
-				return ""
-			}
-			// Drop the event.
-
-		case <-time.After(timeout):
-			d.Fatalf(t, "did not receive event %s", d.Input)
-		}
+	if !ts.eventWait.WaitForEvent(typ) {
+		d.Fatalf(t, "did not receive event %s", d.Input)
 	}
+
+	return ""
+}
+
+// unblockRequest resumes a token bucket request that was blocked by the
+// "blockRequest" configuration option.
+func (ts *testState) unblockRequest(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	ts.provider.unblockRequest(t)
+	return ""
 }
 
 // timers waits for the set of open timers to match the expected output.
@@ -452,13 +467,13 @@ func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) 
 	}
 
 	exp := strings.TrimSpace(d.Expected)
-	if err := testutils.SucceedsSoonError(func() error {
+	if err := testutils.SucceedsWithinError(func() error {
 		got := timesToString(ts.timeSrc.Timers())
 		if got != exp {
 			return errors.Errorf("got: %q, exp: %q", got, exp)
 		}
 		return nil
-	}); err != nil {
+	}, timeout); err != nil {
 		d.Fatalf(t, "failed to find expected timers: %v", err)
 	}
 	return d.Expected
@@ -480,6 +495,11 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData, args cmdArg
 	}
 	ts.provider.configure(cfg)
 	return ""
+}
+
+// tokenBucket dumps the current state of the tenant's token bucket.
+func (ts *testState) tokenBucket(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+	return tenantcostclient.TestingTokenBucketString(ts.controller)
 }
 
 // cpu adds CPU usage which will be observed by the controller on the next main
@@ -504,29 +524,15 @@ func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, args cmd
 	return ""
 }
 
-// usage advances the clock until the latest consumption is reported and prints
-// out the latest consumption.
+// usage prints out the latest consumption. Callers are responsible for
+// triggering calls to the token bucket provider and waiting for responses.
 func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
-	stopCh := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-stopCh:
-				return
-			default:
-				ts.timeSrc.Advance(10 * time.Second)
-				time.Sleep(time.Millisecond)
-			}
-		}
-	}()
-	defer close(stopCh)
-
-	c := ts.provider.waitForConsumption(t)
+	c := ts.provider.consumption()
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
 		"KVRU:  %.2f\n"+
-		"Reads:  %d requests (%d bytes)\n"+
-		"Writes:  %d requests (%d bytes)\n"+
+		"Reads:  %d requests in %d batches (%d bytes)\n"+
+		"Writes:  %d requests in %d batches (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
 		"PGWire egress:  %d bytes\n"+
 		"ExternalIO egress: %d bytes\n"+
@@ -534,14 +540,67 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 		c.RU,
 		c.KVRU,
 		c.ReadRequests,
+		c.ReadBatches,
 		c.ReadBytes,
 		c.WriteRequests,
+		c.WriteBatches,
 		c.WriteBytes,
 		c.SQLPodsCPUSeconds,
 		c.PGWireEgressBytes,
 		c.ExternalIOEgressBytes,
 		c.ExternalIOIngressBytes,
 	)
+}
+
+type event struct {
+	time time.Time
+	typ  tenantcostclient.TestEventType
+}
+
+type eventWaiter struct {
+	timeSrc *timeutil.ManualTime
+	ch      chan event
+}
+
+var _ tenantcostclient.TestInstrumentation = (*eventWaiter)(nil)
+
+func newEventWaiter(timeSrc *timeutil.ManualTime) *eventWaiter {
+	return &eventWaiter{timeSrc: timeSrc, ch: make(chan event, 10000)}
+}
+
+// Event implements the TestInstrumentation interface.
+func (ew *eventWaiter) Event(now time.Time, typ tenantcostclient.TestEventType) {
+	ev := event{
+		time: now,
+		typ:  typ,
+	}
+	select {
+	case ew.ch <- ev:
+		if testing.Verbose() {
+			log.Infof(context.Background(), "event %s at %s\n",
+				eventTypeStr[typ], now.Format(timeFormat))
+		}
+	default:
+		panic("events channel full")
+	}
+}
+
+// WaitForEvent returns true if it receives the given event type at the current
+// time. If it fails to do this before timeout, it returns false.
+func (ew *eventWaiter) WaitForEvent(typ tenantcostclient.TestEventType) bool {
+	now := ew.timeSrc.Now()
+	for {
+		select {
+		case ev := <-ew.ch:
+			if ev.time == now && ev.typ == typ {
+				return true
+			}
+			// Else drop the event.
+
+		case <-time.After(timeout):
+			return false
+		}
+	}
 }
 
 // testProvider is a testing implementation of kvtenant.TokenBucketProvider,
@@ -555,15 +614,21 @@ type testProvider struct {
 		cfg testProviderConfig
 	}
 	recvOnRequest chan struct{}
+	sendOnRequest chan struct{}
 }
 
 type testProviderConfig struct {
-	// If zero, the provider always grants RUs immediately. If non-zero, the
-	// provider grants RUs at this rate.
+	// If zero, the provider always grants RUs immediately. If positive, the
+	// provider grants RUs at this rate. If negative, the provider never grants
+	// RUs.
 	Throttle float64 `yaml:"throttle"`
 
 	// If set, the provider always errors out.
-	Error bool `yaml:"error"`
+	ProviderError bool `yaml:"error"`
+
+	// If set, the provider blocks after receiving each TokenBucket request and
+	// waits until unblockRequest is called.
+	ProviderBlock bool `yaml:"block"`
 
 	FallbackRate float64 `yaml:"fallback_rate"`
 }
@@ -573,6 +638,7 @@ var _ kvtenant.TokenBucketProvider = (*testProvider)(nil)
 func newTestProvider() *testProvider {
 	return &testProvider{
 		recvOnRequest: make(chan struct{}),
+		sendOnRequest: make(chan struct{}),
 	}
 }
 
@@ -594,6 +660,12 @@ func (tp *testProvider) waitForRequest(t *testing.T) {
 	}
 }
 
+func (tp *testProvider) consumption() roachpb.TenantConsumption {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return tp.mu.consumption
+}
+
 // waitForConsumption waits for the next TokenBucket request and returns the
 // total consumption.
 func (tp *testProvider) waitForConsumption(t *testing.T) roachpb.TenantConsumption {
@@ -602,9 +674,20 @@ func (tp *testProvider) waitForConsumption(t *testing.T) roachpb.TenantConsumpti
 	// prepared; we have to wait for another one to make sure the latest
 	// consumption is incorporated.
 	tp.waitForRequest(t)
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
-	return tp.mu.consumption
+	return tp.consumption()
+}
+
+// unblockRequest unblocks a TokenBucket request that was blocked by the "block"
+// configuration option. This is used to test race conditions.
+func (tp *testProvider) unblockRequest(t *testing.T) {
+	t.Helper()
+	// Try to receive through the unbuffered channel, which blocks until
+	// TokenBucket sends.
+	select {
+	case <-tp.sendOnRequest:
+	case <-time.After(timeout):
+		t.Fatal("did not receive request")
+	}
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -623,22 +706,135 @@ func (tp *testProvider) TokenBucket(
 	}
 	tp.mu.lastSeqNum = in.SeqNum
 
-	if tp.mu.cfg.Error {
+	if tp.mu.cfg.ProviderError {
 		return nil, errors.New("injected error")
 	}
+	if tp.mu.cfg.ProviderBlock {
+		// Block until unblockRequest is called.
+		select {
+		case tp.sendOnRequest <- struct{}{}:
+		case <-time.After(timeout):
+			return nil, errors.New("TokenBucket was never unblocked")
+		}
+	}
+
 	tp.mu.consumption.Add(&in.ConsumptionSinceLastRequest)
 	res := &roachpb.TokenBucketResponse{}
 
-	res.GrantedRU = in.RequestedRU
-	if rate := tp.mu.cfg.Throttle; rate > 0 {
-		res.TrickleDuration = time.Duration(in.RequestedRU / rate * float64(time.Second))
-		if res.TrickleDuration > in.TargetRequestPeriod {
-			res.GrantedRU *= in.TargetRequestPeriod.Seconds() / res.TrickleDuration.Seconds()
-			res.TrickleDuration = in.TargetRequestPeriod
+	rate := tp.mu.cfg.Throttle
+	if rate >= 0 {
+		res.GrantedRU = in.RequestedRU
+		if rate > 0 {
+			res.TrickleDuration = time.Duration(in.RequestedRU / rate * float64(time.Second))
+			if res.TrickleDuration > in.TargetRequestPeriod {
+				res.GrantedRU *= in.TargetRequestPeriod.Seconds() / res.TrickleDuration.Seconds()
+				res.TrickleDuration = in.TargetRequestPeriod
+			}
 		}
 	}
 	res.FallbackRate = tp.mu.cfg.FallbackRate
 	return res, nil
+}
+
+// TestWaitingRU verifies that multiple concurrent requests that stack up in the
+// quota pool are reflected in AvailableRU.
+func TestWaitingRU(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Disable CPU consumption so that it doesn't interfere with test.
+	st := cluster.MakeTestingClusterSettings()
+	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, time.Second)
+
+	// Refill the token bucket at a fixed 100 RU/s so that we can limit
+	// non-determinism in the test.
+	testProvider := newTestProvider()
+	testProvider.configure(testProviderConfig{ProviderError: true})
+
+	tenantID := serverutils.TestTenantID()
+	timeSource := timeutil.NewManualTime(t0)
+	eventWait := newEventWaiter(timeSource)
+	ctrl, err := tenantcostclient.TestingTenantSideCostController(
+		st, tenantID, testProvider, timeSource, eventWait)
+	require.NoError(t, err)
+
+	// Immediately consume the initial 10K RUs.
+	require.NoError(t, ctrl.OnResponseWait(ctx,
+		tenantcostmodel.TestingRequestInfo(1, 1, 10237952), tenantcostmodel.ResponseInfo{}))
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	externalUsage := func(ctx context.Context) multitenant.ExternalUsage {
+		return multitenant.ExternalUsage{}
+	}
+	nextLiveInstanceID := func(ctx context.Context) base.SQLInstanceID { return 2 }
+	require.NoError(t, ctrl.Start(
+		ctx, stopper, 1, "test", externalUsage, nextLiveInstanceID))
+
+	// Wait for the initial token bucket response.
+	require.True(t, eventWait.WaitForEvent(tenantcostclient.TokenBucketResponseError))
+
+	// Send 20 KV requests for 1K RU each.
+	const count = 20
+	const fillRate = 100
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952)
+	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0)
+
+	testutils.SucceedsSoon(t, func() error {
+		tenantcostclient.TestingSetRate(ctrl, fillRate)
+
+		var doneCount int64
+		for i := 0; i < count; i++ {
+			go func(i int) {
+				require.NoError(t, ctrl.OnRequestWait(ctx))
+				require.NoError(t, ctrl.OnResponseWait(ctx, req, resp))
+				atomic.AddInt64(&doneCount, 1)
+			}(i)
+		}
+
+		// If available RUs drop below -1K, then multiple responses must be waiting.
+		succeeded := false
+		for i := 0; i < count; i++ {
+			available := tenantcostclient.TestingAvailableRU(ctrl)
+			if available < -1000 {
+				succeeded = true
+			}
+
+			timeSource.Advance(10 * time.Second)
+			require.True(t, eventWait.WaitForEvent(tenantcostclient.TickProcessed))
+		}
+
+		// Wait for all background goroutines to finish. It's necessary to
+		// advance time while waiting in order to resolve a race condition: the
+		// quota pool gets a "tryAgainAfter" value that gets added to the current
+		// time in order to set a retry timer. However, the current time might be
+		// updated at any instant by the foreground goroutine. Therefore, it's
+		// possible for there to be sufficient tokens in the bucket, and yet have
+		// one or more background goroutines waiting for them.
+		testutils.SucceedsWithin(t, func() error {
+			if atomic.LoadInt64(&doneCount) == count {
+				return nil
+			}
+			// Zero out bucket fill rate so that advancing time does not grant
+			// new tokens.
+			tenantcostclient.TestingSetRate(ctrl, 0)
+			timeSource.Advance(10 * time.Second)
+			time.Sleep(time.Millisecond)
+			return errors.Errorf("waiting for background goroutines to finish (now=%v, timers=%v)",
+				timeSource.Now(), timesToString(timeSource.Timers()))
+		}, timeout)
+
+		available := tenantcostclient.TestingAvailableRU(ctrl)
+		if succeeded {
+			require.Equal(t, tenantcostmodel.RU(0), available)
+			return nil
+		}
+
+		return errors.Errorf("RUs did not drop below 1K: %0.2f", available)
+	})
 }
 
 // TestConsumption verifies consumption reporting from a tenant server process.
@@ -668,19 +864,21 @@ func TestConsumption(t *testing.T) {
 		},
 	})
 	r := sqlutils.MakeSQLRunner(tenantDB)
-	r.Exec(t, "CREATE TABLE t (v STRING)")
+	// Create a secondary index to ensure that writes to both indexes are
+	// recorded in metrics.
+	r.Exec(t, "CREATE TABLE t (v STRING, w STRING, INDEX (w, v))")
 	// Do some writes and reads and check the reported consumption. Repeat the
 	// test a few times, since background requests can trick the test into
 	// passing.
 	for repeat := 0; repeat < 5; repeat++ {
 		beforeWrite := testProvider.waitForConsumption(t)
-		r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+		r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 		const expectedBytes = 10 * 10 * 1024
 
 		afterWrite := testProvider.waitForConsumption(t)
 		delta := afterWrite
 		delta.Sub(&beforeWrite)
-		if delta.WriteRequests < 1 || delta.WriteBytes < expectedBytes {
+		if delta.WriteBatches < 1 || delta.WriteRequests < 2 || delta.WriteBytes < expectedBytes*2 {
 			t.Errorf("usage after write: %s", delta.String())
 		}
 
@@ -689,7 +887,7 @@ func TestConsumption(t *testing.T) {
 		afterRead := testProvider.waitForConsumption(t)
 		delta = afterRead
 		delta.Sub(&afterWrite)
-		if delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
+		if delta.ReadBatches < 1 || delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
 			t.Errorf("usage after read: %s", delta.String())
 		}
 		r.Exec(t, "DELETE FROM t WHERE true")
@@ -957,8 +1155,14 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	hostServer, hostSQL, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer hostServer.Stopper().Stop(context.Background())
 
+	// Override the external I/O egress cost so that we don't run out of RUs
+	// during this benchmark.
+	st := cluster.MakeTestingClusterSettings()
+	tenantcostmodel.ExternalIOEgressCostPerMiB.Override(context.Background(), &st.SV, 0.0)
 	tenantS, _ := serverutils.StartTenant(b, hostServer, base.TestTenantArgs{
-		TenantID: serverutils.TestTenantID(),
+		TenantID:                    serverutils.TestTenantID(),
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
 	})
 
 	nullsink.NullRequiresExternalIOAccounting = true

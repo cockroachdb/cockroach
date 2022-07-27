@@ -9,6 +9,7 @@
 package tenantcostclient
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -17,14 +18,7 @@ import (
 // tokenBucket implements a token bucket. It is a more specialized form of
 // quotapool.TokenBucket. The main differences are:
 //  - it does not currently support a burst limit;
-//  - it implements a "low tokens" notification mechanism;
 //  - it has special debt handling.
-//
-// -- Notification mechanism --
-//
-// Notifications can be configured to fire when the number of available RUs dips
-// below a certain value (or when a request blocks). Notifications are delivered
-// via a non-blocking send to a given channel.
 //
 // -- Debt handling --
 //
@@ -32,28 +26,29 @@ import (
 // for usage that cannot be throttled (e.g. read/transferred bytes, CPU usage).
 // This can bring the token bucket into debt.
 //
-// The simplest handling of debt is to always pay the debt first, blocking all
-// operations that require tokens in the mean time. However, this is undesirable
-// because the accounting can happen at arbitrary intervals which can lead to
-// the workload periodically experiencing starvation (e.g. CPU usage might be
-// accounted for only once per second, which can lead to all requests being
-// blocked for the beginning part of each second).
+// The simplest handling of debt is to immediately subtract it from available
+// tokens, and then blocking all operations that require tokens in the meantime.
+// However, this is undesirable because the accounting can happen at arbitrary
+// intervals which can lead to the workload periodically experiencing starvation
+// (e.g. CPU usage might be accounted for only once per second, which can lead
+// to all requests being blocked for the beginning part of each second).
 //
-// Instead, we aim to pay all outstanding debt D within time T from the time the
-// last debt was incurred. We do this by splitting the refill rate into D/T and
-// using only what's left for replenishing tokens.
+// Instead, we apply any un-throttled debt D over a time period T, starting from
+// the time the last debt was incurred. We do this by splitting the refill rate
+// into D/T and using only what's left for replenishing tokens.
 //
 // This rate is recalculated every time we incur debt. So in essence, every time
-// we incur debt, we put it together with all existing debt and plan to pay it
-// within time T (we can think of this as "refinancing" the existing debt).
+// we incur debt, we put it together with any other waiting debt and then plan
+// to subtract it from available tokens over time T (we can think of this as
+// "refinancing" the existing waiting debt).
 //
-// This behavior is somewhat arbitrary because the rate at which we pay debt
-// depends on how frequently we incur additional debt. To see how much it can
-// vary, imagine that at time t=0 we incur some debt D(0) and consider the two
-// extremes:
+// This behavior is somewhat arbitrary because the rate at which we apply
+// waiting debt depends on how frequently we incur additional debt. To see how
+// much it can vary, imagine that at time t=0 we incur some debt D(0) and
+// consider the two extremes:
 //
 //   A. We start with debt D(0), and we never recalculate the rate (no
-//      "refinancing"). We pay debt at constant rate D(0) / T and all debt is
+//      "refinancing"). We apply debt at constant rate D(0) / T and all debt is
 //      paid at time T.
 //
 //   B. We start with debt D(0), and we recalculate the rate ("refinance")
@@ -62,57 +57,47 @@ import (
 //        D'(t) = - D(t) / T
 //      The debt formula is:
 //        D(t) = D(0) * e^(-t/T)
-//      We pay 63% of the debt in time T; 86% in 2T; and 95% in 3T.
+//      We apply 63% of the debt in time T; 86% in 2T; and 95% in 3T.
 //
-// The difference between these two extremes is reasonable - we pay between 63%
-// and 100% of the debt in time T, depending on the usage pattern.
+// The difference between these two extremes is reasonable - we apply between
+// 63% and 100% of the debt in time T, depending on the usage pattern.
 //
 // Design note: ideally we would always simulate B. However, under this model it
 // is hard to compute the time until a request can go through (i.e. time until
 // we accumulate a certain amount of tokens): it involves calculating the
 // intersection of a line with an exponential, which cannot be solved
 // algebraically (it requires slower numerical methods).
+//
+// tokenBucket's methods are *not* thread-safe, and rely on higher-level
+// synchronization.
 type tokenBucket struct {
-	// -- Static fields --
-
-	// Once the available RUs are below the notifyThreshold or a request cannot
-	// be immediately fulfilled, we do a (non-blocking) send on this channel.
-	notifyCh chan struct{}
-
 	// -- Dynamic fields --
 	// Protected by the AbstractPool's lock. All changes should happen either
 	// inside a Request.Acquire() method or under AbstractPool.Update().
 
-	// See notifyCh. A threshold of zero disables notifications.
-	notifyThreshold tenantcostmodel.RU
-
-	// Refill rate, in RU/s.
+	// rate that tokens fill the bucket, in RU/s.
 	rate tenantcostmodel.RU
-	// Currently available RUs. Can not be negative.
+	// available is the number of currently available RUs in the bucket. This can
+	// be negative if waiting debt has been subtracted from it.
 	available tenantcostmodel.RU
 
-	// Debt incurred that we will try to pay over time. See debtHalfLife.
-	debt tenantcostmodel.RU
+	// waitingDebt is debt that will be subtracted from the available RUs over
+	// time, in order to smooth its impact.
+	waitingDebt tenantcostmodel.RU
 
-	// Rate at which we pay off debt; cannot exceed the refill rate.
-	debtRate tenantcostmodel.RU
+	// waitingDebtRate is the rate at which "waitingDebt" is subtracted from
+	// available RUs; cannot exceed the fill rate.
+	waitingDebtRate tenantcostmodel.RU
 
 	lastUpdated time.Time
 }
 
-// We try to repay debt over the next 2 seconds.
-const debtRepaymentSecs = 2
+// debtApplySecs is the target number of seconds that it should take to subtract
+// waiting debt from the available RUs.
+const debtApplySecs = 2
 
-func (tb *tokenBucket) Init(
-	now time.Time, notifyCh chan struct{}, rate, available tenantcostmodel.RU,
-) {
-	*tb = tokenBucket{
-		notifyCh:        notifyCh,
-		notifyThreshold: 0,
-		rate:            rate,
-		available:       available,
-		lastUpdated:     now,
-	}
+func (tb *tokenBucket) Init(now time.Time) {
+	*tb = tokenBucket{lastUpdated: now}
 }
 
 // update accounts for the passing of time.
@@ -123,121 +108,88 @@ func (tb *tokenBucket) update(now time.Time) {
 	}
 	tb.lastUpdated = now
 	sinceSeconds := since.Seconds()
-	refilled := tb.rate * tenantcostmodel.RU(sinceSeconds)
+	tb.available += tb.rate * tenantcostmodel.RU(sinceSeconds)
 
-	if tb.debt == 0 {
-		// Fast path: no debt.
-		tb.available += refilled
+	// Subtract some portion of waiting debt, if there is any.
+	if tb.waitingDebt == 0 {
+		// Fast path.
 		return
 	}
 
-	debtPaid := tb.debtRate * tenantcostmodel.RU(sinceSeconds)
-	if tb.debt >= debtPaid {
-		tb.debt -= debtPaid
-	} else {
-		debtPaid = tb.debt
-		tb.debt = 0
+	debt := tb.waitingDebtRate * tenantcostmodel.RU(sinceSeconds)
+	if debt > tb.waitingDebt {
+		debt = tb.waitingDebt
 	}
-	tb.available += refilled - debtPaid
-}
-
-// notify tries to send a non-blocking notification on notifyCh and disables
-// further notifications (until the next Reconfigure or StartNotification).
-func (tb *tokenBucket) notify() {
-	tb.notifyThreshold = 0
-	select {
-	case tb.notifyCh <- struct{}{}:
-	default:
-	}
-}
-
-// maybeNotify checks if it's time to send the notification and if so, performs
-// the notification.
-func (tb *tokenBucket) maybeNotify(now time.Time) {
-	if tb.notifyThreshold > 0 && tb.available < tb.notifyThreshold {
-		tb.notify()
-	}
+	tb.waitingDebt -= debt
+	tb.available -= debt
 }
 
 func (tb *tokenBucket) calculateDebtRate() {
-	tb.debtRate = tb.debt / debtRepaymentSecs
-	if tb.debtRate > tb.rate {
-		tb.debtRate = tb.rate
+	tb.waitingDebtRate = tb.waitingDebt / debtApplySecs
+	if tb.waitingDebtRate > tb.rate {
+		// There is waiting debt that cannot be applied within debtApplySecs;
+		// immediately subtract it from available RUs (which might cause that to
+		// become negative).
+		debt := (tb.waitingDebtRate - tb.rate) * debtApplySecs
+		tb.waitingDebt -= debt
+		tb.available -= debt
+		tb.waitingDebtRate = tb.rate
 	}
 }
 
-// RemoveTokens decreases the amount of tokens currently available.
-//
-// If there are not enough tokens, this causes the token bucket to go into debt.
-// Debt will be attempted to be repaid over the next few seconds.
+// RemoveTokens decreases the amount of tokens currently available. If there are
+// not enough tokens, this causes the token bucket to go into debt. Debt will be
+// subtracted from the available RUs over the next few seconds in order to
+// smooth its impact.
 func (tb *tokenBucket) RemoveTokens(now time.Time, amount tenantcostmodel.RU) {
 	tb.update(now)
 	if tb.available >= amount {
 		tb.available -= amount
 	} else {
-		tb.debt += amount - tb.available
-		tb.available = 0
-		tb.calculateDebtRate()
-	}
-	tb.maybeNotify(now)
-}
-
-// AddTokens increases the amount of tokens currently available.
-func (tb *tokenBucket) AddTokens(now time.Time, amount tenantcostmodel.RU) {
-	tb.update(now)
-	if amount >= 0 {
-		tb.addTokens(amount)
-	}
-	tb.maybeNotify(now)
-}
-
-func (tb *tokenBucket) addTokens(amount tenantcostmodel.RU) {
-	if tb.debt > 0 {
-		if tb.debt >= amount {
-			tb.debt -= amount
-		} else {
-			tb.available += amount - tb.debt
-			tb.debt = 0
+		if tb.available > 0 {
+			amount -= tb.available
+			tb.available = 0
 		}
-		tb.calculateDebtRate()
-	} else {
-		tb.available += amount
+		tb.waitingDebt += amount
 	}
+	tb.calculateDebtRate()
 }
 
+// tokenBucketReconfigureArgs is used to update the token bucket's
+// configuration.
 type tokenBucketReconfigureArgs struct {
+	// NewTokens is the number of tokens that should be added to the token bucket.
 	NewTokens tenantcostmodel.RU
 
+	// NewRate is the new token fill rate for the bucket.
 	NewRate tenantcostmodel.RU
-
-	NotifyThreshold tenantcostmodel.RU
 }
 
 // Reconfigure changes the rate, optionally adjusts the available tokens and
 // configures the next notification.
 func (tb *tokenBucket) Reconfigure(now time.Time, args tokenBucketReconfigureArgs) {
 	tb.update(now)
-	// If we already produced a notification that wasn't processed, drain it. This
-	// not racy as long as this code does not run in parallel with the code that
-	// receives from notifyCh.
-	select {
-	case <-tb.notifyCh:
-	default:
-	}
 	tb.rate = args.NewRate
-	tb.notifyThreshold = args.NotifyThreshold
-	if args.NewTokens > 0 {
-		tb.addTokens(args.NewTokens)
+	tb.addTokens(args.NewTokens)
+}
+
+// addTokens increases the number of tokens currently available.
+func (tb *tokenBucket) addTokens(amount tenantcostmodel.RU) {
+	if tb.waitingDebt > 0 {
+		if tb.waitingDebt >= amount {
+			tb.waitingDebt -= amount
+		} else {
+			tb.available += amount - tb.waitingDebt
+			tb.waitingDebt = 0
+		}
+	} else {
+		tb.available += amount
 	}
-	tb.maybeNotify(now)
+	tb.calculateDebtRate()
 }
 
-// SetupNotification enables the notification at the given threshold.
-func (tb *tokenBucket) SetupNotification(now time.Time, threshold tenantcostmodel.RU) {
-	tb.update(now)
-	tb.notifyThreshold = threshold
-}
-
+// maxTryAgainAfterSeconds is the maximum value that can be returned from
+// TryToFulfill.
 const maxTryAgainAfterSeconds = 1000
 
 // TryToFulfill either removes the given amount if is available, or returns a
@@ -247,16 +199,10 @@ func (tb *tokenBucket) TryToFulfill(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	tb.update(now)
 
+	// Fast path.
 	if amount <= tb.available {
 		tb.available -= amount
-		tb.maybeNotify(now)
 		return true, 0
-	}
-
-	// We have run out of available tokens; notify if we haven't already. This is
-	// possible if we have more than the notifyThreshold available.
-	if tb.notifyThreshold > 0 {
-		tb.notify()
 	}
 
 	needed := amount - tb.available
@@ -264,34 +210,34 @@ func (tb *tokenBucket) TryToFulfill(
 	// Compute the time it will take to refill to the needed amount.
 	var timeSeconds float64
 
-	if tb.debt == 0 {
+	if tb.waitingDebt == 0 {
 		timeSeconds = float64(needed / tb.rate)
 	} else {
-		remainingRate := tb.rate - tb.debtRate
+		remainingRate := tb.rate - tb.waitingDebtRate
 		// There are two cases:
 		//
-		//  1. We accumulate enough tokens from the remainingRate before paying off
-		//     the entire debt.
+		//  1. We accumulate enough tokens from the remainingRate before applying
+		//     the entire waiting debt.
 		//
-		//  2. We pay off all debt before accumulating enough tokens from the
-		//     remainingRate.
+		//  2. We apply all waiting debt before accumulating enough tokens from
+		//     the remainingRate.
 		//
-		// The time to accumulate the needed tokens while paying debt is:
+		// The time to accumulate the needed tokens while applying waiting debt is:
 		//   needed / remainingRate
-		// The time to pay off the debt is:
-		//   debt / debtRate
+		// The time to apply the waiting debt is:
+		//   waitingDebt / waitingDebtRate
 		//
 		// We are in case 1 if
-		//   needed / remainingRate <= debt / debtRate
+		//   needed / remainingRate <= debt / waitingDebtRate
 		// or equivalently:
-		//   needed * debtRate <= debt * remainingRate
-		if needed*tb.debtRate <= tb.debt*remainingRate {
+		//   needed * waitingDebtRate <= debt * remainingRate
+		if needed*tb.waitingDebtRate <= tb.waitingDebt*remainingRate {
 			// Case 1.
 			timeSeconds = float64(needed / remainingRate)
 		} else {
 			// Case 2.
-			debtPaySeconds := tb.debt / tb.debtRate
-			timeSeconds = float64(debtPaySeconds + (needed-debtPaySeconds*remainingRate)/tb.rate)
+			debtSeconds := tb.waitingDebt / tb.waitingDebtRate
+			timeSeconds = float64(debtSeconds + (needed-debtSeconds*remainingRate)/tb.rate)
 		}
 	}
 
@@ -312,5 +258,14 @@ func (tb *tokenBucket) TryToFulfill(
 // negative if we accumulated debt.
 func (tb *tokenBucket) AvailableTokens(now time.Time) tenantcostmodel.RU {
 	tb.update(now)
-	return tb.available - tb.debt
+	return tb.available - tb.waitingDebt
+}
+
+func (tb *tokenBucket) String(now time.Time) string {
+	tb.update(now)
+	s := fmt.Sprintf("%.2f RU filling @ %.2f RU/s", tb.available, tb.rate)
+	if tb.waitingDebt > 0 {
+		s += fmt.Sprintf(" (%.2f waiting debt @ %.2f RU/s)", tb.waitingDebt, tb.waitingDebtRate)
+	}
+	return s
 }
