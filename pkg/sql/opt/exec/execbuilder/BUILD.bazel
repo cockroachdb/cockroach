@@ -47,6 +47,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

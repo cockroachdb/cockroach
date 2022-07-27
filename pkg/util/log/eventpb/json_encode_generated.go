@@ -3353,6 +3353,77 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendUint(b, uint64(m.StatementFingerprintID), 10)
 	}
 
+	if m.MaxFullScanRowsEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MaxFullScanRowsEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.MaxFullScanRowsEstimate), 'f', -1, 64)
+	}
+
+	if m.TotalScanRowsEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TotalScanRowsEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.TotalScanRowsEstimate), 'f', -1, 64)
+	}
+
+	if m.OutputRowsEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"OutputRowsEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.OutputRowsEstimate), 'f', -1, 64)
+	}
+
+	if m.StatsAvailable {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatsAvailable\":true"...)
+	}
+
+	if m.NanosSinceStatsCollected != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NanosSinceStatsCollected\":"...)
+		b = strconv.AppendInt(b, int64(m.NanosSinceStatsCollected), 10)
+	}
+
+	if m.BytesRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesRead\":"...)
+		b = strconv.AppendInt(b, int64(m.BytesRead), 10)
+	}
+
+	if m.RowsRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RowsRead\":"...)
+		b = strconv.AppendInt(b, int64(m.RowsRead), 10)
+	}
+
+	if m.RowsWritten != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RowsWritten\":"...)
+		b = strconv.AppendInt(b, int64(m.RowsWritten), 10)
+	}
+
 	return printComma, b
 }
 
