@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -1310,6 +1311,8 @@ type ExecutorConfig struct {
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
+
+	SpanStatsConsumer keyvisualizer.SpanStatsConsumer
 
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.
