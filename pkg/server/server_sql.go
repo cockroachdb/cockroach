@@ -29,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvismanager"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatsconsumer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -169,6 +172,8 @@ type SQLServer struct {
 	spanconfigSQLWatcher           *spanconfigsqlwatcher.SQLWatcher
 	settingsWatcher                *settingswatcher.SettingsWatcher
 
+	keyVisManager *keyvismanager.Manager
+
 	systemConfigWatcher *systemconfigwatcher.Cache
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
@@ -269,6 +274,9 @@ type sqlServerArgs struct {
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
+
+	// Used by the tenant's key visualizer job.
+	spanStatsAccessor keyvisualizer.KVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
@@ -1080,6 +1088,30 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
 
+	// actually just do this on the system tenant for now
+	var keyVisManager *keyvismanager.Manager = nil
+
+	if codec.ForSystemTenant() {
+		spanStatsConsumer := spanstatsconsumer.New(
+			roachpb.SystemTenantID,
+			cfg.spanStatsAccessor,
+			cfg.distSender,
+			cfg.circularInternalExecutor,
+		)
+		keyVisManager = keyvismanager.New(
+			cfg.db,
+			jobRegistry,
+			cfg.circularInternalExecutor,
+			cfg.stopper,
+			cfg.Settings,
+			spanStatsConsumer,
+		)
+		execCfg.SpanStatsConsumer = spanStatsConsumer
+	} else {
+		// TODO(zachlite): instantiate a spanStatsConsumer for non-system tenants
+		// that can access KV via the Connector.
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -1154,6 +1186,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		spanconfigSQLWatcher:              spanConfig.sqlWatcher,
 		settingsWatcher:                   settingsWatcher,
 		systemConfigWatcher:               cfg.systemConfigWatcher,
+		keyVisManager:                     keyVisManager,
 		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
 		cfg:                               cfg.BaseConfig,
 		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
@@ -1307,6 +1340,12 @@ func (s *SQLServer) preStart(
 
 	if s.spanconfigMgr != nil {
 		if err := s.spanconfigMgr.Start(ctx); err != nil {
+			return err
+		}
+	}
+
+	if s.keyVisManager != nil {
+		if err := s.keyVisManager.Start(ctx); err != nil {
 			return err
 		}
 	}
