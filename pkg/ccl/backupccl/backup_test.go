@@ -5583,7 +5583,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
 		[][]string{
-			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history"},
+			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history = true"},
 			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
 		},
 	)
