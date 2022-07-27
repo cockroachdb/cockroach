@@ -171,7 +171,7 @@ type TypeResolver interface {
 	// query, an error will be returned.
 	ResolveOIDFromString(
 		ctx context.Context, resultType *types.T, toResolve *tree.DString,
-	) (*tree.DOid, error)
+	) (_ *tree.DOid, errSafeToIgnore bool, _ error)
 
 	// ResolveOIDFromOID looks up the populated value of the oid with the
 	// desired resultType which matches the provided oid.
@@ -181,7 +181,7 @@ type TypeResolver interface {
 	// query, an error will be returned.
 	ResolveOIDFromOID(
 		ctx context.Context, resultType *types.T, toResolve *tree.DOid,
-	) (*tree.DOid, error)
+	) (_ *tree.DOid, errSafeToIgnore bool, _ error)
 }
 
 // Planner is a limited planner that can be used from EvalContext.
