@@ -258,8 +258,14 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (Statements, error) {
+	return ParseWithInt(sql, defaultNakedIntType)
+}
+
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, defaultNakedIntType)
+	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a

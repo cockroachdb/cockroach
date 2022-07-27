@@ -142,13 +142,21 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 	}
 
 	for _, prepStmt := range m.PreparedStatements {
-		parserStmt, err := parser.ParseOneWithInt(
-			prepStmt.SQL,
-			parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize),
+		stmts, err := parser.ParseWithInt(
+			prepStmt.SQL, parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize),
 		)
 		if err != nil {
 			return nil, err
 		}
+		if len(stmts) > 1 {
+			// The pgwire protocol only allows at most 1 statement here.
+			return nil, pgerror.WrongNumberOfPreparedStatements(len(stmts))
+		}
+		var parserStmt parser.Statement
+		if len(stmts) == 1 {
+			parserStmt = stmts[0]
+		}
+		// len(stmts) == 0 results in a nil (empty) statement.
 		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
 		stmt := makeStatement(parserStmt, id)
 
