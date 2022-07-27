@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -74,31 +73,21 @@ func PlanCDCExpression(
 
 	cdcCat := &cdcOptCatalog{
 		optCatalog: opc.catalog.(*optCatalog),
+		semaCtx:    &p.semaCtx,
 	}
 	opc.catalog = cdcCat
 
-	// We could use opc.buildExecMemo; alas, it has too much logic we don't
-	// need, and, it also allows stable fold -- something we don't want to do.
-	// So, just build memo ourselves.
-	f := opc.optimizer.Factory()
-	f.FoldingControl().DisallowStableFolds()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
-	if err := bld.Build(); err != nil {
-		return cdcPlan, err
-	}
-
-	oe, err := opc.optimizer.Optimize()
+	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
 		return cdcPlan, err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "Optimized CDC expression: %s", oe.String())
+		log.Infof(ctx, "Optimized CDC expression: %s", memo.RootExpr().String())
 	}
-	execMemo := f.Memo()
 
 	const allowAutoCommit = false
 	if err := opc.runExecBuilder(
-		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), execMemo, p.EvalContext(), allowAutoCommit,
+		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.EvalContext(), allowAutoCommit,
 	); err != nil {
 		return cdcPlan, err
 	}
@@ -285,6 +274,7 @@ func (n *cdcValuesNode) Close(ctx context.Context) {
 
 type cdcOptCatalog struct {
 	*optCatalog
+	semaCtx *tree.SemaContext
 }
 
 var _ cat.Catalog = (*cdcOptCatalog)(nil)
@@ -323,6 +313,21 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 		return nil, false, err
 	}
 	return ds, false, nil
+}
+
+// ResolveFunction implements cat.Catalog interface.
+// We provide custom implementation to resolve CDC specific functions.
+func (c *cdcOptCatalog) ResolveFunction(
+	ctx context.Context, fnName *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	if c.semaCtx != nil && c.semaCtx.FunctionResolver != nil {
+		fnDef, err := c.semaCtx.FunctionResolver.ResolveFunction(ctx, fnName, path)
+		if err != nil {
+			return nil, err
+		}
+		return fnDef, nil
+	}
+	return c.optCatalog.ResolveFunction(ctx, fnName, path)
 }
 
 // newCDCDataSource builds an optTable for the target cdc table.
