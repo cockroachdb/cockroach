@@ -416,6 +416,12 @@ func (r ReplicaDescriptor) String() string {
 	return redact.StringWithoutMarkers(r)
 }
 
+// IsSame returns true if the two replica descriptors refer to the same replica,
+// ignoring the replica type.
+func (r ReplicaDescriptor) IsSame(o ReplicaDescriptor) bool {
+	return r.NodeID == o.NodeID && r.StoreID == o.StoreID && r.ReplicaID == o.ReplicaID
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("(n%d,s%d):", r.NodeID, r.StoreID)
