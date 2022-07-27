@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -141,7 +140,7 @@ var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) CheckPrivilege(
-	ctx context.Context, privilegeObject privilegeobject.PrivilegeObject, privilege privilege.Kind,
+	ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind,
 ) error {
 	return nil
 }
@@ -153,7 +152,7 @@ func (s *TestState) HasAdminRole(ctx context.Context) (bool, error) {
 
 // HasOwnership implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) HasOwnership(
-	ctx context.Context, privilegeObject privilegeobject.PrivilegeObject,
+	ctx context.Context, privilegeObject catalog.PrivilegeObject,
 ) (bool, error) {
 	return true, nil
 }
@@ -161,7 +160,7 @@ func (s *TestState) HasOwnership(
 // CheckPrivilegeForUser implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) CheckPrivilegeForUser(
 	ctx context.Context,
-	privilegeObject privilegeobject.PrivilegeObject,
+	privilegeObject catalog.PrivilegeObject,
 	privilege privilege.Kind,
 	user username.SQLUsername,
 ) error {

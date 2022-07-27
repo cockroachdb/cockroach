@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -44,7 +43,7 @@ type public struct {
 }
 
 var _ catalog.SchemaDescriptor = public{}
-var _ privilegeobject.PrivilegeObject = public{}
+var _ catalog.PrivilegeObject = public{}
 
 func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }

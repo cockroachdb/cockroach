@@ -15,9 +15,18 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
+
+// Object represents an object that has its privileges stored
+// in system.privileges.
+type Object interface {
+	catalog.PrivilegeObject
+	// GetPath returns the path used to identify the object in
+	// system.privileges.
+	GetPath() string
+}
 
 // Metadata for system privileges.
 type Metadata struct {
@@ -48,8 +57,8 @@ func findMetadata(val string) *Metadata {
 	return nil
 }
 
-// Parse turns a privilege path string to a SyntheticPrivilegeObject.
-func Parse(privPath string) (privilegeobject.SyntheticPrivilegeObject, error) {
+// Parse turns a privilege path string to a Object.
+func Parse(privPath string) (Object, error) {
 	md := findMetadata(privPath)
 	if md == nil {
 		return nil, errors.AssertionFailedf("no prefix match found for privilege path %s", privPath)
@@ -83,7 +92,7 @@ func Parse(privPath string) (privilegeobject.SyntheticPrivilegeObject, error) {
 		}
 		v.Elem().Field(i).Set(val)
 	}
-	return v.Interface().(privilegeobject.SyntheticPrivilegeObject), nil
+	return v.Interface().(Object), nil
 }
 
 func unmarshal(val reflect.Value, f reflect.StructField) (reflect.Value, error) {
