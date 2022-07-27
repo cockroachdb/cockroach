@@ -1163,9 +1163,16 @@ func (c *transientCluster) getNetworkURLForServer(
 	if c.demoCtx.Insecure {
 		u.WithInsecure()
 	} else {
+		caCert := security.CACertFilename()
+		if isTenant {
+			caCert = security.TenantCACertFilename()
+		}
 		u.
 			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
-			WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, ""))
+			WithTransport(pgurl.TransportTLS(
+				pgurl.TLSRequire,
+				filepath.Join(c.demoDir, caCert),
+			))
 	}
 	return u, nil
 }
