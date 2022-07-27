@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -753,6 +754,7 @@ type Store struct {
 	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsReader  spanconfig.ProtectedTSReader
 	ctSender           *sidetransport.Sender
+	spanStatsCollector *spanstatscollector.SpanStatsCollector
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -1231,6 +1233,8 @@ func NewStore(
 		math.MaxInt64,
 		cfg.Settings,
 	)
+
+	s.spanStatsCollector = spanstatscollector.New()
 
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
@@ -3643,6 +3647,12 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+// GetSpanStatsCollector returns an implementation of the keyvisualizer.SpanStatsCollector interface.
+// It's used to interact with the collector outside of kvserver.
+func (s *Store) GetSpanStatsCollector() *spanstatscollector.SpanStatsCollector {
+	return s.spanStatsCollector
 }
 
 // Implementation of the storeForTruncator interface.
