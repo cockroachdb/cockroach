@@ -225,11 +225,10 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 	privilegeObjectName string,
 	privilegeObjectPath string,
 	privilegeObjectType privilege.ObjectType,
-) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+) (*catpb.PrivilegeDescriptor, error) {
 	var tableVersions []descpb.DescriptorVersion
 	cache := p.ExecCfg().SyntheticPrivilegeCache
-	var found bool
-	found, privileges, retErr = func() (bool, *catpb.PrivilegeDescriptor, error) {
+	found, privileges, retErr := func() (bool, *catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
 		_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
@@ -254,7 +253,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		return privileges, retErr
 	}
 
-	val, err := cache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (_ interface{}, err error) {
+	val, err := cache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (_ interface{}, retErr error) {
 		query := fmt.Sprintf(
 			`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
 			catconstants.SystemPrivilegeTableName,
@@ -266,7 +265,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 			return nil, err
 		}
 		defer func() {
-			err = errors.CombineErrors(err, it.Close())
+			retErr = errors.CombineErrors(retErr, it.Close())
 		}()
 
 		privileges = &catpb.PrivilegeDescriptor{}

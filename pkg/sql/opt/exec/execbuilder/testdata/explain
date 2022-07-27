@@ -492,11 +492,7 @@ SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE info NOT LIKE '%size%'
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'timezone'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '%size%'
@@ -504,11 +500,7 @@ SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'default_transaction_isolation'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%size%'
@@ -516,11 +508,7 @@ SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'default_transaction_priority'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info NOT LIKE '%size%'
@@ -528,11 +516,7 @@ SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info N
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'default_transaction_use_follower_reads'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
@@ -540,11 +524,7 @@ SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%s
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'transaction_isolation'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
@@ -552,11 +532,7 @@ SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: variable = 'transaction_priority'
-│
-└── • virtual table
-      table: session_variables@primary
+• show
 
 query T
 EXPLAIN SHOW COLUMNS FROM foo
