@@ -653,6 +653,46 @@ func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, 
 	}
 }
 
+// TypeAsBool enforces (not hints) that the given expression typechecks as a
+// string and returns a function that can be called to get the string value
+// during (planNode).Start.
+func (p *planner) TypeAsBool(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (bool, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.Bool, op)
+	if err != nil {
+		return nil, err
+	}
+	evalFn := p.makeBoolEvalFn(typedE)
+	return func() (bool, error) {
+		isNull, b, err := evalFn()
+		if err != nil {
+			return false, err
+		}
+		if isNull {
+			return false, errors.Errorf("expected string, got NULL")
+		}
+		return b, nil
+	}, nil
+}
+
+func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func() (bool, bool, error) {
+	return func() (bool, bool, error) {
+		d, err := eval.Expr(p.EvalContext(), typedE)
+		if err != nil {
+			return false, false, err
+		}
+		if d == tree.DNull {
+			return true, false, nil
+		}
+		b, ok := d.(*tree.DBool)
+		if !ok {
+			return false, false, errors.Errorf("failed to cast %T to bool", d)
+		}
+		return false, bool(*b), nil
+	}
+}
+
 // KVStringOptValidate indicates the requested validation of a TypeAsStringOpts
 // option.
 type KVStringOptValidate string

@@ -88,6 +88,7 @@ type PlanHookState interface {
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
 	TypeAsString(ctx context.Context, e tree.Expr, op string) (func() (string, error), error)
+	TypeAsBool(ctx context.Context, e tree.Expr, op string) (func() (bool, error), error)
 	TypeAsStringArray(ctx context.Context, e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
 		ctx context.Context, opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,

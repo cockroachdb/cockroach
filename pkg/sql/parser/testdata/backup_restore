@@ -315,36 +315,36 @@ BACKUP DATABASE _ TO ($1, $2) INCREMENTAL FROM 'baz' -- identifiers removed
 parse
 BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = '*****' -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, encryption_passphrase = '*****' -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, encryption_passphrase = '*****' -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret' -- passwords exposed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = '*****' -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), encryption_passphrase = '*****' -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, encryption_passphrase = '*****' -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, encryption_passphrase = '*****' -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = 'secret' -- passwords exposed
 
 parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, kms = ('foo', 'bar') -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = (('foo'), ('bar')) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, kms = ('_', '_') -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, kms = ('foo', 'bar') -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, kms = ('foo', 'bar') -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), kms = (('foo'), ('bar')) -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, kms = ('_', '_') -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, kms = ('foo', 'bar') -- identifiers removed
 
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = '*****', detached -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, encryption_passphrase = '*****', detached -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, encryption_passphrase = '*****', detached -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****', detached -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret', detached -- passwords exposed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', detached -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), encryption_passphrase = '*****', detached -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, encryption_passphrase = '*****', detached -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, encryption_passphrase = '*****', detached -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, encryption_passphrase = 'secret', detached -- passwords exposed
 
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, detached, kms = ('foo', 'bar') -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, detached, kms = (('foo'), ('bar')) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, detached, kms = ('_', '_') -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, detached, kms = ('foo', 'bar') -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, detached, kms = ('foo', 'bar') -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), detached, kms = (('foo'), ('bar')) -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, detached, kms = ('_', '_') -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, detached, kms = ('foo', 'bar') -- identifiers removed
 
 parse
 BACKUP TENANT 36 TO 'bar'
@@ -740,10 +740,18 @@ RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 -- identifiers removed
 parse
 BACKUP TABLE foo TO 'bar' WITH revision_history, detached
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, detached
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, detached -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH revision_history, detached -- literals removed
-BACKUP TABLE _ TO 'bar' WITH revision_history, detached -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history = true, detached -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), detached -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = _, detached -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = true, detached -- identifiers removed
+
+parse
+BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached
+BACKUP TABLE (foo) TO ('bar') WITH revision_history = ($1), detached -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH revision_history = $1, detached -- literals removed
+BACKUP TABLE _ TO 'bar' WITH revision_history = $1, detached -- identifiers removed
 
 parse
 RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached
@@ -765,18 +773,43 @@ HINT: try \h BACKUP
 error
 BACKUP foo TO 'bar' WITH revision_history, revision_history
 ----
-at or near "revision_history": syntax error: revision_history option specified multiple times
+at or near "EOF": syntax error: revision_history option specified multiple times
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH revision_history, revision_history
-                                           ^
+                                                           ^
 
 error
 BACKUP foo TO 'bar' WITH detached, revision_history, detached
 ----
-at or near "detached": syntax error: detached option specified multiple times
+at or near "EOF": syntax error: detached option specified multiple times
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH detached, revision_history, detached
-                                                     ^
+                                                             ^
+
+error
+BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
+----
+at or near ",": syntax error: revision_history option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
+                                                                 ^
+
+error
+BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
+----
+at or near "true": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
+                                                                   ^
+
+error
+BACKUP foo TO 'bar' WITH detached=$1, revision_history
+----
+at or near "1": syntax error
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached=$1, revision_history
+                                  ^
+HINT: try \h BACKUP
 
 error
 RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
