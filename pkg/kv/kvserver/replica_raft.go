@@ -1049,6 +1049,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		} else if err != nil {
 			return stats, getNonDeterministicFailureExplanation(err), err
 		}
+		if r.store.cfg.KVAdmissionController != nil &&
+			stats.apply.followerStoreWriteBytes.numEntries > 0 {
+			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
+				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
+		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
 		// empty). This happens in two situations: When a new leader is elected, and

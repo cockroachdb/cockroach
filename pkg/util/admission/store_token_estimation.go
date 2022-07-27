@@ -271,6 +271,16 @@ type perWorkTokensAux struct {
 	intL0IngestedAccountedBytes int64
 	intWriteLinearModel         tokensLinearModel
 	intIngestedLinearModel      tokensLinearModel
+
+	// The bypassed count and bytes are also included in the overall interval
+	// stats.
+	intBypassedWorkCount                int64
+	intL0WriteBypassedAccountedBytes    int64
+	intL0IngestedBypassedAccountedBytes int64
+
+	// The ignored bytes are included in intL0IngestedBytes, and may even be
+	// higher than that value because these are from a different source.
+	intL0IgnoredIngestedBytes int64
 }
 
 func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
@@ -293,6 +303,12 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
 	intL0IngestedBytes := int64(l0Metrics.BytesIngested) - int64(e.cumL0IngestedBytes)
+	intL0IgnoredIngestedBytes := int64(admissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes) -
+		int64(e.cumStoreAdmissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes)
+	adjustedIntL0IngestedBytes := intL0IngestedBytes - intL0IgnoredIngestedBytes
+	if adjustedIntL0IngestedBytes < 0 {
+		adjustedIntL0IngestedBytes = 0
+	}
 	intWorkCount := int64(admissionStats.admittedCount) -
 		int64(e.cumStoreAdmissionStats.admittedCount)
 	intL0WriteAccountedBytes :=
@@ -304,9 +320,9 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	e.atDoneWriteTokensLinearModel.updateModelUsingIntervalStats(
 		intL0WriteAccountedBytes, intL0WriteBytes, intWorkCount)
 	e.atDoneIngestTokensLinearModel.updateModelUsingIntervalStats(
-		intL0IngestedAccountedBytes, intL0IngestedBytes, intWorkCount)
+		intL0IngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
 
-	intL0TotalBytes := intL0WriteBytes + intL0IngestedBytes
+	intL0TotalBytes := intL0WriteBytes + adjustedIntL0IngestedBytes
 	if intWorkCount > 1 && intL0TotalBytes > 0 {
 		// Update the atAdmissionWorkTokens
 		intAtAdmissionWorkTokens := intL0TotalBytes / intWorkCount
@@ -315,9 +331,6 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 			(1-alpha)*float64(e.atAdmissionWorkTokens))
 		e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
 	}
-	e.cumStoreAdmissionStats = admissionStats
-	e.cumL0WriteBytes = l0Metrics.BytesFlushed
-	e.cumL0IngestedBytes = l0Metrics.BytesIngested
 	e.aux = perWorkTokensAux{
 		intWorkCount:                intWorkCount,
 		intL0WriteBytes:             intL0WriteBytes,
@@ -326,7 +339,18 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intL0IngestedAccountedBytes: intL0IngestedAccountedBytes,
 		intWriteLinearModel:         e.atDoneWriteTokensLinearModel.intLinearModel,
 		intIngestedLinearModel:      e.atDoneIngestTokensLinearModel.intLinearModel,
+		intBypassedWorkCount: int64(admissionStats.aux.bypassedCount) -
+			int64(e.cumStoreAdmissionStats.aux.bypassedCount),
+		intL0WriteBypassedAccountedBytes: int64(admissionStats.aux.writeBypassedAccountedBytes) -
+			int64(e.cumStoreAdmissionStats.aux.writeBypassedAccountedBytes),
+		intL0IngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
+			int64(e.cumStoreAdmissionStats.aux.ingestedBypassedAccountedBytes),
+		intL0IgnoredIngestedBytes: intL0IgnoredIngestedBytes,
 	}
+	// Store the latest cumulative values.
+	e.cumStoreAdmissionStats = admissionStats
+	e.cumL0WriteBytes = l0Metrics.BytesFlushed
+	e.cumL0IngestedBytes = l0Metrics.BytesIngested
 }
 
 func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() storeRequestEstimates {
@@ -340,22 +364,3 @@ func (e *storePerWorkTokenEstimator) getModelsAtAdmittedDone() (
 	return e.atDoneWriteTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel
 }
-
-// TODO(sumeer):
-// - Make followers tell admission control about the size of their write and
-//   sstable bytes, without asking for permission. We will include these in
-//   the admitted count and fit them to the same model, so that it is more
-//   accurate. Additionally, we will scale down the bytes for
-//   at-admission-tokens by the fraction
-//   bytes-that-sought-permission/(bytes-that-sought-permission +
-//   bytes-that-did-not-seek-permission)
-//   Additionally, this work that did not seek permission will consume tokens.
-//
-// - Integrate snapshot ingests: these are likely to usually land in L6, so
-//   may not fit the existing ingest model well. Additionally, we do not want
-//   large range snapshots to consume a huge number of tokens. We do know how
-//   many bytes were ingested into L0 for such snapshots. We can use those
-//   bytes to hide the L0 increase caused by these snapshots so that they do
-//   not affect the model. And not have them consume any tokens (this is a
-//   simpler version of https://github.com/cockroachdb/cockroach/pull/80914,
-//   and not the final solution).

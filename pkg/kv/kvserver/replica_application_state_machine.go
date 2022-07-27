@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -50,12 +51,26 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed      int
-	entriesProcessed      int
-	entriesProcessedBytes int64
-	stateAssertions       int
-	numEmptyEntries       int
-	numConfChangeEntries  int
+	batchesProcessed        int
+	entriesProcessed        int
+	entriesProcessedBytes   int64
+	stateAssertions         int
+	numEmptyEntries         int
+	numConfChangeEntries    int
+	followerStoreWriteBytes followerStoreWriteBytes
+}
+
+// followerStoreWriteBytes captures stats about writes done to a store by a
+// replica that is not the leaseholder. These are used for admission control.
+type followerStoreWriteBytes struct {
+	numEntries int64
+	admission.StoreWorkDoneInfo
+}
+
+func (f *followerStoreWriteBytes) merge(from followerStoreWriteBytes) {
+	f.numEntries += from.numEntries
+	f.WriteBytes += from.WriteBytes
+	f.IngestedBytes += from.IngestedBytes
 }
 
 // nonDeterministicFailure is an error type that indicates that a state machine
@@ -430,11 +445,12 @@ type replicaAppBatch struct {
 	changeRemovesReplica bool
 
 	// Statistics.
-	entries      int
-	entryBytes   int64
-	emptyEntries int
-	mutations    int
-	start        time.Time
+	entries                 int
+	entryBytes              int64
+	emptyEntries            int
+	mutations               int
+	start                   time.Time
+	followerStoreWriteBytes followerStoreWriteBytes
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
@@ -528,6 +544,16 @@ func (b *replicaAppBatch) Stage(
 	// and before the write batch is staged in the batch.
 	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
 		return nil, err
+	}
+
+	// We do the stats for store write byte sizes here since the code below may
+	// fiddle with these fields e.g. runPreApplyTriggersAfterStagingWriteBatch
+	// nils the AddSSTable field.
+	if !cmd.IsLocal() {
+		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
+		b.followerStoreWriteBytes.numEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
 
 	// Stage the command's write batch in the application batch.
@@ -1046,6 +1072,7 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.sm.stats.entriesProcessedBytes += b.entryBytes
 	b.sm.stats.numEmptyEntries += b.emptyEntries
 	b.sm.stats.batchesProcessed++
+	b.sm.stats.followerStoreWriteBytes.merge(b.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
