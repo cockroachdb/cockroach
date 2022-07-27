@@ -590,27 +590,30 @@ func (b *Builder) buildFunction(
 
 // buildUDF builds a set of memo groups that represents a user-defined function
 // invocation.
-// TODO(mgartner): Support multi-statement UDFs.
 // TODO(mgartner): Support UDFs with arguments.
 func (b *Builder) buildUDF(
 	f *tree.FuncExpr, def *tree.FunctionDefinition, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
-	stmt, err := parser.ParseOne(f.ResolvedOverload().Body)
+	stmts, err := parser.Parse(f.ResolvedOverload().Body)
 	if err != nil {
 		panic(err)
 	}
 
-	// A statement inside a UDF body cannot refer to anything from the outer
-	// expression calling the function, so we use an empty scope.
-	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent CTEs
-	// that mutate and are not at the top-level.
-	bodyScope := b.allocScope()
-	bodyScope = b.buildStmt(stmt.AST, nil /* desiredTypes */, bodyScope)
+	rels := make(memo.RelListExpr, len(stmts))
+	for i := range stmts {
+		// A statement inside a UDF body cannot refer to anything from the outer
+		// expression calling the function, so we use an empty scope.
+		// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
+		// CTEs that mutate and are not at the top-level.
+		bodyScope := b.allocScope()
+		bodyScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		rels[i] = bodyScope.expr
+	}
 
-	out = b.factory.ConstructUserDefinedFunction(
-		bodyScope.expr,
-		&memo.UserDefinedFunctionPrivate{
+	out = b.factory.ConstructUDF(
+		&memo.UDFPrivate{
 			Name: def.Name,
+			Body: rels,
 			Typ:  f.ResolvedType(),
 		},
 	)

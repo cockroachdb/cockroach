@@ -187,6 +187,7 @@ SHOW GRANTS ON t11
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t11         admin      ALL             true
 test           public       t11         root       ALL             true
+test           public       t11         testuser   ALL             true
 test           public       t11         testuser2  SELECT          false
 
 # Default privileges for schemas have no defaults - no privileges are defined
@@ -206,9 +207,10 @@ CREATE TABLE s2.t12()
 query TTTTTB colnames
 SHOW GRANTS ON s2.t12
 ----
-database_name  schema_name  table_name  grantee  privilege_type  is_grantable
-test           s2           t12         admin    ALL             true
-test           s2           t12         root     ALL             true
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           s2           t12         admin     ALL             true
+test           s2           t12         root      ALL             true
+test           s2           t12         testuser  ALL             true
 
 query TTTBTTT colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges WHERE schema_name IS NOT NULL

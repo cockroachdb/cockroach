@@ -1026,7 +1026,7 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
-					privs := typeDesc.GetPrivileges().Show(privilege.Type)
+					privs := typeDesc.GetPrivileges().Show(privilege.Type, true /* showImplicitOwnerPrivs */)
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
@@ -1062,7 +1062,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
-					privs := sc.GetPrivileges().Show(privilege.Schema)
+					privs := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
@@ -1372,7 +1372,7 @@ func populateTablePrivileges(
 			} else {
 				tableType = privilege.Table
 			}
-			for _, u := range table.GetPrivileges().Show(tableType) {
+			for _, u := range table.GetPrivileges().Show(tableType, true /* showImplicitOwnerPrivs */) {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
 					// We use this function to check for the grant option so that the

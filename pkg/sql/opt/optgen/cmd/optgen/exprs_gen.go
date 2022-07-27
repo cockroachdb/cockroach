@@ -232,7 +232,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	if define.Tags.Contains("Scalar") {
 		fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
 
-		// Generate the ID method.
+		// Generate the Rank method.
 		fmt.Fprintf(g.w, "func (e *%s) Rank() opt.ScalarRank {\n", opTyp.name)
 		if define.Tags.Contains("ListItem") {
 			fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"list items have no rank\"))")
@@ -518,7 +518,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	opTyp := g.md.typeOf(define)
 	fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
 
-	// Generate the ID method.
+	// Generate the Rank method.
 	fmt.Fprintf(g.w, "func (e *%s) Rank() opt.ScalarRank {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"lists have no rank\"))")
 	fmt.Fprintf(g.w, "}\n\n")

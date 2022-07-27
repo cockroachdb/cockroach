@@ -1214,18 +1214,17 @@ define NthValue {
     Nth ScalarExpr
 }
 
-# UserDefinedFunction invokes a user-defined function. The
-# UserDefinedFunctionPrivate field contains the name of the function and a
-# pointer to its type.
+# UDF invokes a user-defined function. The UDFPrivate field contains the name of
+# the function, the statements in the function body, and a pointer to its type.
 [Scalar]
-define UserDefinedFunction {
-    Body RelExpr
-    _ UserDefinedFunctionPrivate
+define UDF {
+    _ UDFPrivate
 }
 
 [Private]
-define UserDefinedFunctionPrivate {
+define UDFPrivate {
     Name string
+    Body RelListExpr
     Typ Type
 }
 

@@ -33,9 +33,10 @@ CREATE TYPE testuser_t2 AS ENUM();
 query TTTTTB colnames
 SHOW GRANTS ON TYPE testuser_t2
 ----
-database_name  schema_name  type_name    grantee  privilege_type  is_grantable
-d              public       testuser_t2  admin    ALL             true
-d              public       testuser_t2  root     ALL             true
+database_name  schema_name  type_name    grantee   privilege_type  is_grantable
+d              public       testuser_t2  admin     ALL             true
+d              public       testuser_t2  root      ALL             true
+d              public       testuser_t2  testuser  ALL             true
 
 user root
 
@@ -105,9 +106,10 @@ CREATE TYPE t4 AS ENUM()
 query TTTTTB colnames
 SHOW GRANTS ON TYPE t4
 ----
-database_name  schema_name  type_name  grantee  privilege_type  is_grantable
-d              public       t4         admin    ALL             true
-d              public       t4         root     ALL             true
+database_name  schema_name  type_name  grantee   privilege_type  is_grantable
+d              public       t4         admin     ALL             true
+d              public       t4         root      ALL             true
+d              public       t4         testuser  ALL             true
 
 user root
 statement ok
@@ -129,6 +131,7 @@ CREATE TYPE t5 AS ENUM()
 query TTTTTB colnames
 SHOW GRANTS ON TYPE t5
 ----
-database_name  schema_name  type_name  grantee  privilege_type  is_grantable
-d              public       t5         admin    ALL             true
-d              public       t5         root     ALL             true
+database_name  schema_name  type_name  grantee   privilege_type  is_grantable
+d              public       t5         admin     ALL             true
+d              public       t5         root      ALL             true
+d              public       t5         testuser  ALL             true

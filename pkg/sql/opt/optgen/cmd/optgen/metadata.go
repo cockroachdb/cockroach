@@ -188,6 +188,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"RelExpr":             {fullName: "memo.RelExpr", isExpr: true, isInterface: true},
 		"Expr":                {fullName: "opt.Expr", isExpr: true, isInterface: true},
 		"ScalarExpr":          {fullName: "opt.ScalarExpr", isExpr: true, isInterface: true},
+		"RelListExpr":         {fullName: "memo.RelListExpr"},
 		"Operator":            {fullName: "opt.Operator", passByVal: true},
 		"ColumnID":            {fullName: "opt.ColumnID", passByVal: true},
 		"ColSet":              {fullName: "opt.ColSet", passByVal: true},
