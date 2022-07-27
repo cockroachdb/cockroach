@@ -88,8 +88,8 @@ public     test           public              USAGE           NO
 root       test           public              ALL             YES
 admin      test           s                   ALL             YES
 root       test           s                   ALL             YES
-testuser   test           s                   ALL             YES
 testuser2  test           s                   CREATE          NO
+testuser   test           s                   ALL             YES
 
 # Check grants for testuser2, which should inherit from the public role.
 query TBB colnames rowsort
@@ -136,3 +136,22 @@ test           owner_grant_option  admin                     ALL             tru
 test           owner_grant_option  owner_grant_option_child  USAGE           true
 test           owner_grant_option  root                      ALL             true
 test           owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER SCHEMA owner_grant_option OWNER TO other_owner
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA owner_grant_option
+----
+database_name  schema_name         grantee                   privilege_type  is_grantable
+test           owner_grant_option  admin                     ALL             true
+test           owner_grant_option  other_owner               ALL             true
+test           owner_grant_option  owner_grant_option_child  USAGE           false
+test           owner_grant_option  root                      ALL             true

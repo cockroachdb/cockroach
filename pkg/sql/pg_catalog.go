@@ -2642,7 +2642,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				owner := table.GetPrivileges().Owner()
-				for _, u := range table.GetPrivileges().Show(privilege.Table) {
+				for _, u := range table.GetPrivileges().Show(privilege.Table, true /* showImplicitOwnerPrivs */) {
 					if err := addSharedDependency(
 						dbOid(db.GetID()),       // dbid
 						pgClassOid,              // classid
@@ -2664,7 +2664,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		if err = forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				owner := db.GetPrivileges().Owner()
-				for _, u := range db.GetPrivileges().Show(privilege.Database) {
+				for _, u := range db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */) {
 					if err := addSharedDependency(
 						tree.NewDOid(0),   // dbid
 						pgDatabaseOid,     // classid
