@@ -159,15 +159,15 @@ type DummyEvalPlanner struct{}
 // ResolveOIDFromString is part of the Planner interface.
 func (ep *DummyEvalPlanner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
-) (*tree.DOid, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+) (*tree.DOid, bool, error) {
+	return nil, false, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveOIDFromOID is part of the Planner interface.
 func (ep *DummyEvalPlanner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
-) (*tree.DOid, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+) (*tree.DOid, bool, error) {
+	return nil, false, errors.WithStack(errEvalPlanner)
 }
 
 // UnsafeUpsertDescriptor is part of the Planner interface.
