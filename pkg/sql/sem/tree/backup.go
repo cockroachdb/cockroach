@@ -40,9 +40,9 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory bool
+	CaptureRevisionHistory Expr
 	EncryptionPassphrase   Expr
-	Detached               bool
+	Detached               Expr
 	EncryptionKMSURI       StringOrPlaceholderOptList
 	IncrementalStorage     StringOrPlaceholderOptList
 }
@@ -244,7 +244,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		}
 		addSep = true
 	}
-	if o.CaptureRevisionHistory {
+	if o.CaptureRevisionHistory == DBoolTrue {
 		ctx.WriteString("revision_history")
 		addSep = true
 	}
@@ -259,7 +259,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		}
 	}
 
-	if o.Detached {
+	if o.Detached == DBoolTrue {
 		maybeAddSep()
 		ctx.WriteString("detached")
 	}
@@ -280,8 +280,8 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 // CombineWith merges other backup options into this backup options struct.
 // An error is returned if the same option merged multiple times.
 func (o *BackupOptions) CombineWith(other *BackupOptions) error {
-	if o.CaptureRevisionHistory {
-		if other.CaptureRevisionHistory {
+	if o.CaptureRevisionHistory != nil {
+		if other.CaptureRevisionHistory != nil {
 			return errors.New("revision_history option specified multiple times")
 		}
 	} else {
@@ -294,8 +294,8 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("encryption_passphrase specified multiple times")
 	}
 
-	if o.Detached {
-		if other.Detached {
+	if o.Detached != nil {
+		if other.Detached != nil {
 			return errors.New("detached option specified multiple times")
 		}
 	} else {

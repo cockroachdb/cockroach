@@ -2972,11 +2972,27 @@ backup_options:
   }
 | REVISION_HISTORY
   {
-    $$.val = &tree.BackupOptions{CaptureRevisionHistory: true}
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: tree.MakeDBool(true)}
+  }
+| REVISION_HISTORY '=' TRUE
+  {
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: tree.MakeDBool(true)}
+  }
+| REVISION_HISTORY '=' FALSE
+  {
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: tree.MakeDBool(false)}
   }
 | DETACHED
   {
-    $$.val = &tree.BackupOptions{Detached: true}
+    $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
+  }
+| DETACHED '=' TRUE
+  {
+    $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
+  }
+| DETACHED '=' FALSE
+  {
+    $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(false)}
   }
 | KMS '=' string_or_placeholder_opt_list
   {

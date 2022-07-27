@@ -765,18 +765,34 @@ HINT: try \h BACKUP
 error
 BACKUP foo TO 'bar' WITH revision_history, revision_history
 ----
-at or near "revision_history": syntax error: revision_history option specified multiple times
+at or near "EOF": syntax error: revision_history option specified multiple times
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH revision_history, revision_history
-                                           ^
+                                                           ^
 
 error
 BACKUP foo TO 'bar' WITH detached, revision_history, detached
 ----
-at or near "detached": syntax error: detached option specified multiple times
+at or near "EOF": syntax error: detached option specified multiple times
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH detached, revision_history, detached
-                                                     ^
+                                                             ^
+
+error
+BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
+----
+at or near ",": syntax error: revision_history option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
+                                                                 ^
+
+error
+BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
+----
+at or near "true": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
+                                                                   ^
 
 error
 RESTORE foo FROM 'bar' WITH key1, key2 = 'value'

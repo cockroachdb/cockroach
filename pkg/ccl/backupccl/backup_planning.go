@@ -464,7 +464,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnIsSingleStmt || backupStmt.Options.Detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt || backupStmt.Options.Detached == tree.DBoolTrue) {
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
@@ -530,7 +530,7 @@ func backupPlanHook(
 		}
 
 		var revisionHistory bool
-		if backupStmt.Options.CaptureRevisionHistory {
+		if backupStmt.Options.CaptureRevisionHistory == tree.DBoolTrue {
 			if err := requireEnterprise(p.ExecCfg(), "revision_history"); err != nil {
 				return err
 			}
@@ -633,7 +633,7 @@ func backupPlanHook(
 		}
 		plannerTxn := p.Txn()
 
-		if backupStmt.Options.Detached {
+		if backupStmt.Options.Detached == tree.DBoolTrue {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
@@ -674,7 +674,7 @@ func backupPlanHook(
 		return sj.ReportExecutionResults(ctx, resultsCh)
 	}
 
-	if backupStmt.Options.Detached {
+	if backupStmt.Options.Detached == tree.DBoolTrue {
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil

@@ -106,11 +106,16 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	s.bulkBackups[name] = targets
 	s.lock.Unlock()
 
+	coinVal := tree.DBoolFalse
+	if s.coin() {
+		coinVal = tree.DBoolTrue
+	}
+
 	return &tree.Backup{
 		Targets: &targets,
 		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),
-		Options: tree.BackupOptions{CaptureRevisionHistory: s.coin()},
+		Options: tree.BackupOptions{CaptureRevisionHistory: coinVal},
 	}, true
 }
 
