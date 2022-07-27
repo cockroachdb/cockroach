@@ -438,7 +438,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			desc: "ttl expiration expression",
 			createTable: `CREATE TABLE tbl (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  expire_at TIMESTAMP
+  expire_at TIMESTAMPTZ
 ) WITH (ttl_expiration_expression = 'expire_at')`,
 			numExpiredRows:       1001,
 			numNonExpiredRows:    5,

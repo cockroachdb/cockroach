@@ -12,6 +12,9 @@ CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression
 statement error value of "ttl_expiration_expression" must be a valid expression: at or near "EOF": syntax error
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = '; DROP DATABASE defaultdb')
 
+statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
+CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 'text')
+
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
 
@@ -473,7 +476,7 @@ subtest create_table_ttl_expiration_expression
 statement ok
 CREATE TABLE tbl_create_table_ttl_expiration_expression (
   id INT PRIMARY KEY,
-  expire_at TIMESTAMP,
+  expire_at TIMESTAMPTZ,
   FAMILY (id, expire_at)
 ) WITH (ttl_expiration_expression = 'expire_at')
 
@@ -482,7 +485,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_
 ----
 CREATE TABLE public.tbl_create_table_ttl_expiration_expression (
                                                                                         id INT8 NOT NULL,
-                                                                                        expire_at TIMESTAMP NULL,
+                                                                                        expire_at TIMESTAMPTZ NULL,
                                                                                         CONSTRAINT tbl_create_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
                                                                                         FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
@@ -495,7 +498,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_
 ----
 CREATE TABLE public.tbl_create_table_ttl_expiration_expression (
    id INT8 NOT NULL,
-   expire_at TIMESTAMP NULL,
+   expire_at TIMESTAMPTZ NULL,
    CONSTRAINT tbl_create_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
    FAMILY fam_0_id_expire_at (id, expire_at)
 )
@@ -507,19 +510,19 @@ subtest create_table_ttl_expiration_expression_escape_sql
 statement ok
 CREATE TABLE tbl_create_table_ttl_expiration_expression_escape_sql (
   id INT PRIMARY KEY,
-  expire_at TIMESTAMP,
+  expire_at TIMESTAMPTZ,
   FAMILY (id, expire_at)
-) WITH (ttl_expiration_expression = 'IF(expire_at > ''2020-01-01 00:00:00'':::TIMESTAMP, expire_at, NULL)')
+) WITH (ttl_expiration_expression = 'IF(expire_at > ''2020-01-01 00:00:00'':::TIMESTAMPTZ, expire_at, NULL)')
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression_escape_sql]
 ----
 CREATE TABLE public.tbl_create_table_ttl_expiration_expression_escape_sql (
                                                                                                                                                    id INT8 NOT NULL,
-                                                                                                                                                   expire_at TIMESTAMP NULL,
+                                                                                                                                                   expire_at TIMESTAMPTZ NULL,
                                                                                                                                                    CONSTRAINT tbl_create_table_ttl_expiration_expression_escape_sql_pkey PRIMARY KEY (id ASC),
                                                                                                                                                    FAMILY fam_0_id_expire_at (id, expire_at)
-) WITH (ttl = 'on', ttl_expiration_expression = e'IF(expire_at > \'2020-01-01 00:00:00\':::TIMESTAMP, expire_at, NULL)', ttl_job_cron = '@hourly')
+) WITH (ttl = 'on', ttl_expiration_expression = e'IF(expire_at > \'2020-01-01 00:00:00\':::TIMESTAMPTZ, expire_at, NULL)', ttl_job_cron = '@hourly')
 
 
 subtest end
@@ -529,21 +532,29 @@ subtest alter_table_ttl_expiration_expression
 statement ok
 CREATE TABLE tbl_alter_table_ttl_expiration_expression (
   id INT PRIMARY KEY,
-  expire_at TIMESTAMP,
-  FAMILY (id, expire_at)
+  text TEXT,
+  expire_at TIMESTAMPTZ,
+  FAMILY (id, text, expire_at)
 )
+
+statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
+ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'text')
 
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
+
+statement error column "expire_at" does not exist
+ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
                                                                                         id INT8 NOT NULL,
-                                                                                        expire_at TIMESTAMP NULL,
+                                                                                        text STRING NULL,
+                                                                                        expire_at TIMESTAMPTZ NULL,
                                                                                         CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-                                                                                        FAMILY fam_0_id_expire_at (id, expire_at)
+                                                                                        FAMILY fam_0_id_text_expire_at (id, text, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
 # try setting it again
@@ -555,9 +566,10 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_e
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
                                                                                                                     id INT8 NOT NULL,
-                                                                                                                    expire_at TIMESTAMP NULL,
+                                                                                                                    text STRING NULL,
+                                                                                                                    expire_at TIMESTAMPTZ NULL,
                                                                                                                     CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-                                                                                                                    FAMILY fam_0_id_expire_at (id, expire_at)
+                                                                                                                    FAMILY fam_0_id_text_expire_at (id, text, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = e'expire_at + \'5 minutes\':::INTERVAL', ttl_job_cron = '@hourly')
 
 statement ok
@@ -568,9 +580,10 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_e
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
    id INT8 NOT NULL,
-   expire_at TIMESTAMP NULL,
+   text STRING NULL,
+   expire_at TIMESTAMPTZ NULL,
    CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-   FAMILY fam_0_id_expire_at (id, expire_at)
+   FAMILY fam_0_id_text_expire_at (id, text, expire_at)
 )
 
 subtest end
@@ -580,7 +593,7 @@ subtest add_ttl_expiration_expression_to_ttl_expire_after
 statement ok
 CREATE TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after (
   id INT PRIMARY KEY,
-  expire_at TIMESTAMP,
+  expire_at TIMESTAMPTZ,
   FAMILY (id, expire_at)
 ) WITH (ttl_expire_after = '10 minutes')
 
@@ -592,7 +605,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expiration_expressio
 ----
 CREATE TABLE public.tbl_add_ttl_expiration_expression_to_ttl_expire_after (
                                                                                                                                                  id INT8 NOT NULL,
-                                                                                                                                                 expire_at TIMESTAMP NULL,
+                                                                                                                                                 expire_at TIMESTAMPTZ NULL,
                                                                                                                                                  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                                                                                                                  CONSTRAINT tbl_add_ttl_expiration_expression_to_ttl_expire_after_pkey PRIMARY KEY (id ASC),
                                                                                                                                                  FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
@@ -606,7 +619,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expiration_expressio
 ----
 CREATE TABLE public.tbl_add_ttl_expiration_expression_to_ttl_expire_after (
                                                                                          id INT8 NOT NULL,
-                                                                                         expire_at TIMESTAMP NULL,
+                                                                                         expire_at TIMESTAMPTZ NULL,
                                                                                          crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                                                          CONSTRAINT tbl_add_ttl_expiration_expression_to_ttl_expire_after_pkey PRIMARY KEY (id ASC),
                                                                                          FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
@@ -619,7 +632,7 @@ subtest add_ttl_expire_after_to_ttl_expiration_expression
 statement ok
 CREATE TABLE tbl_add_ttl_expire_after_to_ttl_expiration_expression (
   id INT PRIMARY KEY,
-  expire_at TIMESTAMP,
+  expire_at TIMESTAMPTZ,
   FAMILY (id, expire_at)
 ) WITH (ttl_expiration_expression = 'expire_at')
 
@@ -631,7 +644,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expire_after_to_ttl_
 ----
 CREATE TABLE public.tbl_add_ttl_expire_after_to_ttl_expiration_expression (
                                                                                                                                   id INT8 NOT NULL,
-                                                                                                                                  expire_at TIMESTAMP NULL,
+                                                                                                                                  expire_at TIMESTAMPTZ NULL,
                                                                                                                                   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                                                                                                   CONSTRAINT tbl_add_ttl_expire_after_to_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
                                                                                                                                   FAMILY fam_0_id_expire_at (id, expire_at, crdb_internal_expiration)
@@ -645,7 +658,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expire_after_to_ttl_
 ----
 CREATE TABLE public.tbl_add_ttl_expire_after_to_ttl_expiration_expression (
    id INT8 NOT NULL,
-   expire_at TIMESTAMP NULL,
+   expire_at TIMESTAMPTZ NULL,
    CONSTRAINT tbl_add_ttl_expire_after_to_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
    FAMILY fam_0_id_expire_at (id, expire_at)
 )

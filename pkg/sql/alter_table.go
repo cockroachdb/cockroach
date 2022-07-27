@@ -1958,6 +1958,13 @@ func handleTTLStorageParamChange(
 		}
 	}
 
+	// validate ttl_expiration_expression
+	if after != nil && after.HasExpirationExpr() {
+		if err := ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

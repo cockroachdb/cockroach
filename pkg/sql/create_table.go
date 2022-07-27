@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -2347,6 +2348,7 @@ func newTableDesc(
 		regionConfig = &conf
 	}
 
+	semaCtx := params.p.SemaCtx()
 	// We need to run NewTableDesc with caching disabled, because it needs to pull
 	// in descriptors from FK depended-on tables using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
@@ -2364,7 +2366,7 @@ func newTableDesc(
 			creationTime,
 			privileges,
 			affected,
-			&params.p.semaCtx,
+			semaCtx,
 			params.EvalContext(),
 			params.SessionData(),
 			n.Persistence,
@@ -2387,6 +2389,11 @@ func newTableDesc(
 
 	// Row level TTL tables require a scheduled job to be created as well.
 	if ttl := ret.RowLevelTTL; ttl != nil {
+
+		if err := ValidateTTLExpirationExpression(params.ctx, ret, semaCtx, &n.Table); err != nil {
+			return nil, err
+		}
+
 		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
 			params.ExecCfg(),
@@ -2401,6 +2408,44 @@ func newTableDesc(
 		ttl.ScheduleID = j.ScheduleID()
 	}
 	return ret, nil
+}
+
+func ValidateTTLExpirationExpression(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	semaCtx *tree.SemaContext,
+	tableName *tree.TableName,
+) error {
+
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+
+	ttl := tableDesc.GetRowLevelTTL()
+	if !ttl.HasExpirationExpr() {
+		return nil
+	}
+
+	expr, err := parser.ParseExpr(string(ttl.ExpirationExpr))
+	if err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.InvalidParameterValue,
+			`value of "ttl_expiration_expression" must be a valid expression`,
+		)
+	}
+
+	_, _, _, err = schemaexpr.DequalifyAndValidateExpr(
+		ctx,
+		tableDesc,
+		expr,
+		types.TimestampTZ,
+		"ttl_expiration_expression",
+		semaCtx,
+		volatility.Stable,
+		tableName,
+	)
+	return err
 }
 
 // newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
