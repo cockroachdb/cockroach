@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -238,17 +237,6 @@ var tableParams = map[string]tableParam{
 			stringVal, err := paramparse.DatumAsString(evalCtx, key, datum)
 			if err != nil {
 				return err
-			}
-			stringVal = strings.TrimSpace(stringVal)
-			// todo(wall): add type checking https://github.com/cockroachdb/cockroach/issues/76916
-			_, err = parser.ParseExpr(stringVal)
-			if err != nil {
-				return pgerror.Wrapf(
-					err,
-					pgcode.InvalidParameterValue,
-					`value of %q must be a valid expression`,
-					key,
-				)
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.ExpirationExpr = catpb.Expression(stringVal)
