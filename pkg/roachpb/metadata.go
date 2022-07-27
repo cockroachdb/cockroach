@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -258,13 +257,8 @@ func (r *RangeDescriptor) SetReplicaType(
 	for i := range r.InternalReplicas {
 		desc := &r.InternalReplicas[i]
 		if desc.StoreID == storeID && desc.NodeID == nodeID {
-			prevTyp := desc.GetType()
-			if typ != VOTER_FULL {
-				desc.Type = &typ
-			} else {
-				// For 19.1 compatibility.
-				desc.Type = nil
-			}
+			prevTyp := desc.Type
+			desc.Type = typ
 			return *desc, prevTyp, true
 		}
 	}
@@ -276,16 +270,11 @@ func (r *RangeDescriptor) SetReplicaType(
 func (r *RangeDescriptor) AddReplica(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
 ) ReplicaDescriptor {
-	var typPtr *ReplicaType
-	// For 19.1 compatibility, use nil instead of VOTER_FULL.
-	if typ != VOTER_FULL {
-		typPtr = &typ
-	}
 	toAdd := ReplicaDescriptor{
 		NodeID:    nodeID,
 		StoreID:   storeID,
 		ReplicaID: r.NextReplicaID,
-		Type:      typPtr,
+		Type:      typ,
 	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
@@ -333,14 +322,6 @@ func (r *RangeDescriptor) IsInitialized() bool {
 // This method mutates the receiver; do not call it with shared RangeDescriptors.
 func (r *RangeDescriptor) IncrementGeneration() {
 	r.Generation++
-}
-
-// GetStickyBit returns the sticky bit of this RangeDescriptor.
-func (r *RangeDescriptor) GetStickyBit() hlc.Timestamp {
-	if r.StickyBit == nil {
-		return hlc.Timestamp{}
-	}
-	return *r.StickyBit
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
@@ -397,8 +378,8 @@ func (r RangeDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<no replicas>")
 	}
 	w.Printf(", next=%d, gen=%d", r.NextReplicaID, r.Generation)
-	if s := r.GetStickyBit(); !s.IsEmpty() {
-		w.Printf(", sticky=%s", s)
+	if !r.StickyBit.IsEmpty() {
+		w.Printf(", sticky=%s", r.StickyBit)
 	}
 	w.SafeString("]")
 }
@@ -430,8 +411,8 @@ func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 	} else {
 		w.Print(r.ReplicaID)
 	}
-	if typ := r.GetType(); typ != VOTER_FULL {
-		w.Print(typ)
+	if r.Type != VOTER_FULL {
+		w.Print(r.Type)
 	}
 }
 
@@ -447,14 +428,6 @@ func (r ReplicaDescriptor) Validate() error {
 		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
-}
-
-// GetType returns the type of this ReplicaDescriptor.
-func (r ReplicaDescriptor) GetType() ReplicaType {
-	if r.Type == nil {
-		return VOTER_FULL
-	}
-	return *r.Type
 }
 
 // SafeValue implements the redact.SafeValue interface.
@@ -476,7 +449,7 @@ func (r ReplicaSet) GetReplicaDescriptorByID(id ReplicaID) (repDesc ReplicaDescr
 // Can be used as a filter for
 // ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
 func (r ReplicaDescriptor) IsVoterOldConfig() bool {
-	switch r.GetType() {
+	switch r.Type {
 	case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
 		return true
 	default:
@@ -489,7 +462,7 @@ func (r ReplicaDescriptor) IsVoterOldConfig() bool {
 // Can be used as a filter for
 // ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
 func (r ReplicaDescriptor) IsVoterNewConfig() bool {
-	switch r.GetType() {
+	switch r.Type {
 	case VOTER_FULL, VOTER_INCOMING:
 		return true
 	default:
@@ -501,7 +474,7 @@ func (r ReplicaDescriptor) IsVoterNewConfig() bool {
 // config (pre-reconfiguration) or the incoming config. Can be used as a filter
 // for ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
 func (r ReplicaDescriptor) IsAnyVoter() bool {
-	switch r.GetType() {
+	switch r.Type {
 	case VOTER_FULL, VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
 		return true
 	default:

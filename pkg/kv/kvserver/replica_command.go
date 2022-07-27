@@ -158,23 +158,9 @@ func prepareSplitDescs(
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
+	rightDesc.StickyBit = expiration
 
-	setStickyBit(rightDesc, expiration)
 	return leftDesc, rightDesc
-}
-
-func setStickyBit(desc *roachpb.RangeDescriptor, expiration hlc.Timestamp) {
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// Note that the client API for splitting has expiration time as
-	// non-nullable, but the internal representation of a sticky bit is nullable
-	// for backwards compatibility. If expiration time is the zero timestamp, we
-	// must be sure not to set the sticky bit to the zero timestamp because the
-	// byte representation of setting the stickyBit to nil is different than
-	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
-	// fail on older versions.
-	if !expiration.IsEmpty() {
-		desc.StickyBit = &expiration
-	}
 }
 
 func splitTxnAttempt(
@@ -267,7 +253,7 @@ func splitTxnStickyUpdateAttempt(
 		return err
 	}
 	newDesc := *desc
-	setStickyBit(&newDesc, expiration)
+	newDesc.StickyBit = expiration
 
 	b := txn.NewBatch()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -283,7 +269,7 @@ func splitTxnStickyUpdateAttempt(
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			StickyBitTrigger: &roachpb.StickyBitTrigger{
-				StickyBit: newDesc.GetStickyBit(),
+				StickyBit: newDesc.StickyBit,
 			},
 		},
 	})
@@ -391,7 +377,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
 		// bit if it has a later expiration time.
-		if desc.GetStickyBit().Less(args.ExpirationTime) {
+		if desc.StickyBit.Less(args.ExpirationTime) {
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return splitTxnStickyUpdateAttempt(ctx, txn, desc, args.ExpirationTime)
 			})
@@ -473,7 +459,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	// mixed version clusters that don't support StickyBit, all range descriptor
 	// sticky bits are guaranteed to be nil, so we can skip checking the cluster
 	// version.
-	if desc.GetStickyBit().IsEmpty() {
+	if desc.StickyBit.IsEmpty() {
 		return reply, nil
 	}
 
@@ -485,11 +471,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		}
 
 		newDesc := *desc
-		// Use nil instead of &zero until 20.1; this field is new in 19.2. We
-		// could use &zero here because the sticky bit will never be populated
-		// before the cluster version reaches 19.2 and the early return above
-		// already handles that case, but nothing is won in doing so.
-		newDesc.StickyBit = nil
+		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
 		b := txn.NewBatch()
@@ -1206,8 +1188,7 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		if beingRemoved && v.ReplicaID == r.ReplicaID() {
 			beingRemoved = false
 		}
-		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) &&
-			v.GetType() == roachpb.VOTER_INCOMING {
+		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) && v.Type == roachpb.VOTER_INCOMING {
 			voterIncomingTarget = v
 		}
 	}
@@ -1408,7 +1389,7 @@ func validateAdditionsPerStore(
 				// good.
 				continue
 			}
-			switch t := replDesc.GetType(); t {
+			switch t := replDesc.Type; t {
 			case roachpb.LEARNER:
 				// Looks like we found a learner with the same store and node id. One of
 				// the following is true:
@@ -1453,7 +1434,7 @@ func validateRemovals(desc *roachpb.RangeDescriptor, chgsByStoreID changesByStor
 			}
 			// Ensure that the type of replica being removed is the same as the type
 			// of replica present in the range descriptor.
-			switch t := replDesc.GetType(); t {
+			switch t := replDesc.Type; t {
 			case roachpb.VOTER_FULL, roachpb.LEARNER:
 				if chg.ChangeType != roachpb.REMOVE_VOTER {
 					return errors.AssertionFailedf("type of replica being removed (%s) does not match"+
@@ -1494,7 +1475,7 @@ func validatePromotionsAndDemotions(
 				// Thus, the store must not already have a replica.
 				if found {
 					return errors.AssertionFailedf("trying to add(%+v) to a store(%s) that already"+
-						" has a replica(%s)", chgs[0], storeID, replDesc.GetType())
+						" has a replica(%s)", chgs[0], storeID, replDesc.Type)
 				}
 			}
 		case 2:
@@ -1513,7 +1494,7 @@ func validatePromotionsAndDemotions(
 				isDemotion := c1.ChangeType == roachpb.ADD_NON_VOTER && c2.ChangeType == roachpb.REMOVE_VOTER
 				if !(isPromotion || isDemotion) {
 					return errors.AssertionFailedf("trying to add-remove the same replica(%s):"+
-						" %+v", replDesc.GetType(), chgs)
+						" %+v", replDesc.Type, chgs)
 				}
 			} else {
 				// NB: validateOneReplicaPerNode has a stronger version of this check,
@@ -1793,7 +1774,7 @@ func (r *Replica) initializeRaftLearners(
 			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
 		}
 
-		if rDesc.GetType() != replicaType {
+		if rDesc.Type != replicaType {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
@@ -1888,7 +1869,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	for _, target := range voterRemovals {
 		typ := internalChangeTypeRemoveLearner
-		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL {
+		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.Type == roachpb.VOTER_FULL {
 			typ = internalChangeTypeDemoteVoterToLearner
 		}
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
@@ -1933,7 +1914,7 @@ func (r *Replica) tryRollbackRaftLearner(
 		return
 	}
 	var removeChgType internalChangeType
-	switch repDesc.GetType() {
+	switch repDesc.Type {
 	case roachpb.NON_VOTER:
 		removeChgType = internalChangeTypeRemoveNonVoter
 	case roachpb.LEARNER:
@@ -1972,13 +1953,13 @@ func (r *Replica) tryRollbackRaftLearner(
 		log.Infof(
 			ctx,
 			"failed to rollback %s %s, abandoning it for the replicate queue: %v",
-			repDesc.GetType(),
+			repDesc.Type,
 			target,
 			err,
 		)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	} else {
-		log.Infof(ctx, "rolled back %s %s in %s", repDesc.GetType(), target, rangeDesc)
+		log.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
 	}
 }
 
@@ -2088,7 +2069,7 @@ func prepareChangeReplicasTrigger(
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
 				}
-				prevTyp := rDesc.GetType()
+				prevTyp := rDesc.Type
 				isRaftLearner := prevTyp == roachpb.LEARNER || prevTyp == roachpb.NON_VOTER
 				if !useJoint || isRaftLearner {
 					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
@@ -2114,7 +2095,7 @@ func prepareChangeReplicasTrigger(
 					// there's a demotion. This is just a sanity check.
 					return nil, errors.AssertionFailedf("demotions require joint consensus")
 				}
-				if prevTyp := rDesc.GetType(); prevTyp != roachpb.VOTER_FULL {
+				if prevTyp := rDesc.Type; prevTyp != roachpb.VOTER_FULL {
 					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING_LEARNER", prevTyp)
 				}
 				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING_LEARNER)
@@ -2129,7 +2110,7 @@ func prepareChangeReplicasTrigger(
 					// there's a demotion. This is just a sanity check.
 					return nil, errors.Errorf("demotions require joint consensus")
 				}
-				if prevTyp := rDesc.GetType(); prevTyp != roachpb.VOTER_FULL {
+				if prevTyp := rDesc.Type; prevTyp != roachpb.VOTER_FULL {
 					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING_NON_VOTER", prevTyp)
 				}
 				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING_NON_VOTER)
@@ -2145,7 +2126,7 @@ func prepareChangeReplicasTrigger(
 		// NB: the DeepCopy is needed or we'll skip over an entry every time we
 		// call RemoveReplica below.
 		for _, rDesc := range updatedDesc.Replicas().DeepCopy().Descriptors() {
-			switch rDesc.GetType() {
+			switch rDesc.Type {
 			case roachpb.VOTER_INCOMING:
 				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
 				isJoint = true
@@ -2455,7 +2436,7 @@ func recordRangeEventsInLog(
 	logChange logChangeFn,
 ) error {
 	for _, repDesc := range repDescs {
-		isNonVoter := repDesc.GetType() == roachpb.NON_VOTER
+		isNonVoter := repDesc.Type == roachpb.NON_VOTER
 		var typ roachpb.ReplicaChangeType
 		if added {
 			typ = roachpb.ADD_VOTER
@@ -3227,7 +3208,7 @@ func (r *Replica) relocateOne(
 					NodeID:    additionTarget.NodeID,
 					StoreID:   additionTarget.StoreID,
 					ReplicaID: desc.NextReplicaID,
-					Type:      roachpb.ReplicaTypeVoterFull(),
+					Type:      roachpb.VOTER_FULL,
 				},
 			)
 			// When we're relocating voting replicas, `additionTarget` is allowed to
@@ -3250,7 +3231,7 @@ func (r *Replica) relocateOne(
 					NodeID:    additionTarget.NodeID,
 					StoreID:   additionTarget.StoreID,
 					ReplicaID: desc.NextReplicaID,
-					Type:      roachpb.ReplicaTypeNonVoter(),
+					Type:      roachpb.NON_VOTER,
 				},
 			)
 		}

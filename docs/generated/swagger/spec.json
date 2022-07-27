@@ -1322,7 +1322,7 @@
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
     "ReplicaDescriptor": {
-      "description": "ReplicaDescriptor describes a replica location by node ID\n(corresponds to a host:port via lookup on gossip network) and store\nID (identifies the device).\nTODO(jeffreyxiao): All nullable fields in ReplicaDescriptor can be made\nnon-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).",
+      "description": "ReplicaDescriptor describes a replica location by node ID\n(corresponds to a host:port via lookup on gossip network) and store\nID (identifies the device).",
       "type": "object",
       "properties": {
         "node_id": {

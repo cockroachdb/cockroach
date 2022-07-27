@@ -995,8 +995,8 @@ func TestLeaseEquivalence(t *testing.T) {
 	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.ToTimestamp().Clone()}
 
 	r1Voter, r1Learner := r1, r1
-	r1Voter.Type = ReplicaTypeVoterFull()
-	r1Learner.Type = ReplicaTypeLearner()
+	r1Voter.Type = VOTER_FULL
+	r1Learner.Type = LEARNER
 	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
 	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
 
@@ -1815,14 +1815,10 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 func TestChangeReplicasTrigger_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	vi := VOTER_INCOMING
-	vo := VOTER_OUTGOING
-	vd := VOTER_DEMOTING_LEARNER
-	l := LEARNER
-	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
-	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
-	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
-	repl3 := ReplicaDescriptor{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: &vd}
+	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: VOTER_INCOMING}
+	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: VOTER_OUTGOING}
+	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: LEARNER}
+	repl3 := ReplicaDescriptor{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: VOTER_DEMOTING_LEARNER}
 	crt := ChangeReplicasTrigger{
 		InternalAddedReplicas:   []ReplicaDescriptor{repl1},
 		InternalRemovedReplicas: []ReplicaDescriptor{repl2, repl3},
@@ -1849,7 +1845,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 
 	crt.InternalRemovedReplicas = nil
 	crt.InternalAddedReplicas = nil
-	repl1.Type = ReplicaTypeVoterFull()
+	repl1.Type = VOTER_FULL
 	crt.Desc.SetReplicas(MakeReplicaSet([]ReplicaDescriptor{repl1, learner}))
 	act = crt.String()
 	require.Empty(t, crt.Added())
@@ -1880,7 +1876,7 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 			typ := alt[i].(ReplicaType)
 			id := alt[i+1].(int)
 			rDescs = append(rDescs, ReplicaDescriptor{
-				Type:      &typ,
+				Type:      typ,
 				NodeID:    NodeID(3 * id),
 				StoreID:   StoreID(2 * id),
 				ReplicaID: ReplicaID(id),

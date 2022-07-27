@@ -860,7 +860,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	var ops []roachpb.ReplicationChange
 	replDesc, found := desc.GetReplicaDescriptor(newVoter.StoreID)
 	if found {
-		if replDesc.GetType() != roachpb.NON_VOTER {
+		if replDesc.Type != roachpb.NON_VOTER {
 			return false, errors.AssertionFailedf("allocation target %s for a voter"+
 				" already has an unexpected replica: %s", newVoter, replDesc)
 		}
@@ -1481,7 +1481,7 @@ func replicationChangesForRebalance(
 	switch rebalanceTargetType {
 	case allocatorimpl.VoterTarget:
 		// Check if the target being added already has a non-voting replica.
-		if found && rdesc.GetType() == roachpb.NON_VOTER {
+		if found && rdesc.Type == roachpb.NON_VOTER {
 			// If the receiving store already has a non-voting replica, we *must*
 			// execute a swap between that non-voting replica and the voting replica
 			// we're trying to move to it. This swap is executed atomically via

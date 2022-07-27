@@ -189,7 +189,7 @@ func (t *testProposer) leaderStatusRLocked(
 		iAmTheLeader = leaderRep == t.getReplicaID()
 		repDesc := roachpb.ReplicaDescriptor{
 			ReplicaID: leaderRep,
-			Type:      &t.leaderReplicaType,
+			Type:      t.leaderReplicaType,
 		}
 
 		if t.leaderReplicaInDescriptor {

@@ -237,7 +237,7 @@ func (mq *mergeQueue) process(
 
 	// Range was manually split and not expired, so skip merging.
 	now := mq.store.Clock().NowAsClockTimestamp()
-	if now.ToTimestamp().Less(rhsDesc.GetStickyBit()) {
+	if now.ToTimestamp().Less(rhsDesc.StickyBit) {
 		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
 		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
 		// repeatedly processing ranges that cannot be merged.
@@ -309,7 +309,7 @@ func (mq *mergeQueue) process(
 	// Defensive sanity check that the ranges involved only have either VOTER_FULL
 	// and NON_VOTER replicas.
 	for i := range leftRepls {
-		if typ := leftRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+		if typ := leftRepls[i].Type; !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
 			return false,
 				errors.AssertionFailedf(
 					`cannot merge because lhs is either in a joint state or has learner replicas: %v`,
@@ -370,7 +370,7 @@ func (mq *mergeQueue) process(
 		rightRepls = rhsDesc.Replicas().Descriptors()
 	}
 	for i := range rightRepls {
-		if typ := rightRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+		if typ := rightRepls[i].Type; !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
 			log.Infof(ctx, "RHS Type: %s", typ)
 			return false,
 				errors.AssertionFailedf(

@@ -143,7 +143,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	if !ok {
 		return true
 	}
-	if t := replDesc.GetType(); t != roachpb.VOTER_FULL && t != roachpb.NON_VOTER {
+	if t := replDesc.Type; t != roachpb.VOTER_FULL && t != roachpb.NON_VOTER {
 		return true
 	}
 

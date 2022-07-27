@@ -126,8 +126,6 @@ enum ReplicaType {
 // ReplicaDescriptor describes a replica location by node ID
 // (corresponds to a host:port via lookup on gossip network) and store
 // ID (identifies the device).
-// TODO(jeffreyxiao): All nullable fields in ReplicaDescriptor can be made
-// non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message ReplicaDescriptor {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
@@ -147,9 +145,9 @@ message ReplicaDescriptor {
       (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID",
       (gogoproto.moretags) = "yaml:\"ReplicaID\""];
 
-  // Type indicates which raft activities a replica participates in. A nil type
-  // is equivalent to VOTER.
-  optional ReplicaType type = 4 [(gogoproto.moretags) = "yaml:\"ReplicaType,omitempty\""];
+  // Type indicates which raft activities a replica participates in.
+  optional ReplicaType type = 4 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = "yaml:\"ReplicaType,omitempty\""];
 }
 
 // ReplicaIdent uniquely identifies a specific replica.
@@ -171,9 +169,6 @@ message ReplicaIdent {
 // (instead of re-marshaling the proto), but unfortunately we also need the
 // Equal() method to work. Also note that we configure our protos to not
 // maintain unrecognized fields.
-//
-// TODO(jeffreyxiao): All nullable fields in RangeDescriptor can be made
-// non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
   // We implement the Equal method by hand so that it can ignore deprecated
@@ -271,8 +266,7 @@ message RangeDescriptor {
   // that the unsplit operation is a different operation from the merge
   // operation. Unsplit only unsets sticky_bit. It is represented by a
   // timestamp that indicates when it expires. After the expiration time has
-  // passed, the split is eligible for automatic merging. A nil sticky bit is
-  // equivalent to hlc.Timestamp{}.
+  // passed, the split is eligible for automatic merging.
   //
   // The reason the sticky_bit exists is because when the merge queue is
   // enabled and a manual split happens, the split ranges would immediately be
@@ -280,7 +274,7 @@ message RangeDescriptor {
   // attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // disabling the merge queue.
-  optional util.hlc.Timestamp sticky_bit = 7;
+  optional util.hlc.Timestamp sticky_bit = 7 [(gogoproto.nullable) = false];
 
   reserved 8;
 }

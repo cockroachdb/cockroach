@@ -448,7 +448,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 				NodeID:    roachpb.NodeID(storeID),
 				StoreID:   storeID,
 				ReplicaID: roachpb.ReplicaID(storeID),
-				Type:      roachpb.ReplicaTypeVoterFull(),
+				Type:      roachpb.VOTER_FULL,
 			})
 		}
 		repl.mu.state.Lease = &roachpb.Lease{
@@ -461,7 +461,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 				NodeID:    roachpb.NodeID(storeID),
 				StoreID:   storeID,
 				ReplicaID: roachpb.ReplicaID(storeID),
-				Type:      roachpb.ReplicaTypeNonVoter(),
+				Type:      roachpb.NON_VOTER,
 			})
 		}
 		// TODO(a-robinson): The below three lines won't be needed once the old
