@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -30,6 +31,8 @@ func TestTransportMoveToFront(t *testing.T) {
 	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
+	rd3Incoming := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3,
+		Type: roachpb.ReplicaTypeVoterIncoming()}
 	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
@@ -94,6 +97,11 @@ func TestTransportMoveToFront(t *testing.T) {
 	if gt.nextReplicaIdx != 1 {
 		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
 	}
+
+	// Move rd3 to front, even if the replica type differs.
+	gt.MoveToFront(rd3Incoming)
+	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd3, rd2})
+	require.Equal(t, 1, gt.nextReplicaIdx)
 }
 
 // TestSpanImport tests that the gRPC transport ingests trace information that

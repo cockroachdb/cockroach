@@ -2127,7 +2127,7 @@ func (ds *DistSender) sendToReplicas(
 			// account that the local node can't be down) it won't take long until we
 			// talk to a replica that tells us who the leaseholder is.
 			if ctx.Err() == nil {
-				if lh := routing.Leaseholder(); lh != nil && *lh == curReplica {
+				if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
 					routing.EvictLease(ctx)
 				}
 			}
@@ -2209,7 +2209,7 @@ func (ds *DistSender) sendToReplicas(
 						// (possibly because it hasn't applied its lease yet). Perhaps that
 						// lease expires and someone else gets a new one, so by moving on we
 						// get out of possibly infinite loops.
-						if *lh != curReplica || sameReplicaRetries < sameReplicaRetryLimit {
+						if !lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
 							transport.MoveToFront(*lh)
 						}
 					}
