@@ -112,6 +112,12 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
+	case "/cockroach.keyvisualizer.keyvispb.KeyVisualizer/SaveBoundaries":
+		return a.authTenant(tenID)
+
+	case "/cockroach.keyvisualizer.keyvispb.KeyVisualizer/GetSamples":
+		return a.authTenant(tenID)
+
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 

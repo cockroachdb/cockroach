@@ -358,6 +358,12 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SystemExternalConnectionsTable)
 	target.AddDescriptor(systemschema.RoleIDSequence)
 
+	// Tables introduced in 23.1.
+	target.AddDescriptorForSystemTenant(systemschema.SpanStatsUniqueKeysTable)
+	target.AddDescriptorForSystemTenant(systemschema.SpanStatsBucketsTable)
+	target.AddDescriptorForSystemTenant(systemschema.SpanStatsSamplesTable)
+	target.AddDescriptorForSystemTenant(systemschema.SpanStatsTenantBoundariesTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
@@ -376,15 +382,30 @@ func addSplitIDs(target *MetadataSchema) {
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 }
 
+// findSystemTableDescID returns the descpb.ID for the system table with tableName.
+// If no descriptor for tableName exists, descpb.InvalidID is returned.
+func findSystemTableDescID(
+	target *MetadataSchema, tableName catconstants.SystemTableName,
+) descpb.ID {
+	id := descpb.InvalidID
+	_ = target.ForEachCatalogDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetName() == string(tableName) {
+			id = desc.GetID()
+		}
+		return nil
+	})
+	return id
+}
+
 // InitialZoneConfigKVs returns a list of KV pairs to seed `system.zones`. The
 // list contains extra entries for the system tenant.
 func InitialZoneConfigKVs(
-	codec keys.SQLCodec,
+	target *MetadataSchema,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (ret []roachpb.KeyValue) {
 	const skippedColumnFamilyID = 0
-	w := MakeKVWriter(codec, systemschema.ZonesTable, skippedColumnFamilyID)
+	w := MakeKVWriter(target.codec, systemschema.ZonesTable, skippedColumnFamilyID)
 	add := func(id uint32, zc *zonepb.ZoneConfig) {
 		bytes, err := protoutil.Marshal(zc)
 		if err != nil {
@@ -401,7 +422,7 @@ func InitialZoneConfigKVs(
 	// zone configuration.
 	add(keys.RootNamespaceID, defaultZoneConfig)
 
-	if !codec.ForSystemTenant() {
+	if !target.codec.ForSystemTenant() {
 		return ret
 	}
 
@@ -437,6 +458,14 @@ func InitialZoneConfigKVs(
 	add(keys.ReplicationStatsTableID, replicationStatsZoneConf)
 	add(keys.TenantUsageTableID, tenantUsageZoneConf)
 
+	// SpanStatsTenantBoundaries has a dynamically allocated descriptor ID, and it needs a shorter GC policy.
+	if id := findSystemTableDescID(target, catconstants.SpanStatsTenantBoundaries); id != descpb.InvalidID {
+		spanStatsTenantBoundariesZoneConf := &zonepb.ZoneConfig{
+			GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.SpanStatsTenantBoundariesTableTTL.Seconds())},
+		}
+		add(uint32(id), spanStatsTenantBoundariesZoneConf)
+	}
+
 	return ret
 }
 
@@ -447,7 +476,7 @@ func addZoneConfigKVsToSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
+	kvs := InitialZoneConfigKVs(target, defaultZoneConfig, defaultSystemZoneConfig)
 	target.otherKV = append(target.otherKV, kvs...)
 }
 

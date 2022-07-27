@@ -172,7 +172,11 @@ var upgrades = []upgrade.Upgrade{
 	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
 		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
 		NoPrecondition,
-		descIDSequenceForSystemTenant,
+		descIDSequenceForSystemTenant),
+	upgrade.NewTenantUpgrade("add tables to support persisting key visualizer samples",
+		toCV(clusterversion.KeyVisualizerTables),
+		NoPrecondition,
+		keyVisualizerTablesMigration,
 	),
 }
 

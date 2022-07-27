@@ -47,6 +47,7 @@ var (
 	_ Details = StreamReplicationDetails{}
 	_ Details = RowLevelTTLDetails{}
 	_ Details = SchemaTelemetryDetails{}
+	_ Details = KeyVisualizerDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -66,6 +67,7 @@ var (
 	_ ProgressDetails = StreamReplicationProgress{}
 	_ ProgressDetails = RowLevelTTLProgress{}
 	_ ProgressDetails = SchemaTelemetryProgress{}
+	_ ProgressDetails = KeyVisualizerProgress{}
 )
 
 // Type returns the payload's job type.
@@ -136,6 +138,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeRowLevelTTL
 	case *Payload_SchemaTelemetry:
 		return TypeAutoSchemaTelemetry
+	case *Payload_KeyVisualizerDetails:
+		return TypeKeyVisualizer
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -182,6 +186,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryProgress:
 		return &Progress_SchemaTelemetry{SchemaTelemetry: &d}
+	case KeyVisualizerProgress:
+		return &Progress_KeyVisualizerProgress{KeyVisualizerProgress: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -223,6 +229,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.RowLevelTTL
 	case *Payload_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Payload_KeyVisualizerDetails:
+		return *d.KeyVisualizerDetails
 	default:
 		return nil
 	}
@@ -264,6 +272,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.RowLevelTTL
 	case *Progress_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Progress_KeyVisualizerProgress:
+		return *d.KeyVisualizerProgress
 	default:
 		return nil
 	}
@@ -318,6 +328,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryDetails:
 		return &Payload_SchemaTelemetry{SchemaTelemetry: &d}
+	case KeyVisualizerDetails:
+		return &Payload_KeyVisualizerDetails{KeyVisualizerDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -353,7 +365,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 18
+const NumJobTypes = 19
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

@@ -322,6 +322,9 @@ const (
 	// system tenant.
 	V23_1DescIDSequenceForSystemTenant
 
+	// KeyVisualizerTables adds the system tables that support persisting key visualizer sample data.
+	KeyVisualizerTables
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -527,6 +530,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1DescIDSequenceForSystemTenant,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
+	},
+	{
+		Key:     KeyVisualizerTables,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 8},
 	},
 
 	// *************************************************

@@ -1,0 +1,24 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keyvismanager",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvismanager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keyvisualizer/keyvisjob",
+        "//pkg/keyvisualizer/keyvissettings",
+        "//pkg/kv",
+        "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)
+
+get_x_data(name = "get_x_data")
