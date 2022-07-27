@@ -175,34 +175,36 @@ var changefeedResultTypes = []*types.T{
 // fetchSpansForTable returns the set of spans for the specified table.
 // Usually, this is just the primary index span.
 // However, if details.Select is not empty, the set of spans returned may be
-// restricted to satisfy predicate in the select clause.  In that case,
-// possibly updated select clause returned representing the remaining expression
-// that still needs to be applied to the events.
+// restricted to satisfy predicate in the select clause.
 func fetchSpansForTables(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	tableDescs []catalog.TableDescriptor,
 	details jobspb.ChangefeedDetails,
-) (_ []roachpb.Span, updatedExpression string, _ error) {
+	initialHighwater hlc.Timestamp,
+) (roachpb.Spans, error) {
 	var trackedSpans []roachpb.Span
 	if details.Select == "" {
 		for _, d := range tableDescs {
 			trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCtx.ExecCfg().Codec))
 		}
-		return trackedSpans, "", nil
+		return trackedSpans, nil
 	}
 
 	if len(tableDescs) != 1 {
-		return nil, "", pgerror.Newf(pgcode.InvalidParameterValue,
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 			"filter can only be used with single target (found %d)",
 			len(tableDescs))
 	}
 	target := details.TargetSpecifications[0]
-	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
-	keyOnly := details.Opts[changefeedbase.OptEnvelope] == string(changefeedbase.OptEnvelopeKeyOnly)
-
-	return cdceval.ConstrainPrimaryIndexSpanByFilter(
-		ctx, execCtx, details.Select, tableDescs[0], target, includeVirtual, keyOnly)
+	sc, err := cdceval.ParseChangefeedExpression(details.Select)
+	if err != nil {
+		return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue,
+			"could not parse changefeed expression")
+	}
+	return cdceval.SpansForExpression(
+		ctx, execCtx.ExecCfg(), execCtx.User(), execCtx.SessionData().SessionData,
+		tableDescs[0], initialHighwater, target, sc)
 }
 
 var replanChangefeedThreshold = settings.RegisterFloatSetting(
@@ -236,7 +238,11 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
-	trackedSpans, selectClause, err := fetchSpansForTables(ctx, execCtx, tableDescs, details)
+
+	if schemaTS.IsEmpty() {
+		schemaTS = details.StatementTime
+	}
+	trackedSpans, err := fetchSpansForTables(ctx, execCtx, tableDescs, details, schemaTS)
 	if err != nil {
 		return err
 	}
@@ -248,7 +254,7 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans, selectClause)(ctx, dsp)
+	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -264,7 +270,7 @@ func startDistChangefeed(
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
 		p,
-		makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans, selectClause),
+		makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans),
 		execCtx,
 		replanOracle,
 		func() time.Duration { return replanChangefeedFrequency.Get(execCtx.ExecCfg().SV()) },
@@ -331,7 +337,6 @@ func makePlan(
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	trackedSpans []roachpb.Span,
-	selectClause string,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		var blankTxn *kv.Txn
@@ -401,7 +406,7 @@ func makePlan(
 				Feed:       details,
 				UserProto:  execCtx.User().EncodeProto(),
 				JobID:      jobID,
-				Select:     execinfrapb.Expression{Expr: selectClause},
+				Select:     execinfrapb.Expression{Expr: details.Select},
 			}
 		}
 
