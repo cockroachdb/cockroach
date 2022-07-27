@@ -506,16 +506,16 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil {
+	if log.ExpensiveLogEnabled(ctx, 2) {
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
 		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
 		if err != nil {
-			log.Infof(ctx, "error generating diagram: %s", err)
+			log.VEventf(ctx, 2, "error generating diagram: %s", err)
 		} else {
-			log.Infof(ctx, "plan diagram URL:\n%s", url.String())
+			log.VEventf(ctx, 2, "plan diagram URL:\n%s", url.String())
 		}
 	}
 

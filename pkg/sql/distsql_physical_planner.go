@@ -840,7 +840,6 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	diagramFlags execinfrapb.DiagramFlags,
 ) (execinfrapb.FlowDiagram, error) {
-	log.VEvent(ctx, 1, "creating plan diagram")
 	var stmtStr string
 	if p.planner != nil && p.planner.stmt.AST != nil {
 		stmtStr = p.planner.stmt.String()
