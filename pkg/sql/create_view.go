@@ -636,7 +636,11 @@ func addResultColumns(
 	resultColumns colinfo.ResultColumns,
 ) error {
 	for _, colRes := range resultColumns {
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
+		colTyp := colRes.Typ
+		if colTyp.Family() == types.UnknownFamily {
+			colTyp = types.String
+		}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colTyp}
 		// Nullability constraints do not need to exist on the view, since they are
 		// already enforced on the source data.
 		columnTableDef.Nullable.Nullability = tree.SilentNull
