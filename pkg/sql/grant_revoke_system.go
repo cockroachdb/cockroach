@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -184,12 +183,12 @@ func (*changeNonDescriptorBackedPrivilegesNode) Close(context.Context)        {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 	ctx context.Context, p *planner,
-) ([]privilegeobject.SyntheticPrivilegeObject, error) {
+) ([]syntheticprivilege.Object, error) {
 	switch n.grantOn {
 	case privilege.Global:
-		return []privilegeobject.SyntheticPrivilegeObject{syntheticprivilege.GlobalPrivilegeObject}, nil
+		return []syntheticprivilege.Object{syntheticprivilege.GlobalPrivilegeObject}, nil
 	case privilege.VirtualTable:
-		var ret []privilegeobject.SyntheticPrivilegeObject
+		var ret []syntheticprivilege.Object
 		for _, tableTarget := range n.targets.Tables.TablePatterns {
 			tableGlob, err := tableTarget.NormalizeTablePattern()
 			if err != nil {

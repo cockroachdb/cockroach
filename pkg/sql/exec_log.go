@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -452,7 +452,7 @@ func (p *planner) logOperationalEventsOnlyExternally(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(privilegeObject privilegeobject.PrivilegeObject, priv privilege.Kind) {
+func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privilege.Kind) {
 	switch object := privilegeObject.(type) {
 	case catalog.Descriptor:
 		wantedMode := object.GetAuditMode()
@@ -466,7 +466,7 @@ func (p *planner) maybeAudit(privilegeObject privilegeobject.PrivilegeObject, pr
 		default:
 			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: false})
 		}
-	case privilegeobject.SyntheticPrivilegeObject:
+	case syntheticprivilege.Object:
 		// TODO(richardjcai): Add auditing here.
 	}
 }
