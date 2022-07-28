@@ -11,6 +11,7 @@
 package test3node_tenant
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,6 +36,10 @@ const configIdx = 9
 var sqliteLogicTestDir string
 
 func init() {
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
 	if *logictest.Bigtest {
 		if bazel.BuiltWithBazel() {
 			var err error
@@ -50,10 +55,6 @@ func init() {
 			}
 		}
 	}
-
-}
-
-func TestMain(m *testing.M) {
 	defer utilccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
