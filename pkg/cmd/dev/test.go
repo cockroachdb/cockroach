@@ -454,7 +454,11 @@ func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	changedFilesList := strings.Split(strings.TrimSpace(string(changedFiles)), "\n")
+	trimmedOutput := strings.TrimSpace(string(changedFiles))
+	if trimmedOutput == "" {
+		return nil, nil
+	}
+	changedFilesList := strings.Split(trimmedOutput, "\n")
 	// Each file in this list needs to be munged somewhat to match up to the
 	// Bazel target syntax.
 	for idx, file := range changedFilesList {
