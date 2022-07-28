@@ -211,6 +211,24 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 
 			return buf.String()
 		}))
+		t.Run("DeocdeValueFromMVCCValue/"+name, func(t *testing.T) {
+			enc, err := EncodeMVCCValue(tc.val)
+			require.NoError(t, err)
+			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
+
+			dec, err := DecodeValueFromMVCCValue(enc)
+			require.NoError(t, err)
+
+			if len(dec.RawBytes) == 0 {
+				dec.RawBytes = nil // normalize
+			}
+
+			require.Equal(t, tc.val.Value, dec)
+			require.Equal(t, tc.val.IsTombstone(), len(dec.RawBytes) == 0)
+			isTombstone, err := EncodedMVCCValueIsTombstone(enc)
+			require.NoError(t, err)
+			require.Equal(t, tc.val.IsTombstone(), isTombstone)
+		})
 	}
 }
 
@@ -227,6 +245,14 @@ func TestDecodeMVCCValueErrors(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			dec, err := DecodeMVCCValue(tc.enc)
+			require.Equal(t, tc.expect, err)
+			require.Zero(t, dec)
+			isTombstone, err := EncodedMVCCValueIsTombstone(tc.enc)
+			require.Equal(t, tc.expect, err)
+			require.False(t, isTombstone)
+		})
+		t.Run("DecodeValueFromMVCCValue/"+name, func(t *testing.T) {
+			dec, err := DecodeValueFromMVCCValue(tc.enc)
 			require.Equal(t, tc.expect, err)
 			require.Zero(t, dec)
 			isTombstone, err := EncodedMVCCValueIsTombstone(tc.enc)
@@ -283,6 +309,26 @@ func BenchmarkEncodeMVCCValue(b *testing.B) {
 	}
 }
 
+func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					res, err := EncodeMVCCValueForExport(mvccValue)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = res
+				}
+			})
+		}
+	}
+}
+
 func BenchmarkDecodeMVCCValue(b *testing.B) {
 	headers, values := mvccValueBenchmarkConfigs()
 	for hDesc, h := range headers {
@@ -312,6 +358,27 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func BenchmarkDecodeValueFromMVCCValue(b *testing.B) {
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			buf, err := EncodeMVCCValue(mvccValue)
+			require.NoError(b, err)
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					res, err := DecodeValueFromMVCCValue(buf)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = res
+				}
+			})
 		}
 	}
 }
