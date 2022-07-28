@@ -12,6 +12,7 @@ package rules
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 )
 
 // TestRulesYAML outputs the rules to yaml as a way to visualize changes.
+// Rules are sorted by name to ensure stable output.
 func TestRulesYAML(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -30,7 +32,14 @@ func TestRulesYAML(t *testing.T) {
 			case "rules":
 				var m yaml.Node
 				m.Kind = yaml.MappingNode
+				var s []rel.RuleDef
 				screl.Schema.ForEachRule(func(def rel.RuleDef) {
+					s = append(s, def)
+				})
+				sort.Slice(s, func(i, j int) bool {
+					return s[i].Name < s[j].Name
+				})
+				for _, def := range s {
 					var clauses yaml.Node
 					if err := clauses.Encode(def.Clauses); err != nil {
 						panic(err)
@@ -41,20 +50,28 @@ func TestRulesYAML(t *testing.T) {
 							"%s(%v)", def.Name, strings.Join(toStrings(def.Params), ", "),
 						),
 					}, &clauses)
-				})
+				}
 				out, err := yaml.Marshal(m)
 				if err != nil {
 					d.Fatalf(t, "failed to marshal rules: %v", err)
 				}
 				return string(out)
 			case "deprules":
-				out, err := yaml.Marshal(registry.depRules)
+				s := append(([]registeredDepRule)(nil), registry.depRules...)
+				sort.Slice(s, func(i, j int) bool {
+					return s[i].name < s[j].name
+				})
+				out, err := yaml.Marshal(s)
 				if err != nil {
 					d.Fatalf(t, "failed to marshal deprules: %v", err)
 				}
 				return string(out)
 			case "oprules":
-				out, err := yaml.Marshal(registry.opRules)
+				s := append(([]registeredOpRule)(nil), registry.opRules...)
+				sort.Slice(s, func(i, j int) bool {
+					return s[i].name < s[j].name
+				})
+				out, err := yaml.Marshal(s)
 				if err != nil {
 					d.Fatalf(t, "failed to marshal oprules: %v", err)
 				}
