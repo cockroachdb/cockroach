@@ -132,7 +132,7 @@ PostCommitPhase stage 2 of 2 with 6 MutationType ops
       JobID: 1
 
 ops
-ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
+ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
 ----
 StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
@@ -161,7 +161,8 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
+          ‹123›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
@@ -174,7 +175,6 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -234,9 +234,9 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       JobID: 1
       RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
       Statements:
-      - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
-          ‹123›
+      - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT
+          NULL DEFAULT ‹123›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
@@ -341,7 +341,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
+          ‹123›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
@@ -353,7 +354,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
+          ‹123›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
@@ -392,13 +394,14 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
     *scop.CreateGcJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
+          ‹123›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
