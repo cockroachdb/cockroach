@@ -5596,10 +5596,12 @@ func MVCCExportToSST(
 			if err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
-
-			// Export only the inner roachpb.Value, not the MVCCValue header.
-			unsafeValue = mvccValue.Value.RawBytes
-
+			unsafeValue, err = EncodeForExport(mvccValue)
+			if err != nil {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+					"repackaging imported mvcc value %s",
+					unsafeKey)
+			}
 			// Skip tombstone records when start time is zero (non-incremental)
 			// and we are not exporting all versions.
 			skip = skipTombstones && mvccValue.IsTombstone()

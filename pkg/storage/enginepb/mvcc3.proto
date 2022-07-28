@@ -170,6 +170,10 @@ message MVCCValueHeader {
   // to stale reads.
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // ImportEpoch identifies the number of times a user has called IMPORT
+  // INTO on the table this key belongs to when the table was not empty.
+  uint32 import_epoch = 2;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
