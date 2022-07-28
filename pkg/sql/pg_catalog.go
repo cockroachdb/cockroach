@@ -4224,13 +4224,11 @@ func init() {
 	h := makeOidHasher()
 	tree.OidToBuiltinName = make(map[oid.Oid]string, len(tree.FunDefs))
 	for name, def := range tree.FunDefs {
-		for _, o := range def.Definition {
-			if overload, ok := o.(*tree.Overload); ok {
-				builtinOid := h.BuiltinOid(name, overload)
-				id := builtinOid.Oid
-				tree.OidToBuiltinName[id] = name
-				overload.Oid = id
-			}
+		for _, overload := range def.Definition {
+			builtinOid := h.BuiltinOid(name, overload)
+			id := builtinOid.Oid
+			tree.OidToBuiltinName[id] = name
+			overload.Oid = id
 		}
 	}
 }

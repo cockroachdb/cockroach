@@ -624,8 +624,7 @@ func checkFunctionSupported(
 			fnVolatility = fnCall.ResolvedOverload().Volatility
 		} else {
 			// Pick highest volatility overload.
-			for _, o := range fn.Definition {
-				overload := o.(*tree.Overload)
+			for _, overload := range fn.Definition {
 				if overload.Volatility > fnVolatility {
 					fnVolatility = overload.Volatility
 				}
