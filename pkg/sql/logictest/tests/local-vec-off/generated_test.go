@@ -43,7 +43,6 @@ func init() {
 	} else {
 		logicTestDir = "../../../../sql/logictest/testdata/logic_test"
 	}
-
 }
 
 func TestMain(m *testing.M) {

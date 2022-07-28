@@ -28,6 +28,7 @@ const (
 	stressTarget = "@com_github_cockroachdb_stress//:stress"
 
 	// General testing flags.
+	changedFlag      = "changed"
 	countFlag        = "count"
 	vFlag            = "verbose"
 	showLogsFlag     = "show-logs"
@@ -92,6 +93,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// under test, controlling whether the process-internal logs are made
 	// visible.
 	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
+	testCmd.Flags().Bool(changedFlag, false, "automatically determine tests to run. This is done on a best-effort basis by asking git which files have changed. Only .go files and files in testdata/ directories are factored into this analysis.")
 	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
@@ -122,6 +124,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
 		noGen         = mustGetFlagBool(cmd, noGenFlag)
+		changed       = mustGetFlagBool(cmd, changedFlag)
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
@@ -145,6 +148,21 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	)
 
 	var disableTestSharding bool
+	if changed {
+		if rewrite {
+			return fmt.Errorf("cannot combine --%s and --%s", changedFlag, rewriteFlag)
+		}
+		targets, err := d.determineAffectedTargets(ctx)
+		if err != nil {
+			return err
+		}
+		pkgs = append(pkgs, targets...)
+		if len(pkgs) == 0 {
+			log.Printf("WARNING: no affected tests found")
+			return nil
+		}
+	}
+
 	if rewrite {
 		ignoreCache = true
 		disableTestSharding = true
@@ -407,4 +425,76 @@ func getDirectoryFromTarget(target string) string {
 		return target
 	}
 	return target[:colon]
+}
+
+func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
+	// List files changed against `master`.
+	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	if err != nil {
+		return nil, err
+	}
+	var upstream string
+	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
+		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
+			upstream = strings.Fields(remote)[0]
+			break
+		}
+	}
+	if upstream == "" {
+		return nil, fmt.Errorf("could not find git upstream")
+	}
+
+	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	base := strings.TrimSpace(string(baseBytes))
+
+	changedFiles, err := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "*.go", "**/testdata/**")
+	if err != nil {
+		return nil, err
+	}
+	changedFilesList := strings.Split(strings.TrimSpace(string(changedFiles)), "\n")
+	// Each file in this list needs to be munged somewhat to match up to the
+	// Bazel target syntax.
+	for idx, file := range changedFilesList {
+		if strings.HasSuffix(file, ".go") {
+			changedFilesList[idx] = "//" + filepath.Dir(file) + ":" + filepath.Base(file)
+		} else {
+			// Otherwise this is a testdata file.
+			testdataIdx := strings.LastIndex(file, "/testdata/")
+			if testdataIdx < 0 {
+				return nil, fmt.Errorf("cannot parse testdata file %s; this is a bug", file)
+			}
+			pkg := file[:testdataIdx]
+			testdataFile := file[testdataIdx+len("/testdata/"):]
+			changedFilesList[idx] = "//" + pkg + ":testdata/" + testdataFile
+		}
+	}
+
+	// List the targets affected by these changed files.
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	subdirs, err := d.os.ListSubdirectories(filepath.Join(workspace, "pkg"))
+	if err != nil {
+		return nil, err
+	}
+	var dirsToQuery []string
+	for _, subdir := range subdirs {
+		if subdir == "ui" {
+			continue
+		}
+		dirsToQuery = append(dirsToQuery, fmt.Sprintf("//pkg/%s/...", subdir))
+	}
+	// The repetition of `kind('go_test')` here is kind of odd, but I've
+	// noticed the produced list of targets includes non-go_test targets if
+	// we don't include the outer call.
+	query := fmt.Sprintf("kind('go_test', rdeps(kind('go_test', %s), %s))", strings.Join(dirsToQuery, " + "), strings.Join(changedFilesList, " + "))
+	tests, err := d.exec.CommandContextSilent(ctx, "bazel", "query", query, "--output=label")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSpace(string(tests)), "\n"), nil
 }
