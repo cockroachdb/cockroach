@@ -354,6 +354,7 @@ func shouldRetry(err error) bool {
 		return true
 	}
 
+	fmt.Println("@@@ custom retry", err)
 	switch e := err.(type) {
 	case *http2.StreamError:
 		fmt.Println("@@@ retrying custom", e)
@@ -364,6 +365,7 @@ func shouldRetry(err error) bool {
 	}
 
 	if e, ok := err.(interface{ Unwrap() error }); ok {
+		fmt.Println("@@@ custom unwrap", e.Unwrap())
 		return shouldRetry(e.Unwrap())
 	}
 
