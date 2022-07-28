@@ -78,7 +78,7 @@ type Client interface {
 	) (Subscription, error)
 
 	// Close releases all the resources used by this client.
-	Close() error
+	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streaming.StreamID) error
@@ -123,7 +123,9 @@ type Subscription interface {
 }
 
 // NewStreamClient creates a new stream client based on the stream address.
-func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
+func NewStreamClient(
+	ctx context.Context, streamAddress streamingccl.StreamAddress,
+) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
 	if err != nil {
@@ -134,7 +136,7 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return newPartitionedStreamClient(streamURL)
+		return newPartitionedStreamClient(ctx, streamURL)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {

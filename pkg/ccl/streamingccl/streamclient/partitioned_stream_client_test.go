@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,7 +57,6 @@ func (f *subscriptionFeedSource) Close(ctx context.Context) {}
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 83694)
 	defer log.Scope(t).Close(t)
 
 	h, cleanup := streamingtest.NewReplicationHelper(t,
@@ -90,9 +88,9 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	client, err := newPartitionedStreamClient(&h.PGUrl)
+	client, err := newPartitionedStreamClient(ctx, &h.PGUrl)
 	defer func() {
-		require.NoError(t, client.Close())
+		require.NoError(t, client.Close(ctx))
 	}()
 	require.NoError(t, err)
 	expectStreamState := func(streamID streaming.StreamID, status jobs.Status) {
@@ -166,9 +164,9 @@ INSERT INTO d.t2 VALUES (2);
 	url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
-	subClient, err := newPartitionedStreamClient(url)
+	subClient, err := newPartitionedStreamClient(ctx, url)
 	defer func() {
-		require.NoError(t, subClient.Close())
+		require.NoError(t, subClient.Close(ctx))
 	}()
 	require.NoError(t, err)
 	sub, err := subClient.Subscribe(ctx, streamID, encodeSpec("t1"), hlc.Timestamp{})

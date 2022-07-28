@@ -271,7 +271,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
+			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr))
 			if err != nil {
 				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
 				return
@@ -359,7 +359,7 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	for _, client := range sip.streamPartitionClients {
-		_ = client.Close()
+		_ = client.Close(sip.Ctx)
 	}
 	if sip.batcher != nil {
 		sip.batcher.Close(sip.Ctx)
