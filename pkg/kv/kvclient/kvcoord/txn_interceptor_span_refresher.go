@@ -679,7 +679,16 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 		sr.refreshFootprint.clear()
 	} else if !sr.refreshInvalid {
 		sr.refreshFootprint.insert(tfs.RefreshSpans...)
-		sr.refreshFootprint.maybeCondense(ctx, sr.riGen, MaxTxnRefreshSpansBytes.Get(&sr.st.SV))
+		maxBytes := MaxTxnRefreshSpansBytes.Get(&sr.st.SV)
+		sr.refreshFootprint.maybeCondense(ctx, sr.riGen, maxBytes)
+		// Since maybeCondense reduces the footprint on a best-effort basis,
+		// it's possible that we're now significantly over the maxBytes target.
+		// If we're over by at least an order of magnitude, then give up on the
+		// ability to refresh since this memory is not accounted for.
+		if sr.refreshFootprint.bytes > 10*maxBytes {
+			sr.refreshInvalid = true
+			sr.refreshFootprint.clear()
+		}
 	}
 }
 
