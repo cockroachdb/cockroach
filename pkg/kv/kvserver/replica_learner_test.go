@@ -762,43 +762,51 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		_, processErr, err := store.Enqueue(
+		store.SetReplicateQueueActive(true)
+		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
+		action := "next replica action: remove learner"
+		require.NoError(t, testutils.MatchInOrder(trace.String(), []string{action}...))
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
-		// Make sure it deleted the learner.
-		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-		require.Empty(t, desc.Replicas().LearnerDescriptors())
-
-		// Bonus points: the replicate queue keeps processing until there is nothing
-		// to do, so it should have upreplicated the range to 3.
-		require.Len(t, desc.Replicas().VoterDescriptors(), 3)
+		testutils.SucceedsSoon(t, func() error {
+			desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+			if len(desc.Replicas().LearnerDescriptors()) != 0 {
+				return errors.Newf("Mismatch in num learners %v, desc: %v", desc.Replicas().LearnerDescriptors(), desc)
+			}
+			if len(desc.Replicas().VoterDescriptors()) != 3 {
+				return errors.Newf("Mismatch in num voters %v, desc: %v", desc.Replicas().VoterDescriptors(), desc)
+			}
+			return nil
+		})
+		// It has done everything it needs to do now, disable before the next test section.
+		store.SetReplicateQueueActive(false)
 	}
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+		store.SetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
-		formattedTrace := trace.String()
-		expectedMessages := []string{
-			`transitioning out of joint configuration`,
-		}
-		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
-			t.Fatal(err)
-		}
+		action := "next replica action: finalize conf change"
+		require.NoError(t, testutils.MatchInOrder(trace.String(), []string{action}...))
 
-		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
-		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		// Queue processed again, so we're back to three replicas.
-		require.Len(t, desc.Replicas().VoterDescriptors(), 3)
+		testutils.SucceedsSoon(t, func() error {
+			desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+			if len(desc.Replicas().VoterDescriptors()) != 3 {
+				return errors.Newf("Mismatch in num voters %v, desc: %v", desc.Replicas().VoterDescriptors(), desc)
+			}
+			return nil
+		})
+		store.SetReplicateQueueActive(false)
 	})
 }
 
