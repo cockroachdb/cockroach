@@ -76,7 +76,8 @@ type drainHelper struct {
 	statsCollectors []colexecop.VectorizedStatsCollector
 	sources         colexecop.MetadataSources
 
-	bufferedMeta []execinfrapb.ProducerMetadata
+	drained bool
+	meta    []execinfrapb.ProducerMetadata
 }
 
 var _ execinfra.RowSource = &drainHelper{}
@@ -113,18 +114,17 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		}
 		d.statsCollectors = nil
 	}
-	if d.bufferedMeta == nil {
-		d.bufferedMeta = d.sources.DrainMeta()
-		if d.bufferedMeta == nil {
-			// Still nil, avoid more calls to DrainMeta.
-			d.bufferedMeta = []execinfrapb.ProducerMetadata{}
-		}
+	if !d.drained {
+		d.meta = d.sources.DrainMeta()
+		d.drained = true
 	}
-	if len(d.bufferedMeta) == 0 {
+	if len(d.meta) == 0 {
+		// Eagerly lose the reference to the slice.
+		d.meta = nil
 		return nil, nil
 	}
-	meta := d.bufferedMeta[0]
-	d.bufferedMeta = d.bufferedMeta[1:]
+	meta := d.meta[0]
+	d.meta = d.meta[1:]
 	return nil, &meta
 }
 

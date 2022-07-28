@@ -281,7 +281,11 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 		}
 		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 	}
-	return c.accumulatedMeta
+	bufferedMeta := c.accumulatedMeta
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	c.accumulatedMeta = nil
+	return bufferedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.

@@ -13,6 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/colserde",
+        "//pkg/roachpb",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",

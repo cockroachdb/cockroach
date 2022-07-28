@@ -466,7 +466,11 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 
 	// Done.
 	s.setState(parallelUnorderedSynchronizerStateDone)
-	return s.bufferedMeta
+	bufferedMeta := s.bufferedMeta
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	s.bufferedMeta = nil
+	return bufferedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
