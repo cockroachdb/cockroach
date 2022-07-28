@@ -126,24 +126,9 @@ deprules
     - $new-index-target[TargetStatus] = PUBLIC
     - $old-index-node[CurrentStatus] = VALIDATED
     - $new-index-node[CurrentStatus] = PUBLIC
-    - new-primary-index-depends-on-old(*scpb.PrimaryIndex, *scpb.PrimaryIndex)($new-index, $old-index)
+    - primary-indexes-depend-on-each-other(*scpb.PrimaryIndex, *scpb.PrimaryIndex)($old-index, $new-index)
     - joinTargetNode($old-index, $old-index-target, $old-index-node)
     - joinTargetNode($new-index, $new-index-target, $new-index-node)
-- name: reverting primary index swap
-  from: new-index-node
-  kind: SameStagePrecedence
-  to: old-index-node
-  query:
-    - $new-index[Type] = '*scpb.PrimaryIndex'
-    - $old-index[Type] = '*scpb.PrimaryIndex'
-    - joinOnDescID($new-index, $old-index, $table-id)
-    - $new-index-target[TargetStatus] = ABSENT
-    - $old-index-target[TargetStatus] = PUBLIC
-    - $new-index-node[CurrentStatus] = VALIDATED
-    - $old-index-node[CurrentStatus] = PUBLIC
-    - new-primary-index-depends-on-old(*scpb.PrimaryIndex, *scpb.PrimaryIndex)($new-index, $old-index)
-    - joinTargetNode($new-index, $new-index-target, $new-index-node)
-    - joinTargetNode($old-index, $old-index-target, $old-index-node)
 - name: index existence precedes index name and comment
   from: index-node
   kind: Precedence

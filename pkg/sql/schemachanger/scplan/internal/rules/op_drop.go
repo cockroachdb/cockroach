@@ -104,6 +104,7 @@ func init() {
 			index.el.Type(
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
+				(*scpb.TemporaryIndex)(nil),
 			),
 
 			joinOnDescID(relation.el, index.el, relationID),
