@@ -491,6 +491,7 @@ func ResolveBackupManifests(
 	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
 ) (
 	defaultURIs []string,
@@ -506,7 +507,8 @@ func ResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], encryption)
+	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
+		encryption, kmsEnv)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -539,7 +541,7 @@ func ResolveBackupManifests(
 	defaultURIs[0] = fullyResolvedBaseDirectory[0]
 	mainBackupManifests[0] = baseManifest
 	localityInfo[0], err = backupinfo.GetLocalityInfo(
-		ctx, baseStores, fullyResolvedBaseDirectory, baseManifest, encryption, "", /* prefix */
+		ctx, baseStores, fullyResolvedBaseDirectory, baseManifest, encryption, kmsEnv, "", /* prefix */
 	)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -561,7 +563,8 @@ func ResolveBackupManifests(
 		// For each layer, we need to load the default manifest then calculate the URI and the
 		// locality info for each partition.
 		for i := range prev {
-			defaultManifestForLayer, memSize, err := backupinfo.ReadBackupManifest(ctx, mem, incStores[0], prev[i], encryption)
+			defaultManifestForLayer, memSize, err := backupinfo.ReadBackupManifest(ctx, mem,
+				incStores[0], prev[i], encryption, kmsEnv)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
@@ -580,7 +583,8 @@ func ResolveBackupManifests(
 				partitionURIs[j] = u.String()
 			}
 			defaultURIs[i+1] = partitionURIs[0]
-			localityInfo[i+1], err = backupinfo.GetLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
+			localityInfo[i+1], err = backupinfo.GetLocalityInfo(ctx, incStores, partitionURIs,
+				defaultManifestForLayer, encryption, kmsEnv, incSubDir)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
@@ -611,6 +615,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 	from [][]string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
 ) (
 	defaultURIs []string,
@@ -648,7 +653,8 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 		}
 
 		var memSize int64
-		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
+		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
+			stores[0], encryption, kmsEnv)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -656,7 +662,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		if len(uris) > 1 {
 			localityInfo[i], err = backupinfo.GetLocalityInfo(
-				ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+				ctx, stores, uris, mainBackupManifests[i], encryption, kmsEnv, "", /* prefix */
 			)
 			if err != nil {
 				return nil, nil, nil, 0, err

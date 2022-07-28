@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -93,4 +94,44 @@ func ParseRoleString(roleString string) (assumeRole string, delegateRoles []stri
 		delegateRoles[i] = roles[i]
 	}
 	return assumeRole, delegateRoles
+}
+
+// consumeURL is a helper struct which for "consuming" URL query
+// parameters from the underlying URL.
+type consumeURL struct {
+	*url.URL
+	q url.Values
+}
+
+func (u *consumeURL) consumeParam(p string) string {
+	if u.q == nil {
+		u.q = u.Query()
+	}
+	v := u.q.Get(p)
+	u.q.Del(p)
+	return v
+}
+
+func (u *consumeURL) remainingQueryParams() (res []string) {
+	for p := range u.q {
+		res = append(res, p)
+	}
+	return
+}
+
+// ValidateQueryParameters checks uri for any unsupported query parameters that
+// are not part of the supportedParameters.
+func ValidateQueryParameters(uri url.URL, supportedParameters []string) error {
+	u := uri
+	validateURL := consumeURL{URL: &u}
+	for _, option := range supportedParameters {
+		validateURL.consumeParam(option)
+	}
+
+	if unknownParams := validateURL.remainingQueryParams(); len(unknownParams) > 0 {
+		return errors.Errorf(
+			`unknown query parameters: %s for %s URI`,
+			strings.Join(unknownParams, ", "), uri.Scheme)
+	}
+	return nil
 }

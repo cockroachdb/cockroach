@@ -73,6 +73,10 @@ inspect-system-table
 privileged STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo"}}, "provider": "nodelocal"}
 
 exec-sql
+DROP EXTERNAL CONNECTION privileged;
+----
+
+exec-sql
 REVOKE SYSTEM EXTERNALCONNECTION FROM testuser;
 ----
 
@@ -80,5 +84,24 @@ exec-sql user=testuser
 CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
 ----
 pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+subtest end
+
+subtest basic-gs-kms
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+----
+
+inspect-system-table
+----
+foo-kms KMS {"gcsKms": {"uri": "gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}, "provider": "gs_kms"}
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-kms";
+----
+
+inspect-system-table
+----
 
 subtest end

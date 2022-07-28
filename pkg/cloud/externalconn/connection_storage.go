@@ -16,10 +16,29 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
+
+const scheme = "external"
+
+type storageConnectionContext struct {
+	externalStorageContext cloud.ExternalStorageContext
+}
+
+// ExternalStorageContext implements the ConnectionContext interface.
+func (n *storageConnectionContext) ExternalStorageContext() cloud.ExternalStorageContext {
+	return n.externalStorageContext
+}
+
+// KMSEnv implements the ConnectionContext interface.
+func (n *storageConnectionContext) KMSEnv() cloud.KMSEnv {
+	panic("storageConnectionContext cannot be used for KMS initialization")
+}
+
+var _ ConnectionContext = &storageConnectionContext{}
 
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
@@ -64,7 +83,7 @@ func makeExternalConnectionStorage(
 	var ec *ExternalConnection
 	if err := args.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		ec, err = LoadExternalConnection(ctx, cfg.Name, args.InternalExecutor,
+		ec, err = LoadExternalConnection(ctx, cfg.Name, connectionpb.TypeStorage, args.InternalExecutor,
 			username.MakeSQLUsernameFromPreNormalizedString(cfg.User), txn)
 		return err
 	}); err != nil {
@@ -78,7 +97,8 @@ func makeExternalConnectionStorage(
 	if err != nil {
 		return nil, err
 	}
-	connection, err := connDetails.Dial(ctx, args, cfg.Path)
+	connection, err := connDetails.Dial(ctx,
+		&storageConnectionContext{externalStorageContext: args}, cfg.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to Dial external connection")
 	}
@@ -93,7 +113,6 @@ func makeExternalConnectionStorage(
 }
 
 func init() {
-	scheme := "external"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_external, parseExternalConnectionURL,
 		makeExternalConnectionStorage, cloud.RedactedParams(), scheme)
 }

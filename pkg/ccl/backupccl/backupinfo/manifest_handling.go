@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -121,6 +120,7 @@ func ReadBackupManifestFromURI(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
@@ -128,7 +128,7 @@ func ReadBackupManifestFromURI(
 		return backuppb.BackupManifest{}, 0, err
 	}
 	defer exportStore.Close()
-	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption)
+	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption, kmsEnv)
 }
 
 // ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
@@ -138,12 +138,13 @@ func ReadBackupManifestFromStore(
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
 	backupManifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
-		encryption)
+		encryption, kmsEnv)
 	if err != nil {
 		oldManifest, newMemSize, newErr := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupOldManifestName,
-			encryption)
+			encryption, kmsEnv)
 		if newErr != nil {
 			return backuppb.BackupManifest{}, 0, err
 		}
@@ -188,6 +189,7 @@ func ReadBackupCheckpointManifest(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupCheckpointManifest")
 	defer sp.Finish()
@@ -206,10 +208,10 @@ func ReadBackupCheckpointManifest(
 			return backuppb.BackupManifest{}, 0, err
 		}
 		// Pass checksumFile as nil to indicate it was not found.
-		return readManifest(ctx, mem, exportStore, encryption, checkpointFile, nil)
+		return readManifest(ctx, mem, encryption, kmsEnv, checkpointFile, nil)
 	}
 	defer checksumFile.Close(ctx)
-	return readManifest(ctx, mem, exportStore, encryption, checkpointFile, checksumFile)
+	return readManifest(ctx, mem, encryption, kmsEnv, checkpointFile, checksumFile)
 }
 
 // ReadBackupManifest reads and unmarshals a BackupManifest from filename in the
@@ -220,6 +222,7 @@ func ReadBackupManifest(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifest")
 	defer sp.Finish()
@@ -238,10 +241,10 @@ func ReadBackupManifest(
 			return backuppb.BackupManifest{}, 0, err
 		}
 		// Pass checksumFile as nil to indicate it was not found.
-		return readManifest(ctx, mem, exportStore, encryption, manifestFile, nil)
+		return readManifest(ctx, mem, encryption, kmsEnv, manifestFile, nil)
 	}
 	defer checksumFile.Close(ctx)
-	return readManifest(ctx, mem, exportStore, encryption, manifestFile, checksumFile)
+	return readManifest(ctx, mem, encryption, kmsEnv, manifestFile, checksumFile)
 }
 
 // readManifest reads and unmarshals a BackupManifest from filename in the
@@ -253,8 +256,8 @@ func ReadBackupManifest(
 func readManifest(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	manifestReader ioctx.ReadCloserCtx,
 	checksumReader ioctx.ReadCloserCtx,
 ) (backuppb.BackupManifest, int64, error) {
@@ -286,8 +289,7 @@ func readManifest(
 
 	var encryptionKey []byte
 	if encryption != nil {
-		encryptionKey, err = backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
-			exportStore.ExternalIOConf())
+		encryptionKey, err = backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return backuppb.BackupManifest{}, 0, err
 		}
@@ -355,6 +357,7 @@ func readBackupPartitionDescriptor(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupPartitionDescriptor, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readBackupPartitionDescriptor")
 	defer sp.Finish()
@@ -373,8 +376,7 @@ func readBackupPartitionDescriptor(
 	}()
 
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
-			exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, 0, err
 		}
@@ -418,6 +420,7 @@ func readTableStatistics(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (*backuppb.StatsTable, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readTableStatistics")
 	defer sp.Finish()
@@ -432,8 +435,7 @@ func readTableStatistics(
 		return nil, err
 	}
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
-			exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
@@ -455,6 +457,7 @@ func GetStatisticsFromBackup(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	backup backuppb.BackupManifest,
 ) ([]*stats.TableStatisticProto, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetStatisticsFromBackup")
@@ -471,7 +474,7 @@ func GetStatisticsFromBackup(
 	for _, fname := range backup.StatisticsFilenames {
 		if _, exists := uniqueFileNames[fname]; !exists {
 			uniqueFileNames[fname] = struct{}{}
-			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
+			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption, kmsEnv)
 			if err != nil {
 				return tableStatistics, err
 			}
@@ -486,10 +489,10 @@ func GetStatisticsFromBackup(
 // to `exportStore`.
 func WriteBackupManifest(
 	ctx context.Context,
-	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	desc *backuppb.BackupManifest,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupManifest")
@@ -508,7 +511,7 @@ func WriteBackupManifest(
 	}
 
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -528,7 +531,8 @@ func WriteBackupManifest(
 		return errors.Wrap(err, "calculating checksum")
 	}
 
-	if err := cloud.WriteFile(ctx, exportStore, filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore,
+		filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 		return errors.Wrap(err, "writing manifest checksum")
 	}
 
@@ -554,6 +558,7 @@ func WriteBackupPartitionDescriptor(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	desc *backuppb.BackupPartitionDescriptor,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupPartitionDescriptor")
@@ -568,8 +573,7 @@ func WriteBackupPartitionDescriptor(
 		return errors.Wrap(err, "compressing backup partition descriptor")
 	}
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
-			exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -589,6 +593,7 @@ func WriteTableStatistics(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	stats *backuppb.StatsTable,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteTableStatistics")
@@ -599,8 +604,7 @@ func WriteTableStatistics(
 		return err
 	}
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
-			exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -624,6 +628,7 @@ func LoadBackupManifests(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.LoadBackupManifests")
 	defer sp.Finish()
@@ -637,7 +642,7 @@ func LoadBackupManifests(
 	}()
 	for i, uri := range uris {
 		desc, memSize, err := ReadBackupManifestFromURI(ctx, mem, uri, user, makeExternalStorageFromURI,
-			encryption)
+			encryption, kmsEnv)
 		if err != nil {
 			return nil, 0, errors.Wrapf(err, "failed to read backup descriptor")
 		}
@@ -666,6 +671,7 @@ func GetLocalityInfo(
 	uris []string,
 	mainBackupManifest backuppb.BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	prefix string,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetLocalityInfo")
@@ -689,7 +695,8 @@ func GetLocalityInfo(
 			// tempdir), implying that it is possible for files that the manifest
 			// claims are stored in two different localities, are actually stored in
 			// the same place.
-			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename, encryption); err == nil {
+			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename,
+				encryption, kmsEnv); err == nil {
 				if desc.BackupID != mainBackupManifest.ID {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",
@@ -940,6 +947,7 @@ func WriteBackupManifestCheckpoint(
 	ctx context.Context,
 	storageURI string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	desc *backuppb.BackupManifest,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
@@ -966,7 +974,7 @@ func WriteBackupManifestCheckpoint(
 	}
 
 	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -1143,7 +1151,7 @@ func FetchPreviousBackups(
 		return nil, nil, 0, err
 	}
 	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
-		encryptionOptions)
+		encryptionOptions, kmsEnv)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -1159,6 +1167,7 @@ func getBackupManifests(
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	backupURIs []string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, int64, error) {
 	manifests := make([]backuppb.BackupManifest, len(backupURIs))
 	if len(backupURIs) == 0 {
@@ -1189,7 +1198,7 @@ func getBackupManifests(
 			// descriptors around.
 			uri := backupURIs[i]
 			desc, size, err := ReadBackupManifestFromURI(
-				ctx, &subMem, uri, user, makeCloudStorage, encryption,
+				ctx, &subMem, uri, user, makeCloudStorage, encryption, kmsEnv,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "failed to read backup from %q",

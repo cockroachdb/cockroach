@@ -15,4 +15,8 @@ initialization-time registration with the cloud storage provider registry.
 */
 package providers
 
-import _ "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal" // import all the cloud provider packages to register them.
+import (
+	// import all the cloud provider packages to register them.
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/gcp"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+)

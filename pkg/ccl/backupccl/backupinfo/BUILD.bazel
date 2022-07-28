@@ -24,7 +24,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descbuilder",

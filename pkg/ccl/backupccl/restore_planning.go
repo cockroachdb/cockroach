@@ -1616,6 +1616,9 @@ func doRestorePlan(
 		defer store.Close()
 		baseStores[i] = store
 	}
+	ioConf := baseStores[0].ExternalIOConf()
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &ioConf,
+		p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
 
 	var encryption *jobspb.BackupEncryptionOptions
 	if restoreStmt.Options.EncryptionPassphrase != nil {
@@ -1633,7 +1636,6 @@ func doRestorePlan(
 		if err != nil {
 			return err
 		}
-		ioConf := baseStores[0].ExternalIOConf()
 
 		// A backup could have been encrypted with multiple KMS keys that
 		// are stored across ENCRYPTION-INFO files. Iterate over all
@@ -1643,10 +1645,7 @@ func doRestorePlan(
 		for _, encFile := range opts {
 			defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, kms,
 				backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
-				&backupencryption.BackupKMSEnv{
-					Settings: baseStores[0].Settings(),
-					Conf:     &ioConf,
-				})
+				&kmsEnv)
 			if err == nil {
 				break
 			}
@@ -1676,14 +1675,14 @@ func doRestorePlan(
 		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
-			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
+			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
 		)
 	} else {
 		// Incremental layers are specified explicitly.
 		// This implies the old, deprecated TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err =
 			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
-				endTime, encryption, p.User())
+				endTime, encryption, &kmsEnv, p.User())
 	}
 
 	if err != nil {

@@ -5,6 +5,7 @@ go_library(
     name = "gcp",
     srcs = [
         "gcs_kms.go",
+        "gcs_kms_connection.go",
         "gcs_retry.go",
         "gcs_storage.go",
     ],
@@ -14,6 +15,8 @@ go_library(
         "//pkg/base",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",

@@ -125,7 +125,6 @@ func backup(
 	execCtx sql.JobExecContext,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
-	db *kv.DB,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
@@ -174,6 +173,10 @@ func backup(
 		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings,
+		&execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().DB, execCtx.User(),
+		execCtx.ExecCfg().InternalExecutor)
+
 	backupSpecs, err := distBackupPlanSpecs(
 		ctx,
 		planCtx,
@@ -186,6 +189,7 @@ func backup(
 		defaultURI,
 		urisByLocalityKV,
 		encryption,
+		&kmsEnv,
 		roachpb.MVCCFilter(backupManifest.MVCCFilter),
 		backupManifest.StartTime,
 		backupManifest.EndTime,
@@ -246,7 +250,7 @@ func backup(
 				})
 
 				err := backupinfo.WriteBackupManifestCheckpoint(
-					ctx, defaultURI, encryption, backupManifest, execCtx.ExecCfg(), execCtx.User(),
+					ctx, defaultURI, encryption, &kmsEnv, backupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
@@ -308,7 +312,8 @@ func backup(
 					return err
 				}
 				defer store.Close()
-				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
+				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
+					encryption, &kmsEnv, &desc)
 			}(); err != nil {
 				return roachpb.RowCount{}, err
 			}
@@ -316,8 +321,8 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
-	if err := backupinfo.WriteBackupManifest(ctx, settings, defaultStore, backupbase.BackupManifestName,
-		encryption, backupManifest); err != nil {
+	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
+		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
@@ -347,12 +352,13 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
-	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &statsTable); err != nil {
+	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
 	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
-		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, backupManifest, tableStatistics); err != nil {
+		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
+			tableStatistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
 				return roachpb.RowCount{}, err
@@ -403,6 +409,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
+		&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
 
 	var backupManifest *backuppb.BackupManifest
 
@@ -452,7 +460,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		if err := backupinfo.WriteBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, backupManifest, p.ExecCfg(), p.User(),
+			ctx, details.URI, details.EncryptionOptions, &kmsEnv, backupManifest, p.ExecCfg(), p.User(),
 		); err != nil {
 			return err
 		}
@@ -540,7 +548,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}()
 
 	if backupManifest == nil || forceReadBackupManifest {
-		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details, p.User())
+		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
+			details, p.User(), &kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -575,7 +584,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			p,
 			details.URI,
 			details.URIsByLocalityKV,
-			p.ExecCfg().DB,
 			p.ExecCfg().Settings,
 			defaultStore,
 			storageByLocalityKV,
@@ -600,7 +608,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		var reloadBackupErr error
 		mem.Shrink(ctx, memSize)
 		memSize = 0
-		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details, p.User())
+		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
+			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
@@ -728,13 +737,14 @@ func (b *backupResumer) readManifestOnResume(
 	defaultStore cloud.ExternalStorage,
 	details jobspb.BackupDetails,
 	user username.SQLUsername,
+	kmsEnv cloud.KMSEnv,
 ) (*backuppb.BackupManifest, int64, error) {
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
 	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions)
+		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
@@ -742,13 +752,13 @@ func (b *backupResumer) readManifestOnResume(
 		// Try reading temp checkpoint.
 		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
 		desc, memSize, err = backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-			tmpCheckpoint, details.EncryptionOptions)
+			tmpCheckpoint, details.EncryptionOptions, kmsEnv)
 		if err != nil {
 			return nil, 0, err
 		}
 		// "Rename" temp checkpoint.
 		if err := backupinfo.WriteBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, &desc, cfg, user,
+			ctx, details.URI, details.EncryptionOptions, kmsEnv, &desc, cfg, user,
 		); err != nil {
 			mem.Shrink(ctx, memSize)
 			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")

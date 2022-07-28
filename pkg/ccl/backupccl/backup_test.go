@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -4345,6 +4346,9 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 type testKMSEnv struct {
 	settings         *cluster.Settings
 	externalIOConfig *base.ExternalIODirConfig
+	db               *kv.DB
+	user             username.SQLUsername
+	ie               sqlutil.InternalExecutor
 }
 
 var _ cloud.KMSEnv = &testKMSEnv{}
@@ -4355,6 +4359,18 @@ func (e *testKMSEnv) ClusterSettings() *cluster.Settings {
 
 func (e *testKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 	return e.externalIOConfig
+}
+
+func (e *testKMSEnv) DBHandle() *kv.DB {
+	return e.db
+}
+
+func (e *testKMSEnv) User() username.SQLUsername {
+	return e.user
+}
+
+func (e *testKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
+	return e.ie
 }
 
 type testKMS struct {
@@ -4466,9 +4482,15 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			}
 		}
 
+		kmsEnv := &testKMSEnv{
+			settings:         cluster.NoSettings,
+			externalIOConfig: &base.ExternalIODirConfig{},
+			db:               nil,
+			user:             username.RootUserName(),
+			ie:               nil,
+		}
 		kmsInfo, err := backupencryption.ValidateKMSURIsAgainstFullBackup(
-			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey,
-			&testKMSEnv{cluster.NoSettings, &base.ExternalIODirConfig{}})
+			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey, kmsEnv)
 		if tc.expectError {
 			require.Error(t, err)
 		} else {
@@ -5800,7 +5822,15 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	statsTable := backuppb.StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
-	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil /* encryption */, &statsTable))
+	kmsEnv := &testKMSEnv{
+		settings:         execCfg.Settings,
+		externalIOConfig: &execCfg.ExternalIODirConfig,
+		db:               execCfg.DB,
+		user:             username.RootUserName(),
+		ie:               execCfg.InternalExecutor,
+	}
+	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil, /* encryption */
+		kmsEnv, &statsTable))
 
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s" WITH skip_missing_foreign_keys, into_db = "%s"`,
@@ -8149,8 +8179,17 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	for i := 0; i < magic; i++ {
 		desc.Files = append(desc.Files, backuppb.BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
 	}
-	require.NoError(t, backupinfo.WriteBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
-	_, sz, err := backupinfo.ReadBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
+	kmsEnv := testKMSEnv{
+		settings:         st,
+		externalIOConfig: &base.ExternalIODirConfig{},
+		db:               nil,
+		user:             username.RootUserName(),
+		ie:               nil,
+	}
+	require.NoError(t, backupinfo.WriteBackupManifest(ctx, storage, "testmanifest", encOpts,
+		&kmsEnv, desc))
+	_, sz, err := backupinfo.ReadBackupManifest(ctx, &mem, storage, "testmanifest",
+		encOpts, &kmsEnv)
 	require.NoError(t, err)
 	mem.Shrink(ctx, sz)
 	mem.Close(ctx)
