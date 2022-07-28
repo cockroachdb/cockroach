@@ -1485,6 +1485,12 @@ func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *prop
 	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
 }
 
+func (b *logicalPropsBuilder) buildCreateFunctionProps(
+	cv *CreateFunctionExpr, rel *props.Relational,
+) {
+	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(item.Condition, &scalar.Shared, b.evalCtx)
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -83,6 +84,9 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
 			if _, ok := td[ref.ID]; !ok {
+				if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
+					return nil, err
+				}
 				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 					return nil, err
 				}
@@ -583,4 +587,20 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		p.txn,
 		p.SessionData(),
 	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
+}
+
+// This is a guard to prevent cascade dropping an object if it's referenced by a function.
+// This is because we don't support drop function at the moment. However, we'll
+// add the support pretty soon.
+func (p *planner) maybeFailOnDroppingFunction(ctx context.Context, id descpb.ID) error {
+	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, id)
+	if err != nil {
+		return err
+	}
+	// TODO (Chengxiong): support dropping function.
+	if desc.DescriptorType() == catalog.Function {
+		return unimplemented.NewWithIssue(83235, "drop function not supported")
+	}
+
+	return nil
 }

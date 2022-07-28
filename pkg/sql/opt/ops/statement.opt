@@ -52,14 +52,51 @@ define CreateViewPrivate {
     Columns Presentation
 
     # Deps contains the data source dependencies of the view.
-    Deps ViewDeps
+    Deps SchemaDeps
 
     # TypeDeps contains the type dependencies of the view.
-    TypeDeps ViewTypeDeps
+    TypeDeps SchemaTypeDeps
 
     # WithData indicates if the materialized view is populated
     # with data upon creation.
     WithData bool
+}
+
+[Relational, DDL, Mutation]
+define CreateFunction {
+    _ CreateFunctionPrivate
+}
+
+[Private]
+define CreateFunctionPrivate {
+    # Schema is the ID of the catalog schema into which the new function goes.
+    Schema SchemaID
+
+    # FunctionName is the name of the new function.
+    FunctionName FunctionName
+
+    # Replace indicates whether the existing function, if found, should be
+    # replaced with the new definition or not.
+    Replace bool
+
+    # Args is a slice of Arguments of the new function.
+    Args FuncArgs
+
+    # ReturnType is the return type of the new function.
+    ReturnType FuncReturnType
+
+    # TODO (Chengxiong): break Options into individual option fields.
+    # Options is a slice of attribute values of the new function.
+    Options FunctionOptions
+
+    # Body holds all statements of the new function.
+    Body FunctionBodyStr
+
+    # Deps contains the data source dependencies of the view.
+    Deps SchemaDeps
+
+    # TypeDeps contains the type dependencies of the view.
+    TypeDeps SchemaTypeDeps
 }
 
 # Explain returns information about the execution plan of the "input"

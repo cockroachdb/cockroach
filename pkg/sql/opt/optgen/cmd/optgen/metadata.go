@@ -241,14 +241,21 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"IndexOrdinals":       {fullName: "cat.IndexOrdinals", passByVal: true},
 		"RelocateSubject":     {fullName: "tree.RelocateSubject", passByVal: true},
 		"UniqueOrdinals":      {fullName: "cat.UniqueOrdinals", passByVal: true},
-		"ViewDeps":            {fullName: "opt.ViewDeps", passByVal: true},
-		"ViewTypeDeps":        {fullName: "opt.ViewTypeDeps", passByVal: true},
+		"SchemaDeps":          {fullName: "opt.SchemaDeps", passByVal: true},
+		"SchemaTypeDeps":      {fullName: "opt.SchemaTypeDeps", passByVal: true},
 		"Locking":             {fullName: "opt.Locking", passByVal: true},
 		"MaterializeClause":   {fullName: "tree.MaterializeClause", passByVal: true},
 		"SpanExpression":      {fullName: "inverted.SpanExpression", isPointer: true, usePointerIntern: true},
 		"InvertedSpans":       {fullName: "inverted.Spans", passByVal: true},
 		"Persistence":         {fullName: "tree.Persistence", passByVal: true},
 		"PreFiltererState":    {fullName: "invertedexpr.PreFiltererStateForInvertedFilterer", isPointer: true, usePointerIntern: true},
+		"FunctionName":        {fullName: "tree.FunctionName", isPointer: true, usePointerIntern: true},
+		"FuncArgs":            {fullName: "tree.FuncArgs", passByVal: true},
+		// TODO (Chengxiong): break function options into separate field with
+		// primitive types, so that we don't need to these type mappings.
+		"FuncReturnType":  {fullName: "tree.FuncReturnType", passByVal: true},
+		"FunctionOptions": {fullName: "tree.FunctionOptions", passByVal: true},
+		"FunctionBodyStr": {fullName: "tree.FunctionBodyStr", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

@@ -338,6 +338,9 @@ func (v TableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 // GetReferencingDescriptorID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
+// GetReferencingDescriptorIDs implements the TypeDescriptorInterface.
+func (v TableImplicitRecordType) GetReferencingDescriptorIDs() []descpb.ID { return nil }
+
 // GetPostDeserializationChanges implements the Descriptor interface.
 func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
 	return catalog.PostDeserializationChanges{}
@@ -346,6 +349,12 @@ func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDes
 // HasConcurrentSchemaChanges implements catalog.Descriptor.
 func (v TableImplicitRecordType) HasConcurrentSchemaChanges() bool {
 	return false
+}
+
+// SkipNamespace implements catalog.Descriptor. We never store table implicit
+// record type which is always constructed in memory.
+func (v TableImplicitRecordType) SkipNamespace() bool {
+	return true
 }
 
 func (v TableImplicitRecordType) panicNotSupported(message string) {

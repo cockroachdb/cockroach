@@ -1588,6 +1588,9 @@ func dropColumnImpl(
 	// You can't drop a column depended on by a view unless CASCADE was
 	// specified.
 	for _, ref := range tableDesc.DependedOnBy {
+		if err := params.p.maybeFailOnDroppingFunction(params.ctx, ref.ID); err != nil {
+			return nil, err
+		}
 		found := false
 		for _, colID := range ref.ColumnIDs {
 			if colID == colToDrop.GetID() {

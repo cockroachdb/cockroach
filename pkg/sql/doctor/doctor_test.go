@@ -70,7 +70,7 @@ var validTableDesc = &descpb.Descriptor{
 }
 
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
-	table, database, typ, schema := descpb.FromDescriptor(desc)
+	table, database, typ, schema, function := descpb.FromDescriptor(desc)
 	if table != nil {
 		parentSchemaID := table.GetUnexposedParentSchemaID()
 		if parentSchemaID == descpb.InvalidID {
@@ -110,6 +110,14 @@ func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 			privilege.Schema,
 			schema.GetName(),
 		)
+	} else if function != nil {
+		catprivilege.MaybeFixPrivileges(
+			&function.Privileges,
+			function.GetParentID(),
+			descpb.InvalidID,
+			privilege.Function,
+			function.GetName(),
+		)
 	}
 	res, err := protoutil.Marshal(desc)
 	require.NoError(t, err)
@@ -128,7 +136,7 @@ func TestExamineDescriptors(t *testing.T) {
 
 	droppedValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
-		tbl, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(droppedValidTableDesc, hlc.Timestamp{WallTime: 1})
+		tbl, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(droppedValidTableDesc, hlc.Timestamp{WallTime: 1})
 		tbl.State = descpb.DescriptorState_DROP
 	}
 
@@ -138,7 +146,7 @@ func TestExamineDescriptors(t *testing.T) {
 	// the privileges returned from the SystemAllowedPrivileges map in privilege.go.
 	validTableDescWithParentSchema := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
-		tbl, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(validTableDescWithParentSchema, hlc.Timestamp{WallTime: 1})
+		tbl, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(validTableDescWithParentSchema, hlc.Timestamp{WallTime: 1})
 		tbl.UnexposedParentSchemaID = 53
 	}
 
@@ -414,7 +422,7 @@ func TestExamineDescriptors(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
-					tbl, _, _, _ := descpb.FromDescriptor(desc)
+					tbl, _, _, _, _ := descpb.FromDescriptor(desc)
 					tbl.PrimaryIndex.Disabled = true
 					return desc
 				}())},
@@ -475,7 +483,7 @@ func TestExamineDescriptors(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
-					tbl, _, _, _ := descpb.FromDescriptor(desc)
+					tbl, _, _, _, _ := descpb.FromDescriptor(desc)
 					tbl.MutationJobs = []descpb.TableDescriptor_MutationJob{{MutationID: 1, JobID: 123}}
 					return desc
 				}())},

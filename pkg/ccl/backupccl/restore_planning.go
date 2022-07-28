@@ -1748,7 +1748,7 @@ func doRestorePlan(
 	for _, m := range mainBackupManifests {
 		spans := roachpb.Spans(m.Spans)
 		for i := range m.Descriptors {
-			table, _, _, _ := descpb.FromDescriptor(&m.Descriptors[i])
+			table, _, _, _, _ := descpb.FromDescriptor(&m.Descriptors[i])
 			if table == nil {
 				continue
 			}

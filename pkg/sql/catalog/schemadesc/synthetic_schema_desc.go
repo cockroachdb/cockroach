@@ -118,6 +118,12 @@ func (p synthetic) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// SkipNamespace implements the descriptor interface.
+// We never store synthetic descriptors.
+func (p synthetic) SkipNamespace() bool {
+	return true
+}
+
 // GetName implements the PrivilegeObject interface.
 func (p synthetic) GetName() string {
 	return p.kindName()
@@ -138,4 +144,8 @@ func (p synthetic) GetPrivilegeDescriptor(
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
+}
+
+func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
+	return descpb.SchemaDescriptor_Function{}, false
 }

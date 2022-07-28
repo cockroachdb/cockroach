@@ -14,9 +14,14 @@ add parent-id=1 parent-schema-id=29 id=53 name=tab2
 ----
 (1, 29, tab2): 53
 
+# This entry skips the by-name map and only goes into the by-id map.
+add-without-name parent-id=1 parent-schema-id=29 id=54 name=func1
+----
+(1, 29, func1): 54
+
 len
 ----
-4
+5
 
 iterate-by-id
 ----
@@ -24,7 +29,58 @@ iterate-by-id
 (1, 0, sc1): 51
 (1, 51, tab1): 52
 (1, 29, tab2): 53
+(1, 29, func1): 54
 
+iterate-by-name
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 29, tab2): 53
+(1, 51, tab1): 52
+
+# Make sure that deleting an item which skips the name map does not delete item
+# with the same name from the name map.
+# This item hash same name key (1, 29, tab2) as item with id=53
+add-without-name parent-id=1 parent-schema-id=29 id=55 name=tab2
+----
+(1, 29, tab2): 55
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 29, func1): 54
+(1, 29, tab2): 55
+
+iterate-by-name
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 29, tab2): 53
+(1, 51, tab1): 52
+
+remove id=55
+----
+true
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 29, func1): 54
+
+iterate-by-name
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 29, tab2): 53
+(1, 51, tab1): 52
+
+# Make sure get-by-id works properly
 get-by-id id=10
 ----
 not found
@@ -32,6 +88,16 @@ not found
 get-by-id id=52
 ----
 (1, 51, tab1): 52
+
+# Make sure that we don't get-by-name the item skips the by-name map, but able
+# to get it from the by-id map.
+get-by-name parent-id=1 parent-schema-id=29 name=func1
+----
+not found
+
+get-by-id id=54
+----
+(1, 29, func1): 54
 
 # Looking in the wrong schema.
 

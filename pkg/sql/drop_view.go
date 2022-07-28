@@ -68,6 +68,9 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
 		for _, ref := range droppedDesc.DependedOnBy {
+			if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
+				return nil, err
+			}
 			// Don't verify that we can remove a dependent view if that dependent
 			// view was explicitly specified in the DROP VIEW command.
 			if descInSlice(ref.ID, td) {

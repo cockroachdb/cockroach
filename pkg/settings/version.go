@@ -39,7 +39,7 @@ var _ Setting = &VersionSetting{}
 // pkg/clusterversion. See VersionSetting for additional commentary.
 type VersionSettingImpl interface {
 	// Decode takes in an encoded cluster version and returns it as the native
-	// type (the ClusterVersion proto). Except it does it through the
+	// type (the clusterVersion proto). Except it does it through the
 	// ClusterVersionImpl to avoid circular dependencies.
 	Decode(val []byte) (ClusterVersionImpl, error)
 
@@ -62,9 +62,9 @@ type VersionSettingImpl interface {
 	SettingsListDefault() string
 }
 
-// ClusterVersionImpl is used to stub out the dependency on the ClusterVersion
+// ClusterVersionImpl is used to stub out the dependency on the clusterVersion
 // type (in pkg/clusterversion). The VersionSetting below is used to set
-// ClusterVersion values, but we can't import the type directly due to the
+// clusterVersion values, but we can't import the type directly due to the
 // cyclical dependency structure.
 type ClusterVersionImpl interface {
 	ClusterVersionImpl()
@@ -81,7 +81,7 @@ func MakeVersionSetting(impl VersionSettingImpl) VersionSetting {
 }
 
 // Decode takes in an encoded cluster version and returns it as the native
-// type (the ClusterVersion proto). Except it does it through the
+// type (the clusterVersion proto). Except it does it through the
 // ClusterVersionImpl to avoid circular dependencies.
 func (v *VersionSetting) Decode(val []byte) (ClusterVersionImpl, error) {
 	return v.impl.Decode(val)

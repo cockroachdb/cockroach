@@ -408,7 +408,7 @@ func makeViewTableDesc(
 	}
 
 	if sc != nil {
-		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
+		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */)
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
@@ -431,8 +431,9 @@ func makeViewTableDesc(
 // replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
 // function used to replace sequence names with IDs, and parsing the
 // viewQuery into a statement.
+// TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
-	ctx context.Context, sc resolver.SchemaResolver, viewQuery string,
+	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
 ) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtinsregistry.GetBuiltinProperties)
@@ -454,16 +455,39 @@ func replaceSeqNamesWithIDs(
 		return false, newExpr, nil
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to parse view query")
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmtd, err := parser.Parse(queryStr)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		for _, s := range parsedStmtd {
+			stmts = append(stmts, s.AST)
+		}
+	} else {
+		stmt, err := parser.ParseOne(queryStr)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = tree.Statements{stmt.AST}
 	}
 
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
-	if err != nil {
-		return "", err
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
 	}
-	return newStmt.String(), nil
+
+	return fmtCtx.String(), nil
 }
 
 // serializeUserDefinedTypes will walk the given view query
@@ -539,7 +563,7 @@ func (p *planner) replaceViewDesc(
 	toReplace.ViewQuery = n.viewQuery
 
 	if sc != nil {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery)
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +577,7 @@ func (p *planner) replaceViewDesc(
 		return nil, err
 	}
 
-	// Compare toReplace against its ClusterVersion to verify if
+	// Compare toReplace against its clusterVersion to verify if
 	// its new set of columns is valid for a replacement view.
 	if err := verifyReplacingViewColumns(
 		toReplace.ClusterVersion().Columns,

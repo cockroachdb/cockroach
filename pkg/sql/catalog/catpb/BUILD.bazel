@@ -9,6 +9,7 @@ proto_library(
     name = "catpb_proto",
     srcs = [
         "catalog.proto",
+        "function.proto",
         "index.proto",
         "privilege.proto",
     ],

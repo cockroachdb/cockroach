@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -580,7 +581,7 @@ func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDesc
 	}
 	mut := c.NewBuilder().BuildExistingMutable()
 	pb := u.NewBuilder().BuildImmutable().DescriptorProto()
-	tbl, db, typ, sc := descpb.FromDescriptorWithMVCCTimestamp(pb, s.mvccTimestamp())
+	tbl, db, typ, sc, fn := descpb.FromDescriptorWithMVCCTimestamp(pb, s.mvccTimestamp())
 	switch m := mut.(type) {
 	case *tabledesc.Mutable:
 		m.TableDescriptor = *tbl
@@ -590,6 +591,8 @@ func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDesc
 		m.TypeDescriptor = *typ
 	case *schemadesc.Mutable:
 		m.SchemaDescriptor = *sc
+	case *funcdesc.Mutable:
+		m.FunctionDescriptor = *fn
 	default:
 		return nil, errors.AssertionFailedf("Unknown mutable descriptor type %T", mut)
 	}

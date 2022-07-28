@@ -292,6 +292,9 @@ func (p *planner) accumulateCascadingViews(
 	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
+		if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
+			return err
+		}
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err

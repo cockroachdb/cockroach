@@ -189,7 +189,8 @@ func getResultColumns(
 		return colinfo.ShowTraceColumns, nil
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
-		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp:
+		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
+		createFunctionOp:
 		// These operations produce no columns.
 		return nil, nil
 

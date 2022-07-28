@@ -24,6 +24,8 @@ import (
 type Map struct {
 	byID   byIDMap
 	byName byNameMap
+	// nameSkipped record the ids of items upsert by skipping the name map.
+	nameSkipped map[descpb.ID]struct{}
 }
 
 // EntryIterator is used to iterate namespace entries.
@@ -34,13 +36,20 @@ type EntryIterator func(entry catalog.NameEntry) error
 
 // Upsert adds the descriptor to the tree. If any descriptor exists in the
 // tree with the same name or id, it will be removed.
-func (dt *Map) Upsert(d catalog.NameEntry) {
+func (dt *Map) Upsert(d catalog.NameEntry, skipNameMap bool) {
 	dt.maybeInitialize()
-	if replaced := dt.byName.upsert(d); replaced != nil {
-		dt.byID.delete(replaced.GetID())
-	}
-	if replaced := dt.byID.upsert(d); replaced != nil {
-		dt.byName.delete(replaced)
+
+	if skipNameMap {
+		dt.byID.upsert(d)
+		dt.nameSkipped[d.GetID()] = struct{}{}
+	} else {
+		if replaced := dt.byName.upsert(d); replaced != nil {
+			dt.byID.delete(replaced.GetID())
+		}
+		if replaced := dt.byID.upsert(d); replaced != nil {
+			dt.byName.delete(replaced)
+		}
+		delete(dt.nameSkipped, d.GetID())
 	}
 }
 
@@ -49,7 +58,9 @@ func (dt *Map) Upsert(d catalog.NameEntry) {
 func (dt *Map) Remove(id descpb.ID) catalog.NameEntry {
 	dt.maybeInitialize()
 	if d := dt.byID.delete(id); d != nil {
-		dt.byName.delete(d)
+		if _, ok := dt.nameSkipped[id]; !ok {
+			dt.byName.delete(d)
+		}
 		return d
 	}
 	return nil
@@ -91,8 +102,10 @@ func (dt *Map) IterateByID(f EntryIterator) error {
 	return dt.byID.ascend(f)
 }
 
-// IterateByName iterates the descriptors by name, ascending.
-func (dt *Map) IterateByName(f EntryIterator) error {
+// iterateByName iterates the descriptors by name, ascending.
+// This method is only used by data driven test internally.
+// Use IterateByID instead to get all descriptors.
+func (dt *Map) iterateByName(f EntryIterator) error {
 	if !dt.initialized() {
 		return nil
 	}
@@ -125,7 +138,7 @@ func (dt *Map) Len() int {
 }
 
 func (dt Map) initialized() bool {
-	return dt != (Map{})
+	return dt.byID != (byIDMap{}) && dt.byName != (byNameMap{}) && dt.nameSkipped != nil
 }
 
 func (dt *Map) maybeInitialize() {
@@ -133,7 +146,8 @@ func (dt *Map) maybeInitialize() {
 		return
 	}
 	*dt = Map{
-		byName: byNameMap{t: btreeSyncPool.Get().(*btree.BTree)},
-		byID:   byIDMap{t: btreeSyncPool.Get().(*btree.BTree)},
+		byName:      byNameMap{t: btreeSyncPool.Get().(*btree.BTree)},
+		byID:        byIDMap{t: btreeSyncPool.Get().(*btree.BTree)},
+		nameSkipped: make(map[descpb.ID]struct{}),
 	}
 }

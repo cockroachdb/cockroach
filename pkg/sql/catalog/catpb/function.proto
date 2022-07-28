@@ -1,0 +1,48 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+
+package cockroach.sql.catalog.catpb;
+option go_package = "catpb";
+
+import "gogoproto/gogo.proto";
+
+// Function contains a few enum types of function properties
+message Function {
+  enum Volatility {
+    UNKNOWN_VOLATILITY = 0;
+    VOLATILE = 1;
+    IMMUTABLE = 2;
+    STABLE = 3;
+  }
+
+  enum NullInputBehavior {
+    UNKNOWN_NULL_INPUT_BEHAVIOR = 0;
+    CALLED_ON_NULL_INPUT = 1;
+    RETURNS_NULL_ON_NULL_INPUT = 2;
+    STRICT = 3;
+  }
+
+  enum Language {
+    UNKNOWN_LANGUAGE = 0;
+    SQL = 1;
+  }
+
+  message Arg {
+    enum Class {
+      UNKNOWN_ARG_CLASS = 0;
+      IN = 1;
+      OUT = 2;
+      IN_OUT = 3;
+      VARIADIC = 4;
+    }
+  }
+}
