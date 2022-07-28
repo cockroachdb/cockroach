@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -843,7 +842,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in DEFAULT expression, if any.
 		if col.HasDefault() {
-			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames, builtinsregistry.GetBuiltinProperties)
+			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -852,7 +851,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in ON UPDATE expression, if any.
 		if col.HasOnUpdate() {
-			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames, builtinsregistry.GetBuiltinProperties)
+			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -882,7 +881,7 @@ func maybeUpgradeSequenceReferenceForView(
 	// by-ID reference. It, of course, also append replaced sequence IDs to `upgradedSeqIDs`.
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		newExprStr := expr.String()
-		hasUpgradedInExpr, err := seqexpr.UpgradeSequenceReferenceInExpr(&newExprStr, usedSequenceIDToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgradedInExpr, err := seqexpr.UpgradeSequenceReferenceInExpr(&newExprStr, usedSequenceIDToNames)
 		if err != nil {
 			return false, expr, err
 		}

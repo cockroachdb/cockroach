@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -255,7 +254,7 @@ func sequenceIDsInExpr(expr string) (ids catalog.DescriptorIDSet, _ error) {
 	if err != nil {
 		return ids, err
 	}
-	seqIdents, err := seqexpr.GetUsedSequences(e, builtinsregistry.GetBuiltinProperties)
+	seqIdents, err := seqexpr.GetUsedSequences(e)
 	if err != nil {
 		return ids, err
 	}

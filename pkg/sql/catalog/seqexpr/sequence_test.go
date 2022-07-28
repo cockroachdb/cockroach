@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for seqexpr package
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
@@ -53,7 +52,7 @@ func TestGetSequenceFromFunc(t *testing.T) {
 			if !ok {
 				t.Fatal("Expr is not a FuncExpr")
 			}
-			identifier, err := seqexpr.GetSequenceFromFunc(funcExpr, builtinsregistry.GetBuiltinProperties)
+			identifier, err := seqexpr.GetSequenceFromFunc(funcExpr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,7 +98,7 @@ func TestGetUsedSequences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			identifiers, err := seqexpr.GetUsedSequences(typedExpr, builtinsregistry.GetBuiltinProperties)
+			identifiers, err := seqexpr.GetUsedSequences(typedExpr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,7 +149,7 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(typedExpr, namesToID, builtinsregistry.GetBuiltinProperties)
+			newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(typedExpr, namesToID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,7 +168,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[1] = &tbl1
 		usedSequenceIDsToNames[2] = &tbl2
 		expr := "nextval('testdb.sc1.t') + nextval('sc1.t')"
-		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.NoError(t, err)
 		require.True(t, hasUpgraded)
 		require.Equal(t,
@@ -184,7 +183,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[1] = &tbl1
 		usedSequenceIDsToNames[2] = &tbl2
 		expr := "nextval('testdb.sc1.t') + nextval('sc1.t')"
-		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.NoError(t, err)
 		require.True(t, hasUpgraded)
 		require.Equal(t,
@@ -200,7 +199,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 			usedSequenceIDsToNames[1] = &tbl1
 			usedSequenceIDsToNames[2] = &tbl2
 			expr := "nextval('testdb.public.t') + nextval('testdb.t')"
-			hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+			hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 			require.NoError(t, err)
 			require.True(t, hasUpgraded)
 			require.Equal(t,
@@ -215,7 +214,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[1] = &tbl1
 		usedSequenceIDsToNames[2] = &tbl2
 		expr := "nextval('t')"
-		_, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		_, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.Error(t, err, "ambiguous name matching for 't'; both 'sc1.t' and 'sc2.t' match it.")
 		require.Equal(t, "more than 1 matches found for \"t\"", err.Error())
 	})
@@ -227,7 +226,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[1] = &tbl1
 		usedSequenceIDsToNames[2] = &tbl2
 		expr := "nextval('t2')"
-		_, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		_, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.Error(t, err, "no matching name for 't2'; neither 'sc1.t' nor 'sc2.t' match it.")
 		require.Equal(t, "no table name found to match input \"t2\"", err.Error())
 	})
@@ -241,7 +240,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[2] = &tbl2
 		usedSequenceIDsToNames[3] = &tbl3
 		expr := "((nextval(1::REGCLASS) + nextval(2::REGCLASS)) + currval(3::REGCLASS)) + nextval(3::REGCLASS)"
-		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.NoError(t, err)
 		require.False(t, hasUpgraded)
 		require.Equal(t,
@@ -258,7 +257,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[2] = &tbl2
 		usedSequenceIDsToNames[3] = &tbl3
 		expr := "nextval('testdb.public.s1') + nextval('testdb.public.s2') + currval('testdb.sc1.s3') + nextval('testdb.sc1.s3')"
-		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.NoError(t, err)
 		require.True(t, hasUpgraded)
 		require.Equal(t,
@@ -275,7 +274,7 @@ func TestUpgradeSequenceReferenceInExpr(t *testing.T) {
 		usedSequenceIDsToNames[2] = &tbl2
 		usedSequenceIDsToNames[3] = &tbl3
 		expr := "nextval('testdb.public.s1') + nextval(2::REGCLASS) + currval('testdb.sc1.s3') + nextval('testdb.sc1.s3')"
-		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames, builtinsregistry.GetBuiltinProperties)
+		hasUpgraded, err := seqexpr.UpgradeSequenceReferenceInExpr(&expr, usedSequenceIDsToNames)
 		require.NoError(t, err)
 		require.True(t, hasUpgraded)
 		require.Equal(t,
