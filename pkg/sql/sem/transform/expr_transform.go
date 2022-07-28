@@ -23,7 +23,7 @@ import (
 // visitors between uses.
 type ExprTransformContext struct {
 	normalizeVisitor   normalize.Visitor
-	isAggregateVisitor IsAggregateVisitor
+	isAggregateVisitor isAggregateVisitor
 }
 
 // NormalizeExpr is a wrapper around EvalContex.Expr which
@@ -55,7 +55,7 @@ func (t *ExprTransformContext) AggregateInExpr(
 		return false
 	}
 
-	t.isAggregateVisitor = IsAggregateVisitor{
+	t.isAggregateVisitor = isAggregateVisitor{
 		searchPath: searchPath,
 	}
 	tree.WalkExprConst(&t.isAggregateVisitor, expr)

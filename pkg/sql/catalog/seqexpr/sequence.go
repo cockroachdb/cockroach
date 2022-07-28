@@ -56,15 +56,21 @@ func GetSequenceFromFunc(
 	// so we can pass in an empty SearchPath.
 	// TODO(mgartner): Plumb a function resolver here, or determine that the
 	// function should have already been resolved.
+	// TODO(chengxiong): Since we have funcExpr here, it's possible to narrow down
+	// overloads by using input types.
 	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return nil, err
 	}
 
-	fnProps, overloads := getBuiltinProperties(def.Name)
-	if fnProps != nil && fnProps.HasSequenceArguments {
+	hasSequenceArguments, err := def.GetHasSequenceArguments()
+	if err != nil {
+		return nil, err
+	}
+
+	if hasSequenceArguments {
 		found := false
-		for _, overload := range overloads {
+		for _, overload := range def.Definition {
 			// Find the overload that matches funcExpr.
 			if len(funcExpr.Exprs) == overload.Types.Length() {
 				found = true

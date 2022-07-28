@@ -876,19 +876,27 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.AggregateClass
+	return isClass(def, tree.AggregateClass)
 }
 
 func isWindow(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.WindowClass
+	return isClass(def, tree.WindowClass)
 }
 
 func isGenerator(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.GeneratorClass
+	return isClass(def, tree.GeneratorClass)
 }
 
 func isSQLFn(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.SQLClass
+	return isClass(def, tree.SQLClass)
+}
+
+func isClass(def *tree.FunctionDefinition, want tree.FunctionClass) bool {
+	cls, err := def.GetClass()
+	if err != nil {
+		panic(err)
+	}
+	return cls == want
 }
 
 func newGroupingError(name tree.Name) error {
