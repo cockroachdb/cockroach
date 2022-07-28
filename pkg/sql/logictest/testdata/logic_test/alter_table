@@ -1565,9 +1565,30 @@ INSERT INTO unique_without_index_partial VALUES
   (NULL, 4, 4),
   (NULL, 5, 5);
 
+let $constraint_violations_before
+SELECT usage_count
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
+
 # Trying to add a partial unique constraint fails when there are duplicates.
 statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
+
+# Sanity: Check the number of user errors and
+# database errors in the test.
+query B
+SELECT usage_count > $constraint_violations_before
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
+----
+true
+
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
+----
+1
 
 # We can create not-valid constraints, however.
 statement ok
@@ -1909,22 +1930,6 @@ CREATE TABLE public.t67234 (
    FAMILY fam_0_k_a_b (k, a, b),
    CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 )
-
-# Sanity: Check the number of user errors and
-# database errors in the test.
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
-----
-1
-
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
-----
-1
 
 subtest generated_as_identity
 statement ok
