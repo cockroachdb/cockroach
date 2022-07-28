@@ -11,7 +11,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/iam/com_google_cloud_go_iam-v0.3.0.zip": "943c35c32e09e5d9fe89ed8149f23d6ead84b1ede5fb1537539938046383f36a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/kms/com_google_cloud_go_kms-v1.1.0.zip": "8cb6a77ae7336f22aff5287d2f531dab4ca418593bf897d6aaa05a5ced3b0b0a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/pubsub/com_google_cloud_go_pubsub-v1.16.0.zip": "98134d072e18ee03b96eaf208934bd0fc9431a747a2d62181b86b89c9beceafd",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/storage/com_google_cloud_go_storage-v1.21.0.zip": "fb7b2e6ffe19ef64c8ccd809a64896e551137bfeb7a9af973dab8ab39da211ec",
     "https://storage.googleapis.com/cockroach-godeps/gomod/collectd.org/org_collectd-v0.3.0.zip": "18974a8911a7e89cdeb35f25daddf37eb5026fd42a54a4116fa0fd5af457ae4c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/contrib.go.opencensus.io/exporter/prometheus/io_opencensus_go_contrib_exporter_prometheus-v0.4.0.zip": "e5dc381a98aad09e887f5232b00147308ff806e9189fbf901736ccded75a3357",
     "https://storage.googleapis.com/cockroach-godeps/gomod/dmitri.shuralyov.com/gpu/mtl/com_shuralyov_dmitri_gpu_mtl-v0.0.0-20201218220906-28db891af037.zip": "d9992a60371571861985f191ac38954db2cc1bd36e834058ad50f989ccc8fa06",
