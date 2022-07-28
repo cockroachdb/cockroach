@@ -27,11 +27,14 @@ CREATE ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username                               options  member_of
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+myrole                                 NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -57,11 +60,14 @@ DROP ROLE admin, myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username                               options  member_of
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+myrole                                 NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {}
 
 statement ok
 DROP ROLE myrole
@@ -69,10 +75,13 @@ DROP ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username                               options  member_of
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {}
 
 statement error pq: role/user myrole does not exist
 DROP ROLE myrole
@@ -104,10 +113,13 @@ DROP ROLE rolea, roleb
 query TTT colnames
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username                               options  member_of
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {}
 
 statement ok
 CREATE USER testuser2
@@ -479,13 +491,16 @@ roled  testuser false
 query TTT
 SHOW ROLES
 ----
-admin      ·        {}
-roleb      NOLOGIN  {}
-roled      NOLOGIN  {}
-rolee      NOLOGIN  {}
-root       ·        {admin}
-testuser   ·        {roled}
-testuser2  ·        {}
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+roleb                                  NOLOGIN  {}
+roled                                  NOLOGIN  {}
+rolee                                  NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {roled}
+testuser2                              ·        {}
 
 statement ok
 DROP ROLE roleb

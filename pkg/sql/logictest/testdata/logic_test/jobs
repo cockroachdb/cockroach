@@ -89,6 +89,12 @@ query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser', 'node')
 AND job_type LIKE 'SCHEMA CHANGE%'
 ----
+SCHEMA CHANGE     updating version for users table                   node
+SCHEMA CHANGE     updating version for role options table            node
+SCHEMA CHANGE     updating version for users table                   node
+SCHEMA CHANGE     updating version for role options table            node
+SCHEMA CHANGE     updating version for users table                   node
+SCHEMA CHANGE     updating version for role options table            node
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE     updating version for role options table            root
 SCHEMA CHANGE     updating privileges for database 104               root
@@ -102,6 +108,12 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name 
 AND (job_type LIKE 'AUTO SPAN%' OR job_type LIKE 'SCHEMA CHANGE%')
 ----
 AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    node
+SCHEMA CHANGE                    updating version for users table                   node
+SCHEMA CHANGE                    updating version for role options table            node
+SCHEMA CHANGE                    updating version for users table                   node
+SCHEMA CHANGE                    updating version for role options table            node
+SCHEMA CHANGE                    updating version for users table                   node
+SCHEMA CHANGE                    updating version for role options table            node
 SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE                    updating version for role options table            root
 SCHEMA CHANGE                    updating privileges for database 104               root

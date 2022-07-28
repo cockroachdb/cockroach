@@ -39,7 +39,10 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-testuser  /global/  {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+testuser                               /global/  {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}           {}
 
 query TT
 SELECT connection_name, connection_type FROM system.external_connections
@@ -65,6 +68,9 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
 
 user root
 
@@ -84,8 +90,11 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {MODIFYCLUSTERSETTING}                              {MODIFYCLUSTERSETTING}
 
 statement ok
 REVOKE GRANT OPTION FOR SYSTEM MODIFYCLUSTERSETTING FROM testuser
@@ -93,8 +102,11 @@ REVOKE GRANT OPTION FOR SYSTEM MODIFYCLUSTERSETTING FROM testuser
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {MODIFYCLUSTERSETTING}                              {}
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
@@ -102,7 +114,10 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
 
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
@@ -110,8 +125,11 @@ GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {MODIFYCLUSTERSETTING}                              {MODIFYCLUSTERSETTING}
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
@@ -119,7 +137,10 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
 
 # test VIEWCLUSTERSETTING
 user testuser
@@ -142,8 +163,11 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {VIEWCLUSTERSETTING}    {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {VIEWCLUSTERSETTING}                                {}
 
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
@@ -156,9 +180,12 @@ SELECT * FROM crdb_internal.cluster_settings;
 user root
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
 
 # test VIEWACTIVITY
 user testuser
@@ -181,8 +208,11 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {VIEWACTIVITY}          {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {VIEWACTIVITY}                                      {}
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
@@ -195,9 +225,12 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 user root
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
 
 # test VIEWACTIVITYREDACTED
 user testuser
@@ -220,8 +253,11 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root     /global/  {MODIFYCLUSTERSETTING}  {}
-testuser /global/  {VIEWACTIVITYREDACTED}   {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}
+testuser                               /global/  {VIEWACTIVITYREDACTED}                              {}
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
@@ -234,6 +270,9 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 user root
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+crdb_internal_cluster_activity_reader  /global/  {VIEWACTIVITY}                                      {}
+crdb_internal_cluster_activity_writer  /global/  {CANCELQUERY}                                       {}
+crdb_internal_cluster_metadata_reader  /global/  {VIEWCLUSTERMETADATA,VIEWCLUSTERSETTING,VIEWDEBUG}  {}
+root                                   /global/  {MODIFYCLUSTERSETTING}                              {}

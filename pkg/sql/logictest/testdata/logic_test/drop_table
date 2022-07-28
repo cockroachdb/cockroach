@@ -46,6 +46,12 @@ SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
 
 query TTTTIT

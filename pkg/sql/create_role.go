@@ -98,7 +98,8 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 	// Reject the reserved roles.
-	if roleName.IsReserved() {
+	user := p.SessionData().User()
+	if roleName.IsReserved() && !user.IsNodeUser() {
 		return nil, pgerror.Newf(
 			pgcode.ReservedName,
 			"role name %q is reserved",

@@ -34,6 +34,9 @@ FROM system.eventlog
 WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
 ORDER BY "timestamp", info
 ----
+1  create_role  {"ApplicationName": "$ internal-addClusterActivityReaderRole", "EventType": "create_role", "RoleName": "crdb_internal_cluster_activity_reader", "Statement": "CREATE ROLE IF NOT EXISTS crdb_internal_cluster_activity_reader", "Tag": "CREATE ROLE", "User": "node"}
+1  create_role  {"ApplicationName": "$ internal-addClusterActivityWriterRole", "EventType": "create_role", "RoleName": "crdb_internal_cluster_activity_writer", "Statement": "CREATE ROLE IF NOT EXISTS crdb_internal_cluster_activity_writer", "Tag": "CREATE ROLE", "User": "node"}
+1  create_role  {"ApplicationName": "$ internal-addClusterMetadataReaderRole", "EventType": "create_role", "RoleName": "crdb_internal_cluster_metadata_reader", "Statement": "CREATE ROLE IF NOT EXISTS crdb_internal_cluster_metadata_reader", "Tag": "CREATE ROLE", "User": "node"}
 1  create_role  {"EventType": "create_role", "RoleName": "testuser", "Statement": "CREATE USER testuser", "Tag": "CREATE ROLE", "User": "root"}
 1  create_role  {"EventType": "create_role", "RoleName": "r", "Statement": "CREATE ROLE r", "Tag": "CREATE ROLE", "User": "root"}
 1  create_role  {"EventType": "create_role", "RoleName": "r2", "Statement": "CREATE ROLE IF NOT EXISTS r2", "Tag": "CREATE ROLE", "User": "root"}

@@ -421,10 +421,13 @@ v                                             CREATE VIEW public.v (
 query TTT colnames
 SELECT * FROM [SHOW USERS] ORDER BY 1
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username                               options  member_of
+admin                                  ·        {}
+crdb_internal_cluster_activity_reader  NOLOGIN  {}
+crdb_internal_cluster_activity_writer  NOLOGIN  {}
+crdb_internal_cluster_metadata_reader  NOLOGIN  {}
+root                                   ·        {admin}
+testuser                               ·        {}
 
 
 query TTTI colnames

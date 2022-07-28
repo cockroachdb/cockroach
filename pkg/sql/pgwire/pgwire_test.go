@@ -589,6 +589,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW USERS", []preparedQueryTest{
 			baseTest.Results("abc", "", "{}").
 				Results("admin", "", "{}").
+				Results("crdb_internal_cluster_activity_reader", "NOLOGIN", "{}").
+				Results("crdb_internal_cluster_activity_writer", "NOLOGIN", "{}").
+				Results("crdb_internal_cluster_metadata_reader", "NOLOGIN", "{}").
 				Results("root", "", "{admin}").
 				Results("woo", "", "{}"),
 		}},

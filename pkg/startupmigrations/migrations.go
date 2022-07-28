@@ -299,6 +299,21 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 	},
+	{
+		// Introduced in v22.2.
+		name:   "add crdb_internal_cluster_activity_reader role",
+		workFn: addClusterActivityReaderRole,
+	},
+	{
+		// Introduced in v22.2.
+		name:   "add crdb_internal_cluster_activity_writer role",
+		workFn: addClusterActivityWriterRole,
+	},
+	{
+		// Introduced in v22.2.
+		name:   "add crdb_internal_cluster_metadata_reader role",
+		workFn: addClusterMetadataReaderRole,
+	},
 }
 
 func staticIDs(
@@ -398,6 +413,35 @@ func (r runner) execAsRootWithRetry(
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		err := r.execAsRoot(ctx, opName, stmt, qargs...)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
+	}
+	return err
+}
+
+// execAsNode executes a SQL statement as the node user. This should
+// only be used internally when the operation is not started by a normal
+// user.
+func (r runner) execAsNode(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
+	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: username.NodeUserName(),
+		},
+		stmt, qargs...)
+	return err
+}
+
+func (r runner) execAsNodeWithRetry(
+	ctx context.Context, opName string, stmt string, qargs ...interface{},
+) error {
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		err := r.execAsNode(ctx, opName, stmt, qargs...)
 		if err == nil {
 			break
 		}
@@ -839,6 +883,47 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 			username.PublicRole, username.PublicRole)
 	}
 	return nil
+}
+
+func addClusterActivityReaderRole(ctx context.Context, r runner) error {
+	if !r.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		return nil
+	}
+	const createRoleStmt = `CREATE ROLE IF NOT EXISTS crdb_internal_cluster_activity_reader;`
+	const grantStmt = `GRANT SYSTEM VIEWACTIVITY TO crdb_internal_cluster_activity_reader;`
+
+	err := r.execAsNodeWithRetry(ctx, "addClusterActivityReaderRole", createRoleStmt)
+	if err != nil {
+		return err
+	}
+	return r.execAsNodeWithRetry(ctx, "grantSystemPrivilegeToClusterActivityReader", grantStmt)
+}
+
+func addClusterActivityWriterRole(ctx context.Context, r runner) error {
+	if !r.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		return nil
+	}
+	const createRoleStmt = `CREATE ROLE IF NOT EXISTS crdb_internal_cluster_activity_writer;`
+	const grantStmt = `GRANT SYSTEM CANCELQUERY TO crdb_internal_cluster_activity_writer;`
+
+	err := r.execAsNodeWithRetry(ctx, "addClusterActivityWriterRole", createRoleStmt)
+	if err != nil {
+		return err
+	}
+	return r.execAsNodeWithRetry(ctx, "grantSystemprivilegeToClusterActivityWriter", grantStmt)
+}
+
+func addClusterMetadataReaderRole(ctx context.Context, r runner) error {
+	if !r.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		return nil
+	}
+	const createRoleStmt = `CREATE ROLE IF NOT EXISTS crdb_internal_cluster_metadata_reader;`
+	const grantStmt = `GRANT SYSTEM VIEWCLUSTERMETADATA, VIEWCLUSTERSETTING, VIEWDEBUG TO crdb_internal_cluster_metadata_reader;`
+	err := r.execAsNodeWithRetry(ctx, "addClusterMetadataReaderRole", createRoleStmt)
+	if err != nil {
+		return err
+	}
+	return r.execAsNodeWithRetry(ctx, "grantSystemPrivilegesToClusterMetadataReaderRole", grantStmt)
 }
 
 func createDefaultDbs(ctx context.Context, r runner) error {

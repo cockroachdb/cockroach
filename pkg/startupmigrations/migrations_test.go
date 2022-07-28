@@ -689,3 +689,43 @@ func TestUpdateSystemLocationData(t *testing.T) {
 		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
 	}
 }
+
+func TestBuiltinRolesExist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	readerMigration := mt.pop(t, "add crdb_internal_cluster_activity_reader role")
+	writerMigration := mt.pop(t, "add crdb_internal_cluster_activity_writer role")
+	metadataMigration := mt.pop(t, "add crdb_internal_cluster_metadata_reader role")
+	mt.start(t, base.TestServerArgs{})
+
+	var count int
+	readerRole := "crdb_internal_cluster_activity_reader"
+	writerRole := "crdb_internal_cluster_activity_writer"
+	metadataRole := "crdb_internal_cluster_metadata_reader"
+	tests := map[string]migrationDescriptor{
+		readerRole:   readerMigration,
+		writerRole:   writerMigration,
+		metadataRole: metadataMigration,
+	}
+	for role, migration := range tests {
+		// Verify the roles don't exist in system.users
+		mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.users WHERE username = $1`, role).Scan(&count)
+		require.Equal(t, 0, count)
+
+		if err := mt.runMigration(ctx, migration); err != nil {
+			t.Errorf("expected success, got %q", err)
+		}
+
+		// Verify the roles now exist in system.users
+		mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.users WHERE username = $1`, role).Scan(&count)
+		require.Equal(t, 1, count)
+
+		// Verify the roles have system privileges
+		mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.privileges WHERE username = $1`, role).Scan(&count)
+		require.Equal(t, 1, count)
+	}
+}

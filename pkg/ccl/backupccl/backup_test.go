@@ -712,9 +712,17 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	full1 := strings.TrimPrefix(matches[0], "/full")
 	asOf1 := strings.TrimPrefix(matches[1], "/full")
 
+	updatingUsersString := "updating version for users table"
+	updatingRoleOptionsString := "updating version for role options table"
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE status != 'failed'",
 		[][]string{
+			{updatingUsersString},
+			{updatingRoleOptionsString},
+			{updatingUsersString},
+			{updatingRoleOptionsString},
+			{updatingUsersString},
+			{updatingRoleOptionsString},
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s') INCREMENTAL FROM '%s'", incrementals[0],
@@ -5604,11 +5612,19 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	// run by an unrelated startup migration.
 	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
 	// the startup migration are handled.
+	updatingUsersString := "updating version for users table"
+	updatingRoleOptionsString := "updating version for role options table"
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history = true"},
 			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+			{updatingRoleOptionsString},
+			{updatingRoleOptionsString},
+			{updatingRoleOptionsString},
+			{updatingUsersString},
+			{updatingUsersString},
+			{updatingUsersString},
 		},
 	)
 }
@@ -9580,6 +9596,9 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
+			{"crdb_internal_cluster_activity_reader", "NULL", "true"},
+			{"crdb_internal_cluster_activity_writer", "NULL", "true"},
+			{"crdb_internal_cluster_metadata_reader", "NULL", "true"},
 			{"root", "", "false"},
 			{"test", "NULL", "false"},
 			{"test_role", "NULL", "true"},
@@ -9594,6 +9613,9 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"admin", "", "{}"},
 			{"app", "", "{admin,app_role}"},
 			{"app_role", "", "{}"},
+			{"crdb_internal_cluster_activity_reader", "NOLOGIN", "{}"},
+			{"crdb_internal_cluster_activity_writer", "NOLOGIN", "{}"},
+			{"crdb_internal_cluster_metadata_reader", "NOLOGIN", "{}"},
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
 			{"test_role", "", "{app_role}"},
@@ -9614,6 +9636,9 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
+			{"crdb_internal_cluster_activity_reader", "NULL", "true"},
+			{"crdb_internal_cluster_activity_writer", "NULL", "true"},
+			{"crdb_internal_cluster_metadata_reader", "NULL", "true"},
 			{"root", "", "false"},
 			{"test", "NULL", "false"},
 			{"test_role", "NULL", "true"},
@@ -9625,6 +9650,9 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"admin", "", "{}"},
 			{"app", "", "{}"},
 			{"app_role", "", "{}"},
+			{"crdb_internal_cluster_activity_reader", "NOLOGIN", "{}"},
+			{"crdb_internal_cluster_activity_writer", "NOLOGIN", "{}"},
+			{"crdb_internal_cluster_metadata_reader", "NOLOGIN", "{}"},
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
 			{"test_role", "", "{}"},
