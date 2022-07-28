@@ -218,7 +218,7 @@ func computeStatsDelta(
 				if ok, err := iter.Valid(); err != nil {
 					return err
 				} else if ok && iter.RangeBounds().Key.Compare(bound) < 0 {
-					for i, rkv := range iter.RangeKeys() {
+					for i, rkv := range iter.RangeKeys().AsRangeKeyValues() {
 						keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
 						valBytes := int64(len(rkv.Value))
 						if i == 0 {

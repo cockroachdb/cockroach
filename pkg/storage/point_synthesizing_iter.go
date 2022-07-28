@@ -176,7 +176,7 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 		if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
 			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
 			i.rangeKeys = i.rangeKeys[:0]
-			for _, rk := range i.iter.RangeKeys() {
+			for _, rk := range i.iter.RangeKeys().AsRangeKeyValues() {
 				// TODO(erikgrinaker): We should optimize the clone cost.
 				i.rangeKeys = append(i.rangeKeys, rk.Clone())
 			}
@@ -624,8 +624,8 @@ func (i *pointSynthesizingIter) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements MVCCIterator.
-func (i *pointSynthesizingIter) RangeKeys() []MVCCRangeKeyValue {
-	return []MVCCRangeKeyValue{}
+func (i *pointSynthesizingIter) RangeKeys() MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{}
 }
 
 // ComputeStats implements MVCCIterator.

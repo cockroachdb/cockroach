@@ -106,7 +106,7 @@ func (f *multiIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (f *multiIterator) RangeKeys() []MVCCRangeKeyValue {
+func (f *multiIterator) RangeKeys() MVCCRangeKeyStack {
 	panic("not implemented")
 }
 

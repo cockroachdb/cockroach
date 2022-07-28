@@ -176,7 +176,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 				}
 			}
 			if r {
-				rks := iter.RangeKeys()
+				rks := iter.RangeKeys().AsRangeKeyValues()
 				if !rks[0].RangeKey.StartKey.Equal(rangeStart) {
 					if !reverse {
 						for _, rk := range rks {
