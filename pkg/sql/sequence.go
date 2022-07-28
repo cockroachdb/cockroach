@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -599,7 +598,7 @@ func maybeAddSequenceDependencies(
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 	colExprKind tabledesc.ColExprKind,
 ) ([]*tabledesc.Mutable, error) {
-	seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtinsregistry.GetBuiltinProperties)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -674,7 +673,7 @@ func maybeAddSequenceDependencies(
 	// If sequences are present in the expr (and the cluster is the right version),
 	// walk the expr tree and replace any sequences names with their IDs.
 	if len(seqIdentifiers) > 0 {
-		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtinsregistry.GetBuiltinProperties)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return nil, err
 		}
