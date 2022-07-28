@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -77,6 +78,7 @@ var _ colexecop.VectorizedStatsCollector = &Columnarizer{}
 
 // NewBufferingColumnarizer returns a new Columnarizer that will be buffering up
 // rows before emitting them as output batches.
+// - allocator must use a memory account that is not shared with any other user.
 func NewBufferingColumnarizer(
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
@@ -88,6 +90,7 @@ func NewBufferingColumnarizer(
 
 // NewStreamingColumnarizer returns a new Columnarizer that emits every input
 // row as a separate batch.
+// - allocator must use a memory account that is not shared with any other user.
 func NewStreamingColumnarizer(
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
@@ -233,6 +236,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 				colexecerror.ExpectedError(meta.Err)
 			}
 			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
+			colexecutils.AccountForMetadata(c.allocator, c.accumulatedMeta[len(c.accumulatedMeta)-1:])
 			continue
 		}
 		if row == nil {
@@ -266,12 +270,22 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
 	}
+	// We no longer need the batch.
+	c.batch = nil
+	bufferedMeta := c.accumulatedMeta
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	c.accumulatedMeta = nil
+	// When this method returns, we no longer will have the reference to the
+	// metadata (nor to the batch), so we can release all memory from the
+	// allocator.
+	defer c.allocator.ReleaseAll()
 	if c.Ctx == nil {
 		// The columnarizer wasn't initialized, so the wrapped processors might
 		// not have been started leaving them in an unsafe to drain state, so
 		// we skip the draining. Mostly likely this happened because a panic was
 		// encountered in Init.
-		return c.accumulatedMeta
+		return bufferedMeta
 	}
 	c.MoveToDraining(nil /* err */)
 	for {
@@ -279,9 +293,9 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 		if meta == nil {
 			break
 		}
-		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
+		bufferedMeta = append(bufferedMeta, *meta)
 	}
-	return c.accumulatedMeta
+	return bufferedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.

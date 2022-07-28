@@ -54,17 +54,18 @@ type OpWithMetaInfo struct {
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
-	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []OpWithMetaInfo
-	StreamingMemAccount  *mon.BoundAccount
-	ProcessorConstructor execinfra.ProcessorConstructor
-	LocalProcessors      []execinfra.LocalProcessor
-	DiskQueueCfg         colcontainer.DiskQueueCfg
-	FDSemaphore          semaphore.Semaphore
-	ExprHelper           *ExprHelper
-	Factory              coldata.ColumnFactory
-	MonitorRegistry      *MonitorRegistry
-	TestingKnobs         struct {
+	Spec                   *execinfrapb.ProcessorSpec
+	Inputs                 []OpWithMetaInfo
+	StreamingMemAccount    *mon.BoundAccount
+	StreamingMemAccFactory func() *mon.BoundAccount
+	ProcessorConstructor   execinfra.ProcessorConstructor
+	LocalProcessors        []execinfra.LocalProcessor
+	DiskQueueCfg           colcontainer.DiskQueueCfg
+	FDSemaphore            semaphore.Semaphore
+	ExprHelper             *ExprHelper
+	Factory                coldata.ColumnFactory
+	MonitorRegistry        *MonitorRegistry
+	TestingKnobs           struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
