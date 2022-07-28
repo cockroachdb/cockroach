@@ -1084,7 +1084,7 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 		_, r := rangeIt.HasPointAndRange()
 		if r {
 			span := rangeIt.RangeBounds()
-			newKeys := rangeIt.RangeKeys()
+			newKeys := rangeIt.RangeKeys().AsRangeKeyValues()
 			if lastEnd.Equal(span.Key) {
 				// Try merging keys by timestamp.
 				var newPartial []storage.MVCCRangeKey

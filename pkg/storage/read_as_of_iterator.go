@@ -110,8 +110,8 @@ func (f *ReadAsOfIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys is always empty since this iterator never surfaces rangeKeys.
-func (f *ReadAsOfIterator) RangeKeys() []MVCCRangeKeyValue {
-	return []MVCCRangeKeyValue{}
+func (f *ReadAsOfIterator) RangeKeys() MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{}
 }
 
 // updateValid updates i.valid and i.err based on the underlying iterator, and
@@ -172,7 +172,7 @@ func (f *ReadAsOfIterator) advance() {
 // TODO (msbutler): ensure this function caches range key values (#84379) before
 // the 22.2 branch cut, else we face a steep perf cliff for RESTORE with range keys.
 func (f *ReadAsOfIterator) asOfRangeKeyShadows() (shadows bool) {
-	rangeKeys := f.iter.RangeKeys()
+	rangeKeys := f.iter.RangeKeys().AsRangeKeyValues()
 	if f.asOf.IsEmpty() {
 		return f.iter.UnsafeKey().Timestamp.LessEq(rangeKeys[0].RangeKey.Timestamp)
 	}
