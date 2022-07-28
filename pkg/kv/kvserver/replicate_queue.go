@@ -515,37 +515,43 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		for {
-			requeue, err := rq.processOneChange(
-				ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
-			)
-			if isSnapshotError(err) {
-				// If ChangeReplicas failed because the snapshot failed, we log the
-				// error but then return success indicating we should retry the
-				// operation. The most likely causes of the snapshot failing are a
-				// declined reservation or the remote node being unavailable. In either
-				// case we don't want to wait another scanner cycle before reconsidering
-				// the range.
-				log.Infof(ctx, "%v", err)
-				break
-			}
-
-			if err != nil {
-				return false, err
-			}
-
-			if testingAggressiveConsistencyChecks {
-				if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
-					log.Warningf(ctx, "%v", err)
-				}
-			}
-
-			if !requeue {
-				return true, nil
-			}
-
-			log.VEventf(ctx, 1, "re-processing")
+		requeue, err := rq.processOneChange(
+			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
+		)
+		if isSnapshotError(err) {
+			// If ChangeReplicas failed because the snapshot failed, we log the
+			// error but then return success indicating we should retry the
+			// operation. The most likely causes of the snapshot failing are a
+			// declined reservation or the remote node being unavailable. In either
+			// case we don't want to wait another scanner cycle before reconsidering
+			// the range.
+			// NB: The reason we are retrying snapshot failures immediately is that
+			// the recipient node will be "blocked" by a snapshot send failure for a
+			// few seconds. By retrying immediately we will choose the "second best"
+			// node to send to.
+			// TODO: This is probably suboptimal behavior. In the case where there is
+			// only one option for a recipient, we will block the entire replicate
+			// queue until we are able to send this through. Also even if there are
+			// multiple options, we may choose a far inferior recipient.
+			log.Infof(ctx, "%v", err)
+			continue
 		}
+
+		if err != nil {
+			return false, err
+		}
+
+		if testingAggressiveConsistencyChecks {
+			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		}
+
+		if requeue {
+			log.VEventf(ctx, 1, "re-processing")
+			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+		}
+		return true, nil
 	}
 
 	return false, errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
@@ -910,6 +916,30 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		dryRun,
 	); err != nil {
 		return false, err
+	}
+	// After we add or remove a voter, check that we are still honoring lease
+	// preferences
+	if rq.canTransferLeaseFrom(ctx, repl) {
+		// We require the lease in order to process replicas, so
+		// repl.store.StoreID() corresponds to the lease-holder's store ID.
+		outcome, err := rq.shedLease(
+			ctx,
+			repl,
+			desc,
+			conf,
+			allocator.TransferLeaseOptions{
+				Goal:                   allocator.FollowTheWorkload,
+				ExcludeLeaseRepl:       false,
+				CheckCandidateFullness: true,
+				DryRun:                 dryRun,
+			},
+		)
+		if err != nil {
+			return false, err
+		}
+		if outcome == allocator.TransferOK {
+			lhBeingRemoved = true
+		}
 	}
 	// Unless just removed myself (the leaseholder), always requeue to see
 	// if more work needs to be done. If leaseholder is removed, someone
