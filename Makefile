@@ -1172,31 +1172,18 @@ roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	bin/roachprod-stress $(CLUSTER) $(patsubst github.com/cockroachdb/cockroach/%,./%,$(PKG)) $(STRESSFLAGS) -- \
 	  -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
 
-testlogic: testbaselogic testoptlogic testccllogic
+testlogic: testbaselogic testoptlogic testsqlitelogic testccllogic testsqliteccllogic
 
-testbaselogic: ## Run SQL Logic Tests.
-testbaselogic: bin/logictest
+logic-test-selector := $(if $(FILES),$(subst /,,$(subst -,_,$(subst .,_,$(FILES)))),.*)/$(SUBTESTS)
+testbaselogic: TESTS := TestLogic_$(logic-test-selector)
+testsqlitelogic: TESTS := TestLogic_$(logic-test-selector)
+testccllogic: TESTS := Test(CCL|Tenant)Logic_$(logic-test-selector)
+testsqliteccllogic: TESTS := TestTenantLogic_$(logic-test-selector)
+testoptlogic: TESTS := TestExecBuild_$(logic-test-selector)
 
-testccllogic: ## Run SQL CCL Logic Tests.
-testccllogic: bin/logictestccl
-
-testoptlogic: ## Run SQL Logic Tests from opt package.
-testoptlogic: bin/logictestopt
-
-logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
-testbaselogic: TESTS := TestLogic/$(logic-test-selector)
-testccllogic: TESTS := Test(CCL|Tenant)Logic/$(logic-test-selector)
-testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
-
-# Note: we specify -config here in addition to the filter on TESTS
-# above. This is because if we only restrict in TESTS, this will
-# merely cause Go to skip the sub-tests that match the pattern. It
-# does not prevent loading and initializing every default config in
-# turn (including setting up the test clusters, etc.). By specifying
-# -config, the extra initialization overhead is averted.
-testbaselogic testccllogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
-testbaselogic testccllogic testoptlogic:
-	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+testbaselogic testccllogic testoptlogic testsqlitelogic testsqliteccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
+testbaselogic testccllogic testoptlogic testsqlitelogic testsqliteccllogic:
+	$(xgo) test $($@-package)/tests/$(if $(TESTCONFIG),$(TESTCONFIG),...) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
@@ -1820,9 +1807,11 @@ execgen-package = ./pkg/sql/colexec/execgen/cmd/execgen
 langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
 optfmt-package = ./pkg/sql/opt/optgen/cmd/optfmt
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
-logictest-package = ./pkg/sql/logictest
-logictestccl-package = ./pkg/ccl/logictestccl
-logictestopt-package = ./pkg/sql/opt/exec/execbuilder
+testbaselogic-package = ./pkg/sql/logictest
+testsqlitelogic-package = ./pkg/sql/sqlitelogictest
+testccllogic-package = ./pkg/ccl/logictestccl
+testsqliteccllogic-package = ./pkg/ccl/sqlitelogictestccl
+testoptlogic-package = ./pkg/sql/opt/exec/execbuilder
 terraformgen-package = ./pkg/roachprod/vm/aws/terraformgen
 logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 
