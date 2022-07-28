@@ -207,14 +207,16 @@ type DatumRowConverter struct {
 	TargetColOrds util.FastIntSet
 
 	// The rest of these are derived from tableDesc, just cached here.
-	ri                    Inserter
-	EvalCtx               *eval.Context
-	cols                  []catalog.Column
-	VisibleCols           []catalog.Column
-	VisibleColTypes       []*types.T
-	computedExprs         []tree.TypedExpr
-	defaultCache          []tree.TypedExpr
-	computedIVarContainer schemaexpr.RowIndexedVarContainer
+	ri                        Inserter
+	EvalCtx                   *eval.Context
+	cols                      []catalog.Column
+	VisibleCols               []catalog.Column
+	VisibleColTypes           []*types.T
+	computedExprs             []tree.TypedExpr
+	partialIndexExprs         map[descpb.IndexID]tree.TypedExpr
+	defaultCache              []tree.TypedExpr
+	computedIVarContainer     schemaexpr.RowIndexedVarContainer
+	partialIndexIVarContainer schemaexpr.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
@@ -449,7 +451,21 @@ func NewDatumRowConverter(
 		c.EvalCtx,
 		&semaCtxCopy)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+		return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
+	}
+
+	// Here, partialIndexExprs will be nil if there are no partial indexes, or a
+	// map of predicate expressions for each partial index in the input list of
+	// indexes.
+	c.partialIndexExprs, _, err = schemaexpr.MakePartialIndexExprs(ctx, c.tableDesc.PartialIndexes(),
+		c.tableDesc.PublicColumns(), c.tableDesc, c.EvalCtx, &semaCtxCopy)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error type checking and building partial index expression for IMPORT INTO")
+	}
+
+	c.partialIndexIVarContainer = schemaexpr.RowIndexedVarContainer{
+		Mapping: ri.InsertColIDtoRowIndex,
+		Cols:    tableDesc.PublicColumns(),
 	}
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
@@ -495,9 +511,31 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
-	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-	// not delete entries from.
+
+	// Initialize the PartialIndexUpdateHelper with evaluated predicates for
+	// partial indexes.
 	var pm PartialIndexUpdateHelper
+	{
+		c.partialIndexIVarContainer.CurSourceRow = insertRow
+		c.EvalCtx.PushIVarContainer(&c.partialIndexIVarContainer)
+		partialIndexPutVals := make(tree.Datums, len(c.tableDesc.PartialIndexes()))
+		if len(partialIndexPutVals) > 0 {
+			for i, idx := range c.tableDesc.PartialIndexes() {
+				texpr := c.partialIndexExprs[idx.GetID()]
+				val, err := eval.Expr(c.EvalCtx, texpr)
+				if err != nil {
+					return errors.Wrap(err, "evaluate partial index expression")
+				}
+				partialIndexPutVals[i] = val
+			}
+		}
+		err = pm.Init(partialIndexPutVals, nil /* partialIndexDelVals */, c.tableDesc)
+		if err != nil {
+			return errors.Wrap(err, "error init'ing PartialIndexUpdateHelper")
+		}
+		c.EvalCtx.PopIVarContainer()
+	}
+
 	if err := c.ri.InsertRow(
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {

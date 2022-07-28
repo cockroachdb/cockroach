@@ -4366,14 +4366,14 @@ func TestImportDefaultNextVal(t *testing.T) {
 				insertData: `(1, 'cat'), (2, 'him'), (3, 'meme')`,
 			},
 			// TODO(adityamaru): Unskip once #56387 is fixed.
-			//{
+			// {
 			//	name:                      "two-nextval-same-seq",
 			//	create:                    "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq'),
 			//	c STRING",
 			//	targetCols:                []string{"a", "c"},
 			//	seqToNumNextval:           map[string]int{"myseq": 1, "myseq2": 1},
 			//	expectedImportChunkAllocs: 1110,
-			//},
+			// },
 			{
 				name:       "two-nextval-cols-same-seq",
 				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING, d INT DEFAULT nextval('myseq')",
@@ -7007,4 +7007,111 @@ CREATE TABLE t (a INT, b greeting);
 			}
 		})
 	}
+}
+
+func TestImportIntoPartialIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := serverutils.StartNewTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	t.Run("simple-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)`)
+		data = "1,1,1\n1,2,1" // 1,1,1 is unindexed, 1,2,1 is indexed
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1`, [][]string{
+			{"1", "2", "1"},
+		})
+
+		// Return error if evaluating the predicate errs and do not import the row.
+		sqlDB.Exec(t, `CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)`)
+		data = "1,0"
+		sqlDB.ExpectErr(t, "division by zero", fmt.Sprintf(`IMPORT INTO b CSV DATA ('%s')`, srv.URL))
+
+		// Insert two rows where one is in a partial index and one is not.
+		sqlDB.Exec(t, `CREATE TABLE c (k INT PRIMARY KEY, i INT, INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100)`)
+		data = "3,30\n300,300"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO c CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100`, [][]string{
+			{"3", "30"},
+		})
+	})
+
+	t.Run("computed-cols-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE d (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT AS (b + 10) VIRTUAL,
+    INDEX idx (a) WHERE c = 10
+)`)
+		data = "1,0\n2,2\n3,0"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO d (a,b) CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d@idx WHERE c = 10`, [][]string{
+			{"1", "0", "10"}, {"3", "0", "10"},
+		})
+	})
+
+	t.Run("unique-partial-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE e (
+    a INT,
+    b INT,
+    UNIQUE INDEX i (a) WHERE b > 0
+)
+`)
+		data = "1,0\n1,2"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO e (a,b) CSV DATA ('%s')`, srv.URL))
+	})
+
+	t.Run("unique-partial-index-duplicate-key", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE f (
+    a INT,
+    b INT,
+    UNIQUE INDEX i (a) WHERE b > 0
+)
+`)
+		data = "1,1\n1,2"
+		sqlDB.ExpectErr(t, "duplicate key in index: duplicate key: /Table/109/2/1/0",
+			fmt.Sprintf(`IMPORT INTO f (a,b) CSV DATA ('%s')`, srv.URL))
+	})
+
+	t.Run("avro-partial-index", func(t *testing.T) {
+		simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+		sqlDB.Exec(t, `
+CREATE TABLE simple (
+     i INT8 PRIMARY KEY,
+     s text,
+     b bytea,
+     INDEX idx (i) WHERE i < 0
+)`)
+		sqlDB.Exec(t, `IMPORT INTO simple AVRO DATA ($1)`, simpleOcf)
+		res := sqlDB.QueryStr(t, `SELECT i FROM simple WHERE i < 0`)
+		sqlDB.CheckQueryResults(t, `SELECT i FROM simple@idx WHERE i < 0`, res)
+	})
 }
