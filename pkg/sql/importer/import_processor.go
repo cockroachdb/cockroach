@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -374,6 +375,12 @@ func ingestKvs(
 	// will hog memory as it tries to grow more aggressively.
 	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
+
+	var bulkAdderImportEpoch uint32
+	if flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.ImportRollbacksWithoutMVCC) {
+		// TODO (msbutler): add ImportEpoch to sql table descriptor and plumb to job details.
+		bulkAdderImportEpoch = 1
+	}
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
 		DisallowShadowingBelow:   writeTS,
@@ -382,6 +389,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		ImportEpoch:              bulkAdderImportEpoch,
 	})
 	if err != nil {
 		return nil, err
@@ -398,6 +406,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		ImportEpoch:              bulkAdderImportEpoch,
 	})
 	if err != nil {
 		return nil, err

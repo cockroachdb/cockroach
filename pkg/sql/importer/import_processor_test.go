@@ -238,7 +238,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:        &cluster.Settings{},
+			Settings:        cluster.MakeTestingClusterSettings(),
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
