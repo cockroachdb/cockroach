@@ -412,6 +412,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 
 	// Some aggregation functions benefit from an order by clause.
 	var orderExpr tree.Expr
+	var orderType *types.T
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
@@ -426,6 +427,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			arg, ok = makeColRef(s, argTyp, refs)
 			if ok && len(args) == 0 {
 				orderExpr = arg
+				orderType = argTyp
 			}
 			if !ok {
 				// If we can't find a col ref for our aggregate function, just use a
@@ -464,6 +466,13 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			})
 			orderTypes = append(orderTypes, ref.typ)
 		})
+		if s.disableNondeterministicFns && orderExpr != nil {
+			order = append(order, &tree.Order{
+				Expr:      orderExpr,
+				Direction: s.randDirection(),
+			})
+			orderTypes = append(orderTypes, orderType)
+		}
 		var frame *tree.WindowFrame
 		if s.coin() {
 			frame = makeWindowFrame(s, refs, orderTypes)
@@ -487,7 +496,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	)
 
 	// Some aggregation functions need an order by clause to be deterministic.
-	if s.disableNondeterministicFns {
+	if s.disableNondeterministicFns && orderExpr != nil {
 		switch fn.def.Name {
 		case "array_agg",
 			"concat_agg",
@@ -498,13 +507,11 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			"st_makeline",
 			"string_agg",
 			"xmlagg":
-			if orderExpr != nil {
-				funcExpr.AggType = tree.GeneralAgg
-				funcExpr.OrderBy = tree.OrderBy{{
-					Expr:      orderExpr,
-					Direction: s.randDirection(),
-				}}
-			}
+			funcExpr.AggType = tree.GeneralAgg
+			funcExpr.OrderBy = tree.OrderBy{{
+				Expr:      orderExpr,
+				Direction: s.randDirection(),
+			}}
 		}
 	}
 
