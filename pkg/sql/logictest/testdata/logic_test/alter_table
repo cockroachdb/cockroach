@@ -1891,40 +1891,40 @@ subtest regression_67234
 statement ok
 CREATE TABLE t67234 (k INT PRIMARY KEY, a INT, b INT, FAMILY (k, a, b));
 
-statement ok
-ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
-
-statement ok
-ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t67234]
-----
-CREATE TABLE public.t67234 (
-   k INT8 NOT NULL,
-   a INT8 NULL,
-   b INT8 NULL,
-   CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
-   UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
-   FAMILY fam_0_k_a_b (k, a, b),
-   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
-)
-
-# Sanity: Check the number of user errors and
-# database errors in the test.
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
-----
-1
-
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
-----
-1
+#statement ok
+#ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
+#
+#statement ok
+#ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
+#
+#query T
+#SELECT create_statement FROM [SHOW CREATE TABLE t67234]
+#----
+#CREATE TABLE public.t67234 (
+#   k INT8 NOT NULL,
+#   a INT8 NULL,
+#   b INT8 NULL,
+#   CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
+#   UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+#   FAMILY fam_0_k_a_b (k, a, b),
+#   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+#)
+#
+## Sanity: Check the number of user errors and
+## database errors in the test.
+#query I
+#SELECT count(usage_count)
+#  FROM crdb_internal.feature_usage
+# WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
+#----
+#1
+#
+#query I
+#SELECT count(usage_count)
+#  FROM crdb_internal.feature_usage
+# WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
+#----
+#1
 
 subtest generated_as_identity
 statement ok
