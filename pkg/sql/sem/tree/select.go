@@ -22,6 +22,7 @@ package tree
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -741,6 +742,18 @@ func (d Direction) String() string {
 		return fmt.Sprintf("Direction(%d)", d)
 	}
 	return directionName[d]
+}
+
+// ToIndexColumnDirection converts tree.Direction to catpb.IndexColumn_Direction.
+func (d Direction) ToIndexColumnDirection() catpb.IndexColumn_Direction {
+	switch d {
+	case DefaultDirection, Ascending:
+		return catpb.IndexColumn_ASC
+	case Descending:
+		return catpb.IndexColumn_DESC
+	default:
+		panic(fmt.Sprintf("invalid direction %s", d))
+	}
 }
 
 // NullsOrder for specifying ordering of NULLs.
