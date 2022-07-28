@@ -158,6 +158,10 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// CloseExUnderTxn close the internal executor's conn executor. It should only
+	// be used if the internal executor is used with a not nil txn.
+	CloseExUnderTxn(ctx context.Context)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
