@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -841,6 +843,148 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 	)
 }
 
+// QueryBuffered executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once). If no user has been
+// previously set through SetSessionData, the statement is executed as the root
+// user.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// QueryBuffered is deprecated because it may transparently execute a query as
+// root. Use QueryBufferedEx instead.
+func (p *planner) QueryBuffered(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+}
+
+// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	datums, _, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	return datums, err
+}
+
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	datums, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	return datums, cols, err
+}
+
+// QueryRow is like Query, except it returns a single row, or nil if not row is
+// found, or an error if more that one row is returned.
+//
+// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
+func (p *planner) QueryRow(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	return ie.QueryRowEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	rows, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 2 /* limit */, qargs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, nil, nil
+	case 1:
+		return rows[0], cols, nil
+	default:
+		return nil, nil, &tree.MultipleResultsError{SQL: stmt}
+	}
+}
+
+// Exec executes the supplied SQL statement and returns the number of rows
+// affected (not like the results; see Query()). If no user has been previously
+// set through SetSessionData, the statement is executed as the root user.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// Exec is deprecated because it may transparently execute a query as root. Use
+// ExecEx instead.
+func (p *planner) Exec(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) (int, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	return ie.ExecEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+}
+
+// ExecEx is like Exec, but allows the caller to override some session data
+// fields (e.g. the user).
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) ExecEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	// We will run the query to completion, so we can use an async result
+	// channel.
+	rw := newAsyncIEResultChannel()
+	ie.txn = txn
+	it, err := ie.execInternal(ctx, opName, rw, session, stmt, qargs...)
+	if err != nil {
+		return 0, err
+	}
+	// We need to exhaust the iterator so that it can count the number of rows
+	// affected.
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+	}
+	if err != nil {
+		return 0, err
+	}
+	return it.rowsAffected, nil
+}
+
 // QueryRowEx executes the supplied SQL statement and returns a single row, or
 // nil if no row is found, or an error if more that one row is returned.
 //
@@ -853,8 +997,23 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+}
+
+// QueryIterator executes the query, returning an iterator that can be used
+// to get the results. If the call is successful, the returned iterator
+// *must* be closed.
+//
+// QueryIterator is deprecated because it may transparently execute a query
+// as root. Use QueryIteratorEx instead.
+func (p *planner) QueryIterator(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
+	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -870,7 +1029,23 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.initInternalExecutor(ctx)
+	defer func() { ie.CloseExUnderTxn(ctx) }()
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
 }
+
+func (p *planner) initInternalExecutor(ctx context.Context) *InternalExecutor {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData()).(*InternalExecutor)
+	ex := &connExecutor{}
+	ex.extraTxnState.descCollection = p.Descriptors()
+	ex.extraTxnState.skipReleaseDescCollection = true
+	ex.extraTxnState.skipReleaseSchemaChangeRecord = true
+	ex.extraTxnState.schemaChangerState = *p.extendedEvalCtx.SchemaChangerState
+	ex.extraTxnState.schemaChangeJobRecords = p.extendedEvalCtx.SchemaChangeJobRecords
+	ex.extraTxnState.jobs = *p.extendedEvalCtx.Jobs
+	ie.ex = ex
+	return ie
+}
+
+var _ sqlutil.InternalExecutor = &InternalExecutor{}
