@@ -150,7 +150,7 @@ func formatFunction(fn *tree.FunctionDefinition) string {
 	if len(fn.Definition) != 1 {
 		panic(fmt.Errorf("functions with multiple overloads not supported"))
 	}
-	o := fn.Definition[0].(*tree.Overload)
+	o := fn.Definition[0]
 	tp := treeprinter.New()
 	nullStr := ""
 	if !o.NullableArgs {

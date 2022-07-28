@@ -19,10 +19,7 @@ type FunctionDefinition struct {
 	Name string
 
 	// Definition is the set of overloads for this function name.
-	// We use []overloadImpl here although all the uses of this struct
-	// could actually write a []Overload, because we want to share
-	// the code with typeCheckOverloadedExprs().
-	Definition []overloadImpl
+	Definition []*Overload
 
 	// FunctionProperties are the properties common to all overloads.
 	FunctionProperties
@@ -136,7 +133,7 @@ var _ = NormalClass
 func NewFunctionDefinition(
 	name string, props *FunctionProperties, def []Overload,
 ) *FunctionDefinition {
-	overloads := make([]overloadImpl, len(def))
+	overloads := make([]*Overload, len(def))
 
 	for i := range def {
 		if def[i].PreferredOverload {
