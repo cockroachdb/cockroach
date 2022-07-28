@@ -12,6 +12,9 @@ package cloud
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -39,6 +42,9 @@ type KMS interface {
 type KMSEnv interface {
 	ClusterSettings() *cluster.Settings
 	KMSConfig() *base.ExternalIODirConfig
+	DBHandle() *kv.DB
+	User() username.SQLUsername
+	InternalExecutor() sqlutil.InternalExecutor
 }
 
 // KMSFromURIFactory describes a factory function for KMS given a URI.

@@ -73,7 +73,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	kmsURIParams := resolveKMSURIParams(*kmsURI)
 
 	// Client options to authenticate and start a GCS KMS session.
-	// Currently only accepting json of service account.
+	// Currently, only accepting json of service account.
 	var credentialsOpt []option.ClientOption
 
 	switch kmsURIParams.auth {
@@ -117,7 +117,6 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
-
 	if err != nil {
 		return nil, err
 	}

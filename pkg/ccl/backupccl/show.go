@@ -84,6 +84,7 @@ type backupInfoReader interface {
 		cloud.ExternalStorageFromURIFactory,
 		backupInfo,
 		username.SQLUsername,
+		cloud.KMSEnv,
 		chan<- tree.Datums,
 	) error
 	header() colinfo.ResultColumns
@@ -105,9 +106,10 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	mkStore cloud.ExternalStorageFromURIFactory,
+	_ cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
-	user username.SQLUsername,
+	_ username.SQLUsername,
+	kmsEnv cloud.KMSEnv,
 	resultsCh chan<- tree.Datums,
 ) error {
 	var memReserved int64
@@ -158,10 +160,11 @@ func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
 
 func (m metadataSSTInfoReader) showBackup(
 	ctx context.Context,
-	mem *mon.BoundAccount,
+	_ *mon.BoundAccount,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
 	user username.SQLUsername,
+	kmsEnv cloud.KMSEnv,
 	resultsCh chan<- tree.Datums,
 ) error {
 	filename := backupinfo.MetadataSSTName
@@ -183,7 +186,8 @@ func (m metadataSSTInfoReader) showBackup(
 			return errors.Wrapf(err, "creating external store")
 		}
 		defer store.Close()
-		if err := backupinfo.DebugDumpMetadataSST(ctx, store, filename, info.enc, push); err != nil {
+		if err := backupinfo.DebugDumpMetadataSST(ctx, store, filename, info.enc,
+			kmsEnv, push); err != nil {
 			return err
 		}
 	}
@@ -333,6 +337,8 @@ func showBackupPlanHook(
 			defer encStore.Close()
 		}
 		var encryption *jobspb.BackupEncryptionOptions
+		kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
+			&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupencryption.BackupOptEncPassphrase]; ok {
@@ -357,14 +363,14 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				return err
 			}
 
-			env := &backupencryption.BackupKMSEnv{
-				Settings: p.ExecCfg().Settings,
-				Conf:     &p.ExecCfg().ExternalIODirConfig,
-			}
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, []string{kms},
-					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(
+					ctx,
+					[]string{kms},
+					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
+					&kmsEnv,
+				)
 				if err == nil {
 					break
 				}
@@ -421,7 +427,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
 			err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedDest,
-			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, p.User())
+			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User())
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()
@@ -471,7 +477,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 			info.fileSizes = fileSizes
 		}
-		if err := infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), resultsCh); err != nil {
+		if err := infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), &kmsEnv, resultsCh); err != nil {
 			return err
 		}
 		if backup.InCollection == nil {

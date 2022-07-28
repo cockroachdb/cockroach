@@ -21,6 +21,24 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const scheme = "external"
+
+type nodelocalConnectionContext struct {
+	externalStorageContext cloud.ExternalStorageContext
+}
+
+// ExternalStorageContext implements the ConnectionContext interface.
+func (n *nodelocalConnectionContext) ExternalStorageContext() cloud.ExternalStorageContext {
+	return n.externalStorageContext
+}
+
+// KMSEnv implements the ConnectionContext interface.
+func (n *nodelocalConnectionContext) KMSEnv() cloud.KMSEnv {
+	panic("nodelocalConnectionContext cannot be used for KMS initialization")
+}
+
+var _ ConnectionContext = &nodelocalConnectionContext{}
+
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
 ) (cloudpb.ExternalConnectionConfig, error) {
@@ -78,7 +96,8 @@ func makeExternalConnectionStorage(
 	if err != nil {
 		return nil, err
 	}
-	connection, err := connDetails.Dial(ctx, args, cfg.Path)
+	connection, err := connDetails.Dial(ctx,
+		&nodelocalConnectionContext{externalStorageContext: args}, cfg.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to Dial external connection")
 	}
@@ -93,7 +112,6 @@ func makeExternalConnectionStorage(
 }
 
 func init() {
-	scheme := "external"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_external, parseExternalConnectionURL,
 		makeExternalConnectionStorage, cloud.RedactedParams(), scheme)
 }
