@@ -550,7 +550,7 @@ func EvalAddSSTable(
 // * Only SST set operations (not explicitly verified).
 // * No intents or unversioned values.
 // * If sstTimestamp is set, all MVCC timestamps equal it.
-// * MVCCValueHeader is empty.
+// * The LocalTimestamp in the MVCCValueHeader is empty.
 // * Given MVCC stats match the SST contents.
 func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.MVCCStats) error {
 
@@ -584,8 +584,9 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"SST contains invalid value for key %s", key)
 		}
-		if value.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
-			return errors.AssertionFailedf("SST contains non-empty MVCC value header for key %s", key)
+		if !value.MVCCValueHeader.LocalTimestamp.IsEmpty() {
+			return errors.AssertionFailedf("SST contains non-empty Local Timestamp in the MVCC value"+
+				" header for key %s", key)
 		}
 	}
 
