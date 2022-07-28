@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -762,19 +763,27 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		_, processErr, err := store.Enqueue(
-			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
-		)
-		require.NoError(t, err)
-		require.NoError(t, processErr)
+		expectedMessages := []allocatorimpl.AllocatorAction{
+			allocatorimpl.AllocatorRemoveLearner,
+			allocatorimpl.AllocatorAddVoter,
+			allocatorimpl.AllocatorAddVoter,
+			allocatorimpl.AllocatorConsiderRebalance,
+		}
+		for _, message := range expectedMessages {
+			trace, processErr, err := store.Enqueue(
+				ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+			)
+			require.NoError(t, err)
+			require.NoError(t, processErr)
+			action := "next replica action: " + message.String()
+			require.NoError(t, testutils.MatchInOrder(trace.String(), []string{action}...))
+		}
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
 		// Make sure it deleted the learner.
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		require.Empty(t, desc.Replicas().LearnerDescriptors())
 
-		// Bonus points: the replicate queue keeps processing until there is nothing
-		// to do, so it should have upreplicated the range to 3.
 		require.Len(t, desc.Replicas().VoterDescriptors(), 3)
 	}
 
@@ -782,17 +791,20 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		trace, processErr, err := store.Enqueue(
-			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
-		)
-		require.NoError(t, err)
-		require.NoError(t, processErr)
-		formattedTrace := trace.String()
-		expectedMessages := []string{
-			`transitioning out of joint configuration`,
+		expectedMessages := []allocatorimpl.AllocatorAction{
+			allocatorimpl.AllocatorFinalizeAtomicReplicationChange,
+			allocatorimpl.AllocatorAddVoter,
+			allocatorimpl.AllocatorFinalizeAtomicReplicationChange,
+			allocatorimpl.AllocatorConsiderRebalance,
 		}
-		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
-			t.Fatal(err)
+		for _, message := range expectedMessages {
+			trace, processErr, err := store.Enqueue(
+				ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+			)
+			require.NoError(t, err)
+			require.NoError(t, processErr)
+			action := "next replica action: " + message.String()
+			require.NoError(t, testutils.MatchInOrder(trace.String(), []string{action}...))
 		}
 
 		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
