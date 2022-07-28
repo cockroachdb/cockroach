@@ -448,7 +448,7 @@ func (i *MVCCIncrementalIterator) advance() {
 				// rather than a binary search because we expect EndTime to be near the
 				// current time, so the first range key will typically be sufficient.
 				hasRange = false
-				for _, rkv := range i.iter.RangeKeys() {
+				for _, rkv := range i.iter.RangeKeys().AsRangeKeyValues() {
 					if ts := rkv.RangeKey.Timestamp; ts.LessEq(i.endTime) {
 						hasRange = i.startTime.Less(ts)
 						break
@@ -547,9 +547,9 @@ func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
+func (i *MVCCIncrementalIterator) RangeKeys() MVCCRangeKeyStack {
 	if !i.hasRange {
-		return []MVCCRangeKeyValue{}
+		return MVCCRangeKeyStack{}
 	}
 
 	// TODO(erikgrinaker): It may be worthwhile to clone and memoize this result
@@ -564,21 +564,21 @@ func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
 	// Find the first range key at or below endTime, and truncate rangeKeys. We do
 	// a linear search rather than a binary search, because we expect endTime to
 	// be near the current time, so the first element will typically match.
-	first := len(rangeKeys) - 1
-	for idx, rkv := range rangeKeys {
-		if rkv.RangeKey.Timestamp.LessEq(i.endTime) {
+	first := len(rangeKeys.Versions) - 1
+	for idx, v := range rangeKeys.Versions {
+		if v.Timestamp.LessEq(i.endTime) {
 			first = idx
 			break
 		}
 	}
-	rangeKeys = rangeKeys[first:]
+	rangeKeys.Versions = rangeKeys.Versions[first:]
 
 	// Find the first range key at or below startTime, and truncate rangeKeys.
 	if i.startTime.IsSet() {
-		if idx := sort.Search(len(rangeKeys), func(idx int) bool {
-			return rangeKeys[idx].RangeKey.Timestamp.LessEq(i.startTime)
+		if idx := sort.Search(len(rangeKeys.Versions), func(idx int) bool {
+			return rangeKeys.Versions[idx].Timestamp.LessEq(i.startTime)
 		}); idx >= 0 {
-			rangeKeys = rangeKeys[:idx]
+			rangeKeys.Versions = rangeKeys.Versions[:idx]
 		}
 	}
 

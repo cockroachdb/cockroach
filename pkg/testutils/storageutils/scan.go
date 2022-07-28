@@ -45,7 +45,7 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
-				for _, rkv := range iter.RangeKeys() {
+				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					if len(rkv.Value) == 0 {
 						rkv.Value = nil
 					}
