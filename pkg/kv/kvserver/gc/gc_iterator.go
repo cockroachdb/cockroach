@@ -195,7 +195,7 @@ func (it *gcIterator) currentRangeTS() hlc.Timestamp {
 	}
 
 	it.cachedRangeTombstoneTS = hlc.Timestamp{}
-	rangeKeys := it.it.RangeKeys()
+	rangeKeys := it.it.RangeKeys().AsRangeKeyValues()
 	if idx := sort.Search(len(rangeKeys), func(i int) bool {
 		return rangeKeys[i].RangeKey.Timestamp.LessEq(it.threshold)
 	}); idx < len(rangeKeys) {

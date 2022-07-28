@@ -409,7 +409,7 @@ func UpdateSSTTimestamps(
 		} else if !ok {
 			break
 		}
-		for _, rkv := range iter.RangeKeys() {
+		for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
 			if rkv.RangeKey.Timestamp != from {
 				return nil, errors.Errorf("unexpected timestamp %s (expected %s) for range key %s",
 					rkv.RangeKey.Timestamp, from, rkv.RangeKey)

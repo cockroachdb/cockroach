@@ -93,7 +93,7 @@ func refreshRange(
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
-			rangeKVs := iter.RangeKeys()
+			rangeKVs := iter.RangeKeys().AsRangeKeyValues()
 			if len(rangeKVs) == 0 { // defensive
 				return errors.Errorf("expected range key at %s not found", key)
 			}
