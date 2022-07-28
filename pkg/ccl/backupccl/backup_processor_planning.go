@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -74,6 +75,12 @@ func distBackupPlanSpecs(
 		if err != nil {
 			return nil, err
 		}
+		defer func() {
+			err := kms.Close()
+			if err != nil {
+				log.Infof(ctx, "failed to close KMS: %+v", err)
+			}
+		}()
 
 		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
 			encryption.KMSInfo.EncryptedDataKey)

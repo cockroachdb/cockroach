@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,6 +80,12 @@ func distRestore(
 		if err != nil {
 			return err
 		}
+		defer func() {
+			err := kms.Close()
+			if err != nil {
+				log.Infof(ctx, "failed to close KMS: %+v", err)
+			}
+		}()
 
 		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
 		if err != nil {
