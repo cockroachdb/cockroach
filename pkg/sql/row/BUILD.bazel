@@ -53,7 +53,6 @@ go_library(
         "//pkg/sql/rowinfra",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/builtins/builtinconstants",
-        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",

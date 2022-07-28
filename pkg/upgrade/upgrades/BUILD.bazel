@@ -48,7 +48,6 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
