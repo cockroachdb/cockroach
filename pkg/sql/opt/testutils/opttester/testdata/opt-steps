@@ -1167,3 +1167,70 @@ Final best expression
    ├── fd: ()-->(1)
    └── tuple [type=tuple{int}]
         └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE chk (
+	id INT PRIMARY KEY,
+	a INT,
+	CHECK (a > 1+1)
+)
+----
+
+# Verify that we don't crash when a normalization rule runs on a constraint
+# expression that is never attached to the TableMeta.
+# In this example, the rule is FoldBinary and the check constraint is not
+# attached to the TableMeta because it may evaluate to NULL, which is considered
+# a passing CHECK constraint and therefore the expression is not a universal
+# truth about the contents of the table.
+optsteps
+SELECT id FROM chk
+----
+================================================================================
+Initial expression
+  Cost: 1094.64
+================================================================================
+  project
+   ├── columns: id:1(int!null)
+   ├── key: (1)
+   └── scan chk
+        ├── columns: id:1(int!null) a:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+        ├── key: (1)
+        └── fd: (1)-->(2-4)
+--------------------------------------------------------------------------------
+FoldBinary (normalization of expression outside of memo)
+--------------------------------------------------------------------------------
+================================================================================
+PruneScanCols
+  Cost: 1064.34
+================================================================================
+   project
+    ├── columns: id:1(int!null)
+    ├── key: (1)
+    └── scan chk
+  -      ├── columns: id:1(int!null) a:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+  -      ├── key: (1)
+  -      └── fd: (1)-->(2-4)
+  +      ├── columns: id:1(int!null)
+  +      └── key: (1)
+================================================================================
+EliminateProject
+  Cost: 1054.32
+================================================================================
+  -project
+  +scan chk
+    ├── columns: id:1(int!null)
+  - ├── key: (1)
+  - └── scan chk
+  -      ├── columns: id:1(int!null)
+  -      └── key: (1)
+  + └── key: (1)
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 1054.32
+================================================================================
+  scan chk
+   ├── columns: id:1(int!null)
+   └── key: (1)
