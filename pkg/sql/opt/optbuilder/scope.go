@@ -1015,6 +1015,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.FuncExpr:
 		semaCtx := s.builder.semaCtx
+		// TODO(mgartner): At this point the the function has not been type checked
+		// and resolved to one overload yet. Consider refactoring this so that it
+		// can handle overloads with the same name.
 		def, err := t.Func.Resolve(semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
 			panic(err)
@@ -1133,14 +1136,25 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefinition, bool) {
 	// The impl functions are private because they should never be run directly.
 	// Thus, they need to be marked as non-private before using them.
+
+	// FunctionProperties exist in function definitions and their overloads, so we
+	// unset all private fields here.
+	unsetPrivate := func(def *tree.FunctionDefinition) {
+		def.Private = true
+		for i := range def.Definition {
+			newOverload := *def.Definition[i]
+			newOverload.Private = false
+			def.Definition[i] = &newOverload
+		}
+	}
 	switch def {
 	case tree.FunDefs["percentile_disc"]:
 		newDef := *tree.FunDefs["percentile_disc_impl"]
-		newDef.Private = false
+		unsetPrivate(&newDef)
 		return &newDef, true
 	case tree.FunDefs["percentile_cont"]:
 		newDef := *tree.FunDefs["percentile_cont_impl"]
-		newDef.Private = false
+		unsetPrivate(&newDef)
 		return &newDef, true
 	}
 	return def, false
@@ -1227,7 +1241,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 	private := memo.FunctionPrivate{
 		Name:       def.Name,
-		Properties: &def.FunctionProperties,
+		Properties: &f.ResolvedOverload().FunctionProperties,
 		Overload:   f.ResolvedOverload(),
 	}
 
@@ -1339,7 +1353,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 		FuncExpr: f,
 		def: memo.FunctionPrivate{
 			Name:       def.Name,
-			Properties: &def.FunctionProperties,
+			Properties: &f.ResolvedOverload().FunctionProperties,
 			Overload:   f.ResolvedOverload(),
 		},
 	}
@@ -1394,7 +1408,7 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tre
 		FuncExpr: f,
 		def: memo.FunctionPrivate{
 			Name:       def.Name,
-			Properties: &def.FunctionProperties,
+			Properties: &f.ResolvedOverload().FunctionProperties,
 			Overload:   f.ResolvedOverload(),
 		},
 		args: args,
