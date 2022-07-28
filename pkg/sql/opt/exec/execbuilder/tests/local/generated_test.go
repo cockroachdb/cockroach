@@ -44,7 +44,6 @@ func init() {
 	} else {
 		execBuildLogicTestDir = "../../../../../../sql/opt/exec/execbuilder/testdata"
 	}
-
 }
 
 func TestMain(m *testing.M) {

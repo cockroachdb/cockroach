@@ -13,6 +13,7 @@
 package testfakedist_vec_off
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,6 +36,10 @@ const configIdx = 5
 var sqliteLogicTestDir string
 
 func init() {
+}
+
+func TestMain(m *testing.M) {
+	flag.Parse()
 	if *logictest.Bigtest {
 		if bazel.BuiltWithBazel() {
 			var err error
@@ -50,10 +55,6 @@ func init() {
 			}
 		}
 	}
-
-}
-
-func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
