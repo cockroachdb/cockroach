@@ -172,6 +172,9 @@ type Overload struct {
 	// NOTE: when set, a function should be prepared for any of its arguments to
 	// be NULL and should act accordingly.
 	NullableArgs bool
+
+	// FunctionProperties are the properties of this overload.
+	FunctionProperties
 }
 
 // params implements the overloadImpl interface.

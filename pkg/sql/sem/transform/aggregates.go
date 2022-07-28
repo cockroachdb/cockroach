@@ -15,17 +15,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
-// IsAggregateVisitor checks if walked expressions contain aggregate functions.
-type IsAggregateVisitor struct {
+// isAggregateVisitor checks if walked expressions contain aggregate functions.
+type isAggregateVisitor struct {
 	Aggregated bool
 	// searchPath is used to search for unqualified function names.
 	searchPath sessiondata.SearchPath
 }
 
-var _ tree.Visitor = &IsAggregateVisitor{}
+var _ tree.Visitor = &isAggregateVisitor{}
 
 // VisitPre satisfies the Visitor interface.
-func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+func (v *isAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
 	case *tree.FuncExpr:
 		if t.IsWindowFunctionApplication() {
@@ -39,7 +39,12 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 		if err != nil {
 			return false, expr
 		}
-		if fd.Class == tree.AggregateClass {
+		funcCls, err := fd.GetClass()
+		if err != nil {
+			return false, expr
+		}
+
+		if funcCls == tree.AggregateClass {
 			v.Aggregated = true
 			return false, expr
 		}
@@ -51,4 +56,4 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 }
 
 // VisitPost satisfies the Visitor interface.
-func (*IsAggregateVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+func (*isAggregateVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }

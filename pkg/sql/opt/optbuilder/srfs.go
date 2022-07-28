@@ -97,7 +97,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		texpr := inScope.resolveType(expr, types.Any)
 
 		var def *tree.FunctionDefinition
-		if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
+		funcExpr, ok := texpr.(*tree.FuncExpr)
+		if ok {
 			if def, err = funcExpr.Func.Resolve(
 				b.semaCtx.SearchPath, b.semaCtx.FunctionResolver,
 			); err != nil {
@@ -107,13 +108,13 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
-		if def == nil || def.Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
 
-			if def != nil && len(def.ReturnLabels) > 0 {
+		if def == nil || funcExpr.ResolvedOverload().Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
+			if def != nil && len(funcExpr.ResolvedOverload().ReturnLabels) > 0 {
 				// Override the computed alias with the one defined in the ReturnLabels. This
 				// satisfies a Postgres quirk where some json functions use different labels
 				// when used in a from clause.
-				alias = def.ReturnLabels[0]
+				alias = funcExpr.ResolvedOverload().ReturnLabels[0]
 			}
 			outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 		}

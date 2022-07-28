@@ -29,6 +29,12 @@ import (
 // FunctionReferenceResolver is the interface that provides the ability to
 // resolve built-in or user-defined function definitions from unresolved names.
 type FunctionReferenceResolver interface {
+	// ResolveFunction resolves a group of overloads with the given function name
+	// within a search path.
+	// TODO(Chengxiong): Consider adding an optional slice of argument types to
+	// the input of this method, so that we can try to narrow down the scope of
+	// overloads a bit earlier and decrease the possibility of ambiguous error
+	// on function properties.
 	ResolveFunction(name *UnresolvedName, path SearchPath) (*FunctionDefinition, error)
 }
 
