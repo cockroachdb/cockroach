@@ -27,7 +27,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
-        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_stretchr_testify//require",
