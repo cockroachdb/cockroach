@@ -2994,12 +2994,12 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
 		var qps float64
-		if avgQPS, dur := r.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		if avgQPS, dur := r.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			qps = avgQPS
 			totalQueriesPerSecond += avgQPS
 			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
 		}
-		if wps, dur := r.writeStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		if wps, dur := r.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
@@ -3196,13 +3196,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
 		behindCount += metrics.BehindCount
-		if qps, dur := rep.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		if qps, dur := rep.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageQueriesPerSecond += qps
 		}
 		if rqps, dur := rep.loadStats.requests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageRequestsPerSecond += rqps
 		}
-		if wps, dur := rep.writeStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		if wps, dur := rep.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageWritesPerSecond += wps
 		}
 		if rps, dur := rep.loadStats.readKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {

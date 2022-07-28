@@ -662,7 +662,6 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}
 		if added := res.Delta.KeyCount; added > 0 {
-			b.r.writeStats.RecordCount(float64(added), 0)
 			b.r.loadStats.writeKeys.RecordCount(float64(added), 0)
 		}
 		if res.AddSSTable.AtWriteTimestamp {
@@ -1012,10 +1011,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
-	b.r.writeStats.RecordCount(float64(b.mutations), 0 /* nodeID */)
-	if b.r.loadStats != nil {
-		b.r.loadStats.writeKeys.RecordCount(float64(b.mutations), 0)
-	}
+	b.r.loadStats.writeKeys.RecordCount(float64(b.mutations), 0)
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
