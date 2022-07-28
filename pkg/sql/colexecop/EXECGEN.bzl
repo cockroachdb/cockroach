@@ -30,19 +30,8 @@ def gen_eg_go_rules(targets):
             name = name,
             srcs = [template],
             outs = [target],
-            # `$@` lets us substitute in the output path[1]. The symlink below
-            # is frowned upon for genrules[2]. That said, when testing
-            # pkg/sql/colexec through bazel it expects to find the template
-            # files in a path other than what SRCS would suggest. We haven't
-            # really investigated why. For now lets just symlink the relevant
-            # files into the "right" path within the bazel sandbox[3].
-            #
-            # [1]: https://docs.bazel.build/versions/3.7.0/be/general.html#genrule_args
-            # [2]: https://docs.bazel.build/versions/3.7.0/be/general.html#general-advice
-            # [3]: https://github.com/cockroachdb/cockroach/pull/57027
             cmd = """
               export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
-              ln -s external/cockroach/pkg pkg
               $(location :execgen) -template $(SRCS) \
                   -fmt=false pkg/sql/colexec/$@ > $@
               $(location :goimports) -w $@
