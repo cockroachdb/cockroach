@@ -20,6 +20,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -394,6 +395,7 @@ func (i *Inbox) Next() coldata.Batch {
 					// to keep errors unchanged (e.g. roachpb.ErrPriority() will
 					// be called on each error in the DistSQLReceiver).
 					i.bufferedMeta = append(i.bufferedMeta, meta)
+					colexecutils.AccountForMetadata(i.allocator, i.bufferedMeta[len(i.bufferedMeta)-1:])
 				}
 			}
 			if receivedErr != nil {
@@ -483,7 +485,15 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 // not be called concurrently with Next.
 func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	allMeta := i.bufferedMeta
-	i.bufferedMeta = i.bufferedMeta[:0]
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	i.bufferedMeta = nil
+	// We also no longer need the scratch batch.
+	i.scratch.b = nil
+	// The allocator tracks the memory usage for a few things (the scratch batch
+	// as well as the metadata), and when this function returns, we no longer
+	// reference any of those, so we can release all of the allocations.
+	defer i.allocator.ReleaseAll()
 
 	if i.done {
 		// Next exhausted the stream of metadata.

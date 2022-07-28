@@ -200,6 +200,7 @@ func TestEval(t *testing.T) {
 			require.NoError(t, err)
 
 			mat := colexec.NewMaterializer(
+				nil, /* allocator */
 				flowCtx,
 				0, /* processorID */
 				result.OpWithMetaInfo,

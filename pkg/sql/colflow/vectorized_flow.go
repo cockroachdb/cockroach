@@ -967,7 +967,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
-			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			allocator := colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
+			sync := colexec.NewParallelUnorderedSynchronizer(allocator, inputStreamOps, s.waitGroup)
 			sync.LocalPlan = flowCtx.Local
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
@@ -1074,6 +1075,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				}
 			} else {
 				input = colexec.NewMaterializerNoEvalCtxCopy(
+					colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 					flowCtx,
 					pspec.ProcessorID,
 					opWithMetaInfo,
@@ -1168,9 +1170,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			args := &colexecargs.NewColOperatorArgs{
-				Spec:                 pspec,
-				Inputs:               inputs,
-				StreamingMemAccount:  s.monitorRegistry.NewStreamingMemAccount(flowCtx),
+				Spec:                pspec,
+				Inputs:              inputs,
+				StreamingMemAccount: s.monitorRegistry.NewStreamingMemAccount(flowCtx),
+				StreamingMemAccFactory: func() *mon.BoundAccount {
+					return s.monitorRegistry.NewStreamingMemAccount(flowCtx)
+				},
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
 				DiskQueueCfg:         s.diskQueueCfg,

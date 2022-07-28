@@ -162,6 +162,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	}
 
 	outColOp := colexec.NewMaterializer(
+		nil, /* allocator */
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.OpWithMetaInfo,

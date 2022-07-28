@@ -126,7 +126,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.LocalPlan = true
 	s.Init(ctx)
 
@@ -228,7 +228,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.Init(ctx)
 	for {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
@@ -280,7 +280,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 
 	// Create and initialize (but don't run) the synchronizer.
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	err := colexecerror.CatchVectorizedRuntimeError(func() { s.Init(ctx) })
 	require.NotNil(t, err)
 	require.True(t, strings.Contains(err.Error(), injectedPanicMsg))
@@ -304,7 +304,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
