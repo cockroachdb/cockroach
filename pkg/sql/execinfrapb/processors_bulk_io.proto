@@ -318,7 +318,14 @@ message BackupDataSpec {
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
   optional ElidePrefix elide_prefix = 12 [(gogoproto.nullable) = false];
-  // NEXTID: 13.
+
+  // IncludeMVCCValueHeader indicates whether the backup should be
+  // created with MVCCValueHeaders in the exported data. This should
+  // only be set on backups starting on cluster version 24.1 or
+  // greater.
+  optional bool include_mvcc_value_header = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IncludeMVCCValueHeader"];
+
+  // NEXTID: 14.
 }
 
 message RestoreFileSpec {

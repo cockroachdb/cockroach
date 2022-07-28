@@ -46,6 +46,7 @@ func distBackupPlanSpecs(
 	mvccFilter kvpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	elide execinfrapb.ElidePrefix,
+	includeValueHeader bool,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "backupccl.distBackupPlanSpecs")
@@ -98,17 +99,18 @@ func distBackupPlanSpecs(
 	sqlInstanceIDToSpec := make(map[base.SQLInstanceID]*execinfrapb.BackupDataSpec)
 	for _, partition := range spanPartitions {
 		spec := &execinfrapb.BackupDataSpec{
-			JobID:            jobID,
-			Spans:            partition.Spans,
-			DefaultURI:       defaultURI,
-			URIsByLocalityKV: urisByLocalityKV,
-			MVCCFilter:       mvccFilter,
-			Encryption:       fileEncryption,
-			PKIDs:            pkIDs,
-			BackupStartTime:  startTime,
-			BackupEndTime:    endTime,
-			UserProto:        user.EncodeProto(),
-			ElidePrefix:      elide,
+			JobID:                  jobID,
+			Spans:                  partition.Spans,
+			DefaultURI:             defaultURI,
+			URIsByLocalityKV:       urisByLocalityKV,
+			MVCCFilter:             mvccFilter,
+			Encryption:             fileEncryption,
+			PKIDs:                  pkIDs,
+			BackupStartTime:        startTime,
+			BackupEndTime:          endTime,
+			UserProto:              user.EncodeProto(),
+			ElidePrefix:            elide,
+			IncludeMVCCValueHeader: includeValueHeader,
 		}
 		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 	}
@@ -121,16 +123,17 @@ func distBackupPlanSpecs(
 			// which is not the leaseholder for any of the spans, but is for an
 			// introduced span.
 			spec := &execinfrapb.BackupDataSpec{
-				JobID:            jobID,
-				IntroducedSpans:  partition.Spans,
-				DefaultURI:       defaultURI,
-				URIsByLocalityKV: urisByLocalityKV,
-				MVCCFilter:       mvccFilter,
-				Encryption:       fileEncryption,
-				PKIDs:            pkIDs,
-				BackupStartTime:  startTime,
-				BackupEndTime:    endTime,
-				UserProto:        user.EncodeProto(),
+				JobID:                  jobID,
+				IntroducedSpans:        partition.Spans,
+				DefaultURI:             defaultURI,
+				URIsByLocalityKV:       urisByLocalityKV,
+				MVCCFilter:             mvccFilter,
+				Encryption:             fileEncryption,
+				PKIDs:                  pkIDs,
+				BackupStartTime:        startTime,
+				BackupEndTime:          endTime,
+				UserProto:              user.EncodeProto(),
+				IncludeMVCCValueHeader: includeValueHeader,
 			}
 			sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 		}

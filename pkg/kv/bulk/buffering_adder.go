@@ -63,6 +63,12 @@ type BufferingAdder struct {
 	// name of the BufferingAdder for the purpose of logging only.
 	name string
 
+	// importEpoch specifies the ImportEpoch of the table the BufferingAdder
+	// is ingesting data as part of an IMPORT INTO job. If specified, the Bulk
+	// Adder's SSTBatcher will write the import epoch to each versioned value's
+	// metadata.
+	importEpoch uint32
+
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
 
@@ -96,7 +102,8 @@ func MakeBulkAdder(
 	}
 
 	b := &BufferingAdder{
-		name: opts.Name,
+		name:        opts.Name,
+		importEpoch: opts.ImportEpoch,
 		sink: SSTBatcher{
 			name:                   opts.Name,
 			db:                     db,
@@ -303,8 +310,15 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	for i := range b.curBuf.entries {
 		mvccKey.Key = b.curBuf.Key(i)
-		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
-			return err
+		if b.importEpoch != 0 {
+			if err := b.sink.AddMVCCKeyWithImportEpoch(ctx, mvccKey, b.curBuf.Value(i),
+				b.importEpoch); err != nil {
+				return err
+			}
+		} else {
+			if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
+				return err
+			}
 		}
 	}
 	if err := b.sink.Flush(ctx); err != nil {
