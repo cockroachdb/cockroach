@@ -84,6 +84,9 @@ type internalContext struct {
 	// current database name, if known. This is maintained on a best-effort basis.
 	dbName string
 
+	// hook to run once, then clear, after running the next batch of statements.
+	afterRun func()
+
 	// state about the current query.
 	mu struct {
 		syncutil.Mutex

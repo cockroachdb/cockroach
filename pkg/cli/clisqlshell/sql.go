@@ -84,6 +84,8 @@ Informational
   \du [USER]        list the specified user, or list the users for all databases if no user is specified.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
   \dd TABLE         show details about constraints on the specified table.
+  \xchangefeed TABLES [WITH options]
+					(EXPERIMENTAL) start a changefeed on the specified tables and display the results, disabling input.
 
 Formatting
   \x [on|off]       toggle records display format.
@@ -1145,6 +1147,47 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 	return nextState
 }
 
+func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
+	prevTableFmt := c.sqlExecCtx.TableDisplayFormat
+	prevByteaOutput, err := c.getSessionVarValue("bytea_output")
+	if err != nil {
+		return nil, err
+	}
+	var undoSteps []func()
+	undo = func() {
+		for _, s := range undoSteps {
+			s()
+		}
+	}
+	// The table display format, default for interactive shells,
+	// doesn't work well with changefeeds as it buffers indefinitely.
+	// Newline-delimited JSON doesn't need to buffer and can display
+	// variably-structured data.
+	if prevTableFmt == clisqlexec.TableDisplayTable {
+		c.sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayNDJSON
+		undoSteps = append(undoSteps, func() { c.sqlExecCtx.TableDisplayFormat = prevTableFmt })
+	}
+
+	// bytea_output is defined and enforced server-side. Changefeed
+	// record values are output as bytea datums, and escaped output
+	// is much more readable than the default hex.
+	if prevByteaOutput == `hex` {
+		err := c.conn.Exec(context.Background(), `SET SESSION bytea_output=escape`)
+		if err != nil {
+			undo()
+			return nil, err
+		}
+		undoSteps = append(undoSteps, func() {
+			c.exitErr = errors.CombineErrors(
+				c.exitErr, c.conn.Exec(context.Background(), `SET SESSION bytea_output=hex`),
+			)
+		})
+	}
+
+	return undo, nil
+
+}
+
 func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnum {
 	if len(c.lastInputLine) == 0 || c.lastInputLine[0] != '\\' {
 		return nextState
@@ -1323,6 +1366,18 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\statement-diag`:
 		return c.handleStatementDiag(cmd[1:], loopState, errState)
+
+	case `\xchangefeed`:
+		if c.sqlExecCtx.TerminalOutput {
+			undo, err := c.setupChangefeedOutput()
+			if err != nil {
+				c.exitErr = err
+				return errState
+			}
+			c.iCtx.afterRun = undo
+		}
+		c.concatLines = `EXPERIMENTAL CHANGEFEED FOR` + line[len(cmd[0]):]
+		return cliRunStatement
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
@@ -1767,6 +1822,10 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	if c.iCtx.afterRun != nil {
+		defer c.iCtx.afterRun()
+	}
+
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
