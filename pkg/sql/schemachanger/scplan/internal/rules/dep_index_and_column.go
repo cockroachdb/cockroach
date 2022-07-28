@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
-// This registeredDepRule ensures that a new primary index becomes public right after the
+// This rule ensures that a new primary index becomes public right after the
 // old primary index starts getting removed, effectively swapping one for the
-// other.
+// other. This rule also applies when the schema change gets reverted.
 func init() {
 	registerDepRule(
 		"primary index swap",
@@ -36,31 +36,9 @@ func init() {
 				currentStatus(from.node, scpb.Status_VALIDATED),
 				currentStatus(to.node, scpb.Status_PUBLIC),
 				rel.Filter(
-					"new-primary-index-depends-on-old", to.el, from.el,
-				)(func(add, drop *scpb.PrimaryIndex) bool {
-					return add.SourceIndexID == drop.IndexID
-				}),
-			}
-		},
-	)
-
-	registerDepRule(
-		"reverting primary index swap",
-		scgraph.SameStagePrecedence,
-		"new-index", "old-index",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "table-id"),
-				targetStatus(from.target, scpb.ToAbsent),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_VALIDATED),
-				currentStatus(to.node, scpb.Status_PUBLIC),
-				rel.Filter(
-					"new-primary-index-depends-on-old", from.el, to.el,
-				)(func(add, drop *scpb.PrimaryIndex) bool {
-					return add.SourceIndexID == drop.IndexID
+					"primary-indexes-depend-on-each-other", from.el, to.el,
+				)(func(idx, otherIdx *scpb.PrimaryIndex) bool {
+					return idx.SourceIndexID == otherIdx.IndexID || idx.IndexID == otherIdx.SourceIndexID
 				}),
 			}
 		},
