@@ -21,6 +21,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -63,7 +64,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 	})
 
 	t.Run("auth-implicit", func(t *testing.T) {
-		if !isImplicitAuthConfigured() {
+		if !cloudtestutils.IsImplicitAuthConfigured() {
 			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
 
@@ -193,7 +194,7 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if !isImplicitAuthConfigured() {
+	if !cloudtestutils.IsImplicitAuthConfigured() {
 		skip.IgnoreLint(t, "implicit auth is not configured")
 	}
 

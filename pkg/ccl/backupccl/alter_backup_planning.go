@@ -149,6 +149,8 @@ func doAlterBackupPlan(
 	}
 
 	ioConf := baseStore.ExternalIOConf()
+	kmsEnv := backupencryption.MakeBackupKMSEnv(baseStore.Settings(), &ioConf, p.ExecCfg().DB,
+		p.User(), p.ExecCfg().InternalExecutor)
 
 	// Check that at least one of the old keys has been used to encrypt the backup in the past.
 	// Use the first one that works to decrypt the ENCRYPTION-INFO file(s).
@@ -158,10 +160,7 @@ func doAlterBackupPlan(
 		for _, encFile := range opts {
 			defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, []string{old},
 				backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
-				&backupencryption.BackupKMSEnv{
-					Settings: baseStore.Settings(),
-					Conf:     &ioConf,
-				})
+				&kmsEnv)
 
 			if err == nil {
 				oldKMSFound = true
@@ -182,20 +181,17 @@ func doAlterBackupPlan(
 
 	// Recover the encryption key using the old key, so we can encrypt it again with the new keys.
 	var plaintextDataKey []byte
-	plaintextDataKey, err = backupencryption.GetEncryptionKey(ctx, encryption, baseStore.Settings(),
-		baseStore.ExternalIOConf())
+	plaintextDataKey, err = backupencryption.GetEncryptionKey(ctx, encryption, &kmsEnv)
 	if err != nil {
 		return err
 	}
-
-	kmsEnv := &backupencryption.BackupKMSEnv{Settings: p.ExecCfg().Settings, Conf: &p.ExecCfg().ExternalIODirConfig}
 
 	encryptedDataKeyByKMSMasterKeyID := backupencryption.NewEncryptedDataKeyMap()
 
 	// Add each new key user wants to add to a new data key map.
 	for _, kmsURI := range newKms {
 		masterKeyID, encryptedDataKey, err := backupencryption.GetEncryptedDataKeyFromURI(ctx,
-			plaintextDataKey, kmsURI, kmsEnv)
+			plaintextDataKey, kmsURI, &kmsEnv)
 		if err != nil {
 			return errors.Wrap(err, "failed to encrypt data key when adding new KMS")
 		}

@@ -580,3 +580,11 @@ func CheckNoPermission(
 
 	require.Regexp(t, "(failed|unable) to list", err)
 }
+
+// IsImplicitAuthConfigured returns true if the `GOOGLE_APPLICATION_CREDENTIALS`
+// environment variable is set. This env variable points to the `keys.json` file
+// that is used for implicit authentication.
+func IsImplicitAuthConfigured() bool {
+	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	return credentials != ""
+}

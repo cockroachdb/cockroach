@@ -304,7 +304,7 @@ func getManifestFromURI(ctx context.Context, path string) (backuppb.BackupManife
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
 	backupManifest, _, err := backupinfo.ReadBackupManifestFromURI(ctx, nil /* mem */, path, username.RootUserName(),
-		externalStorageFromURIFactory, nil)
+		externalStorageFromURIFactory, nil, nil)
 	if err != nil {
 		return backuppb.BackupManifest{}, err
 	}
@@ -441,7 +441,8 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer stores[i].Close()
-		manifest, _, err := backupinfo.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i], nil)
+		manifest, _, err := backupinfo.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i],
+			nil, nil)
 		if err != nil {
 			return err
 		}

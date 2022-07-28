@@ -62,6 +62,7 @@ func WriteBackupMetadataSST(
 	ctx context.Context,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	manifest *backuppb.BackupManifest,
 	stats []*stats.TableStatisticProto,
 ) error {
@@ -74,12 +75,12 @@ func WriteBackupMetadataSST(
 		}
 	}()
 
-	w, err := makeWriter(ctx, dest, MetadataSSTName, enc)
+	w, err := makeWriter(ctx, dest, MetadataSSTName, enc, kmsEnv)
 	if err != nil {
 		return err
 	}
 
-	if err := constructMetadataSST(ctx, dest, enc, w, manifest, stats); err != nil {
+	if err := constructMetadataSST(ctx, dest, enc, kmsEnv, w, manifest, stats); err != nil {
 		return err
 	}
 
@@ -95,6 +96,7 @@ func makeWriter(
 	dest cloud.ExternalStorage,
 	filename string,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (io.WriteCloser, error) {
 	w, err := dest.Writer(ctx, filename)
 	if err != nil {
@@ -102,7 +104,7 @@ func makeWriter(
 	}
 
 	if enc != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, enc, dest.Settings(), dest.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +121,7 @@ func constructMetadataSST(
 	ctx context.Context,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	w io.Writer,
 	m *backuppb.BackupManifest,
 	stats []*stats.TableStatisticProto,
@@ -137,7 +140,7 @@ func constructMetadataSST(
 		return err
 	}
 
-	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, FileInfoPath); err != nil {
+	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, kmsEnv, FileInfoPath); err != nil {
 		return err
 	}
 
@@ -247,9 +250,10 @@ func writeFilesToMetadata(
 	m *backuppb.BackupManifest,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	fileInfoPath string,
 ) error {
-	w, err := makeWriter(ctx, dest, fileInfoPath, enc)
+	w, err := makeWriter(ctx, dest, fileInfoPath, enc, kmsEnv)
 	if err != nil {
 		return err
 	}
@@ -618,11 +622,12 @@ func debugDumpFileSST(
 	store cloud.ExternalStorage,
 	fileInfoPath string,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	out func(rawKey, readableKey string, value json.JSON) error,
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return err
 		}
@@ -664,17 +669,19 @@ func DebugDumpMetadataSST(
 	store cloud.ExternalStorage,
 	path string,
 	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	out func(rawKey, readableKey string, value json.JSON) error,
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return err
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store, FilePath: path}}, encOpts, iterOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store,
+		FilePath: path}}, encOpts, iterOpts)
 	if err != nil {
 		return err
 	}
@@ -723,7 +730,7 @@ func DebugDumpMetadataSST(
 			if err := out(k.String(), fmt.Sprintf("file info @ %s", p), nil); err != nil {
 				return err
 			}
-			if err := debugDumpFileSST(ctx, store, p, enc, out); err != nil {
+			if err := debugDumpFileSST(ctx, store, p, enc, kmsEnv, out); err != nil {
 				return err
 			}
 		case bytes.HasPrefix(k.Key, []byte(sstNamesPrefix)):
@@ -796,6 +803,7 @@ type BackupMetadata struct {
 	store    cloud.ExternalStorage
 	enc      *jobspb.BackupEncryptionOptions
 	filename string
+	kmsEnv   cloud.KMSEnv
 }
 
 // NewBackupMetadata returns a new BackupMetadata instance.
@@ -804,16 +812,18 @@ func NewBackupMetadata(
 	exportStore cloud.ExternalStorage,
 	sstFileName string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (*BackupMetadata, error) {
 	var encOpts *roachpb.FileEncryptionOptions
 	if encryption != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(), exportStore.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: exportStore, FilePath: sstFileName}}, encOpts, iterOpts)
+	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: exportStore,
+		FilePath: sstFileName}}, encOpts, iterOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -833,7 +843,8 @@ func NewBackupMetadata(
 		return nil, err
 	}
 
-	return &BackupMetadata{BackupManifest: sstManifest, store: exportStore, enc: encryption, filename: sstFileName}, nil
+	return &BackupMetadata{BackupManifest: sstManifest, store: exportStore,
+		enc: encryption, filename: sstFileName, kmsEnv: kmsEnv}, nil
 }
 
 // SpanIterator is a simple iterator to iterate over roachpb.Spans.
@@ -845,7 +856,8 @@ type SpanIterator struct {
 
 // SpanIter creates a new SpanIterator for the backup metadata.
 func (b *BackupMetadata) SpanIter(ctx context.Context) SpanIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc, true)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc,
+		true, b.kmsEnv)
 	return SpanIterator{
 		backing: backing,
 	}
@@ -853,7 +865,8 @@ func (b *BackupMetadata) SpanIter(ctx context.Context) SpanIterator {
 
 // IntroducedSpanIter creates a new IntroducedSpanIterator for the backup metadata.
 func (b *BackupMetadata) IntroducedSpanIter(ctx context.Context) SpanIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc, false)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstSpansPrefix), b.enc,
+		false, b.kmsEnv)
 
 	return SpanIterator{
 		backing: backing,
@@ -910,13 +923,14 @@ type FileIterator struct {
 
 // FileIter creates a new FileIterator for the backup metadata.
 func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
-	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc, false)
+	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc,
+		false, b.kmsEnv)
 	defer fileInfoIter.close()
 
 	var iters []storage.SimpleMVCCIterator
 	var encOpts *roachpb.FileEncryptionOptions
 	if b.enc != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.kmsEnv)
 		if err != nil {
 			return FileIterator{err: err}
 		}
@@ -994,7 +1008,8 @@ type DescIterator struct {
 
 // DescIter creates a new DescIterator for the backup metadata.
 func (b *BackupMetadata) DescIter(ctx context.Context) DescIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc, true)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc,
+		true, b.kmsEnv)
 	return DescIterator{
 		backing: backing,
 	}
@@ -1046,7 +1061,8 @@ type TenantIterator struct {
 
 // TenantIter creates a new TenantIterator for the backup metadata.
 func (b *BackupMetadata) TenantIter(ctx context.Context) TenantIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstTenantsPrefix), b.enc, false)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstTenantsPrefix), b.enc,
+		false, b.kmsEnv)
 	return TenantIterator{
 		backing: backing,
 	}
@@ -1095,7 +1111,8 @@ type DescriptorRevisionIterator struct {
 
 // DescriptorChangesIter creates a new DescriptorChangesIterator for the backup metadata.
 func (b *BackupMetadata) DescriptorChangesIter(ctx context.Context) DescriptorRevisionIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc, false)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc,
+		false, b.kmsEnv)
 	return DescriptorRevisionIterator{
 		backing: backing,
 	}
@@ -1171,7 +1188,8 @@ type StatsIterator struct {
 
 // StatsIter creates a new StatsIterator for the backup metadata.
 func (b *BackupMetadata) StatsIter(ctx context.Context) StatsIterator {
-	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstStatsPrefix), b.enc, false)
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstStatsPrefix), b.enc,
+		false, b.kmsEnv)
 	return StatsIterator{
 		backing: backing,
 	}
@@ -1230,10 +1248,11 @@ func makeBytesIter(
 	prefix []byte,
 	enc *jobspb.BackupEncryptionOptions,
 	useMVCCNext bool,
+	kmsEnv cloud.KMSEnv,
 ) bytesIter {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return bytesIter{iterError: err}
 		}
