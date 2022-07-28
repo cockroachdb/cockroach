@@ -62,12 +62,16 @@ func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
 // execution flow and returns toWrap's output as an Operator.
 // - materializerSafeToRelease indicates whether the materializers created in
 // order to row-sourcify the inputs are safe to be released on the flow cleanup.
+// - streamingMemAccFactory must be non-nil in the production setting and will
+// be used to create separate accounts for the materializer and the
+// columnarizer.
 func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	streamingMemAccount *mon.BoundAccount,
+	testStreamingMemAcc *mon.BoundAccount,
+	streamingMemAccFactory func() *mon.BoundAccount,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	materializerSafeToRelease bool,
@@ -86,7 +90,12 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
+			materializerMemAcc := testStreamingMemAcc
+			if streamingMemAccFactory != nil {
+				materializerMemAcc = streamingMemAccFactory()
+			}
 			toWrapInput := colexec.NewMaterializer(
+				colmem.NewAllocator(ctx, materializerMemAcc, factory),
 				flowCtx,
 				processorID,
 				inputs[i],
@@ -116,13 +125,17 @@ func wrapRowSources(
 		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
 	var c *colexec.Columnarizer
+	columnarizerMemAcc := testStreamingMemAcc
+	if streamingMemAccFactory != nil {
+		columnarizerMemAcc = streamingMemAccFactory()
+	}
 	if proc.MustBeStreaming() {
 		c = colexec.NewStreamingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, columnarizerMemAcc, factory), flowCtx, processorID, toWrap,
 		)
 	} else {
 		c = colexec.NewBufferingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, columnarizerMemAcc, factory), flowCtx, processorID, toWrap,
 		)
 	}
 	return c, releasables, nil
@@ -543,6 +556,7 @@ func (r opResult) createAndWrapRowSource(
 		inputs,
 		inputTypes,
 		args.StreamingMemAccount,
+		args.StreamingMemAccFactory,
 		processorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
