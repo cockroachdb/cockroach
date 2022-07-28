@@ -75,12 +75,12 @@ func (et *exploreTracer) Next() error {
 	}
 
 	// Compute the lowest cost tree for the source expression.
-	et.srcExpr = et.restrictToExpr(fo.LookupPath(fo.lastAppliedSource))
+	et.srcExpr = et.restrictToExpr(fo.MustLookupPath(fo.lastAppliedSource))
 
 	// Compute the lowest code tree for any target expressions.
 	et.newExprs = et.newExprs[:0]
 	if fo.lastAppliedTarget != nil {
-		et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(fo.lastAppliedTarget)))
+		et.newExprs = append(et.newExprs, et.restrictToExpr(fo.MustLookupPath(fo.lastAppliedTarget)))
 
 		if rel, ok := fo.lastAppliedTarget.(memo.RelExpr); ok {
 			for {
@@ -88,7 +88,7 @@ func (et *exploreTracer) Next() error {
 				if rel == nil {
 					break
 				}
-				et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(rel)))
+				et.newExprs = append(et.newExprs, et.restrictToExpr(fo.MustLookupPath(rel)))
 			}
 		}
 	}

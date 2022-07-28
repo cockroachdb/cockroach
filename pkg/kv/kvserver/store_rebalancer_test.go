@@ -514,19 +514,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	// order to pass replicaIsBehind checks, fake out the function for getting
 	// raft status with one that always returns all replicas as up to date.
 	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
-		status := &raft.Status{
-			Progress: make(map[uint64]tracker.Progress),
-		}
-		status.Lead = uint64(r.ReplicaID())
-		status.RaftState = raft.StateLeader
-		status.Commit = 1
-		for _, replica := range r.Desc().InternalReplicas {
-			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-				Match: 1,
-				State: tracker.StateReplicate,
-			}
-		}
-		return status
+		return TestingRaftStatusFn(r)
 	}
 
 	testCases := []struct {
@@ -784,19 +772,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
-				status := &raft.Status{
-					Progress: make(map[uint64]tracker.Progress),
-				}
-				status.Lead = uint64(r.ReplicaID())
-				status.RaftState = raft.StateLeader
-				status.Commit = 1
-				for _, replica := range r.Desc().InternalReplicas {
-					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-						Match: 1,
-						State: tracker.StateReplicate,
-					}
-				}
-				return status
+				return TestingRaftStatusFn(r)
 			}
 			a.StorePool.IsStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
@@ -884,41 +860,55 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	constraint := func(region string, numReplicas int32) roachpb.ConstraintsConjunction {
+	constraint := func(region string) roachpb.Constraint {
+		return roachpb.Constraint{
+			Type:  roachpb.Constraint_REQUIRED,
+			Key:   "region",
+			Value: region,
+		}
+	}
+
+	conjunctionConstraint := func(region string, numReplicas int32) roachpb.ConstraintsConjunction {
 		return roachpb.ConstraintsConjunction{
 			NumReplicas: numReplicas,
-			Constraints: []roachpb.Constraint{
-				{
-					Type:  roachpb.Constraint_REQUIRED,
-					Key:   "region",
-					Value: region,
-				},
-			},
+			Constraints: []roachpb.Constraint{constraint(region)},
 		}
 	}
 
 	oneReplicaPerRegion := []roachpb.ConstraintsConjunction{
-		constraint("a", 1),
-		constraint("b", 1),
-		constraint("c", 1),
+		conjunctionConstraint("a", 1),
+		conjunctionConstraint("b", 1),
+		conjunctionConstraint("c", 1),
 	}
 	twoReplicasInHotRegion := []roachpb.ConstraintsConjunction{
-		constraint("a", 2),
+		conjunctionConstraint("a", 2),
 	}
 	allReplicasInHotRegion := []roachpb.ConstraintsConjunction{
-		constraint("a", 3),
+		conjunctionConstraint("a", 3),
 	}
 	twoReplicasInSecondHottestRegion := []roachpb.ConstraintsConjunction{
-		constraint("b", 2),
+		conjunctionConstraint("b", 2),
 	}
 	oneReplicaInColdestRegion := []roachpb.ConstraintsConjunction{
-		constraint("c", 1),
+		conjunctionConstraint("c", 1),
+	}
+
+	leasePreferredHotRegion := []roachpb.LeasePreference{
+		{Constraints: []roachpb.Constraint{
+			constraint("a"),
+		}},
+	}
+	leasePreferredSecondHotRegion := []roachpb.LeasePreference{
+		{Constraints: []roachpb.Constraint{
+			constraint("b"),
+		}},
 	}
 
 	testCases := []struct {
 		name                          string
 		voters, nonVoters             []roachpb.StoreID
 		voterConstraints, constraints []roachpb.ConstraintsConjunction
+		leasePreferences              []roachpb.LeasePreference
 
 		// the first listed voter target is expected to be the leaseholder.
 		expRebalancedVoters, expRebalancedNonVoters []roachpb.StoreID
@@ -943,6 +933,18 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			constraints:         oneReplicaPerRegion,
 			expRebalancedVoters: []roachpb.StoreID{9, 6, 2},
 		},
+		// A replica is in a heavily loaded region, on a relatively heavily
+		// loaded store. We expect it to be moved to a less busy store
+		// within the same region. However, it cannot be the least busy
+		// store as it has high read amp (3). The new replica in the heavy
+		// region must also get the lease due to preferences.
+		{
+			name:                "rebalance one replica within heavy region, prefer lease in heavy region",
+			voters:              []roachpb.StoreID{1, 6, 9},
+			constraints:         oneReplicaPerRegion,
+			leasePreferences:    leasePreferredHotRegion,
+			expRebalancedVoters: []roachpb.StoreID{2, 6, 9},
+		},
 		// Two replicas are in the hot region, both on relatively heavily loaded
 		// nodes. We expect one of those replicas to be moved to a less busy store
 		// within the same region.
@@ -950,7 +952,26 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			name:                "rebalance two replicas out of three within heavy region",
 			voters:              []roachpb.StoreID{1, 2, 9},
 			constraints:         twoReplicasInHotRegion,
+			leasePreferences:    leasePreferredHotRegion,
+			expRebalancedVoters: []roachpb.StoreID{3, 2, 9},
+		},
+		// Two replicas are in the hot region, both on relatively heavily
+		// loaded nodes. We expect one of those replicas to be moved to a
+		// less busy store within the same region. The lease has a
+		// preference for this region, so the moved replica, in the same
+		// region should get the lease.
+		{
+			name:                "rebalance two replicas out of three within heavy region, prefer lease in heavy region",
+			voters:              []roachpb.StoreID{1, 2, 9},
+			constraints:         twoReplicasInHotRegion,
 			expRebalancedVoters: []roachpb.StoreID{9, 2, 3},
+		},
+		{
+			name:        "rebalance two replicas out of five within heavy region",
+			voters:      []roachpb.StoreID{1, 2, 6, 8, 9},
+			constraints: twoReplicasInHotRegion,
+			// NB: Because of the diversity heuristic we won't rebalance to node 7.
+			expRebalancedVoters: []roachpb.StoreID{9, 3, 6, 8, 2},
 		},
 		{
 			name:        "rebalance two replicas out of five within heavy region",
@@ -966,7 +987,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// Within the hottest region, expect rebalance from the hottest
 			// node (n1) to the coolest node (n3), however since n3 has
 			// high read amp it should instead rebalance to n2. Within the
-			// lease hot region, we don't expect a rebalance from n8 to n9
+			// least hot region, we don't expect a rebalance from n8 to n9
 			// because the qps difference between the two
 			// stores is too small.
 			name:                "QPS balance without constraints",
@@ -1013,6 +1034,32 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			expRebalancedVoters: []roachpb.StoreID{9, 5, 6, 8, 3},
 		},
 		{
+			name:   "primary region with second highest QPS, region survival, one voter on sub-optimal node, prefer lease hottest region",
+			voters: []roachpb.StoreID{3, 4, 5, 8, 9},
+			// Pin two voters to the second hottest region (region B) and have overall
+			// constraints require at least one replica per each region.
+			voterConstraints: twoReplicasInSecondHottestRegion,
+			constraints:      oneReplicaPerRegion,
+			leasePreferences: leasePreferredHotRegion,
+			// NB: Expect the voter on node 4 (hottest node in region B) to
+			// move to node 6 (least hot region in region B). Expect the
+			// lease to stay in the hot region (node 3).
+			expRebalancedVoters: []roachpb.StoreID{3, 5, 6, 8, 9},
+		},
+		{
+			name:   "primary region with second highest QPS, region survival, one voter on sub-optimal node, prefer lease second hottest region",
+			voters: []roachpb.StoreID{3, 4, 5, 8, 9},
+			// Pin two voters to the second hottest region (region B) and have overall
+			// constraints require at least one replica per each region.
+			voterConstraints: twoReplicasInSecondHottestRegion,
+			constraints:      oneReplicaPerRegion,
+			leasePreferences: leasePreferredSecondHotRegion,
+			// NB: Expect the voter on node 4 (hottest node in region B) to move to
+			// node 6 (least hot region in region B). Expect lease to transfer
+			// to least hot store, in the second hottest region (node 6).
+			expRebalancedVoters: []roachpb.StoreID{6, 5, 3, 8, 9},
+		},
+		{
 			name:   "primary region with highest QPS, region survival, two voters on sub-optimal nodes",
 			voters: []roachpb.StoreID{1, 2, 3, 4, 9},
 			// Pin two voters to the hottest region (region A) and have overall
@@ -1036,11 +1083,25 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// having lower qps because node 9 exceeds the l0 sub-level threshold,
 			expRebalancedVoters: []roachpb.StoreID{8, 5, 6},
 		},
+		{
+			name:   "two voters second hottest, one voter coldest, prefer lease in hottest",
+			voters: []roachpb.StoreID{4, 5, 8},
+			// Pin two voters to the second hottest and one voter to the
+			// coldest region.
+			constraints:      append(oneReplicaInColdestRegion, twoReplicasInSecondHottestRegion...),
+			leasePreferences: leasePreferredHotRegion,
+			// NB: Despite the lease preference in the hottest region, it is
+			// impossible to place replicas there due to constraints. We
+			// ignore lease the preference and select the least hot store
+			// to hold the lease (node 8) .
+			expRebalancedVoters: []roachpb.StoreID{8, 5, 6},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Boilerplate for test setup.
-			stopper, g, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
+			testingKnobs := allocator.TestingKnobs{RaftStatusFn: TestingRaftStatusFn}
+			stopper, g, _, a, _ := allocatorimpl.CreateTestAllocatorWithKnobs(ctx, 10, false /* deterministic */, &testingKnobs)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(multiRegionStores, t)
 			storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
@@ -1063,25 +1124,13 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
-				status := &raft.Status{
-					Progress: make(map[uint64]tracker.Progress),
-				}
-				status.Lead = uint64(r.ReplicaID())
-				status.RaftState = raft.StateLeader
-				status.Commit = 1
-				for _, replica := range r.Desc().InternalReplicas {
-					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-						Match: 1,
-						State: tracker.StateReplicate,
-					}
-				}
-				return status
+				return TestingRaftStatusFn(r)
 			}
-
 			s.cfg.DefaultSpanConfig.NumVoters = int32(len(tc.voters))
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters) + len(tc.nonVoters))
 			s.cfg.DefaultSpanConfig.Constraints = tc.constraints
 			s.cfg.DefaultSpanConfig.VoterConstraints = tc.voterConstraints
+			s.cfg.DefaultSpanConfig.LeasePreferences = tc.leasePreferences
 			const testingQPS = float64(60)
 			loadRanges(
 				rr, s, []testRange{
@@ -1312,19 +1361,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
-				status := &raft.Status{
-					Progress: make(map[uint64]tracker.Progress),
-				}
-				status.Lead = uint64(r.ReplicaID())
-				status.RaftState = raft.StateLeader
-				status.Commit = 1
-				for _, replica := range r.Desc().InternalReplicas {
-					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-						Match: 1,
-						State: tracker.StateReplicate,
-					}
-				}
-				return status
+				return TestingRaftStatusFn(r)
 			}
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
@@ -1617,4 +1654,33 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			require.Equal(t, test.expectedTargets, targetVoters)
 		})
 	}
+}
+
+// TestingRaftStatusFn returns a raft status where all replicas are up to date and
+// the replica on the store with ID StoreID is the leader. It may be used for
+// testing.
+func TestingRaftStatusFn(
+	r interface {
+		Desc() *roachpb.RangeDescriptor
+		StoreID() roachpb.StoreID
+	},
+) *raft.Status {
+	status := &raft.Status{
+		Progress: make(map[uint64]tracker.Progress),
+	}
+	replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
+	if !ok {
+		return status
+	}
+
+	status.Lead = uint64(replDesc.ReplicaID)
+	status.RaftState = raft.StateLeader
+	status.Commit = 1
+	for _, replica := range r.Desc().InternalReplicas {
+		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
+			Match: 1,
+			State: tracker.StateReplicate,
+		}
+	}
+	return status
 }
