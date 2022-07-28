@@ -1771,7 +1771,7 @@ upsert decimals
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │    │    │    │    │              └── c_default:11
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
+      │    │    │    │    │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │    │    │    │    │              └── d_comp:13
@@ -1786,11 +1786,11 @@ upsert decimals
       │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:18
-      │    │    │    │              └── a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │              └── a:15 + c:17
       │    │    │    └── filters
       │    │    │         └── a_cast:9 = a:15
       │    │    └── projections
-      │    │         └── a:15::DECIMAL + c:17::DECIMAL [as=d_comp:21]
+      │    │         └── a:15 + c:17 [as=d_comp:21]
       │    └── projections
       │         ├── CASE WHEN a:15 IS NULL THEN a_cast:9 ELSE a:15 END [as=upsert_a:22]
       │         ├── CASE WHEN a:15 IS NULL THEN c_cast:12 ELSE c:17 END [as=upsert_c:23]
@@ -1848,7 +1848,7 @@ upsert decimals
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:11]
       │    │    │    │    │    │    │              └── c_default:10
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a_cast:8::DECIMAL + c_cast:11::DECIMAL [as=d_comp:12]
+      │    │    │    │    │    │         └── a_cast:8 + c_cast:11 [as=d_comp:12]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:13]
       │    │    │    │    │              └── d_comp:12
@@ -1863,11 +1863,11 @@ upsert decimals
       │    │    │    │    ├── columns: a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:17
-      │    │    │    │              └── a:14::DECIMAL + c:16::DECIMAL
+      │    │    │    │              └── a:14 + c:16
       │    │    │    └── filters
       │    │    │         └── a_cast:8 = a:14
       │    │    └── projections
-      │    │         └── a:14::DECIMAL + c:16::DECIMAL [as=d_comp:20]
+      │    │         └── a:14 + c:16 [as=d_comp:20]
       │    └── projections
       │         ├── CASE WHEN a:14 IS NULL THEN a_cast:8 ELSE a:14 END [as=upsert_a:21]
       │         ├── CASE WHEN a:14 IS NULL THEN b_default:9 ELSE b:15 END [as=upsert_b:22]
@@ -1926,7 +1926,7 @@ upsert decimals
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:11]
       │    │    │    │    │    │    │              └── c_default:10
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a_cast:8::DECIMAL + c_cast:11::DECIMAL [as=d_comp:12]
+      │    │    │    │    │    │         └── a_cast:8 + c_cast:11 [as=d_comp:12]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:13]
       │    │    │    │    │              └── d_comp:12
@@ -1941,11 +1941,11 @@ upsert decimals
       │    │    │    │    ├── columns: a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:17
-      │    │    │    │              └── a:14::DECIMAL + c:16::DECIMAL
+      │    │    │    │              └── a:14 + c:16
       │    │    │    └── filters
       │    │    │         └── a_cast:8 = a:14
       │    │    └── projections
-      │    │         └── a:14::DECIMAL + c:16::DECIMAL [as=d_comp:20]
+      │    │         └── a:14 + c:16 [as=d_comp:20]
       │    └── projections
       │         ├── CASE WHEN a:14 IS NULL THEN a_cast:8 ELSE a:14 END [as=upsert_a:21]
       │         ├── CASE WHEN a:14 IS NULL THEN b_default:9 ELSE b:15 END [as=upsert_b:22]
@@ -2013,7 +2013,7 @@ upsert decimals
       │    │    │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │    │    │    │    │    │    │              └── c_default:11
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
+      │    │    │    │    │    │    │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │    │    │    │    │    │    │              └── d_comp:13
@@ -2028,7 +2028,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── d:18
-      │    │    │    │    │    │              └── a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │    │    │              └── a:15 + c:17
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a_cast:9 = a:15
       │    │    │    │    └── projections
@@ -2037,7 +2037,7 @@ upsert decimals
       │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:22]
       │    │    │              └── b_new:21
       │    │    └── projections
-      │    │         └── a:15::DECIMAL + c:17::DECIMAL [as=d_comp:23]
+      │    │         └── a:15 + c:17 [as=d_comp:23]
       │    └── projections
       │         ├── CASE WHEN a:15 IS NULL THEN a_cast:9 ELSE a:15 END [as=upsert_a:24]
       │         ├── CASE WHEN a:15 IS NULL THEN b_cast:10 ELSE b_cast:22 END [as=upsert_b:25]
@@ -2105,7 +2105,7 @@ upsert decimals
       │    │    │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │    │    │    │    │    │    │              └── c_default:11
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
+      │    │    │    │    │    │    │    │         └── a_cast:9 + c_cast:12 [as=d_comp:13]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │    │    │    │    │    │    │              └── d_comp:13
@@ -2120,7 +2120,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── d:18
-      │    │    │    │    │    │              └── a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │    │    │              └── a:15 + c:17
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a_cast:9 = a:15
       │    │    │    │    └── projections
@@ -2129,7 +2129,7 @@ upsert decimals
       │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:22]
       │    │    │              └── b_new:21
       │    │    └── projections
-      │    │         └── a:15::DECIMAL + c:17::DECIMAL [as=d_comp:23]
+      │    │         └── a:15 + c:17 [as=d_comp:23]
       │    └── projections
       │         ├── CASE WHEN a:15 IS NULL THEN a_cast:9 ELSE a:15 END [as=upsert_a:24]
       │         ├── CASE WHEN a:15 IS NULL THEN b_cast:10 ELSE b_cast:22 END [as=upsert_b:25]
@@ -2193,7 +2193,7 @@ upsert assn_cast
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:19]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── d_default:19::DECIMAL + 10.0 [as=d_comp_comp:20]
+      │    │    │    │    │         └── d_default:19 + 10.0 [as=d_comp_comp:20]
       │    │    │    │    └── projections
       │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:21]
       │    │    │    │              └── d_comp_comp:20
@@ -2214,11 +2214,11 @@ upsert assn_cast
       │    │    │    ├── columns: k:22!null c:23 qc:24 i:25 s:26 d:27 d_comp:28 crdb_internal_mvcc_timestamp:29 tableoid:30
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:28
-      │    │    │              └── d:27::DECIMAL + 10.0
+      │    │    │              └── d:27 + 10.0
       │    │    └── filters
       │    │         └── k_cast:15 = k:22
       │    └── projections
-      │         └── d:27::DECIMAL + 10.0 [as=d_comp_comp:31]
+      │         └── d:27 + 10.0 [as=d_comp_comp:31]
       └── projections
            ├── CASE WHEN k:22 IS NULL THEN k_cast:15 ELSE k:22 END [as=upsert_k:32]
            ├── CASE WHEN k:22 IS NULL THEN d_default:19 ELSE d:27 END [as=upsert_d:33]
@@ -2276,7 +2276,7 @@ upsert assn_cast
       │    │    │    │    │    │         ├── NULL::STRING [as=s_default:17]
       │    │    │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:18]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── d_default:18::DECIMAL + 10.0 [as=d_comp_comp:19]
+      │    │    │    │    │         └── d_default:18 + 10.0 [as=d_comp_comp:19]
       │    │    │    │    └── projections
       │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:20]
       │    │    │    │              └── d_comp_comp:19
@@ -2297,11 +2297,11 @@ upsert assn_cast
       │    │    │    ├── columns: k:21!null c:22 qc:23 i:24 s:25 d:26 d_comp:27 crdb_internal_mvcc_timestamp:28 tableoid:29
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:27
-      │    │    │              └── d:26::DECIMAL + 10.0
+      │    │    │              └── d:26 + 10.0
       │    │    └── filters
       │    │         └── k_cast:14 = k:21
       │    └── projections
-      │         └── d:26::DECIMAL + 10.0 [as=d_comp_comp:30]
+      │         └── d:26 + 10.0 [as=d_comp_comp:30]
       └── projections
            ├── CASE WHEN k:21 IS NULL THEN k_cast:14 ELSE k:21 END [as=upsert_k:31]
            ├── CASE WHEN k:21 IS NULL THEN s_default:17 ELSE s:25 END [as=upsert_s:32]
@@ -2351,7 +2351,7 @@ insert assn_cast
       │    │    │    │    └── projections
       │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:19]
       │    │    │    └── projections
-      │    │    │         └── d_default:19::DECIMAL + 10.0 [as=d_comp_comp:20]
+      │    │    │         └── d_default:19 + 10.0 [as=d_comp_comp:20]
       │    │    └── projections
       │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:21]
       │    │              └── d_comp_comp:20
@@ -2359,7 +2359,7 @@ insert assn_cast
       │    │    ├── columns: k:22!null c:23 qc:24 i:25 s:26 d:27 d_comp:28
       │    │    └── computed column expressions
       │    │         └── d_comp:28
-      │    │              └── d:27::DECIMAL + 10.0
+      │    │              └── d:27 + 10.0
       │    └── filters
       │         └── k_cast:15 = k:22
       └── aggregations
@@ -2433,7 +2433,7 @@ upsert assn_cast
       │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:18]
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── d_default:18::DECIMAL + 10.0 [as=d_comp_comp:19]
+      │    │    │    │    │    │    │         └── d_default:18 + 10.0 [as=d_comp_comp:19]
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:20]
       │    │    │    │    │    │              └── d_comp_comp:19
@@ -2454,7 +2454,7 @@ upsert assn_cast
       │    │    │    │    │    ├── columns: k:21!null c:22 qc:23 i:24 s:25 d:26 d_comp:27 crdb_internal_mvcc_timestamp:28 tableoid:29
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d_comp:27
-      │    │    │    │    │              └── d:26::DECIMAL + 10.0
+      │    │    │    │    │              └── d:26 + 10.0
       │    │    │    │    └── filters
       │    │    │    │         └── k_cast:15 = k:21
       │    │    │    └── projections
@@ -2470,7 +2470,7 @@ upsert assn_cast
       │    │         └── assignment-cast: STRING [as=s_cast:36]
       │    │              └── s_new:33
       │    └── projections
-      │         └── d:26::DECIMAL + 10.0 [as=d_comp_comp:37]
+      │         └── d:26 + 10.0 [as=d_comp_comp:37]
       └── projections
            ├── CASE WHEN k:21 IS NULL THEN k_cast:15 ELSE k:21 END [as=upsert_k:38]
            ├── CASE WHEN k:21 IS NULL THEN c_cast:16 ELSE c_cast:34 END [as=upsert_c:39]
@@ -2528,7 +2528,7 @@ upsert assn_cast
       │    │    │    │    │    │         ├── NULL::STRING [as=s_default:15]
       │    │    │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:16]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── d_default:16::DECIMAL + 10.0 [as=d_comp_comp:17]
+      │    │    │    │    │         └── d_default:16 + 10.0 [as=d_comp_comp:17]
       │    │    │    │    └── projections
       │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:18]
       │    │    │    │              └── d_comp_comp:17
@@ -2549,11 +2549,11 @@ upsert assn_cast
       │    │    │    ├── columns: k:19!null c:20 qc:21 i:22 s:23 d:24 d_comp:25 crdb_internal_mvcc_timestamp:26 tableoid:27
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:25
-      │    │    │              └── d:24::DECIMAL + 10.0
+      │    │    │              └── d:24 + 10.0
       │    │    └── filters
       │    │         └── column1:10 = k:19
       │    └── projections
-      │         └── d:24::DECIMAL + 10.0 [as=d_comp_comp:28]
+      │         └── d:24 + 10.0 [as=d_comp_comp:28]
       └── projections
            ├── CASE WHEN k:19 IS NULL THEN column1:10 ELSE k:19 END [as=upsert_k:29]
            ├── CASE WHEN k:19 IS NULL THEN c_default:13 ELSE c:20 END [as=upsert_c:30]
@@ -2609,7 +2609,7 @@ upsert assn_cast
       │    │    │    │    │    │    │    │         ├── NULL::STRING [as=s_default:14]
       │    │    │    │    │    │    │    │         └── NULL::DECIMAL(10) [as=d_default:15]
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── d_default:15::DECIMAL + 10.0 [as=d_comp_comp:16]
+      │    │    │    │    │    │    │         └── d_default:15 + 10.0 [as=d_comp_comp:16]
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:17]
       │    │    │    │    │    │              └── d_comp_comp:16
@@ -2630,7 +2630,7 @@ upsert assn_cast
       │    │    │    │    │    ├── columns: k:18!null c:19 qc:20 i:21 s:22 d:23 d_comp:24 crdb_internal_mvcc_timestamp:25 tableoid:26
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d_comp:24
-      │    │    │    │    │              └── d:23::DECIMAL + 10.0
+      │    │    │    │    │              └── d:23 + 10.0
       │    │    │    │    └── filters
       │    │    │    │         └── column1:10 = k:18
       │    │    │    └── projections
@@ -2639,7 +2639,7 @@ upsert assn_cast
       │    │         └── assignment-cast: INT8 [as=i_cast:28]
       │    │              └── i_new:27
       │    └── projections
-      │         └── d:23::DECIMAL + 10.0 [as=d_comp_comp:29]
+      │         └── d:23 + 10.0 [as=d_comp_comp:29]
       └── projections
            ├── CASE WHEN k:18 IS NULL THEN column1:10 ELSE k:18 END [as=upsert_k:30]
            ├── CASE WHEN k:18 IS NULL THEN c_default:12 ELSE c:19 END [as=upsert_c:31]
@@ -2702,7 +2702,7 @@ upsert assn_cast
       │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
       │    │    │    │    │              └── i_default:15
       │    │    │    │    └── projections
-      │    │    │    │         └── d_cast:12::DECIMAL + 10.0 [as=d_comp_comp:18]
+      │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
       │    │    │    └── projections
       │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
       │    │    │              └── d_comp_comp:18
@@ -2723,7 +2723,7 @@ upsert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    └── computed column expressions
       │    │         └── d_comp:26
-      │    │              └── d:25::DECIMAL + 10.0
+      │    │              └── d:25 + 10.0
       │    └── filters
       │         └── column1:10 = k:20
       └── projections
@@ -2786,7 +2786,7 @@ upsert assn_cast
       │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
       │    │    │    │    │              └── i_default:15
       │    │    │    │    └── projections
-      │    │    │    │         └── d_cast:12::DECIMAL + 10.0 [as=d_comp_comp:18]
+      │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
       │    │    │    └── projections
       │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
       │    │    │              └── d_comp_comp:18
@@ -2807,7 +2807,7 @@ upsert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    └── computed column expressions
       │    │         └── d_comp:26
-      │    │              └── d:25::DECIMAL + 10.0
+      │    │              └── d:25 + 10.0
       │    └── filters
       │         └── column1:10 = k:20
       └── projections
@@ -2863,7 +2863,7 @@ insert assn_cast
       │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
       │    │    │    │              └── i_default:15
       │    │    │    └── projections
-      │    │    │         └── d_cast:12::DECIMAL + 10.0 [as=d_comp_comp:18]
+      │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
       │    │    └── projections
       │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
       │    │              └── d_comp_comp:18
@@ -2871,7 +2871,7 @@ insert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26
       │    │    └── computed column expressions
       │    │         └── d_comp:26
-      │    │              └── d:25::DECIMAL + 10.0
+      │    │              └── d:25 + 10.0
       │    └── filters
       │         └── column1:10 = k:20
       └── aggregations
@@ -2949,7 +2949,7 @@ upsert assn_cast
       │    │    │    │    │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
       │    │    │    │    │    │    │    │    │              └── i_default:15
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── d_cast:12::DECIMAL + 10.0 [as=d_comp_comp:18]
+      │    │    │    │    │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
       │    │    │    │    │    │    │              └── d_comp_comp:18
@@ -2970,7 +2970,7 @@ upsert assn_cast
       │    │    │    │    │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── d_comp:26
-      │    │    │    │    │    │              └── d:25::DECIMAL + 10.0
+      │    │    │    │    │    │              └── d:25 + 10.0
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column1:10 = k:20
       │    │    │    │    └── projections
@@ -2979,7 +2979,7 @@ upsert assn_cast
       │    │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:30]
       │    │    │              └── d_new:29
       │    │    └── projections
-      │    │         └── d_cast:30::DECIMAL + 10.0 [as=d_comp_comp:31]
+      │    │         └── d_cast:30 + 10.0 [as=d_comp_comp:31]
       │    └── projections
       │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:32]
       │              └── d_comp_comp:31
