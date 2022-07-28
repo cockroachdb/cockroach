@@ -75,7 +75,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		)
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
-		if !isImplicitAuthConfigured() {
+		if !cloudtestutils.IsImplicitAuthConfigured() {
 			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
 
@@ -128,14 +128,6 @@ func TestPutGoogleCloud(t *testing.T) {
 			username.RootUserName(), nil, nil, testSettings,
 		)
 	})
-}
-
-// isImplicitAuthConfigured returns true if the `GOOGLE_APPLICATION_CREDENTIALS`
-// environment variable is set. This env variable points to the `keys.json` file
-// that is used for implicit authentication.
-func isImplicitAuthConfigured() bool {
-	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	return credentials != ""
 }
 
 func TestGCSAssumeRole(t *testing.T) {
@@ -272,7 +264,7 @@ func TestGCSAssumeRole(t *testing.T) {
 func TestAntagonisticGCSRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if !isImplicitAuthConfigured() {
+	if !cloudtestutils.IsImplicitAuthConfigured() {
 		skip.IgnoreLint(t, "implicit auth is not configured")
 	}
 
@@ -291,7 +283,7 @@ func TestAntagonisticGCSRead(t *testing.T) {
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if !isImplicitAuthConfigured() {
+	if !cloudtestutils.IsImplicitAuthConfigured() {
 		skip.IgnoreLint(t, "implicit auth is not configured")
 	}
 
@@ -333,7 +325,7 @@ func TestFileDoesNotExist(t *testing.T) {
 func TestCompressedGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if !isImplicitAuthConfigured() {
+	if !cloudtestutils.IsImplicitAuthConfigured() {
 		skip.IgnoreLint(t, "implicit auth is not configured")
 	}
 

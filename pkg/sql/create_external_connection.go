@@ -100,7 +100,7 @@ func (p *planner) createExternalConnection(
 		return errors.Wrap(err, "failed to construct External Connection details")
 	}
 	ex.SetConnectionDetails(*connDetails.ConnectionProto())
-	ex.SetConnectionType(connDetails.ConnectionType().String())
+	ex.SetConnectionType(connDetails.ConnectionType())
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.

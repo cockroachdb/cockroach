@@ -30,8 +30,9 @@ type localFileConnectionDetails struct {
 
 // Dial implements the external.ConnectionDetails interface.
 func (l *localFileConnectionDetails) Dial(
-	ctx context.Context, args cloud.ExternalStorageContext, subdir string,
+	ctx context.Context, connectionCtx externalconn.ConnectionContext, subdir string,
 ) (externalconn.Connection, error) {
+	args := connectionCtx.ExternalStorageContext()
 	cfg := l.GetNodelocal().Cfg
 	cfg.Path = path.Join(cfg.Path, subdir)
 	externalStorageConf := cloudpb.ExternalStorage{
@@ -50,7 +51,7 @@ func (l *localFileConnectionDetails) Dial(
 
 // ConnectionType implements the external.ConnectionDetails interface.
 func (l *localFileConnectionDetails) ConnectionType() connectionpb.ConnectionType {
-	return connectionpb.TypeStorage
+	return l.ConnectionDetails.Type()
 }
 
 // ConnectionProto implements the external.ConnectionDetails interface.

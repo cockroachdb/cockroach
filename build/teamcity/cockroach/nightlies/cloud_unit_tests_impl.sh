@@ -18,7 +18,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test -- \
+    test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test -- \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
@@ -37,7 +37,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=AWS_KMS_REGION="$AWS_KMS_REGION" \
     --test_env=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
     --test_env=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-    --test_timeout=60 \
+    --test_timeout=900 \
     || exit_status=$?
 
 process_test_json \
