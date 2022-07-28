@@ -483,7 +483,7 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 
 	// Evict unless the cache has something newer. Regardless of what the cache
 	// has, we'll still attempt to insert newDescs (if any).
-	et.rdc.evictDescLocked(ctx, et.Desc())
+	evicted := et.rdc.evictDescLocked(ctx, et.Desc())
 
 	if len(newDescs) > 0 {
 		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
@@ -497,7 +497,7 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 			// The closed timestamp policy likely hasn't changed.
 			ClosedTimestampPolicy: et.closedts,
 		})
-	} else {
+	} else if evicted {
 		log.Eventf(ctx, "evicting cached range descriptor")
 	}
 	et.clear()
