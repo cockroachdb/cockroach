@@ -581,6 +581,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if verbose {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
+		// TODO(msbutler): ingest the ImportEpoch from an in progress import
 		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
