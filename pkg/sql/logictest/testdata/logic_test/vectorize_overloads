@@ -1,5 +1,3 @@
-# LogicTest: local
-
 statement ok
 CREATE TABLE many_types (
     _bool        BOOL,
@@ -183,7 +181,7 @@ NULL
 [2, "hi", {"b": ["bar", {"c": 4}]}]
 [1, "hello"]
 
-query T
+query T rowsort
 SELECT _bytes || _bytes FROM many_types
 ----
 NULL
@@ -191,7 +189,7 @@ NULL
 456456
 NULL
 
-query T
+query T rowsort
 SELECT _string || _string FROM many_types
 ----
 NULL
@@ -199,7 +197,7 @@ NULL
 456456
 NULL
 
-query T
+query T rowsort
 SELECT _json || _json FROM many_types
 ----
 NULL
@@ -207,7 +205,7 @@ NULL
 [2, "hi", {"b": ["bar", {"c": 4}]}, 2, "hi", {"b": ["bar", {"c": 4}]}]
 [1, "hello", {"a": ["foo", {"b": 3}]}, 1, "hello", {"a": ["foo", {"b": 3}]}]
 
-query T
+query T rowsort
 SELECT _varbit || _varbit FROM many_types
 ----
 NULL
@@ -245,7 +243,7 @@ NULL
 0
 0
 
-query T
+query T rowsort
 SELECT _varbit >> 1 FROM many_types
 ----
 NULL
@@ -253,7 +251,7 @@ NULL
 01
 01101
 
-query T
+query T rowsort
 SELECT _varbit << 1 FROM many_types
 ----
 NULL
@@ -261,7 +259,7 @@ NULL
 10
 10100
 
-query T
+query T rowsort
 SELECT _varbit << 3 FROM many_types
 ----
 NULL
@@ -284,7 +282,7 @@ SELECT _int2^_int2 FROM many_types WHERE _int2 < 10
 statement error integer out of range
 SELECT _int2^_int4 FROM many_types
 
-query T
+query T rowsort
 SELECT _json -> _int2 FROM many_types
 ----
 NULL
@@ -292,7 +290,7 @@ NULL
 NULL
 {"a": ["foo", {"b": 3}]}
 
-query T
+query T rowsort
 SELECT _json -> _int4 FROM many_types
 ----
 NULL
@@ -300,7 +298,7 @@ NULL
 NULL
 {"a": ["foo", {"b": 3}]}
 
-query T
+query T rowsort
 SELECT _json -> _int FROM many_types
 ----
 NULL
@@ -308,7 +306,7 @@ NULL
 NULL
 {"a": ["foo", {"b": 3}]}
 
-query T
+query T rowsort
 SELECT _json -> 2 FROM many_types
 ----
 NULL
@@ -316,7 +314,7 @@ NULL
 {"b": ["bar", {"c": 4}]}
 {"a": ["foo", {"b": 3}]}
 
-query T
+query T rowsort
 SELECT _json -> 2 -> 'a' FROM many_types
 ----
 NULL
@@ -325,22 +323,22 @@ NULL
 ["foo", {"b": 3}]
 
 query TT
-SELECT _json #> _stringarray, _json #> '{2,a}' FROM many_types
+SELECT _json #> _stringarray, _json #> '{2,a}' FROM many_types ORDER BY _int
 ----
 NULL               NULL
+NULL               ["foo", {"b": 3}]
 ["foo", {"b": 3}]  ["foo", {"b": 3}]
 ["bar", {"c": 4}]  NULL
-NULL               ["foo", {"b": 3}]
 
 query TT
-SELECT _json #> _stringarray #> '{1,b}', _json #> '{2,a}' #> '{1,b}' FROM many_types
+SELECT _json #> _stringarray #> '{1,b}', _json #> '{2,a}' #> '{1,b}' FROM many_types ORDER BY _int
 ----
 NULL  NULL
+NULL  3
 3     3
 NULL  NULL
-NULL  3
 
-query T
+query T rowsort
 SELECT _json #> '{}' FROM many_types
 ----
 NULL
@@ -357,14 +355,14 @@ NULL  NULL
 NULL  NULL
 
 query TT
-SELECT _json #>> _stringarray, _json #>> '{2,a}' FROM many_types
+SELECT _json #>> _stringarray, _json #>> '{2,a}' FROM many_types ORDER BY _int
 ----
 NULL               NULL
+NULL               ["foo", {"b": 3}]
 ["foo", {"b": 3}]  ["foo", {"b": 3}]
 ["bar", {"c": 4}]  NULL
-NULL               ["foo", {"b": 3}]
 
-query TT
+query TT rowsort
 SELECT _json #> '{2,a}' #>> _stringarray, _json #> '{2,a}' #>> '{1,b}' FROM many_types
 ----
 NULL  NULL
@@ -372,7 +370,7 @@ NULL  3
 NULL  NULL
 NULL  3
 
-query T
+query T rowsort
 SELECT _json #>> '{}' FROM many_types
 ----
 NULL
@@ -400,7 +398,7 @@ NULL
 NULL
 NULL
 
-query B
+query B rowsort
 SELECT _json -> _int -> 'a' = '["foo", {"b": 3}]' FROM many_types
 ----
 NULL

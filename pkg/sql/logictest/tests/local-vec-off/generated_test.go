@@ -1942,6 +1942,13 @@ func TestLogic_vectorize_agg(
 	runLogicTest(t, "vectorize_agg")
 }
 
+func TestLogic_vectorize_overloads(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vectorize_overloads")
+}
+
 func TestLogic_vectorize_shutdown(
 	t *testing.T,
 ) {
