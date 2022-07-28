@@ -43,7 +43,6 @@ func init() {
 	} else {
 		cclLogicTestDir = "../../../../ccl/logictestccl/testdata/logic_test"
 	}
-
 }
 
 func TestMain(m *testing.M) {
