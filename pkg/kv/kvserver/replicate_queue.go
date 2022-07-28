@@ -481,7 +481,7 @@ func (rq *replicateQueue) shouldQueue(
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
 		rq.canTransferLeaseFrom(ctx, repl) &&
-		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.leaseholderStats) {
+		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.loadStats.batchRequests) {
 
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
@@ -1550,7 +1550,7 @@ func (rq *replicateQueue) shedLease(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
-		repl.leaseholderStats,
+		repl.loadStats.batchRequests,
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
@@ -1563,7 +1563,7 @@ func (rq *replicateQueue) shedLease(
 		return allocator.NoTransferDryRun, nil
 	}
 
-	avgQPS, qpsMeasurementDur := repl.leaseholderStats.AverageRatePerSecond()
+	avgQPS, qpsMeasurementDur := repl.loadStats.batchRequests.AverageRatePerSecond()
 	if qpsMeasurementDur < replicastats.MinStatsDuration {
 		avgQPS = 0
 	}
@@ -1724,10 +1724,10 @@ func rangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 	info := allocator.RangeUsageInfo{
 		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
-	if queriesPerSecond, dur := repl.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+	if queriesPerSecond, dur := repl.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 		info.QueriesPerSecond = queriesPerSecond
 	}
-	if writesPerSecond, dur := repl.writeStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+	if writesPerSecond, dur := repl.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 		info.WritesPerSecond = writesPerSecond
 	}
 	return info

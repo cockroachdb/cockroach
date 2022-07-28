@@ -128,7 +128,7 @@ func (sr *StoreRebalancer) deprecatedChooseLeaseToTransfer(
 				*localDesc,
 				candidate.StoreID,
 				candidates,
-				replWithStats.repl.leaseholderStats,
+				replWithStats.repl.loadStats.batchRequests,
 			) {
 				log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
 					desc.RangeID, localDesc.StoreID)

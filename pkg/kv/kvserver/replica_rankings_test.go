@@ -162,14 +162,14 @@ func TestAddSSTQPSStat(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER setting kv.replica_stats.addsst_request_size_factor = %d`, testCase.addsstRequestFactor))
 
 		// Reset the request counts to 0 before sending to clear previous requests.
-		repl.leaseholderStats.ResetRequestCounts()
+		repl.loadStats.reset()
 
 		_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
 		require.Nil(t, pErr)
 
-		repl.leaseholderStats.Mu.Lock()
-		queriesAfter, _ := repl.leaseholderStats.SumLocked()
-		repl.leaseholderStats.Mu.Unlock()
+		repl.loadStats.batchRequests.Mu.Lock()
+		queriesAfter, _ := repl.loadStats.batchRequests.SumLocked()
+		repl.loadStats.batchRequests.Mu.Unlock()
 
 		// If queries are correctly recorded, we should see increase in query
 		// count by the expected QPS. However, it is possible to to get a
