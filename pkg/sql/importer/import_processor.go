@@ -389,6 +389,16 @@ func ingestKvs(
 	// will hog memory as it tries to grow more aggressively.
 	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
+
+	var bulkAdderImportEpoch uint32
+	for _, v := range spec.Tables {
+		if bulkAdderImportEpoch == 0 {
+			bulkAdderImportEpoch = v.Desc.ImportEpoch
+		} else if bulkAdderImportEpoch != v.Desc.ImportEpoch {
+			return nil, errors.AssertionFailedf("inconsistent import epoch on multi-table import")
+		}
+	}
+
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
 		DisallowShadowingBelow:   writeTS,
@@ -397,6 +407,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    true,
+		ImportEpoch:              bulkAdderImportEpoch,
 	})
 	if err != nil {
 		return nil, err
@@ -413,6 +424,7 @@ func ingestKvs(
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    true,
+		ImportEpoch:              bulkAdderImportEpoch,
 	})
 	if err != nil {
 		return nil, err

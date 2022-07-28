@@ -487,14 +487,14 @@ func runBackupProcessor(
 						if !span.firstKeyTS.IsEmpty() {
 							splitMidKey = true
 						}
-
 						req := &kvpb.ExportRequest{
-							RequestHeader:  kvpb.RequestHeaderFromSpan(span.span),
-							ResumeKeyTS:    span.firstKeyTS,
-							StartTime:      span.start,
-							MVCCFilter:     spec.MVCCFilter,
-							TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							SplitMidKey:    splitMidKey,
+							RequestHeader:          kvpb.RequestHeaderFromSpan(span.span),
+							ResumeKeyTS:            span.firstKeyTS,
+							StartTime:              span.start,
+							MVCCFilter:             spec.MVCCFilter,
+							TargetFileSize:         batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+							SplitMidKey:            splitMidKey,
+							IncludeMVCCValueHeader: spec.IncludeMVCCValueHeader,
 						}
 
 						// If we're doing re-attempts but are not yet in the priority regime,
