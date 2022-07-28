@@ -172,3 +172,20 @@ func VerifyBackupRestoreStatementResult(
 
 	return nil
 }
+
+// CheckForInvalidDescriptors returns an error if there exists any descriptors in
+// the crdb_internal.invalid_objects virtual table.
+func CheckForInvalidDescriptors(sqlDB *gosql.DB) error {
+	rows, err := sqlDB.Query(`SELECT id FROM crdb_internal.invalid_objects`)
+	if err != nil {
+		return err
+	}
+	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)
+	if err != nil {
+		return err
+	}
+	if invalidIDs != "" {
+		return errors.Newf("The following descriptor ids are invalid %v", invalidIDs)
+	}
+	return nil
+}

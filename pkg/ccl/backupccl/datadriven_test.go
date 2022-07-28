@@ -101,7 +101,7 @@ func newDatadrivenTestState() datadrivenTestState {
 	}
 }
 
-func (d *datadrivenTestState) cleanup(ctx context.Context) {
+func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 	for _, db := range d.sqlDBs {
 		db.Close()
 	}
@@ -353,12 +353,12 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
 		var lastCreatedServer string
 		ds := newDatadrivenTestState()
-		defer ds.cleanup(ctx)
+		defer ds.cleanup(ctx, t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
 			switch d.Cmd {
 			case "reset":
-				ds.cleanup(ctx)
+				ds.cleanup(ctx, t)
 				ds = newDatadrivenTestState()
 				return ""
 
