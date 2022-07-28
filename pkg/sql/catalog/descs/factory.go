@@ -75,15 +75,16 @@ func NewBareBonesCollectionFactory(
 // MakeCollection constructs a Collection for the purposes of embedding.
 func (cf *CollectionFactory) MakeCollection(
 	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider, monitor *mon.BytesMonitor,
-) Collection {
+) *Collection {
 	if monitor == nil {
 		// If an upstream monitor is not provided, the default, unlimited monitor will be used.
 		// All downstream resource allocation/releases on this default monitor will then be no-ops.
 		monitor = cf.defaultMonitor
 	}
 
-	return makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
+	c := makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
 		cf.virtualSchemas, temporarySchemaProvider, monitor)
+	return &c
 }
 
 // NewCollection constructs a new Collection.
@@ -91,5 +92,5 @@ func (cf *CollectionFactory) NewCollection(
 	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider,
 ) *Collection {
 	c := cf.MakeCollection(ctx, temporarySchemaProvider, nil /* monitor */)
-	return &c
+	return c
 }

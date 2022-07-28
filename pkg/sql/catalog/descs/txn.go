@@ -79,7 +79,7 @@ func (cf *CollectionFactory) Txn(
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
 			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
+			descsCol = *cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
 			defer descsCol.ReleaseAll(ctx)
 			if err := f(ctx, txn, &descsCol); err != nil {
 				return err
