@@ -447,7 +447,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			conf,
 			candidates,
 			replWithStats.repl,
-			replWithStats.repl.leaseholderStats,
+			replWithStats.repl.loadStats.batchRequests,
 			true, /* forceDecisionWithoutStats */
 			allocator.TransferLeaseOptions{
 				Goal:             allocator.QPSConvergence,
@@ -473,7 +473,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			*localDesc,
 			candidate.StoreID,
 			candidates,
-			replWithStats.repl.leaseholderStats,
+			replWithStats.repl.loadStats.batchRequests,
 		) {
 			log.VEventf(
 				ctx, 3, "r%d is on s%d due to follow-the-workload; considering replica rebalance instead",

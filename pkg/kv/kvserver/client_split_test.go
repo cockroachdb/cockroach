@@ -2774,9 +2774,14 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	if e, a := int32(1), cap.LeaseCount; e != a {
 		t.Errorf("expected cap.LeaseCount=%d, got %d", e, a)
 	}
-	if minExpected, a := 1/float64(replicastats.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a {
+
+	// NB: The writes per second may be within some error bound below the
+	// minExpected due to timing and floating point calculation. An error of
+	// 0.01 (WPS) is added to avoid flaking the test.
+	if minExpected, a := 1/float64(replicastats.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a+0.01 {
 		t.Errorf("expected cap.WritesPerSecond >= %f, got %f", minExpected, a)
 	}
+
 	bpr2 := cap.BytesPerReplica
 	if bpr2.P10 <= bpr1.P10 {
 		t.Errorf("expected BytesPerReplica to have increased from %+v, but got %+v", bpr1, bpr2)
