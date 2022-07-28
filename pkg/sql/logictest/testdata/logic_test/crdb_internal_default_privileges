@@ -4,77 +4,77 @@ ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         root      false          tables       public    SELECT
-test           NULL         root      false          sequences    public    SELECT
-test           NULL         root      false          schemas      public    USAGE
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         root      false          types        public    USAGE
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         root      false          sequences    public    SELECT          false
+test           NULL         root      false          schemas      public    USAGE           false
+test           NULL         root      false          tables       public    SELECT          false
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         root      false          types        public    USAGE           false
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
 
 statement ok
 CREATE USER foo
@@ -88,50 +88,50 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges WHERE grantee='foo' OR grantee='bar'
 ----
-database_name  schema_name  role  for_all_roles  object_type  grantee  privilege_type
-defaultdb      NULL         bar   false          tables       bar      ALL
-defaultdb      NULL         bar   false          sequences    bar      ALL
-defaultdb      NULL         bar   false          types        bar      ALL
-defaultdb      NULL         bar   false          schemas      bar      ALL
-defaultdb      NULL         foo   false          tables       foo      ALL
-defaultdb      NULL         foo   false          sequences    foo      ALL
-defaultdb      NULL         foo   false          types        foo      ALL
-defaultdb      NULL         foo   false          schemas      foo      ALL
-postgres       NULL         bar   false          tables       bar      ALL
-postgres       NULL         bar   false          sequences    bar      ALL
-postgres       NULL         bar   false          types        bar      ALL
-postgres       NULL         bar   false          schemas      bar      ALL
-postgres       NULL         foo   false          tables       foo      ALL
-postgres       NULL         foo   false          sequences    foo      ALL
-postgres       NULL         foo   false          types        foo      ALL
-postgres       NULL         foo   false          schemas      foo      ALL
-system         NULL         bar   false          tables       bar      ALL
-system         NULL         bar   false          sequences    bar      ALL
-system         NULL         bar   false          types        bar      ALL
-system         NULL         bar   false          schemas      bar      ALL
-system         NULL         foo   false          tables       foo      ALL
-system         NULL         foo   false          sequences    foo      ALL
-system         NULL         foo   false          types        foo      ALL
-system         NULL         foo   false          schemas      foo      ALL
-test           NULL         bar   false          tables       bar      ALL
-test           NULL         bar   false          sequences    bar      ALL
-test           NULL         bar   false          types        bar      ALL
-test           NULL         bar   false          schemas      bar      ALL
-test           NULL         foo   false          tables       foo      ALL
-test           NULL         foo   false          sequences    foo      ALL
-test           NULL         foo   false          types        foo      ALL
-test           NULL         foo   false          schemas      foo      ALL
-test           NULL         root  false          sequences    bar      ALL
-test           NULL         root  false          sequences    foo      ALL
-test           NULL         root  false          types        bar      ALL
-test           NULL         root  false          types        foo      ALL
-test           NULL         root  false          schemas      bar      ALL
-test           NULL         root  false          schemas      foo      ALL
-test           NULL         root  false          tables       bar      ALL
-test           NULL         root  false          tables       foo      ALL
+database_name  schema_name  role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+defaultdb      NULL         bar   false          tables       bar      ALL             true
+defaultdb      NULL         bar   false          sequences    bar      ALL             true
+defaultdb      NULL         bar   false          types        bar      ALL             true
+defaultdb      NULL         bar   false          schemas      bar      ALL             true
+defaultdb      NULL         foo   false          tables       foo      ALL             true
+defaultdb      NULL         foo   false          sequences    foo      ALL             true
+defaultdb      NULL         foo   false          types        foo      ALL             true
+defaultdb      NULL         foo   false          schemas      foo      ALL             true
+postgres       NULL         bar   false          tables       bar      ALL             true
+postgres       NULL         bar   false          sequences    bar      ALL             true
+postgres       NULL         bar   false          types        bar      ALL             true
+postgres       NULL         bar   false          schemas      bar      ALL             true
+postgres       NULL         foo   false          tables       foo      ALL             true
+postgres       NULL         foo   false          sequences    foo      ALL             true
+postgres       NULL         foo   false          types        foo      ALL             true
+postgres       NULL         foo   false          schemas      foo      ALL             true
+system         NULL         bar   false          tables       bar      ALL             true
+system         NULL         bar   false          sequences    bar      ALL             true
+system         NULL         bar   false          types        bar      ALL             true
+system         NULL         bar   false          schemas      bar      ALL             true
+system         NULL         foo   false          tables       foo      ALL             true
+system         NULL         foo   false          sequences    foo      ALL             true
+system         NULL         foo   false          types        foo      ALL             true
+system         NULL         foo   false          schemas      foo      ALL             true
+test           NULL         bar   false          tables       bar      ALL             true
+test           NULL         bar   false          sequences    bar      ALL             true
+test           NULL         bar   false          types        bar      ALL             true
+test           NULL         bar   false          schemas      bar      ALL             true
+test           NULL         foo   false          tables       foo      ALL             true
+test           NULL         foo   false          sequences    foo      ALL             true
+test           NULL         foo   false          types        foo      ALL             true
+test           NULL         foo   false          schemas      foo      ALL             true
+test           NULL         root  false          sequences    bar      ALL             false
+test           NULL         root  false          sequences    foo      ALL             false
+test           NULL         root  false          types        bar      ALL             false
+test           NULL         root  false          types        foo      ALL             false
+test           NULL         root  false          schemas      bar      ALL             false
+test           NULL         root  false          schemas      foo      ALL             false
+test           NULL         root  false          tables       bar      ALL             false
+test           NULL         root  false          tables       foo      ALL             false
 
 statement ok
 GRANT foo, bar TO root;
@@ -142,58 +142,58 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges WHERE role='foo' OR role='bar'
 ----
-database_name  schema_name  role  for_all_roles  object_type  grantee  privilege_type
-defaultdb      NULL         bar   false          tables       bar      ALL
-defaultdb      NULL         bar   false          sequences    bar      ALL
-defaultdb      NULL         bar   false          types        bar      ALL
-defaultdb      NULL         bar   false          schemas      bar      ALL
-defaultdb      NULL         bar   false          types        public   USAGE
-defaultdb      NULL         foo   false          tables       foo      ALL
-defaultdb      NULL         foo   false          sequences    foo      ALL
-defaultdb      NULL         foo   false          types        foo      ALL
-defaultdb      NULL         foo   false          schemas      foo      ALL
-defaultdb      NULL         foo   false          types        public   USAGE
-postgres       NULL         bar   false          tables       bar      ALL
-postgres       NULL         bar   false          sequences    bar      ALL
-postgres       NULL         bar   false          types        bar      ALL
-postgres       NULL         bar   false          schemas      bar      ALL
-postgres       NULL         bar   false          types        public   USAGE
-postgres       NULL         foo   false          tables       foo      ALL
-postgres       NULL         foo   false          sequences    foo      ALL
-postgres       NULL         foo   false          types        foo      ALL
-postgres       NULL         foo   false          schemas      foo      ALL
-postgres       NULL         foo   false          types        public   USAGE
-system         NULL         bar   false          tables       bar      ALL
-system         NULL         bar   false          sequences    bar      ALL
-system         NULL         bar   false          types        bar      ALL
-system         NULL         bar   false          schemas      bar      ALL
-system         NULL         bar   false          types        public   USAGE
-system         NULL         foo   false          tables       foo      ALL
-system         NULL         foo   false          sequences    foo      ALL
-system         NULL         foo   false          types        foo      ALL
-system         NULL         foo   false          schemas      foo      ALL
-system         NULL         foo   false          types        public   USAGE
-test           NULL         bar   false          tables       bar      ALL
-test           NULL         bar   false          tables       foo      ALL
-test           NULL         bar   false          sequences    bar      ALL
-test           NULL         bar   false          sequences    foo      ALL
-test           NULL         bar   false          types        bar      ALL
-test           NULL         bar   false          types        foo      ALL
-test           NULL         bar   false          schemas      bar      ALL
-test           NULL         bar   false          schemas      foo      ALL
-test           NULL         bar   false          types        public   USAGE
-test           NULL         foo   false          sequences    bar      ALL
-test           NULL         foo   false          sequences    foo      ALL
-test           NULL         foo   false          types        bar      ALL
-test           NULL         foo   false          types        foo      ALL
-test           NULL         foo   false          schemas      bar      ALL
-test           NULL         foo   false          schemas      foo      ALL
-test           NULL         foo   false          tables       bar      ALL
-test           NULL         foo   false          tables       foo      ALL
-test           NULL         foo   false          types        public   USAGE
+database_name  schema_name  role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+defaultdb      NULL         bar   false          tables       bar      ALL             true
+defaultdb      NULL         bar   false          sequences    bar      ALL             true
+defaultdb      NULL         bar   false          types        bar      ALL             true
+defaultdb      NULL         bar   false          schemas      bar      ALL             true
+defaultdb      NULL         bar   false          types        public   USAGE           false
+defaultdb      NULL         foo   false          tables       foo      ALL             true
+defaultdb      NULL         foo   false          sequences    foo      ALL             true
+defaultdb      NULL         foo   false          types        foo      ALL             true
+defaultdb      NULL         foo   false          schemas      foo      ALL             true
+defaultdb      NULL         foo   false          types        public   USAGE           false
+postgres       NULL         bar   false          tables       bar      ALL             true
+postgres       NULL         bar   false          sequences    bar      ALL             true
+postgres       NULL         bar   false          types        bar      ALL             true
+postgres       NULL         bar   false          schemas      bar      ALL             true
+postgres       NULL         bar   false          types        public   USAGE           false
+postgres       NULL         foo   false          tables       foo      ALL             true
+postgres       NULL         foo   false          sequences    foo      ALL             true
+postgres       NULL         foo   false          types        foo      ALL             true
+postgres       NULL         foo   false          schemas      foo      ALL             true
+postgres       NULL         foo   false          types        public   USAGE           false
+system         NULL         bar   false          tables       bar      ALL             true
+system         NULL         bar   false          sequences    bar      ALL             true
+system         NULL         bar   false          types        bar      ALL             true
+system         NULL         bar   false          schemas      bar      ALL             true
+system         NULL         bar   false          types        public   USAGE           false
+system         NULL         foo   false          tables       foo      ALL             true
+system         NULL         foo   false          sequences    foo      ALL             true
+system         NULL         foo   false          types        foo      ALL             true
+system         NULL         foo   false          schemas      foo      ALL             true
+system         NULL         foo   false          types        public   USAGE           false
+test           NULL         bar   false          sequences    foo      ALL             false
+test           NULL         bar   false          types        foo      ALL             false
+test           NULL         bar   false          schemas      foo      ALL             false
+test           NULL         bar   false          tables       foo      ALL             false
+test           NULL         bar   false          tables       bar      ALL             true
+test           NULL         bar   false          sequences    bar      ALL             true
+test           NULL         bar   false          types        bar      ALL             true
+test           NULL         bar   false          schemas      bar      ALL             true
+test           NULL         bar   false          types        public   USAGE           false
+test           NULL         foo   false          sequences    bar      ALL             false
+test           NULL         foo   false          types        bar      ALL             false
+test           NULL         foo   false          schemas      bar      ALL             false
+test           NULL         foo   false          tables       bar      ALL             false
+test           NULL         foo   false          tables       foo      ALL             true
+test           NULL         foo   false          sequences    foo      ALL             true
+test           NULL         foo   false          types        foo      ALL             true
+test           NULL         foo   false          schemas      foo      ALL             true
+test           NULL         foo   false          types        public   USAGE           false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -201,117 +201,117 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         bar       false          tables       bar       ALL
-defaultdb      NULL         bar       false          sequences    bar       ALL
-defaultdb      NULL         bar       false          types        bar       ALL
-defaultdb      NULL         bar       false          schemas      bar       ALL
-defaultdb      NULL         bar       false          types        public    USAGE
-defaultdb      NULL         foo       false          tables       foo       ALL
-defaultdb      NULL         foo       false          sequences    foo       ALL
-defaultdb      NULL         foo       false          types        foo       ALL
-defaultdb      NULL         foo       false          schemas      foo       ALL
-defaultdb      NULL         foo       false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         bar       false          tables       bar       ALL
-postgres       NULL         bar       false          sequences    bar       ALL
-postgres       NULL         bar       false          types        bar       ALL
-postgres       NULL         bar       false          schemas      bar       ALL
-postgres       NULL         bar       false          types        public    USAGE
-postgres       NULL         foo       false          tables       foo       ALL
-postgres       NULL         foo       false          sequences    foo       ALL
-postgres       NULL         foo       false          types        foo       ALL
-postgres       NULL         foo       false          schemas      foo       ALL
-postgres       NULL         foo       false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         bar       false          tables       bar       ALL
-system         NULL         bar       false          sequences    bar       ALL
-system         NULL         bar       false          types        bar       ALL
-system         NULL         bar       false          schemas      bar       ALL
-system         NULL         bar       false          types        public    USAGE
-system         NULL         foo       false          tables       foo       ALL
-system         NULL         foo       false          sequences    foo       ALL
-system         NULL         foo       false          types        foo       ALL
-system         NULL         foo       false          schemas      foo       ALL
-system         NULL         foo       false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         bar       false          types        public    USAGE
-test           NULL         foo       false          types        public    USAGE
-test           NULL         root      false          tables       bar       ALL
-test           NULL         root      false          tables       foo       ALL
-test           NULL         root      false          tables       public    SELECT
-test           NULL         root      false          sequences    bar       ALL
-test           NULL         root      false          sequences    foo       ALL
-test           NULL         root      false          sequences    public    SELECT
-test           NULL         root      false          types        bar       ALL
-test           NULL         root      false          types        foo       ALL
-test           NULL         root      false          schemas      bar       ALL
-test           NULL         root      false          schemas      foo       ALL
-test           NULL         root      false          schemas      public    USAGE
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         root      false          types        public    USAGE
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         bar       false          tables       bar       ALL             true
+defaultdb      NULL         bar       false          sequences    bar       ALL             true
+defaultdb      NULL         bar       false          types        bar       ALL             true
+defaultdb      NULL         bar       false          schemas      bar       ALL             true
+defaultdb      NULL         bar       false          types        public    USAGE           false
+defaultdb      NULL         foo       false          tables       foo       ALL             true
+defaultdb      NULL         foo       false          sequences    foo       ALL             true
+defaultdb      NULL         foo       false          types        foo       ALL             true
+defaultdb      NULL         foo       false          schemas      foo       ALL             true
+defaultdb      NULL         foo       false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         bar       false          tables       bar       ALL             true
+postgres       NULL         bar       false          sequences    bar       ALL             true
+postgres       NULL         bar       false          types        bar       ALL             true
+postgres       NULL         bar       false          schemas      bar       ALL             true
+postgres       NULL         bar       false          types        public    USAGE           false
+postgres       NULL         foo       false          tables       foo       ALL             true
+postgres       NULL         foo       false          sequences    foo       ALL             true
+postgres       NULL         foo       false          types        foo       ALL             true
+postgres       NULL         foo       false          schemas      foo       ALL             true
+postgres       NULL         foo       false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         bar       false          tables       bar       ALL             true
+system         NULL         bar       false          sequences    bar       ALL             true
+system         NULL         bar       false          types        bar       ALL             true
+system         NULL         bar       false          schemas      bar       ALL             true
+system         NULL         bar       false          types        public    USAGE           false
+system         NULL         foo       false          tables       foo       ALL             true
+system         NULL         foo       false          sequences    foo       ALL             true
+system         NULL         foo       false          types        foo       ALL             true
+system         NULL         foo       false          schemas      foo       ALL             true
+system         NULL         foo       false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         bar       false          types        public    USAGE           false
+test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          schemas      bar       ALL             false
+test           NULL         root      false          schemas      foo       ALL             false
+test           NULL         root      false          schemas      public    USAGE           false
+test           NULL         root      false          tables       bar       ALL             false
+test           NULL         root      false          tables       foo       ALL             false
+test           NULL         root      false          tables       public    SELECT          false
+test           NULL         root      false          sequences    bar       ALL             false
+test           NULL         root      false          sequences    foo       ALL             false
+test           NULL         root      false          sequences    public    SELECT          false
+test           NULL         root      false          types        bar       ALL             false
+test           NULL         root      false          types        foo       ALL             false
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         root      false          types        public    USAGE           false
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
@@ -319,223 +319,223 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         bar       false          tables       bar       ALL
-defaultdb      NULL         bar       false          sequences    bar       ALL
-defaultdb      NULL         bar       false          types        bar       ALL
-defaultdb      NULL         bar       false          schemas      bar       ALL
-defaultdb      NULL         bar       false          types        public    USAGE
-defaultdb      NULL         foo       false          tables       foo       ALL
-defaultdb      NULL         foo       false          sequences    foo       ALL
-defaultdb      NULL         foo       false          types        foo       ALL
-defaultdb      NULL         foo       false          schemas      foo       ALL
-defaultdb      NULL         foo       false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         bar       false          tables       bar       ALL
-postgres       NULL         bar       false          sequences    bar       ALL
-postgres       NULL         bar       false          types        bar       ALL
-postgres       NULL         bar       false          schemas      bar       ALL
-postgres       NULL         bar       false          types        public    USAGE
-postgres       NULL         foo       false          tables       foo       ALL
-postgres       NULL         foo       false          sequences    foo       ALL
-postgres       NULL         foo       false          types        foo       ALL
-postgres       NULL         foo       false          schemas      foo       ALL
-postgres       NULL         foo       false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         bar       false          tables       bar       ALL
-system         NULL         bar       false          sequences    bar       ALL
-system         NULL         bar       false          types        bar       ALL
-system         NULL         bar       false          schemas      bar       ALL
-system         NULL         bar       false          types        public    USAGE
-system         NULL         foo       false          tables       foo       ALL
-system         NULL         foo       false          sequences    foo       ALL
-system         NULL         foo       false          types        foo       ALL
-system         NULL         foo       false          schemas      foo       ALL
-system         NULL         foo       false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         bar       false          types        public    USAGE
-test           NULL         foo       false          types        public    USAGE
-test           NULL         root      false          tables       bar       CREATE
-test           NULL         root      false          tables       bar       DROP
-test           NULL         root      false          tables       bar       INSERT
-test           NULL         root      false          tables       bar       DELETE
-test           NULL         root      false          tables       bar       UPDATE
-test           NULL         root      false          tables       bar       ZONECONFIG
-test           NULL         root      false          tables       foo       CREATE
-test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       INSERT
-test           NULL         root      false          tables       foo       DELETE
-test           NULL         root      false          tables       foo       UPDATE
-test           NULL         root      false          tables       foo       ZONECONFIG
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         bar       false          tables       bar       ALL             true
+defaultdb      NULL         bar       false          sequences    bar       ALL             true
+defaultdb      NULL         bar       false          types        bar       ALL             true
+defaultdb      NULL         bar       false          schemas      bar       ALL             true
+defaultdb      NULL         bar       false          types        public    USAGE           false
+defaultdb      NULL         foo       false          tables       foo       ALL             true
+defaultdb      NULL         foo       false          sequences    foo       ALL             true
+defaultdb      NULL         foo       false          types        foo       ALL             true
+defaultdb      NULL         foo       false          schemas      foo       ALL             true
+defaultdb      NULL         foo       false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         bar       false          tables       bar       ALL             true
+postgres       NULL         bar       false          sequences    bar       ALL             true
+postgres       NULL         bar       false          types        bar       ALL             true
+postgres       NULL         bar       false          schemas      bar       ALL             true
+postgres       NULL         bar       false          types        public    USAGE           false
+postgres       NULL         foo       false          tables       foo       ALL             true
+postgres       NULL         foo       false          sequences    foo       ALL             true
+postgres       NULL         foo       false          types        foo       ALL             true
+postgres       NULL         foo       false          schemas      foo       ALL             true
+postgres       NULL         foo       false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         bar       false          tables       bar       ALL             true
+system         NULL         bar       false          sequences    bar       ALL             true
+system         NULL         bar       false          types        bar       ALL             true
+system         NULL         bar       false          schemas      bar       ALL             true
+system         NULL         bar       false          types        public    USAGE           false
+system         NULL         foo       false          tables       foo       ALL             true
+system         NULL         foo       false          sequences    foo       ALL             true
+system         NULL         foo       false          types        foo       ALL             true
+system         NULL         foo       false          schemas      foo       ALL             true
+system         NULL         foo       false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         bar       false          types        public    USAGE           false
+test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          tables       bar       CREATE          false
+test           NULL         root      false          tables       bar       DROP            false
+test           NULL         root      false          tables       bar       INSERT          false
+test           NULL         root      false          tables       bar       DELETE          false
+test           NULL         root      false          tables       bar       UPDATE          false
+test           NULL         root      false          tables       bar       ZONECONFIG      false
+test           NULL         root      false          tables       foo       CREATE          false
+test           NULL         root      false          tables       foo       DROP            false
+test           NULL         root      false          tables       foo       INSERT          false
+test           NULL         root      false          tables       foo       DELETE          false
+test           NULL         root      false          tables       foo       UPDATE          false
+test           NULL         root      false          tables       foo       ZONECONFIG      false
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
 ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         bar       false          tables       bar       ALL
-defaultdb      NULL         bar       false          sequences    bar       ALL
-defaultdb      NULL         bar       false          types        bar       ALL
-defaultdb      NULL         bar       false          schemas      bar       ALL
-defaultdb      NULL         bar       false          types        public    USAGE
-defaultdb      NULL         foo       false          tables       foo       ALL
-defaultdb      NULL         foo       false          sequences    foo       ALL
-defaultdb      NULL         foo       false          types        foo       ALL
-defaultdb      NULL         foo       false          schemas      foo       ALL
-defaultdb      NULL         foo       false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         bar       false          tables       bar       ALL
-postgres       NULL         bar       false          sequences    bar       ALL
-postgres       NULL         bar       false          types        bar       ALL
-postgres       NULL         bar       false          schemas      bar       ALL
-postgres       NULL         bar       false          types        public    USAGE
-postgres       NULL         foo       false          tables       foo       ALL
-postgres       NULL         foo       false          sequences    foo       ALL
-postgres       NULL         foo       false          types        foo       ALL
-postgres       NULL         foo       false          schemas      foo       ALL
-postgres       NULL         foo       false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         bar       false          tables       bar       ALL
-system         NULL         bar       false          sequences    bar       ALL
-system         NULL         bar       false          types        bar       ALL
-system         NULL         bar       false          schemas      bar       ALL
-system         NULL         bar       false          types        public    USAGE
-system         NULL         foo       false          tables       foo       ALL
-system         NULL         foo       false          sequences    foo       ALL
-system         NULL         foo       false          types        foo       ALL
-system         NULL         foo       false          schemas      foo       ALL
-system         NULL         foo       false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         bar       false          types        public    USAGE
-test           NULL         foo       false          types        public    USAGE
-test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       ZONECONFIG
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         bar       false          tables       bar       ALL             true
+defaultdb      NULL         bar       false          sequences    bar       ALL             true
+defaultdb      NULL         bar       false          types        bar       ALL             true
+defaultdb      NULL         bar       false          schemas      bar       ALL             true
+defaultdb      NULL         bar       false          types        public    USAGE           false
+defaultdb      NULL         foo       false          tables       foo       ALL             true
+defaultdb      NULL         foo       false          sequences    foo       ALL             true
+defaultdb      NULL         foo       false          types        foo       ALL             true
+defaultdb      NULL         foo       false          schemas      foo       ALL             true
+defaultdb      NULL         foo       false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         bar       false          tables       bar       ALL             true
+postgres       NULL         bar       false          sequences    bar       ALL             true
+postgres       NULL         bar       false          types        bar       ALL             true
+postgres       NULL         bar       false          schemas      bar       ALL             true
+postgres       NULL         bar       false          types        public    USAGE           false
+postgres       NULL         foo       false          tables       foo       ALL             true
+postgres       NULL         foo       false          sequences    foo       ALL             true
+postgres       NULL         foo       false          types        foo       ALL             true
+postgres       NULL         foo       false          schemas      foo       ALL             true
+postgres       NULL         foo       false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         bar       false          tables       bar       ALL             true
+system         NULL         bar       false          sequences    bar       ALL             true
+system         NULL         bar       false          types        bar       ALL             true
+system         NULL         bar       false          schemas      bar       ALL             true
+system         NULL         bar       false          types        public    USAGE           false
+system         NULL         foo       false          tables       foo       ALL             true
+system         NULL         foo       false          sequences    foo       ALL             true
+system         NULL         foo       false          types        foo       ALL             true
+system         NULL         foo       false          schemas      foo       ALL             true
+system         NULL         foo       false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         bar       false          types        public    USAGE           false
+test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          tables       foo       DROP            true
+test           NULL         root      false          tables       foo       ZONECONFIG      true
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
 
 # Create a second database.
 statement ok
@@ -545,266 +545,266 @@ use test2;
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         bar       false          tables       bar       ALL
-defaultdb      NULL         bar       false          sequences    bar       ALL
-defaultdb      NULL         bar       false          types        bar       ALL
-defaultdb      NULL         bar       false          schemas      bar       ALL
-defaultdb      NULL         bar       false          types        public    USAGE
-defaultdb      NULL         foo       false          tables       foo       ALL
-defaultdb      NULL         foo       false          sequences    foo       ALL
-defaultdb      NULL         foo       false          types        foo       ALL
-defaultdb      NULL         foo       false          schemas      foo       ALL
-defaultdb      NULL         foo       false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         bar       false          tables       bar       ALL
-postgres       NULL         bar       false          sequences    bar       ALL
-postgres       NULL         bar       false          types        bar       ALL
-postgres       NULL         bar       false          schemas      bar       ALL
-postgres       NULL         bar       false          types        public    USAGE
-postgres       NULL         foo       false          tables       foo       ALL
-postgres       NULL         foo       false          sequences    foo       ALL
-postgres       NULL         foo       false          types        foo       ALL
-postgres       NULL         foo       false          schemas      foo       ALL
-postgres       NULL         foo       false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         bar       false          tables       bar       ALL
-system         NULL         bar       false          sequences    bar       ALL
-system         NULL         bar       false          types        bar       ALL
-system         NULL         bar       false          schemas      bar       ALL
-system         NULL         bar       false          types        public    USAGE
-system         NULL         foo       false          tables       foo       ALL
-system         NULL         foo       false          sequences    foo       ALL
-system         NULL         foo       false          types        foo       ALL
-system         NULL         foo       false          schemas      foo       ALL
-system         NULL         foo       false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         bar       false          types        public    USAGE
-test           NULL         foo       false          types        public    USAGE
-test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       ZONECONFIG
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
-test2          NULL         admin     false          tables       admin     ALL
-test2          NULL         admin     false          sequences    admin     ALL
-test2          NULL         admin     false          types        admin     ALL
-test2          NULL         admin     false          schemas      admin     ALL
-test2          NULL         admin     false          types        public    USAGE
-test2          NULL         bar       false          tables       bar       ALL
-test2          NULL         bar       false          sequences    bar       ALL
-test2          NULL         bar       false          types        bar       ALL
-test2          NULL         bar       false          schemas      bar       ALL
-test2          NULL         bar       false          types        public    USAGE
-test2          NULL         foo       false          tables       foo       ALL
-test2          NULL         foo       false          sequences    foo       ALL
-test2          NULL         foo       false          types        foo       ALL
-test2          NULL         foo       false          schemas      foo       ALL
-test2          NULL         foo       false          types        public    USAGE
-test2          NULL         root      false          tables       foo       DROP
-test2          NULL         root      false          tables       foo       ZONECONFIG
-test2          NULL         root      false          tables       root      ALL
-test2          NULL         root      false          sequences    root      ALL
-test2          NULL         root      false          types        root      ALL
-test2          NULL         root      false          schemas      root      ALL
-test2          NULL         root      false          types        public    USAGE
-test2          NULL         testuser  false          tables       testuser  ALL
-test2          NULL         testuser  false          sequences    testuser  ALL
-test2          NULL         testuser  false          types        testuser  ALL
-test2          NULL         testuser  false          schemas      testuser  ALL
-test2          NULL         testuser  false          types        public    USAGE
-test2          NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         bar       false          tables       bar       ALL             true
+defaultdb      NULL         bar       false          sequences    bar       ALL             true
+defaultdb      NULL         bar       false          types        bar       ALL             true
+defaultdb      NULL         bar       false          schemas      bar       ALL             true
+defaultdb      NULL         bar       false          types        public    USAGE           false
+defaultdb      NULL         foo       false          tables       foo       ALL             true
+defaultdb      NULL         foo       false          sequences    foo       ALL             true
+defaultdb      NULL         foo       false          types        foo       ALL             true
+defaultdb      NULL         foo       false          schemas      foo       ALL             true
+defaultdb      NULL         foo       false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         bar       false          tables       bar       ALL             true
+postgres       NULL         bar       false          sequences    bar       ALL             true
+postgres       NULL         bar       false          types        bar       ALL             true
+postgres       NULL         bar       false          schemas      bar       ALL             true
+postgres       NULL         bar       false          types        public    USAGE           false
+postgres       NULL         foo       false          tables       foo       ALL             true
+postgres       NULL         foo       false          sequences    foo       ALL             true
+postgres       NULL         foo       false          types        foo       ALL             true
+postgres       NULL         foo       false          schemas      foo       ALL             true
+postgres       NULL         foo       false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         bar       false          tables       bar       ALL             true
+system         NULL         bar       false          sequences    bar       ALL             true
+system         NULL         bar       false          types        bar       ALL             true
+system         NULL         bar       false          schemas      bar       ALL             true
+system         NULL         bar       false          types        public    USAGE           false
+system         NULL         foo       false          tables       foo       ALL             true
+system         NULL         foo       false          sequences    foo       ALL             true
+system         NULL         foo       false          types        foo       ALL             true
+system         NULL         foo       false          schemas      foo       ALL             true
+system         NULL         foo       false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         bar       false          types        public    USAGE           false
+test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          tables       foo       DROP            true
+test           NULL         root      false          tables       foo       ZONECONFIG      true
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
+test2          NULL         admin     false          tables       admin     ALL             true
+test2          NULL         admin     false          sequences    admin     ALL             true
+test2          NULL         admin     false          types        admin     ALL             true
+test2          NULL         admin     false          schemas      admin     ALL             true
+test2          NULL         admin     false          types        public    USAGE           false
+test2          NULL         bar       false          tables       bar       ALL             true
+test2          NULL         bar       false          sequences    bar       ALL             true
+test2          NULL         bar       false          types        bar       ALL             true
+test2          NULL         bar       false          schemas      bar       ALL             true
+test2          NULL         bar       false          types        public    USAGE           false
+test2          NULL         foo       false          tables       foo       ALL             true
+test2          NULL         foo       false          sequences    foo       ALL             true
+test2          NULL         foo       false          types        foo       ALL             true
+test2          NULL         foo       false          schemas      foo       ALL             true
+test2          NULL         foo       false          types        public    USAGE           false
+test2          NULL         root      false          tables       foo       DROP            true
+test2          NULL         root      false          tables       foo       ZONECONFIG      true
+test2          NULL         root      false          tables       root      ALL             true
+test2          NULL         root      false          sequences    root      ALL             true
+test2          NULL         root      false          types        root      ALL             true
+test2          NULL         root      false          schemas      root      ALL             true
+test2          NULL         root      false          types        public    USAGE           false
+test2          NULL         testuser  false          tables       testuser  ALL             true
+test2          NULL         testuser  false          sequences    testuser  ALL             true
+test2          NULL         testuser  false          types        testuser  ALL             true
+test2          NULL         testuser  false          schemas      testuser  ALL             true
+test2          NULL         testuser  false          types        public    USAGE           false
+test2          NULL         NULL      true           types        public    USAGE           false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO foo;
 
-query TTTBTTT colnames,rowsort
+query TTTBTTTB colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
 ----
-database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type
-defaultdb      NULL         admin     false          tables       admin     ALL
-defaultdb      NULL         admin     false          sequences    admin     ALL
-defaultdb      NULL         admin     false          types        admin     ALL
-defaultdb      NULL         admin     false          schemas      admin     ALL
-defaultdb      NULL         admin     false          types        public    USAGE
-defaultdb      NULL         bar       false          tables       bar       ALL
-defaultdb      NULL         bar       false          sequences    bar       ALL
-defaultdb      NULL         bar       false          types        bar       ALL
-defaultdb      NULL         bar       false          schemas      bar       ALL
-defaultdb      NULL         bar       false          types        public    USAGE
-defaultdb      NULL         foo       false          tables       foo       ALL
-defaultdb      NULL         foo       false          sequences    foo       ALL
-defaultdb      NULL         foo       false          types        foo       ALL
-defaultdb      NULL         foo       false          schemas      foo       ALL
-defaultdb      NULL         foo       false          types        public    USAGE
-defaultdb      NULL         root      false          tables       root      ALL
-defaultdb      NULL         root      false          sequences    root      ALL
-defaultdb      NULL         root      false          types        root      ALL
-defaultdb      NULL         root      false          schemas      root      ALL
-defaultdb      NULL         root      false          types        public    USAGE
-defaultdb      NULL         testuser  false          tables       testuser  ALL
-defaultdb      NULL         testuser  false          sequences    testuser  ALL
-defaultdb      NULL         testuser  false          types        testuser  ALL
-defaultdb      NULL         testuser  false          schemas      testuser  ALL
-defaultdb      NULL         testuser  false          types        public    USAGE
-defaultdb      NULL         NULL      true           types        public    USAGE
-postgres       NULL         admin     false          tables       admin     ALL
-postgres       NULL         admin     false          sequences    admin     ALL
-postgres       NULL         admin     false          types        admin     ALL
-postgres       NULL         admin     false          schemas      admin     ALL
-postgres       NULL         admin     false          types        public    USAGE
-postgres       NULL         bar       false          tables       bar       ALL
-postgres       NULL         bar       false          sequences    bar       ALL
-postgres       NULL         bar       false          types        bar       ALL
-postgres       NULL         bar       false          schemas      bar       ALL
-postgres       NULL         bar       false          types        public    USAGE
-postgres       NULL         foo       false          tables       foo       ALL
-postgres       NULL         foo       false          sequences    foo       ALL
-postgres       NULL         foo       false          types        foo       ALL
-postgres       NULL         foo       false          schemas      foo       ALL
-postgres       NULL         foo       false          types        public    USAGE
-postgres       NULL         root      false          tables       root      ALL
-postgres       NULL         root      false          sequences    root      ALL
-postgres       NULL         root      false          types        root      ALL
-postgres       NULL         root      false          schemas      root      ALL
-postgres       NULL         root      false          types        public    USAGE
-postgres       NULL         testuser  false          tables       testuser  ALL
-postgres       NULL         testuser  false          sequences    testuser  ALL
-postgres       NULL         testuser  false          types        testuser  ALL
-postgres       NULL         testuser  false          schemas      testuser  ALL
-postgres       NULL         testuser  false          types        public    USAGE
-postgres       NULL         NULL      true           types        public    USAGE
-system         NULL         admin     false          tables       admin     ALL
-system         NULL         admin     false          sequences    admin     ALL
-system         NULL         admin     false          types        admin     ALL
-system         NULL         admin     false          schemas      admin     ALL
-system         NULL         admin     false          types        public    USAGE
-system         NULL         bar       false          tables       bar       ALL
-system         NULL         bar       false          sequences    bar       ALL
-system         NULL         bar       false          types        bar       ALL
-system         NULL         bar       false          schemas      bar       ALL
-system         NULL         bar       false          types        public    USAGE
-system         NULL         foo       false          tables       foo       ALL
-system         NULL         foo       false          sequences    foo       ALL
-system         NULL         foo       false          types        foo       ALL
-system         NULL         foo       false          schemas      foo       ALL
-system         NULL         foo       false          types        public    USAGE
-system         NULL         root      false          tables       root      ALL
-system         NULL         root      false          sequences    root      ALL
-system         NULL         root      false          types        root      ALL
-system         NULL         root      false          schemas      root      ALL
-system         NULL         root      false          types        public    USAGE
-system         NULL         testuser  false          tables       testuser  ALL
-system         NULL         testuser  false          sequences    testuser  ALL
-system         NULL         testuser  false          types        testuser  ALL
-system         NULL         testuser  false          schemas      testuser  ALL
-system         NULL         testuser  false          types        public    USAGE
-system         NULL         NULL      true           types        public    USAGE
-test           NULL         admin     false          tables       admin     ALL
-test           NULL         admin     false          sequences    admin     ALL
-test           NULL         admin     false          types        admin     ALL
-test           NULL         admin     false          schemas      admin     ALL
-test           NULL         admin     false          types        public    USAGE
-test           NULL         bar       false          types        public    USAGE
-test           NULL         foo       false          types        public    USAGE
-test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       ZONECONFIG
-test           NULL         root      false          tables       root      ALL
-test           NULL         root      false          sequences    root      ALL
-test           NULL         root      false          types        root      ALL
-test           NULL         root      false          schemas      root      ALL
-test           NULL         testuser  false          tables       testuser  ALL
-test           NULL         testuser  false          sequences    testuser  ALL
-test           NULL         testuser  false          types        testuser  ALL
-test           NULL         testuser  false          schemas      testuser  ALL
-test           NULL         testuser  false          types        public    USAGE
-test           NULL         NULL      true           types        public    USAGE
-test2          NULL         admin     false          tables       admin     ALL
-test2          NULL         admin     false          sequences    admin     ALL
-test2          NULL         admin     false          types        admin     ALL
-test2          NULL         admin     false          schemas      admin     ALL
-test2          NULL         admin     false          types        public    USAGE
-test2          NULL         bar       false          tables       bar       ALL
-test2          NULL         bar       false          sequences    bar       ALL
-test2          NULL         bar       false          types        bar       ALL
-test2          NULL         bar       false          schemas      bar       ALL
-test2          NULL         bar       false          types        public    USAGE
-test2          NULL         foo       false          tables       foo       ALL
-test2          NULL         foo       false          sequences    foo       ALL
-test2          NULL         foo       false          types        foo       ALL
-test2          NULL         foo       false          schemas      foo       ALL
-test2          NULL         foo       false          types        public    USAGE
-test2          NULL         root      false          tables       foo       DROP
-test2          NULL         root      false          tables       foo       ZONECONFIG
-test2          NULL         root      false          tables       root      ALL
-test2          NULL         root      false          sequences    root      ALL
-test2          NULL         root      false          types        root      ALL
-test2          NULL         root      false          schemas      root      ALL
-test2          NULL         root      false          types        public    USAGE
-test2          NULL         testuser  false          tables       testuser  ALL
-test2          NULL         testuser  false          sequences    testuser  ALL
-test2          NULL         testuser  false          types        testuser  ALL
-test2          NULL         testuser  false          schemas      testuser  ALL
-test2          NULL         testuser  false          types        public    USAGE
-test2          NULL         NULL      true           tables       foo       SELECT
-test2          NULL         NULL      true           types        public    USAGE
+database_name  schema_name  role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+defaultdb      NULL         admin     false          tables       admin     ALL             true
+defaultdb      NULL         admin     false          sequences    admin     ALL             true
+defaultdb      NULL         admin     false          types        admin     ALL             true
+defaultdb      NULL         admin     false          schemas      admin     ALL             true
+defaultdb      NULL         admin     false          types        public    USAGE           false
+defaultdb      NULL         bar       false          tables       bar       ALL             true
+defaultdb      NULL         bar       false          sequences    bar       ALL             true
+defaultdb      NULL         bar       false          types        bar       ALL             true
+defaultdb      NULL         bar       false          schemas      bar       ALL             true
+defaultdb      NULL         bar       false          types        public    USAGE           false
+defaultdb      NULL         foo       false          tables       foo       ALL             true
+defaultdb      NULL         foo       false          sequences    foo       ALL             true
+defaultdb      NULL         foo       false          types        foo       ALL             true
+defaultdb      NULL         foo       false          schemas      foo       ALL             true
+defaultdb      NULL         foo       false          types        public    USAGE           false
+defaultdb      NULL         root      false          tables       root      ALL             true
+defaultdb      NULL         root      false          sequences    root      ALL             true
+defaultdb      NULL         root      false          types        root      ALL             true
+defaultdb      NULL         root      false          schemas      root      ALL             true
+defaultdb      NULL         root      false          types        public    USAGE           false
+defaultdb      NULL         testuser  false          tables       testuser  ALL             true
+defaultdb      NULL         testuser  false          sequences    testuser  ALL             true
+defaultdb      NULL         testuser  false          types        testuser  ALL             true
+defaultdb      NULL         testuser  false          schemas      testuser  ALL             true
+defaultdb      NULL         testuser  false          types        public    USAGE           false
+defaultdb      NULL         NULL      true           types        public    USAGE           false
+postgres       NULL         admin     false          tables       admin     ALL             true
+postgres       NULL         admin     false          sequences    admin     ALL             true
+postgres       NULL         admin     false          types        admin     ALL             true
+postgres       NULL         admin     false          schemas      admin     ALL             true
+postgres       NULL         admin     false          types        public    USAGE           false
+postgres       NULL         bar       false          tables       bar       ALL             true
+postgres       NULL         bar       false          sequences    bar       ALL             true
+postgres       NULL         bar       false          types        bar       ALL             true
+postgres       NULL         bar       false          schemas      bar       ALL             true
+postgres       NULL         bar       false          types        public    USAGE           false
+postgres       NULL         foo       false          tables       foo       ALL             true
+postgres       NULL         foo       false          sequences    foo       ALL             true
+postgres       NULL         foo       false          types        foo       ALL             true
+postgres       NULL         foo       false          schemas      foo       ALL             true
+postgres       NULL         foo       false          types        public    USAGE           false
+postgres       NULL         root      false          tables       root      ALL             true
+postgres       NULL         root      false          sequences    root      ALL             true
+postgres       NULL         root      false          types        root      ALL             true
+postgres       NULL         root      false          schemas      root      ALL             true
+postgres       NULL         root      false          types        public    USAGE           false
+postgres       NULL         testuser  false          tables       testuser  ALL             true
+postgres       NULL         testuser  false          sequences    testuser  ALL             true
+postgres       NULL         testuser  false          types        testuser  ALL             true
+postgres       NULL         testuser  false          schemas      testuser  ALL             true
+postgres       NULL         testuser  false          types        public    USAGE           false
+postgres       NULL         NULL      true           types        public    USAGE           false
+system         NULL         admin     false          tables       admin     ALL             true
+system         NULL         admin     false          sequences    admin     ALL             true
+system         NULL         admin     false          types        admin     ALL             true
+system         NULL         admin     false          schemas      admin     ALL             true
+system         NULL         admin     false          types        public    USAGE           false
+system         NULL         bar       false          tables       bar       ALL             true
+system         NULL         bar       false          sequences    bar       ALL             true
+system         NULL         bar       false          types        bar       ALL             true
+system         NULL         bar       false          schemas      bar       ALL             true
+system         NULL         bar       false          types        public    USAGE           false
+system         NULL         foo       false          tables       foo       ALL             true
+system         NULL         foo       false          sequences    foo       ALL             true
+system         NULL         foo       false          types        foo       ALL             true
+system         NULL         foo       false          schemas      foo       ALL             true
+system         NULL         foo       false          types        public    USAGE           false
+system         NULL         root      false          tables       root      ALL             true
+system         NULL         root      false          sequences    root      ALL             true
+system         NULL         root      false          types        root      ALL             true
+system         NULL         root      false          schemas      root      ALL             true
+system         NULL         root      false          types        public    USAGE           false
+system         NULL         testuser  false          tables       testuser  ALL             true
+system         NULL         testuser  false          sequences    testuser  ALL             true
+system         NULL         testuser  false          types        testuser  ALL             true
+system         NULL         testuser  false          schemas      testuser  ALL             true
+system         NULL         testuser  false          types        public    USAGE           false
+system         NULL         NULL      true           types        public    USAGE           false
+test           NULL         admin     false          tables       admin     ALL             true
+test           NULL         admin     false          sequences    admin     ALL             true
+test           NULL         admin     false          types        admin     ALL             true
+test           NULL         admin     false          schemas      admin     ALL             true
+test           NULL         admin     false          types        public    USAGE           false
+test           NULL         bar       false          types        public    USAGE           false
+test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          tables       foo       DROP            true
+test           NULL         root      false          tables       foo       ZONECONFIG      true
+test           NULL         root      false          tables       root      ALL             true
+test           NULL         root      false          sequences    root      ALL             true
+test           NULL         root      false          types        root      ALL             true
+test           NULL         root      false          schemas      root      ALL             true
+test           NULL         testuser  false          tables       testuser  ALL             true
+test           NULL         testuser  false          sequences    testuser  ALL             true
+test           NULL         testuser  false          types        testuser  ALL             true
+test           NULL         testuser  false          schemas      testuser  ALL             true
+test           NULL         testuser  false          types        public    USAGE           false
+test           NULL         NULL      true           types        public    USAGE           false
+test2          NULL         admin     false          tables       admin     ALL             true
+test2          NULL         admin     false          sequences    admin     ALL             true
+test2          NULL         admin     false          types        admin     ALL             true
+test2          NULL         admin     false          schemas      admin     ALL             true
+test2          NULL         admin     false          types        public    USAGE           false
+test2          NULL         bar       false          tables       bar       ALL             true
+test2          NULL         bar       false          sequences    bar       ALL             true
+test2          NULL         bar       false          types        bar       ALL             true
+test2          NULL         bar       false          schemas      bar       ALL             true
+test2          NULL         bar       false          types        public    USAGE           false
+test2          NULL         foo       false          tables       foo       ALL             true
+test2          NULL         foo       false          sequences    foo       ALL             true
+test2          NULL         foo       false          types        foo       ALL             true
+test2          NULL         foo       false          schemas      foo       ALL             true
+test2          NULL         foo       false          types        public    USAGE           false
+test2          NULL         root      false          tables       foo       DROP            true
+test2          NULL         root      false          tables       foo       ZONECONFIG      true
+test2          NULL         root      false          tables       root      ALL             true
+test2          NULL         root      false          sequences    root      ALL             true
+test2          NULL         root      false          types        root      ALL             true
+test2          NULL         root      false          schemas      root      ALL             true
+test2          NULL         root      false          types        public    USAGE           false
+test2          NULL         testuser  false          tables       testuser  ALL             true
+test2          NULL         testuser  false          sequences    testuser  ALL             true
+test2          NULL         testuser  false          types        testuser  ALL             true
+test2          NULL         testuser  false          schemas      testuser  ALL             true
+test2          NULL         testuser  false          types        public    USAGE           false
+test2          NULL         NULL      true           tables       foo       SELECT          false
+test2          NULL         NULL      true           types        public    USAGE           false

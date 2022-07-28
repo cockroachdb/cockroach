@@ -18,13 +18,10 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	gobuild "go/build"
-	"io"
 	"math"
 	"math/rand"
 	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -39,8 +36,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -50,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,15 +62,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
@@ -127,7 +120,7 @@ import (
 //
 // This directive lists configurations; the test is run once in each
 // configuration (in separate subtests). The configurations are defined by
-// logicTestConfigs. If the directive is missing, the test is run in the
+// LogicTestConfigs. If the directive is missing, the test is run in the
 // default configuration.
 //
 // The directive also supports blocklists, i.e. running all specified
@@ -403,7 +396,7 @@ import (
 //
 // -config name[,name2,...]   customizes the test cluster configuration for test
 //                files that lack LogicTest directives; must be one
-//                of `logicTestConfigs`.
+//                of `LogicTestConfigs`.
 //                Example:
 //                  -config local,fakedist
 //
@@ -464,13 +457,8 @@ var (
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
-	// Input selection
-	logictestdata  = flag.String("d", "", "glob that selects subset of files to run")
-	bigtest        = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
-	overrideConfig = flag.String(
-		"config", "",
-		"sets the test cluster configuration; comma-separated values",
-	)
+	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
+	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
 
 	// Testing mode
 	maxErrs = flag.Int(
@@ -520,544 +508,9 @@ var (
 		"optimizer-cost-perturbation", 0,
 		"randomly perturb the estimated cost of each expression in the query tree by at most the "+
 			"given fraction for the purpose of creating alternate query plans in the optimizer.")
-	printBlocklistIssues = flag.Bool(
-		"print-blocklist-issues", false,
-		"for any test files that contain a blocklist directive, print a link to the associated issue",
-	)
 )
-
-type testClusterConfig struct {
-	// name is the name of the config (used for subtest names).
-	name     string
-	numNodes int
-	// TODO(asubiotto): The fake span resolver does not currently play well with
-	// contention events and tracing (see #61438).
-	useFakeSpanResolver bool
-	// if non-empty, overrides the default distsql mode.
-	overrideDistSQLMode string
-	// allowSplitAndScatter enables the AllowSplitAndScatter tenant testing knob.
-	allowSplitAndScatter bool
-	// if non-empty, overrides the default vectorize mode.
-	overrideVectorize string
-	// if set, queries using distSQL processors or vectorized operators that can
-	// fall back to disk do so immediately, using only their disk-based
-	// implementation.
-	sqlExecUseDisk bool
-	// if set and the -test.short flag is passed, skip this config.
-	skipShort bool
-	// If not empty, bootstrapVersion controls what version the cluster will be
-	// bootstrapped at.
-	bootstrapVersion roachpb.Version
-	// If not empty, binaryVersion is used to set what the Server will consider
-	// to be the binary version.
-	binaryVersion  roachpb.Version
-	disableUpgrade bool
-	// If true, a sql tenant server will be started and pointed at a node in the
-	// cluster. Connections on behalf of the logic test will go to that tenant.
-	useTenant bool
-	// Disable the default test tenant.
-	disableDefaultTestTenant bool
-	// isCCLConfig should be true for any config that can only be run with a CCL
-	// binary.
-	isCCLConfig bool
-	// localities is set if nodes should be set to a particular locality.
-	// Nodes are 1-indexed.
-	localities map[int]roachpb.Locality
-	// backupRestoreProbability will periodically backup the cluster and restore
-	// it's state to a new cluster at random points during a logic test.
-	backupRestoreProbability float64
-	// disableDeclarativeSchemaChanger will disable the declarative schema changer
-	// for logictest.
-	disableDeclarativeSchemaChanger bool
-	// disableLocalityOptimizedSearch disables the cluster setting
-	// locality_optimized_partitioned_index_scan, which is enabled by default.
-	disableLocalityOptimizedSearch bool
-}
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
-
-const threeNodeTenantConfigName = "3node-tenant"
-
-var multiregion9node3region3azsLocalities = map[int]roachpb.Locality{
-	1: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az1"},
-		},
-	},
-	2: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az2"},
-		},
-	},
-	3: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az3"},
-		},
-	},
-	4: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az1"},
-		},
-	},
-	5: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az2"},
-		},
-	},
-	6: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az3"},
-		},
-	},
-	7: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az1"},
-		},
-	},
-	8: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az2"},
-		},
-	},
-	9: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az3"},
-		},
-	},
-}
-
-var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
-	1: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az1"},
-		},
-	},
-	2: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az2"},
-		},
-	},
-	3: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ap-southeast-2"},
-			{Key: "availability-zone", Value: "ap-az3"},
-		},
-	},
-	4: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az1"},
-		},
-	},
-	5: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az2"},
-		},
-	},
-	6: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "ca-central-1"},
-			{Key: "availability-zone", Value: "ca-az3"},
-		},
-	},
-	7: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az1"},
-		},
-	},
-	8: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az2"},
-		},
-	},
-	9: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-east-1"},
-			{Key: "availability-zone", Value: "us-az3"},
-		},
-	},
-	10: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-west-1"},
-			{Key: "availability-zone", Value: "usw-az1"},
-		},
-	},
-	11: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-west-1"},
-			{Key: "availability-zone", Value: "usw-az2"},
-		},
-	},
-	12: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-west-1"},
-			{Key: "availability-zone", Value: "usw-az3"},
-		},
-	},
-	13: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-central-1"},
-			{Key: "availability-zone", Value: "usc-az1"},
-		},
-	},
-	14: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-central-1"},
-			{Key: "availability-zone", Value: "usc-az2"},
-		},
-	},
-	15: {
-		Tiers: []roachpb.Tier{
-			{Key: "region", Value: "us-central-1"},
-			{Key: "availability-zone", Value: "usc-az3"},
-		},
-	},
-}
-
-// logicTestConfigs contains all possible cluster configs. A test file can
-// specify a list of configs they run on in a file-level comment like:
-//   # LogicTest: default distsql
-// The test is run once on each configuration (in different subtests).
-// If no configs are indicated, the default one is used (unless overridden
-// via -config).
-var logicTestConfigs = []testClusterConfig{
-	{
-		name:                "local",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		// local is the configuration where we run all tests which have bad
-		// interactions with the default test tenant.
-		disableDefaultTestTenant: true,
-	},
-	{
-		name:                            "local-legacy-schema-changer",
-		numNodes:                        1,
-		overrideDistSQLMode:             "off",
-		disableDeclarativeSchemaChanger: true,
-	},
-	{
-		name:                "local-vec-off",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		overrideVectorize:   "off",
-	},
-	{
-		name:                "local-v1.1-at-v1.0-noupgrade",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		bootstrapVersion:    roachpb.Version{Major: 1},
-		binaryVersion:       roachpb.Version{Major: 1, Minor: 1},
-		disableUpgrade:      true,
-	},
-	{
-		name:                "fakedist",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-	},
-	{
-		name:                "fakedist-vec-off",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideVectorize:   "off",
-	},
-	{
-		name:                "fakedist-disk",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
-	},
-	{
-		name:                "5node",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		// Have to disable the default test tenant here as there are test run in
-		// this mode which try to modify zone configurations and we're more
-		// restrictive in the way we allow zone configs to be modified by
-		// secondary tenants. See #75569 for more info.
-		disableDefaultTestTenant: true,
-	},
-	{
-		name:                "5node-disk",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		sqlExecUseDisk:      true,
-		skipShort:           true,
-	},
-	{
-		// 3node-tenant is a config that runs the test as a SQL tenant. This config
-		// can only be run with a CCL binary, so is a noop if run through the normal
-		// logictest command.
-		// To run a logic test with this config as a directive, run:
-		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic/^3node-tenant$$/<test_name>
-		name:                threeNodeTenantConfigName,
-		numNodes:            3,
-		useTenant:           true,
-		isCCLConfig:         true,
-		overrideDistSQLMode: "on",
-	},
-	{
-		// 3node-tenant-multiregion is a config that runs the test as a SQL tenant
-		// with SQL instances and KV nodes in multiple regions. This config can only
-		// be run with a CCL binary, so is a noop if run through the normal
-		// logictest command.
-		// To run a logic test with this config as a directive, run:
-		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic/3node-tenant-multiregion/<test_name>
-		name:                 "3node-tenant-multiregion",
-		numNodes:             3,
-		useTenant:            true,
-		isCCLConfig:          true,
-		overrideDistSQLMode:  "on",
-		allowSplitAndScatter: true,
-		localities: map[int]roachpb.Locality{
-			1: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test"},
-				},
-			},
-			2: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-				},
-			},
-			3: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-				},
-			},
-		},
-	},
-	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
-	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
-	// (they're double double quoted) so we explicitly test them here to ensure that
-	// the multi-region code handles them correctly.
-
-	{
-		name:     "multiregion-invalid-locality",
-		numNodes: 3,
-		localities: map[int]roachpb.Locality{
-			1: {
-				Tiers: []roachpb.Tier{
-					{Key: "invalid-region-setup", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az1"},
-				},
-			},
-			2: {
-				Tiers: []roachpb.Tier{},
-			},
-			3: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az3"},
-				},
-			},
-		},
-	},
-	{
-		name:     "multiregion-3node-3superlongregions",
-		numNodes: 3,
-		localities: map[int]roachpb.Locality{
-			1: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "veryveryveryveryveryveryverylongregion1"},
-				},
-			},
-			2: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "veryveryveryveryveryveryverylongregion2"},
-				},
-			},
-			3: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "veryveryveryveryveryveryverylongregion3"},
-				},
-			},
-		},
-	},
-	{
-		name:       "multiregion-9node-3region-3azs",
-		numNodes:   9,
-		localities: multiregion9node3region3azsLocalities,
-		// Need to disable the default test tenant here until we have the
-		// locality optimized search working in multi-tenant configurations.
-		// Tracked with #80678.
-		disableDefaultTestTenant: true,
-	},
-	{
-		name:       "multiregion-9node-3region-3azs-tenant",
-		numNodes:   9,
-		localities: multiregion9node3region3azsLocalities,
-		useTenant:  true,
-	},
-	{
-		name:              "multiregion-9node-3region-3azs-vec-off",
-		numNodes:          9,
-		localities:        multiregion9node3region3azsLocalities,
-		overrideVectorize: "off",
-	},
-	{
-		name:                           "multiregion-9node-3region-3azs-no-los",
-		numNodes:                       9,
-		localities:                     multiregion9node3region3azsLocalities,
-		disableLocalityOptimizedSearch: true,
-	},
-	{
-		name:       "multiregion-15node-5region-3azs",
-		numNodes:   15,
-		localities: multiregion15node5region3azsLocalities,
-	},
-	{
-		name:                "local-mixed-21.2-22.1",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		// Test fails when run within a test tenant. Tracked with
-		// #76378.
-		disableDefaultTestTenant: true,
-		bootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
-		binaryVersion:            roachpb.Version{Major: 22, Minor: 1},
-		disableUpgrade:           true,
-	},
-	{
-		// 3node-backup is a config that periodically performs a cluster backup,
-		// and restores that backup into a new cluster before continuing the test.
-		// This config can only be run with a CCL binary, so is a noop if run
-		// through the normal logictest command.
-		// To run a logic test with this config as a directive, run:
-		//  make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
-		name:                     "3node-backup",
-		numNodes:                 3,
-		backupRestoreProbability: envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0),
-		isCCLConfig:              true,
-	},
-	{
-		name:                "local-mixed-22.1-22.2",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		bootstrapVersion:    roachpb.Version{Major: 22, Minor: 1},
-		binaryVersion:       roachpb.Version{Major: 22, Minor: 2},
-		disableUpgrade:      true,
-	},
-}
-
-// An index in the above slice.
-type logicTestConfigIdx int
-
-// A collection of configurations.
-type configSet []logicTestConfigIdx
-
-var logicTestConfigIdxToName = make(map[logicTestConfigIdx]string)
-
-func init() {
-	for i, cfg := range logicTestConfigs {
-		logicTestConfigIdxToName[logicTestConfigIdx(i)] = cfg.name
-	}
-}
-
-func parseTestConfig(names []string) configSet {
-	ret := make(configSet, len(names))
-	for i, name := range names {
-		idx, ok := findLogicTestConfig(name)
-		if !ok {
-			panic(fmt.Errorf("unknown config %s", name))
-		}
-		ret[i] = idx
-	}
-	return ret
-}
-
-var (
-	// defaultConfigName is a special alias for the default configs.
-	defaultConfigName  = "default-configs"
-	defaultConfigNames = []string{
-		"local",
-		"local-vec-off",
-		"fakedist",
-		"fakedist-vec-off",
-		"fakedist-disk",
-	}
-	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
-	fiveNodeDefaultConfigName  = "5node-default-configs"
-	fiveNodeDefaultConfigNames = []string{
-		"5node",
-		"5node-disk",
-	}
-	// threeNodeTenantDefaultConfigName is a special alias for all 3-node tenant
-	// configs.
-	threeNodeTenantDefaultConfigName  = "3node-tenant-default-configs"
-	threeNodeTenantDefaultConfigNames = []string{
-		"3node-tenant",
-		"3node-tenant-multiregion",
-	}
-	defaultConfig                = parseTestConfig(defaultConfigNames)
-	fiveNodeDefaultConfig        = parseTestConfig(fiveNodeDefaultConfigNames)
-	threeNodeTenantDefaultConfig = parseTestConfig(threeNodeTenantDefaultConfigNames)
-)
-
-func findLogicTestConfig(name string) (logicTestConfigIdx, bool) {
-	for i, cfg := range logicTestConfigs {
-		if cfg.name == name {
-			return logicTestConfigIdx(i), true
-		}
-	}
-	return -1, false
-}
-
-// lineScanner handles reading from input test files.
-type lineScanner struct {
-	*bufio.Scanner
-	line       int
-	skip       bool
-	skipReason string
-}
-
-func (l *lineScanner) SetSkip(reason string) {
-	l.skip = true
-	l.skipReason = reason
-}
-
-func (l *lineScanner) LogAndResetSkip(t *logicTest) {
-	if l.skipReason != "" {
-		t.t().Logf("statement/query skipped with reason: %s", l.skipReason)
-	}
-	l.skipReason = ""
-	l.skip = false
-}
-
-func newLineScanner(r io.Reader) *lineScanner {
-	return &lineScanner{
-		Scanner: bufio.NewScanner(r),
-		line:    0,
-	}
-}
-
-func (l *lineScanner) Scan() bool {
-	ok := l.Scanner.Scan()
-	if ok {
-		l.line++
-	}
-	return ok
-}
-
-func (l *lineScanner) Text() string {
-	return l.Scanner.Text()
-}
 
 // logicStatement represents a single statement test in Test-Script.
 type logicStatement struct {
@@ -1122,7 +575,7 @@ type pendingQuery struct {
 // If a separator is found, returns separator=true. If a separator is found when
 // it is not expected, returns an error.
 func (ls *logicStatement) readSQL(
-	t *logicTest, s *lineScanner, allowSeparator bool,
+	t *logicTest, s *logictestbase.LineScanner, allowSeparator bool,
 ) (separator bool, _ error) {
 	var buf bytes.Buffer
 	hasVars := false
@@ -1419,7 +872,7 @@ type logicTest struct {
 	rootT    *testing.T
 	subtestT *testing.T
 	rng      *rand.Rand
-	cfg      testClusterConfig
+	cfg      logictestbase.TestClusterConfig
 	// serverArgs are the parameters used to create a cluster for this test.
 	// They are persisted since a cluster can be recreated throughout the
 	// lifetime of the test and we should create all clusters with the same
@@ -1687,10 +1140,10 @@ func (t *logicTest) newCluster(
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
-	if serverArgs.maxSQLMemoryLimit == 0 {
+	if serverArgs.MaxSQLMemoryLimit == 0 {
 		// Specify a fixed memory limit (some test cases verify OOM conditions;
 		// we don't want those to take long on large machines).
-		serverArgs.maxSQLMemoryLimit = 192 * 1024 * 1024
+		serverArgs.MaxSQLMemoryLimit = 192 * 1024 * 1024
 	}
 	// We have some queries that bump into 100MB default temp storage limit
 	// when run with fakedist-disk config, so we'll use a larger limit here.
@@ -1699,11 +1152,11 @@ func (t *logicTest) newCluster(
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.maxSQLMemoryLimit,
+			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
 				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
 			),
-			DisableDefaultTestTenant: t.cfg.useTenant || t.cfg.disableDefaultTestTenant,
+			DisableDefaultTestTenant: t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1733,21 +1186,21 @@ func (t *logicTest) newCluster(
 	}
 
 	cfg := t.cfg
-	if cfg.useTenant {
+	if cfg.UseTenant {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
 		params.ReplicationMode = base.ReplicationAuto
 	}
 	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-		ForceDiskSpill: cfg.sqlExecUseDisk,
+		ForceDiskSpill: cfg.SQLExecUseDisk,
 	}
-	if cfg.bootstrapVersion != (roachpb.Version{}) {
+	if cfg.BootstrapVersion != (roachpb.Version{}) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.bootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.BootstrapVersion
 	}
-	if cfg.disableUpgrade {
+	if cfg.DisableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
@@ -1760,36 +1213,36 @@ func (t *logicTest) newCluster(
 	paramsPerNode := map[int]base.TestServerArgs{}
 	require.Truef(
 		t.rootT,
-		len(cfg.localities) == 0 || len(cfg.localities) == cfg.numNodes,
+		len(cfg.Localities) == 0 || len(cfg.Localities) == cfg.NumNodes,
 		"localities must be set for each node -- got %#v for %d nodes",
-		cfg.localities,
-		cfg.numNodes,
+		cfg.Localities,
+		cfg.NumNodes,
 	)
-	for i := 0; i < cfg.numNodes; i++ {
+	for i := 0; i < cfg.NumNodes; i++ {
 		nodeParams := params.ServerArgs
-		if locality, ok := cfg.localities[i+1]; ok {
+		if locality, ok := cfg.Localities[i+1]; ok {
 			nodeParams.Locality = locality
 		} else {
-			require.Lenf(t.rootT, cfg.localities, 0, "node %d does not have a locality set", i+1)
+			require.Lenf(t.rootT, cfg.Localities, 0, "node %d does not have a locality set", i+1)
 		}
 
-		if cfg.binaryVersion != (roachpb.Version{}) {
-			binaryMinSupportedVersion := cfg.binaryVersion
-			if cfg.bootstrapVersion != (roachpb.Version{}) {
+		if cfg.BinaryVersion != (roachpb.Version{}) {
+			binaryMinSupportedVersion := cfg.BinaryVersion
+			if cfg.BootstrapVersion != (roachpb.Version{}) {
 				// If we want to run a specific server version, we assume that it
 				// supports at least the bootstrap version.
-				binaryMinSupportedVersion = cfg.bootstrapVersion
+				binaryMinSupportedVersion = cfg.BootstrapVersion
 			}
 			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-				cfg.binaryVersion,
+				cfg.BinaryVersion,
 				binaryMinSupportedVersion,
 				false, /* initializeVersion */
 			)
 
 			// If we're injecting fake versions, hook up logic to simulate the end
 			// version existing.
-			from := clusterversion.ClusterVersion{Version: cfg.bootstrapVersion}
-			to := clusterversion.ClusterVersion{Version: cfg.binaryVersion}
+			from := clusterversion.ClusterVersion{Version: cfg.BootstrapVersion}
+			to := clusterversion.ClusterVersion{Version: cfg.BinaryVersion}
 			if len(clusterversion.ListBetween(from, to)) == 0 {
 				mm, ok := nodeParams.Knobs.UpgradeManager.(*upgrade.TestingKnobs)
 				if !ok {
@@ -1814,16 +1267,16 @@ func (t *logicTest) newCluster(
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.numNodes, params)
-	if cfg.useFakeSpanResolver {
+	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
+	if cfg.UseFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.useTenant {
-		t.tenantAddrs = make([]string, cfg.numNodes)
-		for i := 0; i < cfg.numNodes; i++ {
+	if cfg.UseTenant {
+		t.tenantAddrs = make([]string, cfg.NumNodes)
+		for i := 0; i < cfg.NumNodes; i++ {
 			tenantArgs := base.TestTenantArgs{
 				TenantID:                    serverutils.TestTenantID(),
 				AllowSettingClusterSettings: true,
@@ -1835,7 +1288,7 @@ func (t *logicTest) newCluster(
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",
 					},
 					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						AllowSplitAndScatter: cfg.allowSplitAndScatter,
+						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
 					},
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -1877,7 +1330,7 @@ func (t *logicTest) newCluster(
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
 	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
-	if cfg.useTenant || t.cluster.StartedDefaultTestTenant() {
+	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
 		for _, opt := range tenantClusterSettingOverrideOpts {
 			opt.apply(clusterSettingOverrideArgs)
 		}
@@ -1939,17 +1392,17 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
-		if cfg.overrideDistSQLMode != "" {
+		if cfg.OverrideDistSQLMode != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
+				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.OverrideDistSQLMode,
 			); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		if cfg.overrideVectorize != "" {
+		if cfg.OverrideVectorize != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
+				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.OverrideVectorize,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1957,14 +1410,14 @@ func (t *logicTest) newCluster(
 
 		// We support disabling the declarative schema changer, so that no regressions
 		// occur in the legacy schema changer.
-		if cfg.disableDeclarativeSchemaChanger {
+		if cfg.DisableDeclarativeSchemaChanger {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'"); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		if cfg.disableLocalityOptimizedSearch {
+		if cfg.DisableLocalityOptimizedSearch {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.locality_optimized_partitioned_index_scan.enabled = false",
 			); err != nil {
@@ -2013,10 +1466,10 @@ func (t *logicTest) newCluster(
 		}
 	}
 
-	if cfg.overrideDistSQLMode != "" {
-		_, ok := sessiondatapb.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
+	if cfg.OverrideDistSQLMode != "" {
+		_, ok := sessiondatapb.DistSQLExecModeFromString(cfg.OverrideDistSQLMode)
 		if !ok {
-			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
+			t.Fatalf("invalid distsql mode override: %s", cfg.OverrideDistSQLMode)
 		}
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.rootT, func() error {
@@ -2028,9 +1481,9 @@ func (t *logicTest) newCluster(
 				if err != nil {
 					t.Fatal(errors.Wrapf(err, "%d", i))
 				}
-				if m != cfg.overrideDistSQLMode {
+				if m != cfg.OverrideDistSQLMode {
 					return errors.Errorf("node %d is still waiting for update of DistSQLMode to %s (have %s)",
-						i, cfg.overrideDistSQLMode, m,
+						i, cfg.OverrideDistSQLMode, m,
 					)
 				}
 			}
@@ -2131,7 +1584,7 @@ func (t *logicTest) resetCluster() {
 // file), and before processing any test files - unless a mock logicTest is
 // created (see parallelTest.processTestFile).
 func (t *logicTest) setup(
-	cfg testClusterConfig,
+	cfg logictestbase.TestClusterConfig,
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
@@ -2168,151 +1621,6 @@ CREATE DATABASE test; USE test;
 	t.progress = 0
 	t.failures = 0
 	t.unsupported = 0
-}
-
-// applyBlocklistToConfigs applies the given blocklist to configs, returning the
-// result.
-func applyBlocklistToConfigs(configs configSet, blocklist map[string]int) configSet {
-	if len(blocklist) == 0 {
-		return configs
-	}
-	var newConfigs configSet
-	for _, idx := range configs {
-		if _, ok := blocklist[logicTestConfigIdxToName[idx]]; ok {
-			continue
-		}
-		newConfigs = append(newConfigs, idx)
-	}
-	return newConfigs
-}
-
-// getBlocklistIssueNo takes a blocklist directive with an optional issue number
-// and returns the stripped blocklist name with the corresponding issue number
-// as an integer.
-// e.g. an input of "3node-tenant(123456)" would return "3node-tenant", 123456
-func getBlocklistIssueNo(blocklistDirective string) (string, int) {
-	parts := strings.Split(blocklistDirective, "(")
-	if len(parts) != 2 {
-		return blocklistDirective, 0
-	}
-
-	issueNo, err := strconv.Atoi(strings.TrimRight(parts[1], ")"))
-	if err != nil {
-		panic(fmt.Sprintf("possibly malformed blocklist directive: %s: %v", blocklistDirective, err))
-	}
-	return parts[0], issueNo
-}
-
-// processConfigs, given a list of configNames, returns the list of
-// corresponding logicTestConfigIdxs as well as a boolean indicating whether
-// the test works only in non-metamorphic setting.
-func processConfigs(
-	t *testing.T, path string, defaults configSet, configNames []string,
-) (_ configSet, onlyNonMetamorphic bool) {
-	const blocklistChar = '!'
-	// blocklist is a map from a blocked config to a corresponding issue number.
-	// If 0, there is no associated issue.
-	blocklist := make(map[string]int)
-	allConfigNamesAreBlocklistDirectives := true
-	for _, configName := range configNames {
-		if configName[0] != blocklistChar {
-			allConfigNamesAreBlocklistDirectives = false
-			continue
-		}
-
-		blockedConfig, issueNo := getBlocklistIssueNo(configName[1:])
-		if *printBlocklistIssues && issueNo != 0 {
-			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, build.MakeIssueURL(issueNo))
-		}
-		// Enumerate all the blocked configs if the blocked config is a default
-		// config list.
-		names := getDefaultConfigListNames(blockedConfig)
-		if len(names) == 0 {
-			blocklist[blockedConfig] = issueNo
-		} else {
-			for _, name := range names {
-				blocklist[name] = issueNo
-			}
-		}
-	}
-
-	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
-		onlyNonMetamorphic = true
-	}
-	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
-		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic
-	}
-
-	var configs configSet
-	for _, configName := range configNames {
-		if configName[0] == blocklistChar {
-			continue
-		}
-		if _, ok := blocklist[configName]; ok {
-			continue
-		}
-
-		idx, ok := findLogicTestConfig(configName)
-		if !ok {
-			switch configName {
-			case defaultConfigName:
-				configs = append(configs, applyBlocklistToConfigs(defaults, blocklist)...)
-			case fiveNodeDefaultConfigName:
-				configs = append(configs, applyBlocklistToConfigs(fiveNodeDefaultConfig, blocklist)...)
-			case threeNodeTenantDefaultConfigName:
-				configs = append(configs, applyBlocklistToConfigs(threeNodeTenantDefaultConfig, blocklist)...)
-			default:
-				t.Fatalf("%s: unknown config name %s", path, configName)
-			}
-		} else {
-			configs = append(configs, idx)
-		}
-	}
-
-	return configs, onlyNonMetamorphic
-}
-
-// readTestFileConfigs reads any LogicTest directive at the beginning of a
-// test file. A line that starts with "# LogicTest:" specifies a list of
-// configuration names. The test file is run against each of those
-// configurations.
-//
-// Example:
-//   # LogicTest: default distsql
-//
-// If the file doesn't contain a directive, the default config is returned.
-func readTestFileConfigs(
-	t *testing.T, path string, defaults configSet,
-) (_ configSet, onlyNonMetamorphic bool) {
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-
-	s := newLineScanner(file)
-	for s.Scan() {
-		fields := strings.Fields(s.Text())
-		if len(fields) == 0 {
-			continue
-		}
-		cmd := fields[0]
-		if !strings.HasPrefix(cmd, "#") {
-			// Stop at the first line that's not a comment (or empty).
-			break
-		}
-		// Directive lines are of the form:
-		// # LogicTest: opt1=val1 opt2=val3 boolopt1
-		if len(fields) > 1 && cmd == "#" && fields[1] == "LogicTest:" {
-			if len(fields) == 2 {
-				t.Fatalf("%s: empty LogicTest directive", path)
-			}
-			return processConfigs(t, path, defaults, fields[2:])
-		}
-	}
-	// No directive found, return the default config.
-	return defaults, false
 }
 
 type tenantClusterSettingOverrideArgs struct {
@@ -2419,7 +1727,7 @@ func parseDirectiveOptions(t *testing.T, path string, directiveName string, f fu
 
 	beginningOfFile := true
 	directiveFound := false
-	s := newLineScanner(file)
+	s := logictestbase.NewLineScanner(file)
 
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
@@ -2511,7 +1819,7 @@ type subtestDetails struct {
 	lineLineIndexIntoFile int           // the line number of the test file where the subtest started
 }
 
-func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
+func (t *logicTest) processTestFile(path string, config logictestbase.TestClusterConfig) error {
 	rng, seed := randutil.NewPseudoRand()
 	t.outf("rng seed: %d\n", seed)
 
@@ -2592,16 +1900,18 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 // maybeBackupRestore will randomly issue a cluster backup, create a new
 // cluster, and restore that backup to the cluster before continuing the test.
 // The probability of executing a backup and restore is specified in the
-// testClusterConfig.
-func (t *logicTest) maybeBackupRestore(rng *rand.Rand, config testClusterConfig) error {
-	if config.backupRestoreProbability != 0 && !config.isCCLConfig {
+// logictest.TestClusterConfig.
+func (t *logicTest) maybeBackupRestore(
+	rng *rand.Rand, config logictestbase.TestClusterConfig,
+) error {
+	if config.BackupRestoreProbability != 0 && !config.IsCCLConfig {
 		return errors.Newf("logic test config %s specifies a backup restore probability but is not CCL",
-			config.name)
+			config.Name)
 	}
 
 	// We decide if we want to take a backup here based on a probability
 	// specified in the logic test config.
-	if rng.Float64() > config.backupRestoreProbability {
+	if rng.Float64() > config.BackupRestoreProbability {
 		return nil
 	}
 
@@ -2733,7 +2043,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	}
 	defer file.Close()
 
-	s := newLineScanner(file)
+	s := logictestbase.NewLineScanner(file)
 	var subtests []subtestDetails
 	var curName string
 	var curLineIndexIntoFile int
@@ -2747,7 +2057,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 					"%s:%d expected only one field following the subtest command\n"+
 						"Note that this check does not respect the other commands so if a query result has a "+
 						"line that starts with \"subtest\" it will either fail or be split into a subtest.",
-					path, s.line,
+					path, s.Line,
 				)
 			}
 			subtests = append(subtests, subtestDetails{
@@ -2757,7 +2067,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 			})
 			buffer = &bytes.Buffer{}
 			curName = fields[1]
-			curLineIndexIntoFile = s.line + 1
+			curLineIndexIntoFile = s.Line + 1
 		} else {
 			buffer.WriteString(line)
 			buffer.WriteRune('\n')
@@ -2773,19 +2083,19 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 }
 
 func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config testClusterConfig, rng *rand.Rand,
+	subtest subtestDetails, path string, config logictestbase.TestClusterConfig, rng *rand.Rand,
 ) error {
 	defer t.traceStop()
 
-	s := newLineScanner(subtest.buffer)
+	s := logictestbase.NewLineScanner(subtest.buffer)
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
 	for s.Scan() {
-		t.curPath, t.curLineNo = path, s.line+subtest.lineLineIndexIntoFile
+		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			return errors.Errorf("%s:%d: too many errors encountered, skipping the rest of the input",
-				path, s.line+subtest.lineLineIndexIntoFile,
+				path, s.Line+subtest.lineLineIndexIntoFile,
 			)
 		}
 		line := s.Text()
@@ -2801,7 +2111,7 @@ func (t *logicTest) processSubtest(
 		}
 		if len(fields) == 2 && fields[1] == "error" {
 			return errors.Errorf("%s:%d: no expected error provided",
-				path, s.line+subtest.lineLineIndexIntoFile,
+				path, s.Line+subtest.lineLineIndexIntoFile,
 			)
 		}
 		if err := t.maybeBackupRestore(rng, config); err != nil {
@@ -2819,7 +2129,7 @@ func (t *logicTest) processSubtest(
 			}
 			if err != nil {
 				return errors.Wrapf(err, "%s:%d invalid repeat line",
-					path, s.line+subtest.lineLineIndexIntoFile,
+					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			repeat = count
@@ -2837,7 +2147,7 @@ func (t *logicTest) processSubtest(
 			}
 			if err != nil {
 				return errors.Wrapf(err, "%s:%d invalid sleep line",
-					path, s.line+subtest.lineLineIndexIntoFile,
+					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			time.Sleep(duration)
@@ -2871,7 +2181,7 @@ func (t *logicTest) processSubtest(
 
 		case "statement":
 			stmt := logicStatement{
-				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
 			// Parse "statement (notice|error) <regexp>"
@@ -2897,7 +2207,7 @@ func (t *logicTest) processSubtest(
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
 			}
-			if !s.skip {
+			if !s.Skip {
 				for i := 0; i < repeat; i++ {
 					if cont, err := t.execStatement(stmt); err != nil {
 						if !cont {
@@ -2907,7 +2217,7 @@ func (t *logicTest) processSubtest(
 					}
 				}
 			} else {
-				s.LogAndResetSkip(t)
+				s.LogAndResetSkip(t.t())
 			}
 			repeat = 1
 			t.success(path)
@@ -2936,7 +2246,7 @@ func (t *logicTest) processSubtest(
 
 		case "query":
 			var query logicQuery
-			query.pos = fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile)
+			query.pos = fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile)
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				query.expectErrCode = m[1]
@@ -2946,7 +2256,7 @@ func (t *logicTest) processSubtest(
 			} else {
 				// Parse "query <type-string> <options> <label>"
 				query.colTypes = fields[1]
-				if *bigtest {
+				if *Bigtest {
 					// bigtests put each expected value on its own line.
 					query.valsPerLine = 1
 				} else {
@@ -3168,7 +2478,7 @@ func (t *logicTest) processSubtest(
 				query.checkResults = false
 			}
 
-			if !s.skip {
+			if !s.Skip {
 				if query.kvtrace {
 					_, err := t.db.Exec("SET TRACING=on,kv")
 					if err != nil {
@@ -3239,7 +2549,7 @@ func (t *logicTest) processSubtest(
 						t.emit(l)
 					}
 				}
-				s.LogAndResetSkip(t)
+				s.LogAndResetSkip(t.t())
 			}
 			repeat = 1
 			t.success(path)
@@ -3256,7 +2566,7 @@ func (t *logicTest) processSubtest(
 			}
 
 			stmt := logicStatement{
-				pos: fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				pos: fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
@@ -3300,7 +2610,7 @@ func (t *logicTest) processSubtest(
 			cleanupUserFunc := t.setUser(fields[1], nodeIdx)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
-			if t.cfg.useTenant && strings.HasPrefix(fields[1], "host-cluster-") {
+			if t.cfg.UseTenant && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}
@@ -3330,7 +2640,7 @@ func (t *logicTest) processSubtest(
 					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
 				}
 				configName := fields[2]
-				if t.cfg.name == configName || configIsInDefaultList(t.cfg.name, configName) {
+				if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 					issue := "no issue given"
 					if len(fields) > 3 {
 						issue = fields[3]
@@ -3358,12 +2668,12 @@ func (t *logicTest) processSubtest(
 					return errors.New("onlyif config CONFIG [ISSUE] command requires configuration parameter")
 				}
 				configName := fields[2]
-				if t.cfg.name != configName && !configIsInDefaultList(t.cfg.name, configName) {
+				if t.cfg.Name != configName && !logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 					issue := "no issue given"
 					if len(fields) > 3 {
 						issue = fields[3]
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.name, configName, issue))
+					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.Name, configName, issue))
 				}
 				continue
 			default:
@@ -3384,7 +2694,7 @@ func (t *logicTest) processSubtest(
 
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
-				path, s.line+subtest.lineLineIndexIntoFile, cmd,
+				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
 			)
 		}
 	}
@@ -4246,7 +3556,7 @@ SELECT encode(descriptor, 'hex') AS descriptor
 	return nil
 }
 
-func (t *logicTest) runFile(path string, config testClusterConfig) {
+func (t *logicTest) runFile(path string, config logictestbase.TestClusterConfig) {
 	defer t.close()
 
 	defer func() {
@@ -4272,10 +3582,10 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // TestServerArgs contains the parameters that callers of RunLogicTest might
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
-	// maxSQLMemoryLimit determines the value of --max-sql-memory startup
+	// MaxSQLMemoryLimit determines the value of --max-sql-memory startup
 	// argument for the server. If unset, then the default limit of 192MiB will
 	// be used.
-	maxSQLMemoryLimit int64
+	MaxSQLMemoryLimit int64
 	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values
 	// randomized via the metamorphic testing will be overridden to use the
 	// production value.
@@ -4284,27 +3594,9 @@ type TestServerArgs struct {
 	DisableWorkmemRandomization bool
 }
 
-// RunLogicTest is the main entry point for the logic test. The globs parameter
-// specifies the default sets of files to run.
-func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
-	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, "", false /* runCCLConfigs */, globs...)
-}
-
-// RunLogicTestWithDefaultConfig is the main entry point for the logic test. The
-// globs parameter specifies the default sets of files to run. The config
-// override parameter, if not empty, specifies the set of configurations to run
-// those files in. If empty, the default set of configurations is used. The
-// config filter override specifies a set of configurations to run the files in
-// if there are explicit directives for those configurations. runCCLConfigs
-// specifies whether the test runner should skip configs that can only be run
-// with a CCL binary.
-func RunLogicTestWithDefaultConfig(
-	t *testing.T,
-	serverArgs TestServerArgs,
-	configOverride string,
-	configFilterOverride string,
-	runCCLConfigs bool,
-	globs ...string,
+// RunLogicTest is the main entry point for the logic test.
+func RunLogicTest(
+	t *testing.T, serverArgs TestServerArgs, configIdx logictestbase.ConfigIdx, path string,
 ) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
@@ -4316,86 +3608,16 @@ func RunLogicTestWithDefaultConfig(
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
-	// Override default glob sets if -d flag was specified.
-	if *logictestdata != "" {
-		globs = []string{*logictestdata}
-	}
-
-	// A new cluster is set up for each separate file in the test.
-	var paths []string
-	for _, g := range globs {
-		match, err := filepath.Glob(g)
-		if err != nil {
-			t.Fatal(err)
-		}
-		paths = append(paths, match...)
-	}
-
-	if len(paths) == 0 {
-		t.Fatalf("No testfiles found (globs: %v)", globs)
-	}
-
-	// mu protects the following vars, which all get updated from within the
-	// possibly parallel subtests.
 	var progress = struct {
-		syncutil.Mutex
 		total, totalFail, totalUnsupported int
 		lastProgress                       time.Time
 	}{
 		lastProgress: timeutil.Now(),
 	}
 
-	// Read the configuration directives from all the files and accumulate a list
-	// of paths per config.
-	configPaths := make([][]string, len(logicTestConfigs))
-	// nonMetamorphic mirrors configPaths and indicates whether a particular
-	// config on a particular path can only run in non-metamorphic setting.
-	nonMetamorphic := make([][]bool, len(logicTestConfigs))
-	configDefaults := defaultConfig
-	var configFilter map[string]struct{}
-	if configOverride != "" {
-		// If a config override is provided, we use it to replace the default
-		// config set. This ensures that the overrides are used for files where:
-		// 1. no config directive is present
-		// 2. a config directive containing only a blocklist is present
-		// 3. a config directive containing "default-configs" is present
-		//
-		// We also create a filter to restrict configs to only those in the
-		// override list.
-		names := strings.Split(configOverride, ",")
-		configDefaults = parseTestConfig(names)
-		configFilter = make(map[string]struct{})
-		for _, name := range names {
-			configFilter[name] = struct{}{}
-		}
-	}
-	if configFilterOverride != "" {
-		// If a config filter override is provided, add them to the filter to
-		// also run tests with them as a config directive. This is in addition to
-		// any configs added via the config override.
-		names := strings.Split(configFilterOverride, ",")
-		for _, name := range names {
-			configFilter[name] = struct{}{}
-		}
-	}
-	for _, path := range paths {
-		configs, onlyNonMetamorphic := readTestFileConfigs(t, path, configDefaults)
-		for _, idx := range configs {
-			config := logicTestConfigs[idx]
-			configName := config.name
-			if _, ok := configFilter[configName]; configFilter != nil && !ok {
-				// Config filter present but not containing test.
-				continue
-			}
-			if config.isCCLConfig && !runCCLConfigs {
-				// Config is a CCL config and the caller specified that CCL configs
-				// should not be run.
-				continue
-			}
-			configPaths[idx] = append(configPaths[idx], path)
-			nonMetamorphic[idx] = append(nonMetamorphic[idx], onlyNonMetamorphic)
-		}
-	}
+	// Check whether the test can only be run in non-metamorphic mode.
+	_, onlyNonMetamorphic := logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
+	config := logictestbase.LogicTestConfigs[configIdx]
 
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make
@@ -4407,85 +3629,42 @@ func RunLogicTestWithDefaultConfig(
 
 	// Only used in rewrite mode, where we don't need to run the same file through
 	// multiple configs.
-	seenPaths := make(map[string]struct{})
-	for idx, cfg := range logicTestConfigs {
-		paths := configPaths[idx]
-		nonMetamorphic := nonMetamorphic[idx]
-		if len(paths) == 0 {
-			continue
-		}
-		// Top-level test: one per test configuration.
-		t.Run(cfg.name, func(t *testing.T) {
-			if testing.Short() && cfg.skipShort {
-				skip.IgnoreLint(t, "config skipped by -test.short")
-			}
-			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
-				skip.IgnoreLint(t, "config excluded via env var")
-			}
-			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
-				skip.IgnoreLint(t, "config does not match env var")
-			}
-			for i, path := range paths {
-				path := path // Rebind range variable.
-				onlyNonMetamorphic := nonMetamorphic[i]
-				// Inner test: one per file path.
-				t.Run(filepath.Base(path), func(t *testing.T) {
-					if *rewriteResultsInTestfiles {
-						if _, seen := seenPaths[path]; seen {
-							skip.IgnoreLint(t, "test file already rewritten")
-						}
-						seenPaths[path] = struct{}{}
-					}
 
-					// Run the test in parallel, unless:
-					//  - we're printing out all of the SQL interactions, or
-					//  - we're generating testfiles, or
-					//  - we are in race mode (where we can hit a limit on alive
-					//    goroutines).
-					//  - we have too many nodes (this can lead to general slowness)
-					if !*showSQL &&
-						!*rewriteResultsInTestfiles &&
-						!*rewriteSQL &&
-						!util.RaceEnabled &&
-						!cfg.useTenant &&
-						cfg.numNodes <= 5 {
-						// We also cannot parallelise tests that use tenant servers
-						// because they change shared state in the logging configuration
-						// and there is an assertion against conflicting changes.
-						//
-						t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
-					}
-					rng, _ := randutil.NewTestRand()
-					lt := logicTest{
-						rootT:           t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-						rng:             rng,
-					}
-					if *printErrorSummary {
-						defer lt.printErrorSummary()
-					}
-					// Each test needs a copy because of Parallel
-					serverArgsCopy := serverArgs
-					serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
-					lt.setup(
-						cfg, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
-					)
-					lt.runFile(path, cfg)
+	if testing.Short() && config.SkipShort {
+		skip.IgnoreLint(t, "config skipped by -test.short")
+	}
+	if logicTestsConfigExclude != "" && config.Name == logicTestsConfigExclude {
+		skip.IgnoreLint(t, "config excluded via env var")
+	}
+	if logicTestsConfigFilter != "" && config.Name != logicTestsConfigFilter {
+		skip.IgnoreLint(t, "config does not match env var")
+	}
 
-					progress.Lock()
-					defer progress.Unlock()
-					progress.total += lt.progress
-					progress.totalFail += lt.failures
-					progress.totalUnsupported += lt.unsupported
-					now := timeutil.Now()
-					if now.Sub(progress.lastProgress) >= 2*time.Second {
-						progress.lastProgress = now
-						lt.outf("--- total progress: %d statements", progress.total)
-					}
-				})
-			}
-		})
+	rng, _ := randutil.NewTestRand()
+	lt := logicTest{
+		rootT:           t,
+		verbose:         verbose,
+		perErrorSummary: make(map[string][]string),
+		rng:             rng,
+	}
+	if *printErrorSummary {
+		defer lt.printErrorSummary()
+	}
+	// Each test needs a copy because of Parallel
+	serverArgsCopy := serverArgs
+	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
+	lt.setup(
+		config, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+	)
+	lt.runFile(path, config)
+
+	progress.total += lt.progress
+	progress.totalFail += lt.failures
+	progress.totalUnsupported += lt.unsupported
+	now := timeutil.Now()
+	if now.Sub(progress.lastProgress) >= 2*time.Second {
+		progress.lastProgress = now
+		lt.outf("--- total progress: %d statements", progress.total)
 	}
 
 	unsupportedMsg := ""
@@ -4498,98 +3677,6 @@ func RunLogicTestWithDefaultConfig(
 			progress.total, progress.totalFail, unsupportedMsg,
 		)
 	}
-}
-
-// RunSQLLiteLogicTest is the main entry point to run the suite of SQLLite logic
-// tests. It runs logic tests from CockroachDB's fork of sqllogictest:
-//
-//   https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki
-//
-// This fork contains many generated tests created by the SqlLite project that
-// ensure the tested SQL database returns correct statement and query output.
-// The logic tests are reasonably independent of the specific dialect of each
-// database so that they can be retargeted. In fact, the expected output for
-// each test can be generated by one database and then used to verify the output
-// of another database.
-//
-// The tests are run with the default set of configurations specified in
-// configOverride. If empty, the default set of configurations is used.
-//
-// By default, these tests are skipped, unless the `bigtest` flag is specified.
-// The reason for this is that these tests are contained in another repo that
-// must be present on the machine, and because they take a long time to run.
-//
-// See the comments in logic.go for more details.
-func RunSQLLiteLogicTest(t *testing.T, configOverride string) {
-	runSQLLiteLogicTest(t,
-		configOverride,
-		"/test/index/between/*/*.test",
-		"/test/index/commute/*/*.test",
-		"/test/index/delete/*/*.test",
-		"/test/index/in/*/*.test",
-		"/test/index/orderby/*/*.test",
-		"/test/index/orderby_nosort/*/*.test",
-		"/test/index/view/*/*.test",
-
-		"/test/select1.test",
-		"/test/select2.test",
-		"/test/select3.test",
-		"/test/select4.test",
-		"/test/select5.test",
-
-		// TODO(pmattis): Incompatibilities in numeric types.
-		// For instance, we type SUM(int) as a decimal since all of our ints are
-		// int64.
-		// "/test/random/expr/*.test",
-
-		// TODO(pmattis): We don't support unary + on strings.
-		// "/test/index/random/*/*.test",
-		// "/test/random/aggregates/*.test",
-		// "/test/random/groupby/*.test",
-		// "/test/random/select/*.test",
-	)
-}
-
-func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
-	if !*bigtest {
-		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
-	}
-
-	var logicTestPath string
-	if bazel.BuiltWithBazel() {
-		runfilesPath, err := bazel.RunfilesPath()
-		if err != nil {
-			t.Fatal(err)
-		}
-		logicTestPath = filepath.Join(runfilesPath, "external", "com_github_cockroachdb_sqllogictest")
-	} else {
-		logicTestPath = gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-		if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
-			fullPath, err := filepath.Abs(logicTestPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Fatalf("unable to find sqllogictest repo: %s\n"+
-				"git clone https://github.com/cockroachdb/sqllogictest %s",
-				logicTestPath, fullPath)
-			return
-		}
-	}
-
-	// Prefix the globs with the logicTestPath.
-	prefixedGlobs := make([]string, len(globs))
-	for i, glob := range globs {
-		prefixedGlobs[i] = logicTestPath + glob
-	}
-
-	// SQLLite logic tests can be very memory intensive, so we give them larger
-	// limit than other logic tests get.
-	serverArgs := TestServerArgs{
-		maxSQLMemoryLimit: 512 << 20, // 512 MiB
-		// TODO(yuzefovich): remove this once the flake in #84022 is fixed.
-		DisableWorkmemRandomization: true,
-	}
-	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, "", true /* runCCLConfigs */, prefixedGlobs...)
 }
 
 type errorSummaryEntry struct {
@@ -4765,12 +3852,12 @@ func (t *logicTest) finishOne(msg string) {
 
 // printCompletion reports on the completion of all tests in a given
 // input file.
-func (t *logicTest) printCompletion(path string, config testClusterConfig) {
+func (t *logicTest) printCompletion(path string, config logictestbase.TestClusterConfig) {
 	unsupportedMsg := ""
 	if t.unsupported > 0 {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", t.unsupported)
 	}
-	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
+	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
 }
 
@@ -4782,27 +3869,4 @@ func roundFloatsInString(s string) string {
 		}
 		return []byte(fmt.Sprintf("%.6g", f))
 	}))
-}
-
-// configIsInDefaultList returns true if defaultName is one of the default
-// config lists and configName is a config included in that list.
-func configIsInDefaultList(configName, defaultName string) bool {
-	for _, name := range getDefaultConfigListNames(defaultName) {
-		if name == configName {
-			return true
-		}
-	}
-	return false
-}
-
-func getDefaultConfigListNames(name string) []string {
-	switch name {
-	case defaultConfigName:
-		return defaultConfigNames
-	case fiveNodeDefaultConfigName:
-		return fiveNodeDefaultConfigNames
-	case threeNodeTenantDefaultConfigName:
-		return threeNodeTenantDefaultConfigNames
-	}
-	return []string{}
 }

@@ -205,6 +205,7 @@
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/multi-tenant
 /pkg/ccl/upgradeccl/         @cockroachdb/unowned
 /pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
+/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/multiregion
 /pkg/ccl/multitenantccl/     @cockroachdb/multi-tenant
 /pkg/ccl/oidcccl/            @cockroachdb/unowned
@@ -239,6 +240,7 @@
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
 /pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
+/pkg/cmd/generate-logictest/       @cockroachdb/dev-inf
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
 /pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
