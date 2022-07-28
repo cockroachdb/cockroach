@@ -55,12 +55,10 @@ func buildOpaque(
 		}
 		// TODO (Chengxiong): Remove this version gate in 22.2
 		if evalCtx.Settings.Version.IsActive(ctx, clusterversion.EnableDeclarativeSchemaChanger) {
-			scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
+			var err error
+			plan, err = p.SchemaChange(ctx, stmt)
 			if err != nil {
 				return nil, err
-			}
-			if usePlan {
-				plan = scPlan
 			}
 		}
 	}

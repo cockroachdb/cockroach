@@ -105,7 +105,7 @@ func runSqliteLogicTest(t *testing.T, file string) {
 {{- end }}
 
 {{- define "initLogicTest" }}
-{{- if .LogicTest }}	if bazel.BuiltWithBazel() {
+{{ if .LogicTest }}	if bazel.BuiltWithBazel() {
 		var err error
 		logicTestDir, err = bazel.Runfile("pkg/sql/logictest/testdata/logic_test")
 		if err != nil {
@@ -143,31 +143,11 @@ func runSqliteLogicTest(t *testing.T, file string) {
 {{ end }}
 {{- end }}
 
-{{- define "initSqliteLogicTest" }}
-{{- if .SqliteLogicTest }}	if *logictest.Bigtest {
-		if bazel.BuiltWithBazel() {
-			var err error
-			sqliteLogicTestDir, err = bazel.Runfile("external/com_github_cockroachdb_sqllogictest")
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			var err error
-			sqliteLogicTestDir, err = sqlitelogictest.FindLocalLogicTestClone()
-			if err != nil {
-				panic(err)
-			}
-		}
-	}
-{{ end }}
-{{- end }}
-
 {{- define "initFunc" }}
 func init() {
-{{ template "initLogicTest" . }}
-{{- template "initCCLLogicTest" . }}
-{{- template "initExecBuildLogicTest" . }}
-{{- template "initSqliteLogicTest" . }}
+{{- template "initLogicTest" . -}}
+{{- template "initCCLLogicTest" . -}}
+{{- template "initExecBuildLogicTest" . -}}
 }
 {{- end }}
 
@@ -177,7 +157,8 @@ func init() {
 
 package test{{ .Package }}
 
-import (
+import ({{ if .SqliteLogicTest }}
+	"flag"{{ end }}
 	"os"
 	"path/filepath"
 	"testing"
@@ -204,8 +185,24 @@ const configIdx = {{ .ConfigIdx }}
 {{- template "initFunc" . }}
 
 func TestMain(m *testing.M) {
-	{{ if .Ccl }}defer utilccl.TestingEnableEnterprise()()
-	{{ end }}securityassets.SetLoader(securitytest.EmbeddedAssets)
+{{ if .SqliteLogicTest }}	flag.Parse()
+	if *logictest.Bigtest {
+		if bazel.BuiltWithBazel() {
+			var err error
+			sqliteLogicTestDir, err = bazel.Runfile("external/com_github_cockroachdb_sqllogictest")
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			var err error
+			sqliteLogicTestDir, err = sqlitelogictest.FindLocalLogicTestClone()
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+{{ end }}{{ if .Ccl }}	defer utilccl.TestingEnableEnterprise()()
+{{ end }}	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
