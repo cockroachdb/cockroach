@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	uiCmd.AddCommand(makeUILintCmd(d))
 	uiCmd.AddCommand(makeUITestCmd(d))
 	uiCmd.AddCommand(makeUIWatchCmd(d))
+	uiCmd.AddCommand(makeUIE2eCmd(d))
 
 	return uiCmd
 }
@@ -49,6 +51,8 @@ type UIDirectories struct {
 	clusterUI string
 	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
 	dbConsole string
+	// e2eTests is the absolute path to ./pkg/ui/workspaces/e2e-tests.
+	e2eTests string
 	// eslintPlugin is the absolute path to ./pkg/ui/workspaces/eslint-plugin-crdb.
 	eslintPlugin string
 }
@@ -63,6 +67,7 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	return &UIDirectories{
 		clusterUI:    path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
 		dbConsole:    path.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		e2eTests:     path.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
 		eslintPlugin: path.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
 	}, nil
 }
@@ -550,6 +555,73 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run (default: true with --watch)")
 
 	return testCmd
+}
+
+func makeUIE2eCmd(d *dev) *cobra.Command {
+	e2eTestCmd := &cobra.Command{
+		Use:   "e2e -- [args passed to Cypress ...]",
+		Short: "run e2e (Cypress) tests",
+		Long: strings.TrimSpace(`
+Run end-to-end tests with Cypress, spinning up a real local cluster and
+launching test in a real browser. Extra flags are passed directly to the
+'cypress' binary".
+`),
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			ctx := cmd.Context()
+			uiDirs, err := getUIDirs(d)
+			if err != nil {
+				return err
+			}
+
+			workspace, err := d.getWorkspace(ctx)
+			if err != nil {
+				return err
+			}
+
+			// Ensure e2e-tests dependencies are installed
+			installArgv := buildBazelYarnArgv("--cwd", uiDirs.e2eTests, "install")
+			logCommand("bazel", installArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", installArgv...)
+			if err != nil {
+				return fmt.Errorf("unable to install NPM dependencies: %w", err)
+			}
+
+			// Build cockroach (relying on Bazel to short-circuit repeated builds)
+			buildCockroachArgv := []string{
+				"build",
+				"//pkg/cmd/cockroach:cockroach",
+				"--config=with_ui",
+			}
+			logCommand("bazel", buildCockroachArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", buildCockroachArgv...)
+			if err != nil {
+				return fmt.Errorf("unable to build cockroach with UI: %w", err)
+			}
+
+			// Run Cypress tests, passing any extra args through to 'cypress'
+			startCrdbMovrSh := path.Join(uiDirs.e2eTests, "build/start-crdb-movr.sh")
+			runCypressArgv := append(
+				[]string{"bazel"},
+				buildBazelYarnArgv("--cwd", uiDirs.e2eTests, "cy:run")...,
+			)
+			runCypressArgv = append(runCypressArgv, cmd.Flags().Args()...)
+
+			logCommand(startCrdbMovrSh, runCypressArgv...)
+			env := append(
+				os.Environ(),
+				fmt.Sprintf("COCKROACH=%s", path.Join(workspace, "cockroach")),
+			)
+			err = d.exec.CommandContextWithEnv(ctx, env, startCrdbMovrSh, runCypressArgv...)
+			if err != nil {
+				return fmt.Errorf("error while running Cypress tests: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	return e2eTestCmd
 }
 
 // buildBazelYarnArgv returns the provided argv formatted so it can be run with
