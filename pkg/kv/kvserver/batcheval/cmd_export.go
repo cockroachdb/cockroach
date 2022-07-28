@@ -197,6 +197,7 @@ func evalExport(
 			TargetLockConflictBytes: targetLockConflictBytes,
 			StopMidKey:              args.SplitMidKey,
 			ScanStats:               cArgs.ScanStats,
+			IncludeMVCCValueHeader:  args.IncludeMVCCValueHeader,
 		}
 		var summary kvpb.BulkOpSummary
 		var resumeInfo storage.ExportRequestResumeInfo

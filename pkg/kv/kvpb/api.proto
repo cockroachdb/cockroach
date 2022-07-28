@@ -1831,7 +1831,14 @@ message ExportRequest {
 
   FingerprintOptions fingerprint_options = 15 [(gogoproto.nullable) = false];
 
-  // Next ID: 16
+  // IncludeMVCCValueHeader controls whether the MVCCValueHeader is
+  // included in exported bytes. Callers should only set this when all
+  // readers of the returned SST are prepared to parse full a
+  // MVCCValue. Even when set, only fields appropriate for export are
+  // included. See storage.EncodeMVCCValueForExport for details.
+  bool include_mvcc_value_header = 16 [(gogoproto.customname) = "IncludeMVCCValueHeader"];
+
+  // Next ID: 17
 }
 
 message FingerprintOptions {
