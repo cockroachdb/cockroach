@@ -12,6 +12,8 @@ package storage
 
 import (
 	"encoding/binary"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -118,13 +120,34 @@ func (v MVCCValue) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
+		fields := make([]string, 0)
 		w.Printf("{")
 		if !v.LocalTimestamp.IsEmpty() {
-			w.Printf("localTs=%s", v.LocalTimestamp)
+			fields = append(fields, fmt.Sprintf("localTs=%s", v.LocalTimestamp))
 		}
+		if v.ImportEpoch != 0 {
+			fields = append(fields, fmt.Sprintf("importEpoch=%v", v.ImportEpoch))
+		}
+		w.Print(strings.Join(fields, ", "))
 		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
+}
+
+// EncodeMVCCValueForExport strips fields from the MVCCValueHeader that
+// should not get exported out of the cluster.
+//
+//gcassert:inline
+func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
+	// Consider a fast path, where only the roachpb.Value gets exported.
+	// Currently, this only occurs if the value was not imported.
+	if mvccValue.ImportEpoch == 0 {
+		return mvccValue.Value.RawBytes, nil
+	}
+
+	// Manually strip off any non-exportable fields, and re-encode the mvcc value.
+	mvccValue.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
+	return EncodeMVCCValue(mvccValue)
 }
 
 // When running a metamorphic build, disable the simple MVCC value encoding to
