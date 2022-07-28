@@ -91,7 +91,7 @@ func getStreamIngestionStats(
 		stats.ReplicationLagInfo = lagInfo
 	}
 
-	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(details.StreamAddress))
+	client, err := streamclient.NewStreamClient(evalCtx.Ctx(), streamingccl.StreamAddress(details.StreamAddress))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func getStreamIngestionStats(
 	} else {
 		stats.ProducerStatus = &streamStatus
 	}
-	return stats, client.Close()
+	return stats, client.Close(evalCtx.Ctx())
 }
 
 type streamIngestionResumer struct {
@@ -122,7 +122,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	// If there is an existing stream ID, reconnect to it.
 	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
-	client, err := streamclient.NewStreamClient(streamAddress)
+	client, err := streamclient.NewStreamClient(ctx, streamAddress)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		// Completes the producer job in the source cluster.
 		return client.Complete(ctx, streamID)
 	}
-	return errors.CombineErrors(ingestWithClient(), client.Close())
+	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
 }
 
 // Resume is part of the jobs.Resumer interface.
