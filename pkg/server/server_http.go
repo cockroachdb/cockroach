@@ -185,13 +185,9 @@ func makeAdminAuthzCheckHandler(
 		md := forwardAuthenticationMetadata(req.Context(), req)
 		authCtx := metadata.NewIncomingContext(req.Context(), md)
 		// Check the privileges of the requester.
-		_, err := adminAuthzCheck.requireAdminUser(authCtx)
-		if errors.Is(err, errRequiresAdmin) {
-			http.Error(w, "admin privilege required", http.StatusUnauthorized)
-			return
-		} else if err != nil {
-			log.Ops.Infof(authCtx, "web session error: %s", err)
-			http.Error(w, "error checking authentication", http.StatusInternalServerError)
+		err := adminAuthzCheck.requireViewDebugPermission(authCtx)
+		if err != nil {
+			http.Error(w, "admin privilege or VIEWDEBUG system privilege required", http.StatusUnauthorized)
 			return
 		}
 		// Forward the request to the inner handler.

@@ -2834,6 +2834,20 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
 			},
 		},
+		{
+			"requireViewClusterMetadataPermission",
+			underTest.requireViewClusterMetadataPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewDebugPermission",
+			underTest.requireViewDebugPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true,
+			},
+		},
 	}
 	// test system privileges if valid version
 	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
@@ -2844,10 +2858,16 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
 		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
 		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withviewclustermetadata")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
+		sqlDB.Exec(t, "CREATE USER withviewdebug")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 
 		withVaSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvasystemprivilege")
 		withVaRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedsystemprivilege")
 		withVaAndRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedsystemprivilege")
+		withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
+		withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
 
 		tests[0].usernameWantErr[withVaSystemPrivilege] = false
 		tests[1].usernameWantErr[withVaSystemPrivilege] = false
@@ -2858,6 +2878,8 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
 		tests[1].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
 		tests[2].usernameWantErr[withVaAndRedactedSystemPrivilege] = true
+		tests[3].usernameWantErr[withviewclustermetadata] = false
+		tests[4].usernameWantErr[withViewDebug] = false
 
 	}
 	for _, tt := range tests {
