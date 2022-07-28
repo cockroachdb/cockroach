@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"net/url"
 	"strings"
 	"testing"
@@ -101,8 +102,14 @@ func newDatadrivenTestState() datadrivenTestState {
 	}
 }
 
-func (d *datadrivenTestState) cleanup(ctx context.Context) {
+func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
+	// While the testCluster cleanupFns would close the dbConn and servers, close
+	// them manually to ensure all queries finish on tests that share these
+	// resources.
 	for _, db := range d.sqlDBs {
+		if err := backuputils.CheckForInvalidDescriptors(db); err != nil {
+			t.Fatal(err)
+		}
 		db.Close()
 	}
 	for _, s := range d.servers {
@@ -353,12 +360,12 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
 		var lastCreatedServer string
 		ds := newDatadrivenTestState()
-		defer ds.cleanup(ctx)
+		defer ds.cleanup(ctx, t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
 			switch d.Cmd {
 			case "reset":
-				ds.cleanup(ctx)
+				ds.cleanup(ctx, t)
 				ds = newDatadrivenTestState()
 				return ""
 

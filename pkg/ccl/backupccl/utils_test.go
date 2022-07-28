@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -113,6 +114,12 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
+		if tc.Conns[0].Ping() == nil {
+			if err := backuputils.CheckForInvalidDescriptors(tc.Conns[0]); err != nil {
+				t.Fatal(err)
+			}
+			t.Log("No Invalid Descriptors")
+		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
@@ -164,6 +171,12 @@ func backupRestoreTestSetupEmptyWithParams(
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	cleanupFn := func() {
+		if tc.Conns[0].Ping() == nil {
+			if err := backuputils.CheckForInvalidDescriptors(tc.Conns[0]); err != nil {
+				t.Fatal(err)
+			}
+			t.Log("No Invalid Descriptors")
+		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 	}
 
@@ -186,6 +199,12 @@ func createEmptyCluster(
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	cleanupFn := func() {
+		if tc.Conns[0].Ping() == nil {
+			if err := backuputils.CheckForInvalidDescriptors(tc.Conns[0]); err != nil {
+				t.Fatal(err)
+			}
+			t.Log("No Invalid Descriptors")
+		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
