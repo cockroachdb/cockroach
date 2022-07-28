@@ -45,6 +45,8 @@ func TestMVCCValueLocalTimestampNeeded(t *testing.T) {
 			mvccVal.LocalTimestamp = hlc.ClockTimestamp(tc.localTs)
 
 			require.Equal(t, tc.expect, mvccVal.LocalTimestampNeeded(tc.versionTs))
+			mvccVal.StripMVCCValueHeaderForExport()
+			require.Equal(t, true, mvccVal.LocalTimestamp.IsEmpty())
 		})
 	}
 }
@@ -88,16 +90,22 @@ func TestMVCCValueFormat(t *testing.T) {
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
+	valHeaderWithJobId := valHeader
+	valHeaderWithJobId.ClientMeta = enginepb.ClientMeta{ImportJobId: 999}
+
 	testcases := map[string]struct {
 		val    MVCCValue
 		expect string
 	}{
-		"tombstone":        {val: MVCCValue{}, expect: "/<empty>"},
-		"bytes":            {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
-		"int":              {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
+		"tombstone":             {val: MVCCValue{}, expect: "/<empty>"},
+		"bytes":                 {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
+		"int":                   {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
+		"header+tombstone":      {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
+		"header+bytes":          {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
+		"header+int":            {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
+		"headerJobID+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId}, expect: "{localTs=0.000000009,0, ClientMeta={importJobID=999}}/<empty>"},
+		"headerJobID+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId, Value: strVal}, expect: "{localTs=0.000000009,0, ClientMeta={importJobID=999}}/BYTES/foo"},
+		"headerJobID+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId, Value: intVal}, expect: "{localTs=0.000000009,0, ClientMeta={importJobID=999}}/INT/17"},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -117,16 +125,22 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
+	valHeaderWithJobId := valHeader
+	valHeaderWithJobId.ClientMeta = enginepb.ClientMeta{ImportJobId: 999}
+
 	testcases := map[string]struct {
 		val    MVCCValue
 		expect []byte
 	}{
-		"tombstone":        {val: MVCCValue{}, expect: nil},
-		"bytes":            {val: MVCCValue{Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
-		"int":              {val: MVCCValue{Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9}},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9, 0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9, 0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
+		"tombstone":             {val: MVCCValue{}, expect: nil},
+		"bytes":                 {val: MVCCValue{Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
+		"int":                   {val: MVCCValue{Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
+		"header+tombstone":      {val: MVCCValue{MVCCValueHeader: valHeader}, expect: []byte{0x0, 0x0, 0x0, 0x6, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x0}},
+		"header+bytes":          {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x6, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
+		"header+int":            {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x6, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
+		"headerJobID+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId}, expect: []byte{0x0, 0x0, 0x0, 0x9, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x3, 0x8, 0xe7, 0x7}},
+		"headerJobID+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId, Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x9, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x3, 0x8, 0xe7, 0x7, 0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
+		"headerJobID+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithJobId, Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x9, 0x65, 0xa, 0x2, 0x8, 0x9, 0x12, 0x3, 0x8, 0xe7, 0x7, 0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -171,9 +185,11 @@ var mvccValueBenchmarkConfigs = struct {
 	values  map[string]roachpb.Value
 }{
 	headers: map[string]enginepb.MVCCValueHeader{
-		"empty":                  {},
-		"local walltime":         {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}},
-		"local walltime+logical": {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}},
+		"empty":                        {},
+		"local walltime":               {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}},
+		"local walltime+logical":       {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}},
+		"local walltime+jobID":         {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}, ClientMeta: enginepb.ClientMeta{ImportJobId: 4096}},
+		"local walltime+logical+jobID": {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}, ClientMeta: enginepb.ClientMeta{ImportJobId: 4096}},
 	},
 	values: map[string]roachpb.Value{
 		"tombstone": {},

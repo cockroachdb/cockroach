@@ -5603,8 +5603,24 @@ func MVCCExportToSST(
 				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
-			// Export only the inner roachpb.Value, not the MVCCValue header.
-			unsafeValue = mvccValue.Value.RawBytes
+			// Export only the inner roachpb.Value, not the MVCCValue header, if the
+			// point key was not imported (aside: range keys are never imported).
+			//
+			// TODO (msbutler): plumb in progress import job IDs to the export
+			// request, as we only need to preserve the import job ID from in
+			// progress imports.
+			if mvccValue.ClientMeta.ImportJobId == 0 {
+				unsafeValue = mvccValue.Value.RawBytes
+			} else {
+				// Preserve the import job ID, but drop the local timestamp.
+				mvccValue.StripMVCCValueHeaderForExport()
+				unsafeValue, err = EncodeMVCCValue(mvccValue)
+				if err != nil {
+					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+						"repackaging imported mvcc value %s",
+						unsafeKey)
+				}
+			}
 
 			// Skip tombstone records when start time is zero (non-incremental)
 			// and we are not exporting all versions.

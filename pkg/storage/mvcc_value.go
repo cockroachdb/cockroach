@@ -135,9 +135,18 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 		if !v.LocalTimestamp.IsEmpty() {
 			w.Printf("localTs=%s", v.LocalTimestamp)
 		}
+		if v.ClientMeta != (enginepb.ClientMeta{}) {
+			w.Printf(", ClientMeta={importJobID=%v}", v.ClientMeta.ImportJobId)
+		}
 		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
+}
+
+// StripMVCCValueHeaderForExport strips fields from the MVCCValueHeader that
+// should not get exported out of the cluster.
+func (v *MVCCValue)StripMVCCValueHeaderForExport() {
+	v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
 }
 
 // When running a metamorphic build, disable the simple MVCC value encoding to
@@ -283,6 +292,7 @@ func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
 	}
 	var v MVCCValue
 	v.LocalTimestamp = header.LocalTimestamp
+	v.ClientMeta = header.ClientMeta
 	v.Value.RawBytes = buf[headerSize:]
 	return v, nil
 }

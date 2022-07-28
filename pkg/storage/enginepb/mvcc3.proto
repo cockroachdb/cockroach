@@ -170,6 +170,15 @@ message MVCCValueHeader {
   // to stale reads.
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  ClientMeta client_meta = 2 [(gogoproto.nullable) = false];
+}
+
+// ClientMeta contains client-defined metadata for a versioned value
+message ClientMeta {
+  option (gogoproto.equal) = true;
+  // ImportJobID identifies job ID of the import job that imported the versioned value
+  int64 import_job_id = 1;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
