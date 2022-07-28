@@ -11,68 +11,11 @@
 package rules
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
-
-// IsDescriptor returns true for a descriptor-element, i.e. an element which
-// owns its corresponding descriptor.
-func IsDescriptor(e scpb.Element) bool {
-	switch e.(type) {
-	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence, *scpb.AliasType, *scpb.EnumType:
-		return true
-	}
-	return false
-}
-
-func isSubjectTo2VersionInvariant(e scpb.Element) bool {
-	switch e.(type) {
-	case *scpb.Column, *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
-		return true
-	}
-	return false
-}
-
-func isSimpleDependent(e scpb.Element) bool {
-	return !IsDescriptor(e) && !isSubjectTo2VersionInvariant(e)
-}
-
-// Assert that elements can be grouped into three categories when transitioning
-// from PUBLIC to ABSENT:
-// - go via DROPPED iff they're descriptor elements
-// - go via a non-read status iff they're indexes or columns, which are
-//   subject to the two-version invariant.
-// - go direct to ABSENT in all other cases.
-func init() {
-	_ = forEachElement(func(e scpb.Element) error {
-		s0 := opgen.InitialStatus(e, scpb.Status_ABSENT)
-		s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
-		switch s1 {
-		case scpb.Status_OFFLINE, scpb.Status_DROPPED:
-			if IsDescriptor(e) {
-				return nil
-			}
-		case scpb.Status_VALIDATED, scpb.Status_WRITE_ONLY, scpb.Status_DELETE_ONLY:
-			if isSubjectTo2VersionInvariant(e) {
-				return nil
-			}
-		case scpb.Status_ABSENT:
-			if isSimpleDependent(e) {
-				return nil
-			}
-		}
-		panic(errors.AssertionFailedf(
-			"unexpected transition %s -> %s in direction ABSENT for %T (descriptor=%v, 2VI=%v)",
-			s0, s1, e, IsDescriptor(e), isSubjectTo2VersionInvariant(e),
-		))
-	})
-}
 
 // These rules ensure that:
 // - a descriptor element reaches the DROPPED state in the statement txn before
@@ -115,93 +58,6 @@ func init() {
 	)
 }
 
-// Assert that only simple dependents (non-descriptor, non-index, non-column)
-// have screl.ReferencedDescID attributes.
-func init() {
-	_ = forEachElement(func(e scpb.Element) error {
-		if isSimpleDependent(e) {
-			return nil
-		}
-		e = nonNilElement(e)
-		if _, err := screl.Schema.GetAttribute(screl.ReferencedDescID, e); err == nil {
-			panic(errors.AssertionFailedf("%T not expected to have screl.ReferencedDescID attr", e))
-		}
-		return nil
-	})
-}
-
-func getTypeT(element scpb.Element) (*scpb.TypeT, error) {
-	switch e := element.(type) {
-	case *scpb.ColumnType:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.TypeT, nil
-	case *scpb.AliasType:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.TypeT, nil
-	}
-	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.TypeT", element)
-}
-
-// Assert that getTypeT covers all elements with embedded TypeTs.
-func init() {
-	_ = forEachElement(func(e scpb.Element) error {
-		e = nonNilElement(e)
-		return screl.WalkTypes(e, func(t *types.T) error {
-			if _, err := getTypeT(e); err != nil {
-				panic(errors.AssertionFailedf("getTypeT should support %T but doesn't", e))
-			}
-			return nil
-		})
-	})
-}
-
-func getExpression(element scpb.Element) (*scpb.Expression, error) {
-	switch e := element.(type) {
-	case *scpb.ColumnType:
-		if e == nil {
-			return nil, nil
-		}
-		return e.ComputeExpr, nil
-	case *scpb.ColumnDefaultExpression:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.Expression, nil
-	case *scpb.ColumnOnUpdateExpression:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.Expression, nil
-	case *scpb.SecondaryIndexPartial:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.Expression, nil
-	case *scpb.CheckConstraint:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.Expression, nil
-	}
-	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.Expression", element)
-}
-
-// Assert that getExpression covers all elements with embedded expressions.
-func init() {
-	_ = forEachElement(func(e scpb.Element) error {
-		return screl.WalkExpressions(e, func(t *catpb.Expression) error {
-			if _, err := getExpression(e); err != nil {
-				panic(errors.AssertionFailedf("getExpression should support %T but doesn't", e))
-			}
-			return nil
-		})
-	})
-}
-
 // These rules ensure that cross-referencing simple dependent elements reach
 // ABSENT in the same stage right after the referenced descriptor element
 // reaches DROPPED.
@@ -236,19 +92,13 @@ func init() {
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
-				elementTypes(to, func(e scpb.Element) bool {
-					_, err := getTypeT(e)
-					return err == nil && isSimpleDependent(e)
-				}),
+				elementTypes(to, isSimpleDependent, isWithTypeT),
 				toAbsent(from.target, to.target),
 				currentStatus(from.node, scpb.Status_DROPPED),
 				currentStatus(to.node, scpb.Status_ABSENT),
 				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
 					refID := screl.GetDescID(ref)
-					typeT, err := getTypeT(e)
-					if err != nil {
-						panic(err)
-					}
+					typeT := getTypeTOrPanic(e)
 					return typeT != nil && idInIDs(typeT.ClosedTypeIDs, refID)
 				}),
 			}
@@ -262,19 +112,13 @@ func init() {
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
-				elementTypes(to, func(e scpb.Element) bool {
-					_, err := getExpression(e)
-					return err == nil && isSimpleDependent(e)
-				}),
+				elementTypes(to, isSimpleDependent, isWithExpression),
 				toAbsent(from.target, to.target),
 				currentStatus(from.node, scpb.Status_DROPPED),
 				currentStatus(to.node, scpb.Status_ABSENT),
 				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
 					refID := screl.GetDescID(ref)
-					expr, err := getExpression(e)
-					if err != nil {
-						panic(err)
-					}
+					expr := getExpressionOrPanic(e)
 					return expr != nil && (idInIDs(expr.UsesTypeIDs, refID) || idInIDs(expr.UsesSequenceIDs, refID))
 				}),
 			}
