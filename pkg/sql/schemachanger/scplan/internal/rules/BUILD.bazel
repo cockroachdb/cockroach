@@ -4,7 +4,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rules",
     srcs = [
+        "dep_column.go",
         "dep_drop.go",
+        "dep_index.go",
         "dep_index_and_column.go",
         "helpers.go",
         "op_drop.go",
