@@ -292,6 +292,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	if len(details.Tables) > 1 {
+		for _, tab := range details.Tables {
+			if !tab.IsNew {
+				return errors.AssertionFailedf("all tables in multi-table import must be new")
+			}
+		}
+	}
+
 	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
 
 	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
