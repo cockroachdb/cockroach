@@ -81,17 +81,16 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		ValBytes: 4,
 	}
 	replica.mu.Unlock()
-	rs := replicastats.NewReplicaStats(clock, nil)
+	replica.loadStats = NewReplicaLoad(clock, nil)
 	for _, store := range stores {
-		rs.RecordCount(1, store.Node.NodeID)
+		replica.loadStats.batchRequests.RecordCount(1, store.Node.NodeID)
+		replica.loadStats.writeKeys.RecordCount(1, store.Node.NodeID)
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
-	replica.leaseholderStats = rs
-	replica.writeStats = rs
 
 	rangeUsageInfo := rangeUsageInfoForRepl(&replica)
-	QPS, _ := replica.leaseholderStats.AverageRatePerSecond()
-	WPS, _ := replica.writeStats.AverageRatePerSecond()
+	QPS, _ := replica.loadStats.batchRequests.AverageRatePerSecond()
+	WPS, _ := replica.loadStats.writeKeys.AverageRatePerSecond()
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeUsageInfo, roachpb.ADD_VOTER)
 	desc, ok := sp.GetStoreDescriptor(roachpb.StoreID(1))
@@ -198,7 +197,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}
-	replica.leaseholderStats = replicastats.NewReplicaStats(store.Clock(), nil)
+	replica.loadStats = NewReplicaLoad(store.Clock(), nil)
 
 	rangeUsageInfo := rangeUsageInfoForRepl(replica)
 

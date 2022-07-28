@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -468,10 +467,9 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		// rangeInfo code is ripped out of the allocator.
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
 
-		repl.leaseholderStats = replicastats.NewReplicaStats(s.Clock(), nil)
-		repl.leaseholderStats.SetMeanRateForTesting(r.qps)
+		repl.loadStats = NewReplicaLoad(s.Clock(), nil)
+		repl.loadStats.batchRequests.SetMeanRateForTesting(r.qps)
 
-		repl.writeStats = replicastats.NewReplicaStats(s.Clock(), nil)
 		acc.addReplica(replicaWithStats{
 			repl: repl,
 			qps:  r.qps,
