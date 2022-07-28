@@ -45,6 +45,9 @@ const (
 
 	// Schema is for schema descriptors.
 	Schema = "schema"
+
+	// Function is for function descriptors.
+	Function = "function"
 )
 
 // MutationPublicationFilter is used by MakeFirstMutationPublic to filter the
@@ -216,6 +219,9 @@ type Descriptor interface {
 	// HasConcurrentSchemaChanges returns true if declarative schema
 	// changes are currently in progress.
 	HasConcurrentSchemaChanges() bool
+
+	// SkipNamespace is true when a descriptor should not have a namespace record.
+	SkipNamespace() bool
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -798,6 +804,9 @@ type TypeDescriptor interface {
 	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
 	// ordinal refOrdinal.
 	GetReferencingDescriptorID(refOrdinal int) descpb.ID
+	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
+	// type.
+	GetReferencingDescriptorIDs() []descpb.ID
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
@@ -819,6 +828,38 @@ type DefaultPrivilegeDescriptor interface {
 	GetDefaultPrivilegesForRole(catpb.DefaultPrivilegesRole) (*catpb.DefaultPrivilegesForRole, bool)
 	ForEachDefaultPrivilegeForRole(func(catpb.DefaultPrivilegesForRole) error) error
 	GetDefaultPrivilegeDescriptorType() catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
+}
+
+// FunctionDescriptor is an interface around the function descriptor types.
+type FunctionDescriptor interface {
+	Descriptor
+
+	// GetReturnType returns the function's return type.
+	GetReturnType() descpb.FunctionDescriptor_ReturnType
+
+	// GetVolatility returns the function's volatility attribute.
+	GetVolatility() catpb.Function_Volatility
+
+	// GetLeakProof returns the function's leakproof attribute.
+	GetLeakProof() bool
+
+	// GetNullInputBehavior returns the function's attribute on null inputs.
+	GetNullInputBehavior() catpb.Function_NullInputBehavior
+
+	// GetFunctionBody returns the function body string.
+	GetFunctionBody() string
+
+	// GetArgs returns a list of argument definition from the function.
+	GetArgs() []descpb.FunctionDescriptor_Argument
+
+	// GetDependsOn returns a list of IDs of the relation this function depends on.
+	GetDependsOn() []descpb.ID
+
+	// GetDependsOnTypes returns a list of IDs of the types this function depends on.
+	GetDependsOnTypes() []descpb.ID
+
+	// GetDependedOnBy returns a list of back-references of this function.
+	GetDependedOnBy() []descpb.FunctionDescriptor_Reference
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

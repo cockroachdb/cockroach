@@ -32,6 +32,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar WITH GRANT OPTION;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar WITH GRANT OPTION;
 
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
@@ -41,12 +42,14 @@ oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
 456512573  1546506610  0                T              {bar=U*/,foo=U*/}
 456512573  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
+456512573  1546506610  0                f              {bar=X*/,foo=X*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR SELECT, DELETE ON TABLES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR USAGE ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR CREATE ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR CREATE, UPDATE ON SEQUENCES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR EXECUTE ON FUNCTIONS FROM foo, bar;
 
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
@@ -56,12 +59,14 @@ oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                S              {bar=Ca*d*r*w/,foo=Ca*d*r*w/,=r/}
 456512573  1546506610  0                T              {bar=U/,foo=U/}
 456512573  1546506610  0                n              {bar=CU*/,foo=CU*/,=U/}
+456512573  1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL ON TABLES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL ON SEQUENCES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL ON FUNCTIONS FROM foo, bar;
 
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
@@ -71,6 +76,7 @@ oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573  1546506610  0                T              {bar=U/,foo=U/}
 456512573  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573  1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 GRANT foo, bar TO root;
@@ -80,6 +86,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TABLES TO foo, bar WITH 
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON TYPES TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SCHEMAS TO foo, bar WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar WITH GRANT OPTION;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON FUNCTIONS TO foo, bar WITH GRANT OPTION;
 
 # 12 rows should exist, 4 for each role, root, foo and bar.
 query OOOTT colnames,rowsort
@@ -90,20 +97,24 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,foo=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/,foo=C*U*/}
+625980300   1791217281  0                f              {bar=X*/,foo=X*/}
 1062786855  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
 1062786855  2026795574  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
 1062786855  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
 1062786855  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
+1062786855  2026795574  0                f              {bar=X*/,foo=X*/}
 456512573   1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573   1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573   1546506610  0                T              {bar=U/,foo=U/}
 456512573   1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573   1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TYPES FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SCHEMAS FROM foo, bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON FUNCTIONS FROM foo, bar;
 
 # Revoking all will result in rows with empty privileges since the privileges
 # are revoked from the creator role.
@@ -115,24 +126,29 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                S              {}
 625980300   1791217281  0                T              {=U/}
 625980300   1791217281  0                n              {}
+625980300   1791217281  0                f              {}
 1062786855  2026795574  0                r              {}
 1062786855  2026795574  0                S              {}
 1062786855  2026795574  0                T              {=U/}
 1062786855  2026795574  0                n              {}
+1062786855  2026795574  0                f              {}
 456512573   1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573   1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573   1546506610  0                T              {bar=U/,foo=U/}
 456512573   1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573   1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TABLES TO foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON SEQUENCES TO foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON SCHEMAS TO foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TYPES TO foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON TABLES TO bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON SEQUENCES TO bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON SCHEMAS TO bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON TYPES TO bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar GRANT ALL ON FUNCTIONS TO bar;
 
 # remove this block once the GRANT privilege is removed in 22.2
 statement ok
@@ -140,10 +156,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR ALL ON TABLES FROM
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR ALL ON SEQUENCES FROM foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR ALL ON SCHEMAS FROM foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR ALL ON TYPES FROM foo;
+ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR ALL ON FUNCTIONS FROM foo;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar REVOKE GRANT OPTION FOR ALL ON TABLES FROM bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar REVOKE GRANT OPTION FOR ALL ON SEQUENCES FROM bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar REVOKE GRANT OPTION FOR ALL ON SCHEMAS FROM bar;
 ALTER DEFAULT PRIVILEGES FOR ROLE bar REVOKE GRANT OPTION FOR ALL ON TYPES FROM bar;
+ALTER DEFAULT PRIVILEGES FOR ROLE bar REVOKE GRANT OPTION FOR ALL ON FUNCTIONS FROM bar;
 
 # Entries should disappear since the previous ALTER DEFAULT PRIVILEGE commands
 # revert the default privileges to the default state.
@@ -155,6 +173,7 @@ oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573  1546506610  0                T              {bar=U/,foo=U/}
 456512573  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573  1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT USAGE ON TYPES TO foo WITH GRANT OPTION
@@ -169,6 +188,7 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573   1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573   1546506610  0                T              {bar=U/,foo=U/}
 456512573   1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573   1546506610  0                f              {bar=X/,foo=X/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR USAGE ON TYPES FROM foo
@@ -182,3 +202,4 @@ oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
 456512573  1546506610  0                T              {bar=U/,foo=U/}
 456512573  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+456512573  1546506610  0                f              {bar=X/,foo=X/}

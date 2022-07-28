@@ -25,6 +25,15 @@ type FunctionName struct {
 	objName
 }
 
+// MakeFunctionNameFromPrefix returns a FunctionName with the given prefix and
+// function name.
+func MakeFunctionNameFromPrefix(prefix ObjectNamePrefix, object Name) FunctionName {
+	return FunctionName{objName{
+		ObjectName:       object,
+		ObjectNamePrefix: prefix,
+	}}
+}
+
 // Format implements the NodeFormatter interface.
 func (f *FunctionName) Format(ctx *FmtCtx) {
 	f.ObjectNamePrefix.Format(ctx)

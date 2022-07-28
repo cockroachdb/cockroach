@@ -80,6 +80,9 @@ func (p *planner) AlterTableSetSchema(
 	// Check if any objects depend on this table/view/sequence via its name.
 	// If so, then we disallow renaming, otherwise we allow it.
 	for _, dependent := range tableDesc.DependedOnBy {
+		if err := p.maybeFailOnDroppingFunction(ctx, dependent.ID); err != nil {
+			return nil, err
+		}
 		if !dependent.ByID {
 			return nil, p.dependentViewError(
 				ctx, string(tableDesc.DescriptorType()), tableDesc.Name,

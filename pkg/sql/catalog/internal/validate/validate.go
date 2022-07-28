@@ -218,6 +218,8 @@ func (vea *validationErrorAccumulator) decorate(err error) error {
 			err = errors.Wrapf(err, catalog.Schema+" %q (%d)", name, id)
 		case catalog.Type:
 			err = errors.Wrapf(err, catalog.Type+" %q (%d)", name, id)
+		case catalog.Function:
+			err = errors.Wrapf(err, catalog.Function+" %q (%d)", name, id)
 		default:
 			return err
 		}
@@ -252,6 +254,15 @@ type validationDescGetterImpl struct {
 }
 
 var _ catalog.ValidationDescGetter = (*validationDescGetterImpl)(nil)
+
+// GetDescriptor implements the ValidationDescGetter interface.
+func (vdg *validationDescGetterImpl) GetDescriptor(id descpb.ID) (catalog.Descriptor, error) {
+	desc, found := vdg.descriptors[id]
+	if !found || desc == nil {
+		return nil, catalog.WrapDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+	}
+	return desc, nil
+}
 
 // GetDatabaseDescriptor implements the ValidationDescGetter interface.
 func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
@@ -299,6 +310,16 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(
 		return nil, err
 	}
 	return descriptor, err
+}
+
+func (vdg *validationDescGetterImpl) GetFunctionDescriptor(
+	id descpb.ID,
+) (catalog.FunctionDescriptor, error) {
+	desc, found := vdg.descriptors[id]
+	if !found || desc == nil {
+		return nil, catalog.WrapFunctionDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+	}
+	return catalog.AsFunctionDescriptor(desc)
 }
 
 func (vdg *validationDescGetterImpl) addNamespaceEntries(
@@ -422,6 +443,10 @@ func validateNamespace(
 	namespace map[descpb.NameInfo]descpb.ID,
 ) {
 	if desc.GetID() == keys.NamespaceTableID || desc.GetID() == keys.DeprecatedNamespaceTableID {
+		return
+	}
+
+	if desc.SkipNamespace() {
 		return
 	}
 
