@@ -194,6 +194,13 @@ type ColumnStatistic struct {
 	// the approximate distribution of values for that column, represented
 	// by a slice of histogram buckets.
 	Histogram *Histogram
+
+	// DerivedFromInvertedStatistic is set to true if this statistic is for a
+	// non-inverted column set, but was derived from a statistic that was
+	// collected over an inverted column. In this case, the Histogram field will
+	// be empty, and this whole statistic can safely be replaced by the most
+	// recent non-inverted statistic for the same column set.
+	DerivedFromInvertedHistogram bool
 }
 
 // ApplySelectivity updates the distinct count, null count, and histogram

@@ -667,15 +667,17 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 
 			colStat, ok := stats.ColStats.Add(cols)
-			if ok || (colStat.Histogram == nil && needHistogram && !invertedStatistic) {
+			if ok || (colStat.DerivedFromInvertedHistogram && colStat.Histogram == nil && needHistogram && !invertedStatistic) {
 				// Set the statistic if either:
 				// 1. We have no statistic for the current col set at all
 				// 2. The most recent statistic we already found for the current colset
-				//    had no histogram even though we're configured to use histograms,
-				//    and the statistic we just found has a (non-inverted) histogram.
+				//    was derived from an inverted histogram, and therefore doesn't have
+				//    a histogram at all, and the new histogram we just found has a
+				//    non-inverted histogram.
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
 				colStat.AvgSize = float64(stat.AvgSize())
+				colStat.DerivedFromInvertedHistogram = invertedStatistic
 				if needHistogram && !invertedStatistic {
 					// A statistic is inverted if the column is invertible and its
 					// histogram contains buckets of types BYTES.
