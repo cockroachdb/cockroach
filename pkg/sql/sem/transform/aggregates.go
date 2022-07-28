@@ -39,7 +39,12 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 		if err != nil {
 			return false, expr
 		}
-		if fd.Class == tree.AggregateClass {
+		funcCls, err := fd.GetClass()
+		if err != nil {
+			panic(err)
+		}
+
+		if funcCls == tree.AggregateClass {
 			v.Aggregated = true
 			return false, expr
 		}

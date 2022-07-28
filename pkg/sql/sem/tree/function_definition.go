@@ -10,7 +10,11 @@
 
 package tree
 
-import "github.com/lib/pq/oid"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/lib/pq/oid"
+)
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
@@ -141,6 +145,7 @@ func NewFunctionDefinition(
 			props.AmbiguousReturnType = true
 		}
 
+		def[i].FunctionProperties = *props
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{
@@ -167,4 +172,69 @@ var OidToBuiltinName map[oid.Oid]string
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
+
+// String implements the Stringer interface.
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
+
+// TODO(Chengxiong): Remove this method after we moved the
+// "UnsupportedWithIssue" check into function resolver implementation.
+func (fd *FunctionDefinition) undefined() bool {
+	return fd.UnsupportedWithIssue != 0
+}
+
+// GetClass returns function class by going through all overloads. Error is
+// return if it's ambiguous.
+func (fd *FunctionDefinition) GetClass() (FunctionClass, error) {
+	if fd.undefined() {
+		return fd.Class, nil
+	}
+	return getFuncClass(fd.Name, fd.Definition)
+}
+
+// GetReturnLabel returns function class by going through all overloads. Error
+// is return if it's ambiguous.
+func (fd *FunctionDefinition) GetReturnLabel() ([]string, error) {
+	if fd.undefined() {
+		return fd.ReturnLabels, nil
+	}
+	return getFuncReturnLabels(fd.Name, fd.Definition)
+}
+
+// GetHasSequenceArguments returns function class by going through all
+// overloads. Error is return if it's ambiguous.
+func (fd *FunctionDefinition) GetHasSequenceArguments() (bool, error) {
+	if fd.undefined() {
+		return fd.HasSequenceArguments, nil
+	}
+	return getHasSequenceArguments(fd.Name, fd.Definition)
+}
+
+func getFuncClass(fnName string, fns []*Overload) (FunctionClass, error) {
+	ret := fns[0].Class
+	for _, o := range fns {
+		if o.Class != ret {
+			return 0, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function class on %s", fnName)
+		}
+	}
+	return ret, nil
+}
+
+func getFuncReturnLabels(fnName string, fns []*Overload) ([]string, error) {
+	ret := fns[0].ReturnLabels
+	for _, o := range fns {
+		if len(ret) != len(o.ReturnLabels) {
+			return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function return label on %s", fnName)
+		}
+	}
+	return ret, nil
+}
+
+func getHasSequenceArguments(fnName string, fns []*Overload) (bool, error) {
+	ret := fns[0].HasSequenceArguments
+	for _, o := range fns {
+		if ret != o.HasSequenceArguments {
+			return false, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function sequence argument on %s", fnName)
+		}
+	}
+	return ret, nil
+}

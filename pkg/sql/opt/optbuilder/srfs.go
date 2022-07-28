@@ -107,14 +107,26 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
-		if def == nil || def.Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
 
-			if def != nil && len(def.ReturnLabels) > 0 {
-				// Override the computed alias with the one defined in the ReturnLabels. This
-				// satisfies a Postgres quirk where some json functions use different labels
-				// when used in a from clause.
-				alias = def.ReturnLabels[0]
+		if def != nil {
+			funcCls, err := def.GetClass()
+			if err != nil {
+				panic(err)
 			}
+			if funcCls != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
+				returnLabels, err := def.GetReturnLabel()
+				if err != nil {
+					panic(err)
+				}
+				if len(returnLabels) > 0 {
+					// Override the computed alias with the one defined in the ReturnLabels. This
+					// satisfies a Postgres quirk where some json functions use different labels
+					// when used in a from clause.
+					alias = returnLabels[0]
+				}
+				outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
+			}
+		} else {
 			outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 		}
 

@@ -540,11 +540,15 @@ func (b *Builder) buildFunction(
 		return b.buildUDF(f, def, inScope, outScope, outCol)
 	}
 
-	if isAggregate(def) {
+	if isAgg, err := isAggregate(def); err != nil {
+		panic(err)
+	} else if isAgg {
 		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
 	}
 
-	if isWindow(def) {
+	if isWin, err := isWindow(def); err != nil {
+		panic(err)
+	} else if isWin {
 		panic(errors.AssertionFailedf("window function should have been replaced"))
 	}
 
@@ -557,11 +561,13 @@ func (b *Builder) buildFunction(
 	out = b.factory.ConstructFunction(args, &memo.FunctionPrivate{
 		Name:       def.Name,
 		Typ:        f.ResolvedType(),
-		Properties: &def.FunctionProperties,
+		Properties: &f.ResolvedOverload().FunctionProperties,
 		Overload:   f.ResolvedOverload(),
 	})
 
-	if isGenerator(def) {
+	if isGen, err := isGenerator(def); err != nil {
+		panic(err)
+	} else if isGen {
 		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
 	}
 

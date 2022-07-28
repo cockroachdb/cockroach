@@ -875,20 +875,36 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
-func isAggregate(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.AggregateClass
+func isAggregate(def *tree.FunctionDefinition) (bool, error) {
+	cls, err := def.GetClass()
+	if err != nil {
+		return false, err
+	}
+	return cls == tree.AggregateClass, nil
 }
 
-func isWindow(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.WindowClass
+func isWindow(def *tree.FunctionDefinition) (bool, error) {
+	cls, err := def.GetClass()
+	if err != nil {
+		return false, err
+	}
+	return cls == tree.WindowClass, nil
 }
 
-func isGenerator(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.GeneratorClass
+func isGenerator(def *tree.FunctionDefinition) (bool, error) {
+	cls, err := def.GetClass()
+	if err != nil {
+		return false, err
+	}
+	return cls == tree.GeneratorClass, nil
 }
 
-func isSQLFn(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.SQLClass
+func isSQLFn(def *tree.FunctionDefinition) (bool, error) {
+	cls, err := def.GetClass()
+	if err != nil {
+		return false, err
+	}
+	return cls == tree.SQLClass, nil
 }
 
 func newGroupingError(name tree.Name) error {
