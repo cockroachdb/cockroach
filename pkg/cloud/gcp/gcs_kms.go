@@ -45,6 +45,11 @@ type kmsURIParams struct {
 	bearerToken   string
 }
 
+// resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
+//
+// NB: If a parameter is added to this method, it must also be added to
+// `gcs_kms_connection.go` so that an External Connection object can accurately
+// represent the KMS URI.
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.Query().Get(AssumeRoleParam))
 	params := kmsURIParams{
@@ -73,7 +78,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	kmsURIParams := resolveKMSURIParams(*kmsURI)
 
 	// Client options to authenticate and start a GCS KMS session.
-	// Currently only accepting json of service account.
+	// Currently, only accepting json of service account.
 	var credentialsOpt []option.ClientOption
 
 	switch kmsURIParams.auth {
@@ -117,7 +122,6 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
-
 	if err != nil {
 		return nil, err
 	}

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -131,6 +132,7 @@ func restoreWithRetry(
 	dataToRestore restorationData,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
@@ -157,6 +159,7 @@ func restoreWithRetry(
 				dataToRestore,
 				job,
 				encryption,
+				kmsEnv,
 			)
 			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
 				break
@@ -227,6 +230,7 @@ func restore(
 	dataToRestore restorationData,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
 	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
@@ -380,6 +384,7 @@ func restore(
 			importSpanChunks,
 			dataToRestore.getPKIDs(),
 			encryption,
+			kmsEnv,
 			dataToRestore.getRekeys(),
 			dataToRestore.getTenantRekeys(),
 			endTime,
@@ -413,9 +418,10 @@ func loadBackupSQLDescs(
 	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
 	backupManifests, sz, err := backupinfo.LoadBackupManifests(ctx, mem, details.URIs,
-		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
+		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
@@ -1239,8 +1245,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig,
+		p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
-		ctx, &mem, p, details, details.Encryption,
+		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
 		return err
@@ -1325,7 +1333,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 	var remappedStats []*stats.TableStatisticProto
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
-		latestBackupManifest)
+		&kmsEnv, latestBackupManifest)
 	if err == nil {
 		remappedStats = remapRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
 			details.TableDescs)
@@ -1397,6 +1405,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			preData,
 			r.job,
 			details.Encryption,
+			&kmsEnv,
 		)
 		if err != nil {
 			return err
@@ -1432,6 +1441,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			mainData,
 			r.job,
 			details.Encryption,
+			&kmsEnv,
 		)
 		if err != nil {
 			return err

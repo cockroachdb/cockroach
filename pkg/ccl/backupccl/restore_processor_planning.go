@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,6 +63,7 @@ func distRestore(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	tableRekeys []execinfrapb.TableRekey,
 	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
@@ -72,13 +73,16 @@ func distRestore(
 	var noTxn *kv.Txn
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupencryption.BackupKMSEnv{
-			Settings: execCtx.ExecCfg().Settings,
-			Conf:     &execCtx.ExecCfg().ExternalIODirConfig,
-		})
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, kmsEnv)
 		if err != nil {
 			return err
 		}
+		defer func() {
+			err := kms.Close()
+			if err != nil {
+				log.Infof(ctx, "failed to close KMS: %+v", err)
+			}
+		}()
 
 		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
 		if err != nil {

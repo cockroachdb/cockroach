@@ -12,7 +12,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -40,6 +40,7 @@ func distBackupPlanSpecs(
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
@@ -48,7 +49,6 @@ func distBackupPlanSpecs(
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
 	user := execCtx.User()
-	execCfg := execCtx.ExecCfg()
 
 	var spanPartitions []sql.SpanPartition
 	var introducedSpanPartitions []sql.SpanPartition
@@ -67,13 +67,16 @@ func distBackupPlanSpecs(
 	}
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupencryption.BackupKMSEnv{
-			Settings: execCfg.Settings,
-			Conf:     &execCfg.ExternalIODirConfig,
-		})
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
+		defer func() {
+			err := kms.Close()
+			if err != nil {
+				log.Infof(ctx, "failed to close KMS: %+v", err)
+			}
+		}()
 
 		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
 			encryption.KMSInfo.EncryptedDataKey)

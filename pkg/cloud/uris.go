@@ -94,3 +94,12 @@ func ParseRoleString(roleString string) (assumeRole string, delegateRoles []stri
 	}
 	return assumeRole, delegateRoles
 }
+
+// ConstructRoleString constructs a comma separated string of roles from a list
+// of intermediate delegate roles and the final assumed role.
+func ConstructRoleString(assumeRole string, delegateRoles []string) string {
+	if len(delegateRoles) == 0 {
+		return assumeRole
+	}
+	return strings.Join(delegateRoles, ",") + "," + assumeRole
+}

@@ -6,7 +6,10 @@ go_library(
     srcs = ["registry.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cloud/nodelocal"],
+    deps = [
+        "//pkg/cloud/gcp",
+        "//pkg/cloud/nodelocal",
+    ],
 )
 
 get_x_data(name = "get_x_data")
