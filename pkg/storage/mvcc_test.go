@@ -5763,7 +5763,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 						if !ok {
 							break
 						}
-						for _, rkv := range it.RangeKeys() {
+						for _, rkv := range it.RangeKeys().AsRangeKeyValues() {
 							require.Less(t, expectIndex, len(d.after), "not enough expectations; at unexpected range:", rkv.RangeKey.String())
 							require.EqualValues(t, d.after[expectIndex], rkv.RangeKey, "range key is not equal")
 							expectIndex++
