@@ -354,16 +354,16 @@ func shouldRetry(err error) bool {
 		return true
 	}
 
-	switch e := err.(type) {
-	case *http2.StreamError:
-		fmt.Println("@@@ retrying custom", e)
-		if e.Code == http2.ErrCodeInternal {
+	switch {
+	case errors.HasType(err, (*http2.StreamError)(nil)):
+		fmt.Println("@@@ retrying custom", err)
+		if err.(*http2.StreamError).Code == http2.ErrCodeInternal {
 			fmt.Println("@@@ retrying custom")
 			return true
 		}
 	}
 
-	if e, ok := err.(interface{ Unwrap() error }); ok {
+	if e, ok := err.(errors.Wrapper); ok {
 		return shouldRetry(e.Unwrap())
 	}
 
@@ -371,13 +371,17 @@ func shouldRetry(err error) bool {
 	return false
 }
 
+type temporary interface {
+	Temporary() bool
+}
+
 // defaultShouldRetry is google-cloud's default predicate for determining
 // whether an error can be retried.
 //
-// TODO(rui): Currently this code is copied as-is from the google-cloud-go SDK
-// in order to get the default retry behavior on top of our own customizations.
-// There's currently a PR in google-cloud-go that exposes the default retry
-// function, so this can be removed when it is merged:
+// TODO(rui): Currently this code is essentially copied as-is from the
+// google-cloud-go SDK in order to get the default retry behavior on top of our
+// own customizations. There's currently a PR in google-cloud-go that exposes
+// the default retry function, so this can be removed when it is merged:
 // https://github.com/googleapis/google-cloud-go/pull/6370
 func defaultShouldRetry(err error) bool {
 	if err == nil {
@@ -387,28 +391,29 @@ func defaultShouldRetry(err error) bool {
 		return true
 	}
 
-	switch e := err.(type) {
-	case *net.OpError:
-		if strings.Contains(e.Error(), "use of closed network connection") {
+	switch {
+	case errors.HasType(err, (*net.OpError)(nil)):
+		if strings.Contains(err.(*net.OpError).Error(), "use of closed network connection") {
 			// TODO: check against net.ErrClosed (go 1.16+) instead of string
 			return true
 		}
-	case *googleapi.Error:
+	case errors.HasType(err, (*googleapi.Error)(nil)):
 		// Retry on 408, 429, and 5xx, according to
 		// https://cloud.google.com/storage/docs/exponential-backoff.
+		e := err.(*googleapi.Error)
 		return e.Code == 408 || e.Code == 429 || (e.Code >= 500 && e.Code < 600)
-	case *url.Error:
+	case errors.HasType(err, (*url.Error)(nil)):
 		// Retry socket-level errors ECONNREFUSED and ECONNRESET (from syscall).
 		// Unfortunately the error type is unexported, so we resort to string
 		// matching.
 		retriable := []string{"connection refused", "connection reset"}
 		for _, s := range retriable {
-			if strings.Contains(e.Error(), s) {
+			if strings.Contains(err.(*url.Error).Error(), s) {
 				return true
 			}
 		}
-	case interface{ Temporary() bool }:
-		if e.Temporary() {
+	case errors.HasInterface(err, (temporary)(nil)):
+		if err.(temporary).Temporary() {
 			return true
 		}
 	}
@@ -420,7 +425,7 @@ func defaultShouldRetry(err error) bool {
 		return true
 	}
 	// Unwrap is only supported in go1.13.x+
-	if e, ok := err.(interface{ Unwrap() error }); ok {
+	if e, ok := err.(errors.Wrapper); ok {
 		return defaultShouldRetry(e.Unwrap())
 	}
 	return false
