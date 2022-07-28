@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -131,6 +132,62 @@ var (
 			}
 		},
 	)
+	indexDependents = screl.Schema.Def4("index-dependents",
+		"index", "dep",
+		"table-id", "index-id", func(
+			index, dep, tableID, indexID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				dep.Type(
+					(*scpb.IndexName)(nil),
+					(*scpb.IndexPartitioning)(nil),
+					(*scpb.SecondaryIndexPartial)(nil),
+					(*scpb.IndexComment)(nil),
+					(*scpb.IndexColumn)(nil),
+				),
+				index.Type(
+					(*scpb.PrimaryIndex)(nil),
+					(*scpb.TemporaryIndex)(nil),
+					(*scpb.SecondaryIndex)(nil),
+				),
+				joinOnIndexID(dep, index, "table-id", "index-id"),
+			}
+		})
+
+	indexContainsColumn = screl.Schema.Def6(
+		"indexContainsColumn",
+		"index", "column", "index-column", "table-id", "column-id", "index-id", func(
+			index, column, indexColumn, tableID, columnID, indexID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				index.AttrEqVar(screl.IndexID, indexID),
+				indexColumn.Type((*scpb.IndexColumn)(nil)),
+				indexColumn.AttrEqVar(screl.DescID, rel.Blank),
+				joinOnColumnID(column, indexColumn, tableID, columnID),
+				joinOnIndexID(index, indexColumn, tableID, indexID),
+			}
+		})
+
+	sourceIndexNotSet = screl.Schema.Def1("sourceIndexNotSet", "index", func(
+		index rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			index.AttrNeq(screl.SourceIndexID, catid.IndexID(0)),
+		}
+	})
+
+	columnInPrimaryIndexSwap = screl.Schema.Def6(
+		"columnInPrimaryIndexSwap",
+		"index", "column", "index-column", "table-id", "column-id", "index-id", func(
+			index, column, indexColumn, tableID, columnID, indexID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				indexContainsColumn(
+					index, column, indexColumn, tableID, columnID, indexID,
+				),
+				sourceIndexNotSet(index),
+			}
+		})
 )
 
 func forEachElement(fn func(element scpb.Element) error) error {
