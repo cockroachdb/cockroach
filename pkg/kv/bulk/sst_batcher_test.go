@@ -308,7 +308,8 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
 			reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs,
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts,
+				kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs,
 			)
 			require.NoError(t, err)
 
@@ -360,4 +361,77 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			require.Equal(t, expected, got)
 		})
 	}
+}
+
+var DummyImportEpoch uint32 = 3
+
+func TestImportEpochIngestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
+		false, true, mem.MakeConcurrentBoundAccount(), reqs)
+	require.NoError(t, err)
+	defer b.Close(ctx)
+
+	startKey := storageutils.PointKey("a", 1)
+	endKey := storageutils.PointKey("b", 1)
+	value := storageutils.StringValueRaw("myHumbleValue")
+	mvccValue, err := storage.DecodeMVCCValue(value)
+	require.NoError(t, err)
+
+	require.NoError(t, b.AddMVCCKeyWithImportEpoch(ctx, startKey, value, DummyImportEpoch))
+	require.NoError(t, b.AddMVCCKeyWithImportEpoch(ctx, endKey, value, DummyImportEpoch))
+	require.NoError(t, b.Flush(ctx))
+
+	// Check that ingested key contains the dummy job ID
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    startKey.Key,
+			EndKey: endKey.Key,
+		},
+		MVCCFilter: kvpb.MVCCFilter_All,
+		StartTime:  hlc.Timestamp{},
+	}
+
+	header := kvpb.Header{Timestamp: s.Clock().Now()}
+	resp, roachErr := kv.SendWrappedWith(ctx,
+		kvDB.NonTransactionalSender(), header, req)
+	require.NoError(t, roachErr.GoError())
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: startKey.Key,
+		UpperBound: endKey.Key,
+	}
+
+	checkedJobId := false
+	for _, file := range resp.(*kvpb.ExportResponse).Files {
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, iterOpts)
+		require.NoError(t, err)
+		defer it.Close()
+		for it.SeekGE(storage.NilKey); ; it.Next() {
+			ok, err := it.Valid()
+			require.NoError(t, err)
+			if !ok {
+				break
+			}
+			rawVal, err := it.UnsafeValue()
+			require.NoError(t, err)
+			val, err := storage.DecodeMVCCValue(rawVal)
+			require.NoError(t, err)
+			require.Equal(t, startKey, it.UnsafeKey())
+			require.Equal(t, mvccValue.Value, val.Value)
+			require.Equal(t, DummyImportEpoch, val.ImportEpoch)
+			require.Equal(t, hlc.ClockTimestamp{}, val.LocalTimestamp)
+			checkedJobId = true
+		}
+	}
+	require.Equal(t, true, checkedJobId)
 }
