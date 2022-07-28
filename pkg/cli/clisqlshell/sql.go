@@ -84,8 +84,6 @@ Informational
   \du [USER]        list the specified user, or list the users for all databases if no user is specified.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
   \dd TABLE         show details about constraints on the specified table.
-  \xchangefeed TABLES [WITH options]
-					(EXPERIMENTAL) start a changefeed on the specified tables and display the results, disabling input.
 
 Formatting
   \x [on|off]       toggle records display format.
@@ -1367,18 +1365,6 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\statement-diag`:
 		return c.handleStatementDiag(cmd[1:], loopState, errState)
 
-	case `\xchangefeed`:
-		if c.sqlExecCtx.TerminalOutput {
-			undo, err := c.setupChangefeedOutput()
-			if err != nil {
-				c.exitErr = err
-				return errState
-			}
-			c.iCtx.afterRun = undo
-		}
-		c.concatLines = `EXPERIMENTAL CHANGEFEED FOR` + line[len(cmd[0]):]
-		return cliRunStatement
-
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
@@ -1822,8 +1808,19 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	if err := c.iCtx.maybeWrapStatement(context.Background(), c.concatLines, c); err != nil {
+		c.exitErr = err
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		if c.iCtx.errExit {
+			return cliStop
+		}
+		return nextState
+	}
 	if c.iCtx.afterRun != nil {
 		defer c.iCtx.afterRun()
+		c.iCtx.afterRun = nil
 	}
 
 	// Once we send something to the server, the txn status may change arbitrarily.
@@ -2173,6 +2170,20 @@ func (c *cliState) configurePreShellDefaults(
 		}
 		c.sqlCtx.SetStmts = nil
 		c.sqlCtx.ExecStmts = append(setStmts, c.sqlCtx.ExecStmts...)
+	}
+
+	if c.sqlExecCtx.TerminalOutput {
+		c.iCtx.addStatementWrapper(statementWrapper{
+			Pattern: createSinklessChangefeed,
+			Wrapper: func(ctx context.Context, statement string, state *cliState) error {
+				undo, err := c.setupChangefeedOutput()
+				if err != nil {
+					return err
+				}
+				c.iCtx.afterRun = undo
+				return nil
+			},
+		})
 	}
 
 	return cleanupFn, nil
