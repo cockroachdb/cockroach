@@ -60,6 +60,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
 	m := NewMaterializer(
+		nil, /* allocator */
 		flowCtx,
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: c},
@@ -137,6 +138,7 @@ func BenchmarkMaterializer(b *testing.B) {
 					b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 					for i := 0; i < b.N; i++ {
 						m := NewMaterializer(
+							nil, /* allocator */
 							flowCtx,
 							0, /* processorID */
 							colexecargs.OpWithMetaInfo{Root: input},
@@ -184,6 +186,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 	}
 
 	m := NewMaterializer(
+		nil, /* allocator */
 		flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{
@@ -227,6 +230,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 	for i := 0; i < b.N; i++ {
 		m := NewMaterializer(
+			nil, /* allocator */
 			flowCtx,
 			1, /* processorID */
 			colexecargs.OpWithMetaInfo{Root: c},

@@ -18,8 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -64,6 +66,7 @@ const (
 type ParallelUnorderedSynchronizer struct {
 	colexecop.InitHelper
 
+	allocator *colmem.Allocator
 	inputs    []colexecargs.OpWithMetaInfo
 	inputCtxs []context.Context
 	// cancelLocalInput stores context cancellation functions for each of the
@@ -129,8 +132,9 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 // increment the passed-in WaitGroup and decrement when done. It is also
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
+// - allocator must use a memory account that is not shared with any other user.
 func NewParallelUnorderedSynchronizer(
-	inputs []colexecargs.OpWithMetaInfo, wg *sync.WaitGroup,
+	allocator *colmem.Allocator, inputs []colexecargs.OpWithMetaInfo, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -139,6 +143,7 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch[i] = make(chan struct{}, 1)
 	}
 	return &ParallelUnorderedSynchronizer{
+		allocator:         allocator,
 		inputs:            inputs,
 		inputCtxs:         make([]context.Context, len(inputs)),
 		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
@@ -379,6 +384,7 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 			}
 			s.lastReadInputIdx = msg.inputIdx
 			if msg.meta != nil {
+				colexecutils.AccountForMetadata(s.allocator, msg.meta)
 				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
 				continue
 			}
@@ -466,7 +472,14 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 
 	// Done.
 	s.setState(parallelUnorderedSynchronizerStateDone)
-	return s.bufferedMeta
+	bufferedMeta := s.bufferedMeta
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	s.bufferedMeta = nil
+	// The caller takes ownership of the metadata, so we can release all of the
+	// allocations.
+	s.allocator.ReleaseAll()
+	return bufferedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.

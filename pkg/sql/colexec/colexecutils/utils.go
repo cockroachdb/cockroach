@@ -12,8 +12,10 @@ package colexecutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -316,5 +318,17 @@ func init() {
 	DefaultSelectionVector = make([]int, coldata.MaxBatchSize)
 	for i := range DefaultSelectionVector {
 		DefaultSelectionVector[i] = i
+	}
+}
+
+// AccountForMetadata registers the memory footprint of meta with the allocator.
+func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.ProducerMetadata) {
+	for i := range meta {
+		// Perform the memory accounting for the LeafTxnFinalState metadata
+		// since it might be of non-trivial size.
+		if ltfs := meta[i].LeafTxnFinalState; ltfs != nil {
+			memUsage := roachpb.Spans(ltfs.RefreshSpans).MemUsage()
+			allocator.AdjustMemoryUsage(memUsage)
+		}
 	}
 }
