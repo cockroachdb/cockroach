@@ -249,6 +249,21 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	b.ms.ValCount++
 }
 
+func (b *SSTBatcher) AddMVCCKeyWithImportID(
+	ctx context.Context, key storage.MVCCKey, value []byte, importJobID int64,
+) error {
+	mvccVal, err := storage.DecodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	mvccVal.MVCCValueHeader.ClientMeta.ImportJobId = importJobID
+	encVal, err := storage.EncodeMVCCValue(mvccVal)
+	if err != nil {
+		return err
+	}
+	return b.AddMVCCKey(ctx, key, encVal)
+}
+
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look like the backup.
@@ -310,8 +325,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	if !b.disallowShadowingBelow.IsEmpty() {
 		b.updateMVCCStats(key, value)
 	}
-
-	return b.sstWriter.Put(key, value)
+	return b.sstWriter.PutRawMVCC(key, value)
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.

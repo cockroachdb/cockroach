@@ -477,6 +477,15 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if log.V(5) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
+		// TODO(msbutler): figure out what import job ID to encode in MVCC Keys that
+		// are part of an in progress IMPORT. The central question: do we assign a
+		// new import job ID to the in progress IMPORT? If so, could we do that
+		// before ingestion, and write the new job ID here?
+		//
+		// Further, I don't think keys from a completed import need to preserve
+		// their import job ID. Ideally, this could be resolved on the backup side:
+		// i.e. an Export request will only preserve the jobId on keys a part of an
+		// in progress IMPORT.
 		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
