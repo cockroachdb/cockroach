@@ -31,6 +31,7 @@ func populatedMVCCValueHeader() MVCCValueHeader {
 	allFieldsSet := MVCCValueHeader{
 		LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1, Logical: 1},
 		OmitInRangefeeds: true,
+		ImportEpoch:      1,
 	}
 	allFieldsSet.KVNemesisSeq.Set(123)
 	return allFieldsSet
