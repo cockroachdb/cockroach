@@ -566,7 +566,7 @@ func GetNeededNonVoters(numVoters, zoneConfigNonVoterCount, clusterNodes int) in
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
 	ctx context.Context, conf roachpb.SpanConfig, desc *roachpb.RangeDescriptor,
-) (action AllocatorAction, priority float64) {
+) (action AllocatorAction, adjustedPriority float64) {
 	if a.StorePool == nil {
 		// Do nothing if storePool is nil for some unittests.
 		action = AllocatorNoop
@@ -625,17 +625,9 @@ func (a *Allocator) ComputeAction(
 		return action, action.Priority()
 	}
 
-	return a.computeAction(ctx, conf, desc.Replicas().VoterDescriptors(),
-		desc.Replicas().NonVoterDescriptors())
+	voterReplicas := desc.Replicas().VoterDescriptors()
+	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 
-}
-
-func (a *Allocator) computeAction(
-	ctx context.Context,
-	conf roachpb.SpanConfig,
-	voterReplicas []roachpb.ReplicaDescriptor,
-	nonVoterReplicas []roachpb.ReplicaDescriptor,
-) (action AllocatorAction, adjustedPriority float64) {
 	// NB: The ordering of the checks in this method is intentional. The order in
 	// which these actions are returned by this method determines the relative
 	// priority of the actions taken on a given range. We want this to be
