@@ -10,6 +10,12 @@
 
 package colinfo
 
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+
 // TTLDefaultExpirationColumnName is the column name representing the expiration
 // column for TTL.
 const TTLDefaultExpirationColumnName = "crdb_internal_expiration"
+
+// DefaultTTLExpirationExpr is default TTL expression when
+// ttl_expiration_expression is not specified
+var DefaultTTLExpirationExpr = catpb.Expression(TTLDefaultExpirationColumnName)
