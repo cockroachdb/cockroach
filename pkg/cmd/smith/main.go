@@ -30,6 +30,12 @@ const description = `
 generator inspired by SQLsmith. See https://github.com/anse1/sqlsmith for more
 about the SQLsmith project.
 
+Statements span multiple lines, with blank lines between each statement. One way
+to search whole multi-line statements with regular expressions is to use awk
+with RS="", for example:
+
+  smith -num 10000 | awk 'BEGIN {RS="";ORS="\n\n"} /regex/' | less
+
 Usage:
   [COCKROACH_RANDOM_SEED=1234] %[1]s [options] [sqlsmith-go options]
 
@@ -100,6 +106,7 @@ func main() {
 	rng, seed := randutil.NewPseudoRand()
 	fmt.Print("-- COCKROACH_RANDOM_SEED=", seed, "\n")
 
+	// Gather our sqlsmith options from command-line arguments.
 	var smitherOpts []sqlsmith.SmitherOption
 	for _, arg := range flags.Args() {
 		if opt, ok := smitherOptMap[arg]; ok {
@@ -112,6 +119,7 @@ func main() {
 		}
 	}
 
+	// Connect to an external database for schema information.
 	var db *gosql.DB
 	if *url != "" {
 		var err error
@@ -128,6 +136,7 @@ func main() {
 		fmt.Println("-- connected to", *url)
 	}
 
+	// Create our smither.
 	smither, err := sqlsmith.NewSmither(db, rng, smitherOpts...)
 	if err != nil {
 		fmt.Println(err)
@@ -135,6 +144,7 @@ func main() {
 	}
 	defer smither.Close()
 
+	// Finally, generate num statements (or expressions).
 	fmt.Println("-- num", *num)
 	if *expr {
 		fmt.Println("-- expr")
