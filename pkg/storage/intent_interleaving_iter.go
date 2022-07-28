@@ -934,9 +934,9 @@ func (i *intentInterleavingIter) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (i *intentInterleavingIter) RangeKeys() []MVCCRangeKeyValue {
+func (i *intentInterleavingIter) RangeKeys() MVCCRangeKeyStack {
 	if _, hasRange := i.HasPointAndRange(); !hasRange {
-		return []MVCCRangeKeyValue{}
+		return MVCCRangeKeyStack{}
 	}
 	return i.iter.RangeKeys()
 }

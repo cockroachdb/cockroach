@@ -186,7 +186,7 @@ func (i *MVCCIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (i *MVCCIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+func (i *MVCCIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return i.i.RangeKeys()
 }
 

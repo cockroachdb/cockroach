@@ -168,13 +168,13 @@ type SimpleMVCCIterator interface {
 	// empty span if there are none. The returned keys are only valid until the
 	// next iterator call.
 	RangeBounds() roachpb.Span
-	// RangeKeys returns all range keys (with different timestamps) at the current
-	// key position, or an empty list if there are none. When at a point key, it
-	// will return all range keys overlapping that point key. The keys are only
-	// valid until the next iterator operation. For details on range keys, see
-	// comment on SimpleMVCCIterator, or this tech note:
+	// RangeKeys returns a stack of all range keys (with different timestamps) at
+	// the current key position. When at a point key, it will return all range
+	// keys overlapping that point key. The stack is only valid until the next
+	// iterator operation. For details on range keys, see comment on
+	// SimpleMVCCIterator, or this tech note:
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
-	RangeKeys() []MVCCRangeKeyValue
+	RangeKeys() MVCCRangeKeyStack
 }
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.

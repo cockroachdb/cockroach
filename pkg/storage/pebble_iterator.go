@@ -663,10 +663,12 @@ func (p *pebbleIterator) EngineRangeBounds() (roachpb.Span, error) {
 }
 
 // RangeKeys implements the MVCCIterator interface.
-func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
-	bounds := p.RangeBounds()
+func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	rangeKeys := p.iter.RangeKeys()
-	rangeKVs := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
+	stack := MVCCRangeKeyStack{
+		Bounds:   p.RangeBounds(),
+		Versions: make(MVCCRangeKeyVersions, 0, len(rangeKeys)),
+	}
 
 	for _, rangeKey := range rangeKeys {
 		timestamp, err := DecodeMVCCTimestampSuffix(rangeKey.Suffix)
@@ -675,16 +677,12 @@ func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
 			// we follow UnsafeKey()'s example and silently skip them.
 			continue
 		}
-		rangeKVs = append(rangeKVs, MVCCRangeKeyValue{
-			RangeKey: MVCCRangeKey{
-				StartKey:  bounds.Key,
-				EndKey:    bounds.EndKey,
-				Timestamp: timestamp,
-			},
-			Value: rangeKey.Value,
+		stack.Versions = append(stack.Versions, MVCCRangeKeyVersion{
+			Timestamp: timestamp,
+			Value:     rangeKey.Value,
 		})
 	}
-	return rangeKVs
+	return stack
 }
 
 // EngineRangeKeys implements the EngineIterator interface.

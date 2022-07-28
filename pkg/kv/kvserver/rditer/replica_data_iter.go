@@ -341,7 +341,7 @@ func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 
 // RangeKeys exposes RangeKeys from underlying iterator. See
 // storage.SimpleMVCCIterator for details.
-func (ri *ReplicaMVCCDataIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+func (ri *ReplicaMVCCDataIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return ri.it.RangeKeys()
 }
 

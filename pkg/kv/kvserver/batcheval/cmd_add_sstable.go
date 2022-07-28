@@ -417,7 +417,7 @@ func EvalAddSSTable(
 			} else if !ok {
 				break
 			}
-			for _, rkv := range rangeIter.RangeKeys() {
+			for _, rkv := range rangeIter.RangeKeys().AsRangeKeyValues() {
 				if err = readWriter.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
 					return result.Result{}, err
 				}
@@ -517,7 +517,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			break
 		}
 
-		for _, rkv := range iter.RangeKeys() {
+		for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
 			if err := rkv.RangeKey.Validate(); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "SST contains invalid range key")
 			}

@@ -154,7 +154,7 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				rangeKeysStart = append(rangeKeysStart[:0], rangeBounds.Key...)
 
 				// Emit events for these MVCC range tombstones, in chronological order.
-				rangeKeys := i.RangeKeys()
+				rangeKeys := i.RangeKeys().AsRangeKeyValues()
 				for i := len(rangeKeys) - 1; i >= 0; i-- {
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeBounds.Key, 0)
@@ -272,7 +272,7 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 					// additional MVCC range tombstones below StartTime that cover this
 					// point. We need to find a more performant way to handle this.
 					if !hasRange || !storage.HasRangeKeyBetween(
-						i.RangeKeys(), reorderBuf[l].Val.Value.Timestamp, ts) {
+						i.RangeKeys().AsRangeKeyValues(), reorderBuf[l].Val.Value.Timestamp, ts) {
 						// TODO(sumeer): find out if it is deliberate that we are not populating
 						// PrevValue.Timestamp.
 						reorderBuf[l].Val.PrevValue.RawBytes = val

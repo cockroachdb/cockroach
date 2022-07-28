@@ -75,8 +75,8 @@ type MVCCRangeKey struct {
 }
 ```
 
-A range key stores an encoded `MVCCValue`, similarly to `MVCCKey`. They are
-often paired as an `MVCCRangeKeyValue`:
+A range key stores an encoded `MVCCValue`, similarly to `MVCCKey`. They can be
+paired as an `MVCCRangeKeyValue`:
 
 ```go
 type MVCCRangeKeyValue struct {
@@ -122,12 +122,31 @@ exist between the bounds `[a-d)`, and `c` is within those bounds. The same is
 true for `a@5`, even though it is above both MVCC range tombstones. It is up to
 the iterator caller to interpret the range keys as appropriate relative to the
 point key. It follows that all range keys overlapping a key will be pulled into
-memory at once, but we assume that overlapping range keys will be few. More on
-MVCC iteration later.
+memory at once, but we assume that overlapping range keys will be few.
 
-In the KV API, however, this distinction doesn't really matter: `Get(c)` at
-timestamp >= 5 would return nothing, while `Get(b)` would return `b5`. Again,
-more on this later.
+This is represented as a specialized compact data structure,
+`MVCCRangeKeyStack`, where all range keys have the same bounds due to
+fragmentation (described below):
+
+```go
+type MVCCRangeKeyStack struct {
+	Bounds   roachpb.Span
+	Versions MVCCRangeKeyVersions
+}
+
+type MVCCRangeKeyVersions []MVCCRangeKeyVersion
+
+type MVCCRangeKeyVersion struct {
+	Timestamp hlc.Timestamp
+	Value     []byte // encoded MVCCValue
+}
+```
+
+In the KV API, however, the relationship between point keys and range keys
+doesn't really matter: `Get(c)` at timestamp >= 5 would simply return nothing,
+while `Get(b)` would return `b5`. More on this later.
+
+### Fragmentation
 
 Range keys do not have a stable, discrete identity, and should be considered a
 continuum: they may be partially removed or replaced, merged or fragmented by
@@ -161,7 +180,7 @@ Pebble: `[a-b)@1`, `[b-c)@2`, `[b-c)@1`, and `[c-d)@2`. Similarly, clearing
 `[b-d)@2` would merge the remaining keys back into `[a-c)@1`.
 
 This implies that all range keys exposed for a specific key position all have
-the same key bounds.
+the same key bounds, as shown in `MVCCRangeKeyStack`.
 
 Fragmentation is beneficial because it makes all range key properties local,
 which avoids incurring unnecessary access costs across SSTs and CRDB ranges when
@@ -268,7 +287,7 @@ The properties of point and range keys are accessed via:
 * `RangeBounds()`: start and end bounds of range keys overlapping the current
   position, if any.
 * `RangeKeys()`: all range keys at the current key position (i.e. at all
-  timestamps), as `[]MVCCRangeKeyValue`.
+  timestamps), as `MVCCRangeKeyStack`.
 
 During iteration with `IterKeyTypePointsAndRanges`, range keys are emitted at
 their start key and at every overlapping point key. Consider a modified
