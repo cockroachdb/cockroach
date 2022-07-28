@@ -78,7 +78,7 @@ oprules
   from: index-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
     - joinOnDescID($relation, $index, $relation-id)
     - joinTarget($relation, $relation-target)
     - joinTargetNode($index, $index-target, $index-node)
