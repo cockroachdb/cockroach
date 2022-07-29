@@ -86,7 +86,9 @@ func TestDropDatabaseCascadeDuringImportsFails(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 
-	_, err := db.Exec(`DROP DATABASE "fooBarBaz" CASCADE`)
+	_, err := db.Exec(`
+SET use_declarative_schema_changer=off;
+DROP DATABASE "fooBarBaz" CASCADE`)
 	require.Regexp(t, `cannot drop a database or a schema with OFFLINE tables, ensure `+
 		dbName+`\.public\.`+tableName+` is dropped or made public before dropping`, err)
 	pgErr := new(pq.Error)
