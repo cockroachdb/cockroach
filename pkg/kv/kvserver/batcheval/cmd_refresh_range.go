@@ -93,12 +93,8 @@ func refreshRange(
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
-			rangeKVs := iter.RangeKeys()
-			if len(rangeKVs) == 0 { // defensive
-				return errors.Errorf("expected range key at %s not found", key)
-			}
 			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-				key.Key, rangeKVs[0].RangeKey.Timestamp)
+				key.Key, iter.RangeKeys().Versions[0].Timestamp)
 		}
 
 		if !key.IsValue() {

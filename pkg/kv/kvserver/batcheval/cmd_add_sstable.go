@@ -417,15 +417,16 @@ func EvalAddSSTable(
 			} else if !ok {
 				break
 			}
-			for _, rkv := range rangeIter.RangeKeys() {
-				if err = readWriter.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
+			rangeKeys := rangeIter.RangeKeys()
+			for _, v := range rangeKeys.Versions {
+				if err = readWriter.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
 					return result.Result{}, err
 				}
 				if sstToReqTS.IsSet() {
 					readWriter.LogLogicalOp(storage.MVCCDeleteRangeOpType, storage.MVCCLogicalOpDetails{
-						Key:       rkv.RangeKey.StartKey,
-						EndKey:    rkv.RangeKey.EndKey,
-						Timestamp: rkv.RangeKey.Timestamp,
+						Key:       rangeKeys.Bounds.Key,
+						EndKey:    rangeKeys.Bounds.EndKey,
+						Timestamp: v.Timestamp,
 					})
 				}
 			}
@@ -517,26 +518,28 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			break
 		}
 
-		for _, rkv := range iter.RangeKeys() {
-			if err := rkv.RangeKey.Validate(); err != nil {
+		rangeKeys := iter.RangeKeys()
+		for _, v := range rangeKeys.Versions {
+			rangeKey := rangeKeys.AsRangeKey(v)
+			if err := rangeKey.Validate(); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "SST contains invalid range key")
 			}
-			if sstTimestamp.IsSet() && rkv.RangeKey.Timestamp != sstTimestamp {
+			if sstTimestamp.IsSet() && v.Timestamp != sstTimestamp {
 				return errors.AssertionFailedf(
 					"SST has unexpected timestamp %s (expected %s) for range key %s",
-					rkv.RangeKey.Timestamp, sstTimestamp, rkv.RangeKey)
+					v.Timestamp, sstTimestamp, rangeKeys.Bounds)
 			}
-			value, err := storage.DecodeMVCCValue(rkv.Value)
+			value, err := storage.DecodeMVCCValue(v.Value)
 			if err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"SST contains invalid range key value for range key %s", rkv.RangeKey)
+					"SST contains invalid range key value for range key %s", rangeKey)
 			}
 			if !value.IsTombstone() {
-				return errors.AssertionFailedf("SST contains non-tombstone range key %s", rkv.RangeKey)
+				return errors.AssertionFailedf("SST contains non-tombstone range key %s", rangeKey)
 			}
 			if value.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
 				return errors.AssertionFailedf("SST contains non-empty MVCC value header for range key %s",
-					rkv.RangeKey)
+					rangeKey)
 			}
 		}
 	}

@@ -204,9 +204,9 @@ func (s *testIterator) RangeBounds() roachpb.Span {
 	return roachpb.Span{}
 }
 
-// RangeTombstones implements SimpleMVCCIterator.
-func (s *testIterator) RangeKeys() []storage.MVCCRangeKeyValue {
-	return []storage.MVCCRangeKeyValue{}
+// RangeKeys implements SimpleMVCCIterator.
+func (s *testIterator) RangeKeys() storage.MVCCRangeKeyStack {
+	return storage.MVCCRangeKeyStack{}
 }
 
 func TestInitResolvedTSScan(t *testing.T) {

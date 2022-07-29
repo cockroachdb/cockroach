@@ -22,7 +22,6 @@ import (
 	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -499,19 +498,88 @@ func TestMVCCRangeKeyValidate(t *testing.T) {
 	}
 }
 
-func TestFirstRangeKeyAbove(t *testing.T) {
+func TestMVCCRangeKeyStackCanMergeRight(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeKVs := []MVCCRangeKeyValue{
-		rangeKV("a", "f", 6, MVCCValue{}),
-		rangeKV("a", "f", 4, MVCCValue{}),
-		rangeKV("a", "f", 3, MVCCValue{}),
-		rangeKV("a", "f", 1, MVCCValue{}),
+	testcases := map[string]struct {
+		lhs, rhs MVCCRangeKeyStack
+		expect   bool
+	}{
+		"empty stacks don't merge": {
+			rangeKeyStack("", "", nil),
+			rangeKeyStack("", "", nil),
+			false},
+
+		"empty lhs doesn't merge": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{1: {}}),
+			false},
+
+		"empty rhs doesn't merge": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{1: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{}),
+			false},
+
+		"stacks merge": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			true},
+
+		"missing lhs version end": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
+
+		"missing rhs version end": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 3: {}}),
+			false},
+
+		"different version timestamp": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 2: {}, 1: {}}),
+			false},
+
+		"different version value": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: tombstoneLocalTS(9), 1: {}}),
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
+
+		"bounds not touching": {
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("c", "d", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
+
+		"overlapping range keys don't merge": {
+			rangeKeyStack("a", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("b", "d", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
+
+		"same range keys don't merge": {
+			rangeKeyStack("a", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("a", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
+
+		"wrong order don't merge": {
+			rangeKeyStack("b", "c", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			rangeKeyStack("a", "b", map[int]MVCCValue{5: {}, 3: {}, 1: {}}),
+			false},
 	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.lhs.CanMergeRight(tc.rhs))
+		})
+	}
+}
+
+func TestMVCCRangeKeyStackFirstAbove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{6: {}, 4: {}, 3: {}, 1: {}})
 
 	testcases := []struct {
-		ts     int64
-		expect int64
+		ts     int
+		expect int
 	}{
 		{0, 1},
 		{1, 1},
@@ -524,51 +592,109 @@ func TestFirstRangeKeyAbove(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
-			rkv, ok := FirstRangeKeyAbove(rangeKVs, hlc.Timestamp{WallTime: tc.ts})
+			v, ok := rangeKeys.FirstAbove(wallTS(tc.ts))
 			if tc.expect == 0 {
 				require.False(t, ok)
-				require.Empty(t, rkv)
+				require.Empty(t, v)
 			} else {
 				require.True(t, ok)
-				require.Equal(t, rangeKV("a", "f", int(tc.expect), MVCCValue{}), rkv)
+				require.Equal(t, rangeKeyVersion(tc.expect, MVCCValue{}), v)
 			}
 		})
 	}
 }
 
-func TestHasRangeKeyBetween(t *testing.T) {
+func TestMVCCRangeKeyStackFirstBelow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeKVs := []MVCCRangeKeyValue{
-		rangeKV("a", "f", 5, MVCCValue{}),
-		rangeKV("a", "f", 1, MVCCValue{}),
-	}
+	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{6: {}, 4: {}, 3: {}, 1: {}})
 
 	testcases := []struct {
-		upper, lower int
+		ts     int
+		expect int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 1},
+		{3, 3},
+		{4, 4},
+		{5, 4},
+		{6, 6},
+		{7, 6},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
+			v, ok := rangeKeys.FirstBelow(wallTS(tc.ts))
+			if tc.expect == 0 {
+				require.False(t, ok)
+				require.Empty(t, v)
+			} else {
+				require.True(t, ok)
+				require.Equal(t, rangeKeyVersion(tc.expect, MVCCValue{}), v)
+			}
+		})
+	}
+}
+
+func TestMVCCRangeKeyStackHasBetween(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{5: {}, 1: {}})
+
+	testcases := []struct {
+		lower, upper int
 		expect       bool
 	}{
 		{0, 0, false},
-		{0, 1, false}, // wrong order
-		{1, 0, true},
+		{1, 0, false}, // wrong order
+		{0, 1, true},
 		{1, 1, true},
-		{0, 2, false}, // wrong order
-		{4, 6, false}, // wrong order
-		{6, 4, true},
+		{2, 0, false}, // wrong order
+		{6, 4, false}, // wrong order
+		{4, 6, true},
 		{5, 5, true},
 		{4, 4, false},
 		{6, 6, false},
-		{4, 2, false},
-		{0, 9, false}, // wrong order
-		{9, 0, true},
+		{2, 4, false},
+		{9, 0, false}, // wrong order
+		{0, 9, true},
 	}
 	for _, tc := range testcases {
-		t.Run(fmt.Sprintf("%d,%d", tc.upper, tc.lower), func(t *testing.T) {
-			if util.RaceEnabled && tc.upper < tc.lower {
-				require.Panics(t, func() { HasRangeKeyBetween(rangeKVs, wallTS(tc.upper), wallTS(tc.lower)) })
-			} else {
-				require.Equal(t, tc.expect, HasRangeKeyBetween(rangeKVs, wallTS(tc.upper), wallTS(tc.lower)))
+		t.Run(fmt.Sprintf("%d,%d", tc.lower, tc.upper), func(t *testing.T) {
+			require.Equal(t, tc.expect, rangeKeys.HasBetween(wallTS(tc.lower), wallTS(tc.upper)))
+		})
+	}
+}
+
+func TestMVCCRangeKeyStackTrim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}})
+
+	testcases := []struct {
+		from, to int
+		expect   []int
+	}{
+		{0, 10, []int{7, 5, 3}},
+		{10, 0, []int{}}, // wrong order
+		{0, 0, []int{}},
+		{0, 2, []int{}},
+		{8, 9, []int{}},
+		{3, 7, []int{7, 5, 3}},
+		{4, 7, []int{7, 5}},
+		{4, 6, []int{5}},
+		{5, 6, []int{5}},
+		{4, 5, []int{5}},
+		{5, 5, []int{5}},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d,%d", tc.from, tc.to), func(t *testing.T) {
+			expect := rangeKeyStack("a", "f", nil)
+			for _, ts := range tc.expect {
+				expect.Versions = append(expect.Versions, rangeKeyVersion(ts, MVCCValue{}))
 			}
+
+			require.Equal(t, expect, rangeKeys.Trim(wallTS(tc.from), wallTS(tc.to)))
 		})
 	}
 }
@@ -605,6 +731,37 @@ func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
 	return MVCCRangeKeyValue{
 		RangeKey: rangeKey(start, end, ts),
 		Value:    valueBytes,
+	}
+}
+
+func rangeKeyStack(start, end string, versions map[int]MVCCValue) MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{
+		Bounds:   roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)},
+		Versions: rangeKeyVersions(versions),
+	}
+}
+
+func rangeKeyVersions(v map[int]MVCCValue) MVCCRangeKeyVersions {
+	versions := make([]MVCCRangeKeyVersion, len(v))
+	var timestamps []int
+	for i := range v {
+		timestamps = append(timestamps, i)
+	}
+	sort.Ints(timestamps)
+	for i, ts := range timestamps {
+		versions[len(versions)-1-i] = rangeKeyVersion(ts, v[ts])
+	}
+	return versions
+}
+
+func rangeKeyVersion(ts int, v MVCCValue) MVCCRangeKeyVersion {
+	valueRaw, err := EncodeMVCCValue(v)
+	if err != nil {
+		panic(err)
+	}
+	return MVCCRangeKeyVersion{
+		Timestamp: wallTS(ts),
+		Value:     valueRaw,
 	}
 }
 

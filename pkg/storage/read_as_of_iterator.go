@@ -110,8 +110,8 @@ func (f *ReadAsOfIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys is always empty since this iterator never surfaces rangeKeys.
-func (f *ReadAsOfIterator) RangeKeys() []MVCCRangeKeyValue {
-	return []MVCCRangeKeyValue{}
+func (f *ReadAsOfIterator) RangeKeys() MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{}
 }
 
 // updateValid updates i.valid and i.err based on the underlying iterator, and
@@ -130,7 +130,9 @@ func (f *ReadAsOfIterator) advance() {
 			return
 		}
 
-		if !f.asOf.IsEmpty() && f.asOf.Less(f.iter.UnsafeKey().Timestamp) {
+		key := f.iter.UnsafeKey()
+
+		if f.asOf.Less(key.Timestamp) {
 			// Skip keys above the asOf timestamp, regardless of type of key (e.g. point or range)
 			f.iter.Next()
 		} else if hasPoint, hasRange := f.iter.HasPointAndRange(); !hasPoint && hasRange {
@@ -155,31 +157,25 @@ func (f *ReadAsOfIterator) advance() {
 		} else if !hasRange {
 			// On a valid key without a range key
 			return
-		} else if f.asOfRangeKeyShadows() {
+			// TODO (msbutler): ensure this caches range key values (#84379) before
+			// the 22.2 branch cut, else we face a steep perf cliff for RESTORE with
+			// range keys.
+		} else if f.iter.RangeKeys().HasBetween(key.Timestamp, f.asOf) {
 			// The latest range key, as of system time, shadows the latest point key.
 			// This key is therefore deleted as of system time.
 			f.iter.NextKey()
 		} else {
-			// On a valid key that potentially shadows range key(s)
+			// On a valid key that potentially shadows range key(s).
 			return
 		}
 	}
 }
 
-// asOfRangeKeyShadows returns true if there exists a range key at or below the asOf timestamp
-// that shadows the latest point key
-//
-// TODO (msbutler): ensure this function caches range key values (#84379) before
-// the 22.2 branch cut, else we face a steep perf cliff for RESTORE with range keys.
-func (f *ReadAsOfIterator) asOfRangeKeyShadows() (shadows bool) {
-	rangeKeys := f.iter.RangeKeys()
-	if f.asOf.IsEmpty() {
-		return f.iter.UnsafeKey().Timestamp.LessEq(rangeKeys[0].RangeKey.Timestamp)
-	}
-	return HasRangeKeyBetween(rangeKeys, f.asOf, f.iter.UnsafeKey().Timestamp)
-}
-
-// NewReadAsOfIterator constructs a ReadAsOfIterator.
+// NewReadAsOfIterator constructs a ReadAsOfIterator. If asOf is not set, the
+// iterator reads the most recent data.
 func NewReadAsOfIterator(iter SimpleMVCCIterator, asOf hlc.Timestamp) *ReadAsOfIterator {
+	if asOf.IsEmpty() {
+		asOf = hlc.MaxTimestamp
+	}
 	return &ReadAsOfIterator{iter: iter, asOf: asOf}
 }

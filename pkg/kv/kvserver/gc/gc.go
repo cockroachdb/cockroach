@@ -855,7 +855,8 @@ func processReplicatedRangeTombstones(
 		if !ok {
 			break
 		}
-		rangeKeys := iter.RangeKeys()
+		// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
+		rangeKeys := iter.RangeKeys().AsRangeKeyValues()
 
 		if idx := sort.Search(len(rangeKeys), func(i int) bool {
 			return rangeKeys[i].RangeKey.Timestamp.LessEq(gcThreshold)

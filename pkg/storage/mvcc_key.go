@@ -11,13 +11,13 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -365,6 +365,11 @@ type MVCCRangeKey struct {
 	Timestamp hlc.Timestamp
 }
 
+// Bounds returns the range key bounds as a Span.
+func (k MVCCRangeKey) Bounds() roachpb.Span {
+	return roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}
+}
+
 // Clone returns a copy of the range key.
 func (k MVCCRangeKey) Clone() MVCCRangeKey {
 	// k is already a copy, but byte slices must be cloned.
@@ -439,39 +444,228 @@ func (k MVCCRangeKey) Validate() (err error) {
 	}
 }
 
-// FirstRangeKeyAbove does a binary search for the first range key at or above
-// the given timestamp. It assumes the range keys are ordered in descending
-// timestamp order, as returned by SimpleMVCCIterator.RangeKeys(). Returns false
-// if no matching range key was found.
-//
-// TODO(erikgrinaker): Consider using a new type for []MVCCRangeKeyValue as
-// returned by SimpleMVCCIterator.RangeKeys(), and add this as a method.
-func FirstRangeKeyAbove(rangeKeys []MVCCRangeKeyValue, ts hlc.Timestamp) (MVCCRangeKeyValue, bool) {
-	// This is kind of odd due to sort.Search() semantics: we do a binary search
-	// for the first range tombstone that's below the timestamp, then return the
-	// previous range tombstone if any.
-	if i := sort.Search(len(rangeKeys), func(i int) bool {
-		return rangeKeys[i].RangeKey.Timestamp.Less(ts)
-	}); i > 0 {
-		return rangeKeys[i-1], true
-	}
-	return MVCCRangeKeyValue{}, false
+// MVCCRangeKeyStack represents a stack of range key fragments as returned
+// by SimpleMVCCIterator.RangeKeys(). All fragments have the same key bounds,
+// and are ordered from newest to oldest.
+type MVCCRangeKeyStack struct {
+	Bounds   roachpb.Span
+	Versions MVCCRangeKeyVersions
 }
 
-// HasRangeKeyBetween checks whether an MVCC range key exists between the two
-// given timestamps (in order). It assumes the range keys are ordered in
-// descending timestamp order, as returned by SimpleMVCCIterator.RangeKeys().
-func HasRangeKeyBetween(rangeKeys []MVCCRangeKeyValue, upper, lower hlc.Timestamp) bool {
-	if len(rangeKeys) == 0 {
+// MVCCRangeKeyVersions represents a stack of range key fragment versions.
+type MVCCRangeKeyVersions []MVCCRangeKeyVersion
+
+// MVCCRangeKeyVersion represents a single range key fragment version.
+type MVCCRangeKeyVersion struct {
+	Timestamp hlc.Timestamp
+	Value     []byte
+}
+
+// AsRangeKey returns an MVCCRangeKey for the given version. Byte slices
+// are shared with the stack.
+func (s MVCCRangeKeyStack) AsRangeKey(v MVCCRangeKeyVersion) MVCCRangeKey {
+	return MVCCRangeKey{
+		StartKey:  s.Bounds.Key,
+		EndKey:    s.Bounds.EndKey,
+		Timestamp: v.Timestamp,
+	}
+}
+
+// AsRangeKeys converts the stack into a slice of MVCCRangeKey. Byte slices
+// are shared with the stack.
+func (s MVCCRangeKeyStack) AsRangeKeys() []MVCCRangeKey {
+	rangeKeys := make([]MVCCRangeKey, 0, len(s.Versions))
+	for _, v := range s.Versions {
+		rangeKeys = append(rangeKeys, s.AsRangeKey(v))
+	}
+	return rangeKeys
+}
+
+// AsRangeKeyValue returns an MVCCRangeKeyValue for the given version. Byte
+// slices are shared with the stack.
+func (s MVCCRangeKeyStack) AsRangeKeyValue(v MVCCRangeKeyVersion) MVCCRangeKeyValue {
+	return MVCCRangeKeyValue{
+		RangeKey: s.AsRangeKey(v),
+		Value:    v.Value,
+	}
+}
+
+// AsRangeKeyValues converts the stack into a slice of MVCCRangeKeyValue. Byte
+// slices are shared with the stack.
+func (s MVCCRangeKeyStack) AsRangeKeyValues() []MVCCRangeKeyValue {
+	kvs := make([]MVCCRangeKeyValue, 0, len(s.Versions))
+	for _, v := range s.Versions {
+		kvs = append(kvs, s.AsRangeKeyValue(v))
+	}
+	return kvs
+}
+
+// CanMergeRight returns true if the current stack will merge with the given
+// right-hand stack. The key bounds must touch exactly, i.e. the left-hand
+// EndKey must equal the right-hand Key.
+func (s MVCCRangeKeyStack) CanMergeRight(r MVCCRangeKeyStack) bool {
+	if s.IsEmpty() || s.Len() != r.Len() || !s.Bounds.EndKey.Equal(r.Bounds.Key) {
 		return false
 	}
-	if util.RaceEnabled && upper.Less(lower) {
-		panic(errors.AssertionFailedf("HasRangeKeyBetween given upper %s <= lower %s", upper, lower))
+	for i := range s.Versions {
+		if !s.Versions[i].Equal(r.Versions[i]) {
+			return false
+		}
 	}
-	if rkv, ok := FirstRangeKeyAbove(rangeKeys, lower); ok {
+	return true
+}
+
+// Clone clones the stack.
+func (s MVCCRangeKeyStack) Clone() MVCCRangeKeyStack {
+	// TODO(erikgrinaker): We can optimize this by using a single memory
+	// allocation for all byte slices in the entire stack.
+	s.Bounds = s.Bounds.Clone()
+	s.Versions = s.Versions.Clone()
+	return s
+}
+
+// Covers returns true if any range key in the stack covers the given point key.
+func (s MVCCRangeKeyStack) Covers(k MVCCKey) bool {
+	return s.Versions.Covers(k.Timestamp) && s.Bounds.ContainsKey(k.Key)
+}
+
+// CoversTimestamp returns true if any range key in the stack covers the given timestamp.
+func (s MVCCRangeKeyStack) CoversTimestamp(ts hlc.Timestamp) bool {
+	return s.Versions.Covers(ts)
+}
+
+// FirstAbove does a binary search for the first range key version at or above
+// the given timestamp. Returns false if no matching range key was found.
+func (s MVCCRangeKeyStack) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	return s.Versions.FirstAbove(ts)
+}
+
+// FirstBelow does a binary search for the first range key version at or below
+// the given timestamp. Returns false if no matching range key was found.
+func (s MVCCRangeKeyStack) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	return s.Versions.FirstBelow(ts)
+}
+
+// HasBetween checks whether an MVCC range key exists between the two given
+// timestamps (both inclusive, in order).
+func (s MVCCRangeKeyStack) HasBetween(lower, upper hlc.Timestamp) bool {
+	return s.Versions.HasBetween(lower, upper)
+}
+
+// IsEmpty returns true if the stack is empty (no versions).
+func (s MVCCRangeKeyStack) IsEmpty() bool {
+	return s.Versions.IsEmpty()
+}
+
+// Len returns the number of versions in the stack.
+func (s MVCCRangeKeyStack) Len() int {
+	return len(s.Versions)
+}
+
+// Timestamps returns the timestamps of all versions.
+func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
+	return s.Versions.Timestamps()
+}
+
+// Trim trims the versions to the time span [from, to] (both inclusive).
+func (s MVCCRangeKeyStack) Trim(from, to hlc.Timestamp) MVCCRangeKeyStack {
+	s.Versions = s.Versions.Trim(from, to)
+	return s
+}
+
+// Clone clones the versions.
+func (v MVCCRangeKeyVersions) Clone() MVCCRangeKeyVersions {
+	c := make(MVCCRangeKeyVersions, len(v))
+	for i, version := range v {
+		c[i] = version.Clone()
+	}
+	return c
+}
+
+// Covers returns true if any version in the stack is above the given timestamp.
+func (v MVCCRangeKeyVersions) Covers(ts hlc.Timestamp) bool {
+	return !v.IsEmpty() && ts.LessEq(v[0].Timestamp)
+}
+
+// FirstAbove does a binary search for the first range key version at or above
+// the given timestamp. Returns false if no matching range key was found.
+func (v MVCCRangeKeyVersions) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	// This is kind of odd due to sort.Search() semantics: we do a binary search
+	// for the first range key that's below the timestamp, then return the
+	// previous range key if any.
+	if i := sort.Search(len(v), func(i int) bool {
+		return v[i].Timestamp.Less(ts)
+	}); i > 0 {
+		return v[i-1], true
+	}
+	return MVCCRangeKeyVersion{}, false
+}
+
+// FirstBelow does a binary search for the first range key version at or below
+// the given timestamp. Returns false if no matching range key was found.
+func (v MVCCRangeKeyVersions) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	if i := sort.Search(len(v), func(i int) bool {
+		return v[i].Timestamp.LessEq(ts)
+	}); i < len(v) {
+		return v[i], true
+	}
+	return MVCCRangeKeyVersion{}, false
+}
+
+// HasBetween checks whether an MVCC range key exists between the two given
+// timestamps (both inclusive, in order).
+func (v MVCCRangeKeyVersions) HasBetween(lower, upper hlc.Timestamp) bool {
+	if version, ok := v.FirstAbove(lower); ok {
 		// Consider equal timestamps to be "between". This shouldn't really happen,
 		// since MVCC enforces point and range keys can't have the same timestamp.
-		return rkv.RangeKey.Timestamp.LessEq(upper)
+		return version.Timestamp.LessEq(upper)
 	}
 	return false
+}
+
+// IsEmpty returns true if the stack is empty (no versions).
+func (v MVCCRangeKeyVersions) IsEmpty() bool {
+	return len(v) == 0
+}
+
+// Timestamps returns the timestamps of all versions.
+func (v MVCCRangeKeyVersions) Timestamps() []hlc.Timestamp {
+	timestamps := make([]hlc.Timestamp, 0, len(v))
+	for _, version := range v {
+		timestamps = append(timestamps, version.Timestamp)
+	}
+	return timestamps
+}
+
+// Trim trims the versions to the time span [from, to] (both inclusive).
+func (v MVCCRangeKeyVersions) Trim(from, to hlc.Timestamp) MVCCRangeKeyVersions {
+	// We assume that to will often be near the current time, and use a linear
+	// rather than a binary search, which will often match on the first range key.
+	start := len(v)
+	for i, version := range v {
+		if version.Timestamp.LessEq(to) {
+			start = i
+			break
+		}
+	}
+	v = v[start:]
+
+	// We then use a binary search to find the lower bound.
+	end := sort.Search(len(v), func(i int) bool {
+		return v[i].Timestamp.Less(from)
+	})
+	return v[:end]
+}
+
+// Clone clones the version.
+func (v MVCCRangeKeyVersion) Clone() MVCCRangeKeyVersion {
+	if v.Value != nil {
+		v.Value = append([]byte(nil), v.Value...)
+	}
+	return v
+}
+
+// Equal returns true if the two versions are equal.
+func (v MVCCRangeKeyVersion) Equal(o MVCCRangeKeyVersion) bool {
+	return v.Timestamp.Equal(o.Timestamp) && bytes.Equal(v.Value, o.Value)
 }

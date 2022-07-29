@@ -176,16 +176,17 @@ func TestMVCCHistories(t *testing.T) {
 					break
 				}
 				hasData = true
-				buf.Printf("rangekey: %s/[", iter.RangeBounds())
-				for i, rangeKV := range iter.RangeKeys() {
-					val, err := DecodeMVCCValue(rangeKV.Value)
+				rangeKeys := iter.RangeKeys()
+				buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
+				for i, version := range rangeKeys.Versions {
+					val, err := DecodeMVCCValue(version.Value)
 					if err != nil {
 						t.Fatal(err)
 					}
 					if i > 0 {
 						buf.Printf(" ")
 					}
-					buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, val)
+					buf.Printf("%s=%s", version.Timestamp, val)
 				}
 				buf.Printf("]\n")
 				iter.Next()
@@ -1211,15 +1212,15 @@ func cmdExport(e *evalCtx) error {
 			if rangeBounds := iter.RangeBounds(); !rangeBounds.Key.Equal(rangeStart) {
 				rangeStart = append(rangeStart[:0], rangeBounds.Key...)
 				e.results.buf.Printf("export: %s/[", rangeBounds)
-				for i, rangeKV := range iter.RangeKeys() {
-					val, err := DecodeMVCCValue(rangeKV.Value)
+				for i, version := range iter.RangeKeys().Versions {
+					val, err := DecodeMVCCValue(version.Value)
 					if err != nil {
 						return err
 					}
 					if i > 0 {
 						e.results.buf.Printf(" ")
 					}
-					e.results.buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, val)
+					e.results.buf.Printf("%s=%s", version.Timestamp, val)
 				}
 				e.results.buf.Printf("]\n")
 			}
@@ -1627,16 +1628,17 @@ func printIter(e *evalCtx) {
 		}
 	}
 	if hasRange {
-		e.results.buf.Printf(" %s/[", e.iter.RangeBounds())
-		for i, rangeKV := range e.iter.RangeKeys() {
-			value, err := DecodeMVCCValue(rangeKV.Value)
+		rangeKeys := e.iter.RangeKeys()
+		e.results.buf.Printf(" %s/[", rangeKeys.Bounds)
+		for i, version := range rangeKeys.Versions {
+			value, err := DecodeMVCCValue(version.Value)
 			if err != nil {
 				e.Fatalf("%v", err)
 			}
 			if i > 0 {
 				e.results.buf.Printf(" ")
 			}
-			e.results.buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, value)
+			e.results.buf.Printf("%s=%s", version.Timestamp, value)
 		}
 		e.results.buf.Printf("]")
 	}

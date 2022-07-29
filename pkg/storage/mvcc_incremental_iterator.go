@@ -11,8 +11,6 @@
 package storage
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -429,7 +427,9 @@ func (i *MVCCIncrementalIterator) advance() {
 		}
 
 		// NB: Don't update i.hasRange directly -- we only change it when
-		// i.rangeKeysStart changes, to avoid unnecessary checks.
+		// i.rangeKeysStart changes, which allows us to retain i.hasRange=false if
+		// we've already determined that the current range keys are outside of the
+		// time bounds.
 		hasPoint, hasRange := i.iter.HasPointAndRange()
 		i.hasPoint = hasPoint
 
@@ -443,21 +443,10 @@ func (i *MVCCIncrementalIterator) advance() {
 		if hasRange {
 			if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
 				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
-				// Find the first range key at or below EndTime. If that's also above
-				// StartTime then we have visible range keys. We use a linear search
-				// rather than a binary search because we expect EndTime to be near the
-				// current time, so the first range key will typically be sufficient.
-				hasRange = false
-				for _, rkv := range i.iter.RangeKeys() {
-					if ts := rkv.RangeKey.Timestamp; ts.LessEq(i.endTime) {
-						hasRange = i.startTime.Less(ts)
-						break
-					}
-				}
-				i.hasRange = hasRange
-				newRangeKey = hasRange
+				i.hasRange = i.iter.RangeKeys().HasBetween(i.startTime.Next(), i.endTime)
+				newRangeKey = i.hasRange
 			}
-			// else keep i.hasRange from last i.rangeKeysStart change.
+			// Else: keep i.hasRange from last i.rangeKeysStart change.
 		} else {
 			i.hasRange = false
 		}
@@ -547,42 +536,18 @@ func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
+func (i *MVCCIncrementalIterator) RangeKeys() MVCCRangeKeyStack {
 	if !i.hasRange {
-		return []MVCCRangeKeyValue{}
+		return MVCCRangeKeyStack{}
 	}
-
 	// TODO(erikgrinaker): It may be worthwhile to clone and memoize this result
 	// for the same range key. However, callers may avoid calling RangeKeys()
 	// unnecessarily, and we may optimize parent iterators, so let's measure.
 	rangeKeys := i.iter.RangeKeys()
-
 	if i.ignoringTime {
 		return rangeKeys
 	}
-
-	// Find the first range key at or below endTime, and truncate rangeKeys. We do
-	// a linear search rather than a binary search, because we expect endTime to
-	// be near the current time, so the first element will typically match.
-	first := len(rangeKeys) - 1
-	for idx, rkv := range rangeKeys {
-		if rkv.RangeKey.Timestamp.LessEq(i.endTime) {
-			first = idx
-			break
-		}
-	}
-	rangeKeys = rangeKeys[first:]
-
-	// Find the first range key at or below startTime, and truncate rangeKeys.
-	if i.startTime.IsSet() {
-		if idx := sort.Search(len(rangeKeys), func(idx int) bool {
-			return rangeKeys[idx].RangeKey.Timestamp.LessEq(i.startTime)
-		}); idx >= 0 {
-			rangeKeys = rangeKeys[:idx]
-		}
-	}
-
-	return rangeKeys
+	return rangeKeys.Trim(i.startTime.Next(), i.endTime)
 }
 
 // UnsafeValue implements SimpleMVCCIterator.

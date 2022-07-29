@@ -15,7 +15,7 @@ CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
-statement error pq: unimplemented: functions do not currently support \* expressions\nHINT: You have attempted to use a feature that is not yet implemented\.\nSee: https://go\.crdb\.dev/issue-v/10028/v22\.2
+statement error pq: unimplemented: functions do not currently support \* expressions.*
 CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
 
 # statement ok

@@ -296,7 +296,7 @@ func doCreateBackupSchedules(
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
 			CaptureRevisionHistory: eval.BackupOptions.CaptureRevisionHistory,
-			Detached:               true,
+			Detached:               tree.DBoolTrue,
 		},
 		Nested:         true,
 		AppendToLatest: false,

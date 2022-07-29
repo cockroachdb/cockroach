@@ -1084,20 +1084,20 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 		_, r := rangeIt.HasPointAndRange()
 		if r {
 			span := rangeIt.RangeBounds()
-			newKeys := rangeIt.RangeKeys()
+			newKeys := rangeIt.RangeKeys().AsRangeKeys()
 			if lastEnd.Equal(span.Key) {
 				// Try merging keys by timestamp.
 				var newPartial []storage.MVCCRangeKey
 				i, j := 0, 0
 				for i < len(newKeys) && j < len(partialRangeKeys) {
-					switch newKeys[i].RangeKey.Timestamp.Compare(partialRangeKeys[j].Timestamp) {
+					switch newKeys[i].Timestamp.Compare(partialRangeKeys[j].Timestamp) {
 					case 1:
-						newPartial = append(newPartial, newKeys[i].RangeKey.Clone())
+						newPartial = append(newPartial, newKeys[i].Clone())
 						i++
 					case 0:
 						newPartial = append(newPartial, storage.MVCCRangeKey{
 							StartKey:  partialRangeKeys[j].StartKey,
-							EndKey:    newKeys[i].RangeKey.EndKey.Clone(),
+							EndKey:    newKeys[i].EndKey.Clone(),
 							Timestamp: partialRangeKeys[j].Timestamp,
 						})
 						i++
@@ -1108,7 +1108,7 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 					}
 				}
 				for ; i < len(newKeys); i++ {
-					newPartial = append(newPartial, newKeys[i].RangeKey.Clone())
+					newPartial = append(newPartial, newKeys[i].Clone())
 				}
 				for ; j < len(partialRangeKeys); j++ {
 					newPartial = append(newPartial, partialRangeKeys[j].Clone())
@@ -1118,7 +1118,7 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 				result = append(result, makeRangeCells(partialRangeKeys)...)
 				partialRangeKeys = make([]storage.MVCCRangeKey, len(newKeys))
 				for i, rk := range newKeys {
-					partialRangeKeys[i] = rk.RangeKey.Clone()
+					partialRangeKeys[i] = rk.Clone()
 				}
 			}
 			lastEnd = span.EndKey.Clone()
