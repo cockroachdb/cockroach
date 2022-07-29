@@ -84,19 +84,23 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 	statements := r.mu.statements[sessionID]
 	delete(r.mu.statements, sessionID)
 
-	hasOutlier := false
+	concerns := make(map[clusterunique.ID][]Concern, len(statements))
+
+	hasConcerns := false
 	for _, s := range statements {
-		if r.detector.isOutlier(s) {
-			hasOutlier = true
+		concerns[s.ID] = r.detector.examine(s)
+		if len(concerns[s.ID]) > 0 {
+			hasConcerns = true
 		}
 	}
 
-	if hasOutlier {
+	if hasConcerns {
 		for _, s := range statements {
 			r.mu.outliers.Add(s.ID, &Insight{
 				Session:     &Session{ID: sessionID},
 				Transaction: transaction,
 				Statement:   s,
+				Concerns:    concerns[s.ID],
 			})
 		}
 	}
