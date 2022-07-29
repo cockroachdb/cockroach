@@ -114,7 +114,7 @@ func (hi *hypotheticalIndex) IsInverted() bool {
 // IsNotVisible is part of the cat.Index interface.
 func (hi *hypotheticalIndex) IsNotVisible() bool {
 	// A hypotheticalIndex should not be invisible because there is no motivation
-	// to recommend an invisible index.
+	// to recommend a not visible index.
 	return false
 }
 
