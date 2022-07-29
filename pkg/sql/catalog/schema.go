@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 // SchemaDescriptor encapsulates the basic
 type SchemaDescriptor interface {
-	Descriptor
+	HydratableDescriptor
 
 	// SchemaKind indicates whether this descriptor
 	SchemaKind() ResolvedSchemaKind

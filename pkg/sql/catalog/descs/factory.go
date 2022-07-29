@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -28,7 +28,7 @@ type CollectionFactory struct {
 	codec              keys.SQLCodec
 	leaseMgr           *lease.Manager
 	virtualSchemas     catalog.VirtualSchemas
-	hydratedTables     *hydratedtables.Cache
+	hydrated           *hydrateddesc.Cache
 	systemDatabase     *systemDatabaseNamespaceCache
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
@@ -42,7 +42,7 @@ func NewCollectionFactory(
 	settings *cluster.Settings,
 	leaseMgr *lease.Manager,
 	virtualSchemas catalog.VirtualSchemas,
-	hydratedTables *hydratedtables.Cache,
+	hydrated *hydrateddesc.Cache,
 	spanConfigSplitter spanconfig.Splitter,
 	spanConfigLimiter spanconfig.Limiter,
 ) *CollectionFactory {
@@ -51,7 +51,7 @@ func NewCollectionFactory(
 		codec:              leaseMgr.Codec(),
 		leaseMgr:           leaseMgr,
 		virtualSchemas:     virtualSchemas,
-		hydratedTables:     hydratedTables,
+		hydrated:           hydrated,
 		systemDatabase:     newSystemDatabaseNamespaceCache(leaseMgr.Codec()),
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
@@ -82,7 +82,7 @@ func (cf *CollectionFactory) MakeCollection(
 		monitor = cf.defaultMonitor
 	}
 
-	return makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
+	return makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydrated, cf.systemDatabase,
 		cf.virtualSchemas, temporarySchemaProvider, monitor)
 }
 

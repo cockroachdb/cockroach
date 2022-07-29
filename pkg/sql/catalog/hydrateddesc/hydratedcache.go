@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package hydratedtables contains logic to cache table descriptors with user
+// Package hydrateddesc contains logic to cache table descriptors with user
 // defined types hydrated.
-package hydratedtables
+package hydrateddesc
 
 import (
 	"context"
@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +39,7 @@ import (
 // TODO(ajwerner): Consider adding a mechanism to remove entries which have not
 // been used in a long time.
 
-// Cache caches table descriptors which have their user-defined types hydrated.
+// Cache caches descriptors which have their user-defined types hydrated.
 // The cache's contract is a bit tricky. In order to use a hydrated type, the
 // caller needs to have a lease on the relevant type descriptor. The way that
 // this is made to work is that the user provides a handle to a leased
@@ -45,7 +47,7 @@ import (
 // of the referenced types which ensures that user always uses properly leased
 // descriptors. While all of the types will need to be resolved, they should
 // already be cached so, in this way, this cache prevents the need to copy
-// and re-construct the tabledesc.immutable in most cases.
+// and re-construct the immutable descriptors in most cases.
 type Cache struct {
 	settings *cluster.Settings
 	g        singleflight.Group
@@ -65,30 +67,79 @@ var _ metric.Struct = (*Metrics)(nil)
 
 // Metrics exposes cache metrics.
 type Metrics struct {
-	Hits   *metric.Counter
-	Misses *metric.Counter
+	Hits   map[catalog.DescriptorType]*metric.Counter
+	Misses map[catalog.DescriptorType]*metric.Counter
+	// AllMetrics is only used to make sure that the metrics registry is able to
+	// add metric metadata to record.
+	AllMetrics [6]*metric.Counter
 }
 
 func makeMetrics() Metrics {
-	return Metrics{
-		Hits:   metric.NewCounter(metaHits),
-		Misses: metric.NewCounter(metaMisses),
+	ret := Metrics{
+		Hits: map[catalog.DescriptorType]*metric.Counter{
+			catalog.Table:    metric.NewCounter(tableMetaHits),
+			catalog.Function: metric.NewCounter(funcMetaHits),
+			catalog.Schema:   metric.NewCounter(schemaMetaHits),
+		},
+		Misses: map[catalog.DescriptorType]*metric.Counter{
+			catalog.Table:    metric.NewCounter(tableMetaMisses),
+			catalog.Function: metric.NewCounter(funcMetaMisses),
+			catalog.Schema:   metric.NewCounter(schemaMetaMisses),
+		},
 	}
+	idx := 0
+	for _, c := range ret.Hits {
+		ret.AllMetrics[idx] = c
+		idx++
+	}
+	for _, c := range ret.Misses {
+		ret.AllMetrics[idx] = c
+		idx++
+	}
+	return ret
 }
 
 // MetricStruct makes Metrics a metric.Struct.
 func (m *Metrics) MetricStruct() {}
 
 var (
-	metaHits = metric.Metadata{
+	tableMetaHits = metric.Metadata{
 		Name:        "sql.hydrated_table_cache.hits",
 		Help:        "counter on the number of cache hits",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
-	metaMisses = metric.Metadata{
+	tableMetaMisses = metric.Metadata{
 		Name:        "sql.hydrated_table_cache.misses",
+		Help:        "counter on the number of cache misses",
+		Measurement: "reads",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	funcMetaHits = metric.Metadata{
+		Name:        "sql.hydrated_udf_cache.hits",
+		Help:        "counter on the number of cache hits",
+		Measurement: "reads",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	funcMetaMisses = metric.Metadata{
+		Name:        "sql.hydrated_udf_cache.misses",
+		Help:        "counter on the number of cache misses",
+		Measurement: "reads",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	schemaMetaHits = metric.Metadata{
+		Name:        "sql.hydrated_schema_cache.hits",
+		Help:        "counter on the number of cache hits",
+		Measurement: "reads",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	schemaMetaMisses = metric.Metadata{
+		Name:        "sql.hydrated_schema_cache.misses",
 		Help:        "counter on the number of cache misses",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
@@ -123,9 +174,48 @@ func NewCache(settings *cluster.Settings) *Cache {
 	return c
 }
 
+type hydratedDescriptor interface {
+	getDesc() catalog.HydratableDescriptor
+	getTypeDescs() []*cachedType
+}
+
 type hydratedTableDescriptor struct {
 	tableDesc catalog.TableDescriptor
 	typeDescs []*cachedType
+}
+
+func (desc *hydratedTableDescriptor) getDesc() catalog.HydratableDescriptor {
+	return desc.tableDesc
+}
+
+func (desc *hydratedTableDescriptor) getTypeDescs() []*cachedType {
+	return desc.typeDescs
+}
+
+type hydratedFunctionDescirptor struct {
+	funcDesc  catalog.FunctionDescriptor
+	typeDescs []*cachedType
+}
+
+func (desc *hydratedFunctionDescirptor) getDesc() catalog.HydratableDescriptor {
+	return desc.funcDesc
+}
+
+func (desc *hydratedFunctionDescirptor) getTypeDescs() []*cachedType {
+	return desc.typeDescs
+}
+
+type hydratedSchemaDescriptor struct {
+	schemaDesc catalog.SchemaDescriptor
+	typeDescs  []*cachedType
+}
+
+func (desc *hydratedSchemaDescriptor) getDesc() catalog.HydratableDescriptor {
+	return desc.schemaDesc
+}
+
+func (desc *hydratedSchemaDescriptor) getTypeDescs() []*cachedType {
+	return desc.typeDescs
 }
 
 type cachedType struct {
@@ -133,34 +223,79 @@ type cachedType struct {
 	typDesc catalog.TypeDescriptor
 }
 
-// GetHydratedTableDescriptor returns an ImmutableCopy with the types
-// hydrated. It may use a cached copy but all of the relevant type descriptors
-// will be retrieved via the TypeDescriptorResolver. Note that if the table
-// descriptor is modified, nil will be returned. If any of the types used by
-// the table or have uncommitted versions, then nil may be returned. If a nil
-// descriptor is returned, it up to the caller to clone and hydrate the table
-// descriptor on their own. If the table descriptor does not contain any
-// user-defined types, it will be returned unchanged.
+// GetHydratedTableDescriptor is the same as GetHydratedDescriptor but specific
+// to table descriptors.
 func (c *Cache) GetHydratedTableDescriptor(
 	ctx context.Context, table catalog.TableDescriptor, res catalog.TypeDescriptorResolver,
 ) (hydrated catalog.TableDescriptor, err error) {
+	hydratedDesc, err := c.GetHydratedDescriptor(ctx, table, res)
+	if err != nil {
+		return nil, err
+	}
+	if hydratedDesc == nil {
+		return nil, nil
+	}
+	return hydratedDesc.(catalog.TableDescriptor), nil
+}
+
+// GetHydratedFunctionDescriptor is the same as GetHydratedDescriptor but
+// specific to function descriptors.
+func (c *Cache) GetHydratedFunctionDescriptor(
+	ctx context.Context, funDesc catalog.FunctionDescriptor, res catalog.TypeDescriptorResolver,
+) (catalog.FunctionDescriptor, error) {
+	hydratedDesc, err := c.GetHydratedDescriptor(ctx, funDesc, res)
+	if err != nil {
+		return nil, err
+	}
+	if hydratedDesc == nil {
+		return nil, nil
+	}
+	return hydratedDesc.(catalog.FunctionDescriptor), nil
+}
+
+// GetHydratedSchemaDescriptor is the same as GetHydratedDescriptor but
+// specific to schema descriptors.
+func (c *Cache) GetHydratedSchemaDescriptor(
+	ctx context.Context, funDesc catalog.SchemaDescriptor, res catalog.TypeDescriptorResolver,
+) (catalog.SchemaDescriptor, error) {
+	hydratedDesc, err := c.GetHydratedDescriptor(ctx, funDesc, res)
+	if err != nil {
+		return nil, err
+	}
+	if hydratedDesc == nil {
+		return nil, nil
+	}
+	return hydratedDesc.(catalog.SchemaDescriptor), nil
+}
+
+// GetHydratedDescriptor returns an Immutable copy with the types hydrated. It
+// may use a cached copy but all of the relevant type descriptors will be
+// retrieved via the TypeDescriptorResolver. Note that if the given descriptor
+// is modified, nil will be returned. If any of the types used by the descriptor
+// or have uncommitted versions, then nil may be returned. If a nil descriptor
+// is returned, it up to the caller to clone and hydrate the hydrate descriptor
+// on their own. If the descriptor does not contain any user-defined types, it
+// will be returned unchanged.
+func (c *Cache) GetHydratedDescriptor(
+	ctx context.Context, hydratable catalog.HydratableDescriptor, res catalog.TypeDescriptorResolver,
+) (hydrated catalog.HydratableDescriptor, err error) {
 
 	// If the table has an uncommitted version, it cannot be cached. Return nil
 	// forcing the caller to hydrate.
-	if table.IsUncommittedVersion() {
+	if hydratable.IsUncommittedVersion() {
 		return nil, nil
 	}
 
 	// If the table has no user defined types, it is already effectively hydrated,
 	// so just return it.
-	if !table.ContainsUserDefinedTypes() {
-		return table, nil
+	if !hydratable.ContainsUserDefinedTypes() {
+		return hydratable, nil
 	}
 
 	// TODO(ajwerner): This cache may thrash a bit right when a version of a type
 	// changes as different callers oscillate evicting the old and new versions of
 	// that type. It should converge rapidly but nevertheless, a finer-granularity
-	// cache which stored descriptors by not just the table version but also by
+	// cache which stored descriptors by not just the descriptor version but also by
 	// the set of type-versions could mitigate the problem. The idea would be to
 	// cache all tuples of table and type versions and then check if what we get
 	// from the resolver matches any of them. Only long-running transactions
@@ -176,10 +311,10 @@ func (c *Cache) GetHydratedTableDescriptor(
 	var groupKey string // used as a proxy for cache hit
 	defer func() {
 		if hydrated != nil {
-			c.recordMetrics(groupKey == "" /* hitCache */)
+			c.recordMetrics(groupKey == "" /* hitCache */, hydratable.DescriptorType())
 		}
 	}()
-	key := newCacheKey(table)
+	key := newCacheKey(hydratable)
 	defer func() {
 		if key != nil {
 			putCacheKey(key)
@@ -198,7 +333,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 				return nil, err
 			}
 			if canUse {
-				return cached.tableDesc, nil
+				return cached.getDesc(), nil
 			}
 		}
 
@@ -220,19 +355,42 @@ func (c *Cache) GetHydratedTableDescriptor(
 				underlying: res,
 				cache:      map[descpb.ID]*cachedType{},
 			}
-			descBase := protoutil.Clone(table.TableDesc()).(*descpb.TableDescriptor)
-			if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, &cachedRes); err != nil {
-				return nil, err
+
+			var hydratedDesc hydratedDescriptor
+			switch t := hydratable.(type) {
+			case catalog.TableDescriptor:
+				descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
+				if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, &cachedRes); err != nil {
+					return nil, err
+				}
+				hydratedDesc = &hydratedTableDescriptor{
+					tableDesc: tabledesc.NewBuilder(descBase).BuildImmutableTable(),
+					typeDescs: cachedRes.types,
+				}
+			case catalog.FunctionDescriptor:
+				descBase := protoutil.Clone(t.FuncDesc()).(*descpb.FunctionDescriptor)
+				if err := typedesc.HydrateTypesInFunctionDescriptor(ctx, descBase, &cachedRes); err != nil {
+					return nil, err
+				}
+				hydratedDesc = &hydratedFunctionDescirptor{
+					funcDesc:  funcdesc.NewBuilder(descBase).BuildImmutableFunction(),
+					typeDescs: cachedRes.types,
+				}
+			case catalog.SchemaDescriptor:
+				descBase := protoutil.Clone(t.SchemaDesc()).(*descpb.SchemaDescriptor)
+				if err := typedesc.HydrateTypesInSchemaDescriptor(ctx, descBase, &cachedRes); err != nil {
+					return nil, err
+				}
+				hydratedDesc = &hydratedSchemaDescriptor{
+					schemaDesc: schemadesc.NewBuilder(descBase).BuildImmutableSchema(),
+					typeDescs:  cachedRes.types,
+				}
 			}
-			hydrated := tabledesc.NewBuilder(descBase).BuildImmutableTable()
 
 			// If any of the types resolved as part of hydration are modified, skip
 			// writing this descriptor to the cache.
 			if !cachedRes.haveUncommitted {
-				c.addToCache(key, &hydratedTableDescriptor{
-					tableDesc: hydrated,
-					typeDescs: cachedRes.types,
-				})
+				c.addToCache(key, hydratedDesc)
 
 				// Prevent the key from being put back in the pool as it is now a member
 				// of the cache's data structure. It will be released when the entry is
@@ -240,7 +398,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 				key = nil
 			}
 
-			return hydrated, nil
+			return hydratedDesc.getDesc(), nil
 		})
 
 		// Another goroutine populated the cache or failed to due to having a
@@ -252,7 +410,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		return res.(catalog.TableDescriptor), nil
+		return res.(catalog.HydratableDescriptor), nil
 	}
 }
 
@@ -264,9 +422,9 @@ func (c *Cache) GetHydratedTableDescriptor(
 // from an older version than the currently cached value. We don't want to wind
 // up evicting a newer version with an older version.
 func canUseCachedDescriptor(
-	ctx context.Context, cached *hydratedTableDescriptor, res catalog.TypeDescriptorResolver,
+	ctx context.Context, cached hydratedDescriptor, res catalog.TypeDescriptorResolver,
 ) (canUse, skipCache bool, _ error) {
-	for _, typ := range cached.typeDescs {
+	for _, typ := range cached.getTypeDescs() {
 		name, typDesc, err := res.GetTypeDescriptor(ctx, typ.typDesc.GetID())
 		if err != nil {
 			return false, false, err
@@ -296,28 +454,28 @@ func canUseCachedDescriptor(
 }
 
 // getFromCache locks the cache and retrieves the descriptor with the given key.
-func (c *Cache) getFromCache(key *cacheKey) (*hydratedTableDescriptor, bool) {
+func (c *Cache) getFromCache(key *cacheKey) (hydratedDescriptor, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	got, ok := c.mu.cache.Get(key)
 	if !ok {
 		return nil, false
 	}
-	return got.(*hydratedTableDescriptor), true
+	return got.(hydratedDescriptor), true
 }
 
 // getFromCache locks the cache and stores the descriptor with the given key.
-func (c *Cache) addToCache(key *cacheKey, toCache *hydratedTableDescriptor) {
+func (c *Cache) addToCache(key *cacheKey, toCache hydratedDescriptor) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.mu.cache.Add(key, toCache)
 }
 
-func (c *Cache) recordMetrics(hitCache bool) {
+func (c *Cache) recordMetrics(hitCache bool, descType catalog.DescriptorType) {
 	if hitCache {
-		c.metrics.Hits.Inc(1)
+		c.metrics.Hits[descType].Inc(1)
 	} else {
-		c.metrics.Misses.Inc(1)
+		c.metrics.Misses[descType].Inc(1)
 	}
 }
 
@@ -375,11 +533,11 @@ var cacheKeySyncPool = sync.Pool{
 	New: func() interface{} { return new(cacheKey) },
 }
 
-func newCacheKey(table catalog.TableDescriptor) *cacheKey {
+func newCacheKey(desc catalog.HydratableDescriptor) *cacheKey {
 	k := cacheKeySyncPool.Get().(*cacheKey)
 	*k = cacheKey{
-		ID:      table.GetID(),
-		Version: table.GetVersion(),
+		ID:      desc.GetID(),
+		Version: desc.GetVersion(),
 	}
 	return k
 }
