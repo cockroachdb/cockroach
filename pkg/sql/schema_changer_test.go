@@ -2646,7 +2646,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		wg.Add(1)
 		// Alter the primary key of the table.
 		go func() {
-			if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
+			if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2);
+SET use_declarative_schema_changer = on;`); err != nil {
 				t.Error(err)
 			}
 			wg.Done()
@@ -2655,7 +2658,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		<-backfillNotif
 
 		// This must be rejected, because there is a primary key change already in progress.
-		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
+SET use_declarative_schema_changer = on;`)
 		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
@@ -2717,7 +2723,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+		if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
+SET use_declarative_schema_changer = on;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2726,7 +2735,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	<-backfillNotification
 
 	// Test that trying different schema changes results an error.
-	_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z INT`)
+	_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ADD COLUMN z INT;
+SET use_declarative_schema_changer = on;`)
 	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`, tableID)
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected to find error %s but found %+v", expected, err)
@@ -3274,7 +3286,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 				if _, err := db.Exec(`CANCEL JOB (
 					SELECT job_id FROM [SHOW JOBS]
 					WHERE
-						job_type = 'SCHEMA CHANGE' AND
+						job_type = 'NEW SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
 				)`, jobs.StatusRunning); err != nil {
@@ -3369,7 +3381,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 `)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+	_, err = sqlDB.Exec(`SET use_declarative_schema_changer = off; 
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 	require.NoError(t, err)
 
 	// Wait until the testing knob has notified that canceling the job has been
@@ -8102,11 +8115,13 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 	for _, tc := range []testCase{
 		{
 			name: "update during alter table with multiple column families",
-			setupSQL: `CREATE DATABASE t;
+			setupSQL: `SET use_declarative_schema_changer = off;
+CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, a INT NOT NULL, b INT, FAMILY (pk, a), FAMILY (b));
 INSERT INTO t.test (pk, a, b) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 `,
-			schemaChangeSQL: `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
+			schemaChangeSQL: `SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
 			operation: func(sqlDB *gosql.DB, kvDB *kv.DB) error {
 				_, err := sqlDB.Exec("UPDATE t.test SET b = 22 WHERE pk = 1")
 				return err
