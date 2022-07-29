@@ -4787,7 +4787,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 
 		// Set a relatively short timeout so that this test doesn't take too long.
 		// We should always hit it.
-		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		withTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 
 		// Write to the liveness range on the System class.
