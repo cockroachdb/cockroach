@@ -396,6 +396,7 @@ CREATE TABLE t.test (x INT);
 	go func() {
 		sqlDB.ExecMultiple(t,
 			`SET enable_experimental_alter_column_type_general = true;`,
+			`SET use_declarative_schema_changer = off;`,
 			`ALTER TABLE t.test ALTER COLUMN x TYPE STRING;`,
 		)
 		wg.Done()
@@ -405,6 +406,7 @@ CREATE TABLE t.test (x INT);
 
 	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress`, tableID)
 	sqlDB.ExpectErr(t, expected, `
+SET use_declarative_schema_changer = off;
 ALTER TABLE t.test ADD COLUMN y INT;
 	`)
 

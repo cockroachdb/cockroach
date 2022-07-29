@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -2717,7 +2716,9 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+		if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2726,7 +2727,9 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	<-backfillNotification
 
 	// Test that trying different schema changes results an error.
-	_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z INT`)
+	_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ADD COLUMN z INT`)
 	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`, tableID)
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected to find error %s but found %+v", expected, err)
@@ -6358,14 +6361,18 @@ INSERT INTO t.test VALUES (1, 2), (2, 2);
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		// Try to create a unique index which won't be valid and will need a rollback.
-		_, err := sqlDB.Exec(`CREATE UNIQUE INDEX i ON t.test(v);`)
+		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+CREATE UNIQUE INDEX i ON t.test(v);`)
 		assert.Regexp(t, "violates unique constraint", err)
 		return nil
 	})
 
 	<-beforeOnFailOrCancelNotification
 
-	_, err = sqlDB.Exec(`DROP TABLE t.test;`)
+	_, err = sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+DROP TABLE t.test;`)
 	require.NoError(t, err)
 
 	close(continueNotification)
@@ -6907,7 +6914,6 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		s, db, _ = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -6917,6 +6923,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 				go func(scStmt string) {
 					// This transaction will not return until the server is shutdown. Therefore,
 					// we run it in a separate goroutine and don't check the returned error.
+					sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 					_, _ = db.Exec(scStmt)
 				}(tc.scStmt)
 				// Verify that the job is in retry state while reverting.
@@ -7763,8 +7770,8 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 		{
 			desc: `TTL change whilst adding column`,
 			setup: `
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT);`,
+		CREATE DATABASE t;
+		CREATE TABLE t.test (x INT);`,
 			successfulChange:        `ALTER TABLE t.test ADD COLUMN y int DEFAULT 42`,
 			conflictingSchemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
 			expected: func(tableID uint32) string {
@@ -7787,8 +7794,10 @@ CREATE TABLE t.test (x INT);`,
 				return nil
 			}
 			params.Knobs = base.TestingKnobs{
-				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-					RunBeforeBackfill: waitFunc,
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(_ roachpb.Span) error {
+						return waitFunc()
+					},
 				},
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 					RunBeforeModifyRowLevelTTL: waitFunc,
@@ -7807,6 +7816,7 @@ CREATE TABLE t.test (x INT);`,
 			var wg sync.WaitGroup
 			wg.Add(1)
 			go func(successfulChange string) {
+				sqlDB.Exec(t, "SET use_declarative_schema_changer = off")
 				sqlDB.Exec(t, successfulChange)
 				wg.Done()
 			}(tc.successfulChange)
@@ -7814,6 +7824,7 @@ CREATE TABLE t.test (x INT);`,
 			<-childJobStartNotification
 
 			expected := tc.expected(tableID)
+			sqlDB.Exec(t, "SET use_declarative_schema_changer = off")
 			sqlDB.ExpectErr(t, expected, tc.conflictingSchemaChange)
 
 			waitBeforeContinuing <- struct{}{}
