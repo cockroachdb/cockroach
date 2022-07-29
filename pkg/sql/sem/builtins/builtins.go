@@ -3735,7 +3735,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Fuzzy String Matching
 	"soundex": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -3765,7 +3765,8 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"levenshtein": makeBuiltin(defProps(),
+	"levenshtein": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -4032,7 +4033,7 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.read_file": makeBuiltin(
-		jsonProps(),
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"uri", types.String},
@@ -4048,7 +4049,7 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.write_file": makeBuiltin(
-		jsonProps(),
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"data", types.Bytes},
