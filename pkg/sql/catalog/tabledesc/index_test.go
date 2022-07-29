@@ -396,9 +396,6 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
 	require.EqualError(t, validate.Self(clusterversion.TestingClusterVersion, mut), expected)
-
-	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
-	require.NoError(t, err)
 }
 
 // TestLatestIndexDescriptorVersionValues tests the correct behavior of the
