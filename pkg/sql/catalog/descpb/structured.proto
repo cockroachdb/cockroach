@@ -1541,8 +1541,8 @@ message FunctionDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
     // If applicable, IDs of the inbound reference table's index.
-    repeated uint32 index_ids = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "IndexIDs", (gogoproto.casttype) = "IndexID"];
+    repeated uint32 index_ids = 2 [(gogoproto.customname) = "IndexIDs",
+      (gogoproto.casttype) = "IndexID"];
     // If applicable, IDs of the inbound reference table's column.
     repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
