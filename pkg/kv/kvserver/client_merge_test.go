@@ -3777,7 +3777,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		for _, span := range keySpans {
 			file := &storage.MemFile{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if err := writer.ClearRawRange(span.Key, span.EndKey); err != nil {
+			if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
 				return err
 			}
 			sstFileWriters[string(span.Key)] = sstFileWriter{
@@ -3835,7 +3835,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
 			s := rditer.MakeRangeIDLocalKeySpan(rangeID, false /* replicatedOnly */)
-			if err := sst.ClearRawRange(s.Key, s.EndKey); err != nil {
+			if err := sst.ClearRawRange(s.Key, s.EndKey, true, true); err != nil {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)

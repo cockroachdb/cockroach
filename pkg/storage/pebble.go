@@ -1150,12 +1150,19 @@ func (p *Pebble) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearRawRange implements the Engine interface.
-func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
-	startKey, endKey := EncodeMVCCKey(MVCCKey{Key: start}), EncodeMVCCKey(MVCCKey{Key: end})
-	if err := p.db.DeleteRange(startKey, endKey, pebble.Sync); err != nil {
-		return err
+func (p *Pebble) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	startRaw, endRaw := EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode()
+	if pointKeys {
+		if err := p.db.DeleteRange(startRaw, endRaw, pebble.Sync); err != nil {
+			return err
+		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+	if rangeKeys && p.SupportsRangeKeys() {
+		if err := p.db.RangeKeyDelete(startRaw, endRaw, pebble.Sync); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -2120,7 +2127,7 @@ func (p *pebbleReadOnly) SingleClearEngineKey(key EngineKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 

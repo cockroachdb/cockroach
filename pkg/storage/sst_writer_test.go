@@ -139,6 +139,7 @@ func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
 			require.Contains(t, err.Error(), "range keys not supported")
 			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
 			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearRawRange(rangeKey.StartKey, rangeKey.EndKey, false, true))
 		})
 	}
 }

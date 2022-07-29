@@ -1550,7 +1550,7 @@ func cmdSSTPutRangeKey(e *evalCtx) error {
 
 func cmdSSTClearRange(e *evalCtx) error {
 	start, end := e.getKeyRange()
-	return e.sst().ClearRawRange(start, end)
+	return e.sst().ClearRawRange(start, end, true /* pointKeys */, true /* rangeKeys */)
 }
 
 func cmdSSTClearRangeKey(e *evalCtx) error {
