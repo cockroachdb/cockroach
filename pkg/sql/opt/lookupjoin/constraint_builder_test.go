@@ -223,7 +223,7 @@ func TestIsCanonicalFilter(t *testing.T) {
 			want:   true,
 		},
 		{name: "and-eq-lt",
-			filter: "i = 10 AND i < 10",
+			filter: "i = 9 AND i < 10",
 			want:   false,
 		},
 		{name: "or-eq-lt",
