@@ -305,6 +305,7 @@ func (p *planner) maybeLogStatementInternal(
 		NumRetries:    uint32(numRetries),
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
+		HasIndexJoin:  p.curPlan.flags.IsSet(planFlagContainsIndexJoin),
 		TxnCounter:    uint32(txnCounter),
 	}
 

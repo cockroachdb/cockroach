@@ -1759,6 +1759,14 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		b = strconv.AppendUint(b, uint64(m.TxnCounter), 10)
 	}
 
+	if m.HasIndexJoin {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HasIndexJoin\":true"...)
+	}
+
 	return printComma, b
 }
 

@@ -534,3 +534,102 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		}
 	}
 }
+
+func TestTelemetryLogHasIndexJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := installTelemetryLogFileSink(sc, t)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, "CREATE TABLE t("+
+		"num INT PRIMARY KEY,"+
+		"first STRING,"+
+		"second STRING,"+
+		"INDEX first_index (first),"+
+		"INDEX second_index (second)"+
+		");")
+	db.Exec(t, "SHOW INDEX FROM t")
+	db.Exec(t, "INSERT INTO t (num, first, second) VALUES (1, 'first', 'second'), (2, 'another_first', 'another_second')")
+
+	stubMaxEventFrequency := int64(1000000)
+	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+
+	/*
+		Test Cases:
+			- run query w/o index join
+				- check that log HasIndexJoin = false
+			- run query with index join
+				- check that log HasIndexJoin = true
+	*/
+
+	testData := []struct {
+		name                 string
+		query                string
+		expectedLogStatement string
+		expectedNumLogs      int
+		expectHasIndexJoin   bool
+	}{
+		{
+			"select-no-index-join",
+			"SELECT * FROM t LIMIT 1;",
+			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+			1,
+			false,
+		},
+		{
+			"select-index-join",
+			"SELECT * FROM t WHERE second='second';",
+			`"SELECT * FROM \"\".\"\".t WHERE second = ‹'second'›"`,
+			1,
+			true,
+		},
+	}
+
+	for _, tc := range testData {
+		db.Exec(t, tc.query)
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, tc := range testData {
+		numLogsFound := 0
+		for i := len(entries) - 1; i >= 0; i-- {
+			e := entries[i]
+			if strings.Contains(e.Message, tc.expectedLogStatement) {
+				numLogsFound++
+				containsHasIndexJoin := strings.Contains(e.Message, "\"HasIndexJoin\":true")
+				if tc.expectHasIndexJoin && !containsHasIndexJoin {
+					t.Errorf("%s: expected \"HasIndexJoin\" to be found, but found none", tc.name)
+				} else if !tc.expectHasIndexJoin && containsHasIndexJoin {
+					t.Errorf("%s: unexpected \"HasIndexJoin\" found", tc.name)
+				}
+			}
+		}
+		if numLogsFound != tc.expectedNumLogs {
+			t.Errorf("%s: expected %d log entries, found %d", tc.name, tc.expectedNumLogs, numLogsFound)
+		}
+	}
+}

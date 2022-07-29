@@ -1731,6 +1731,10 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
+	if !tab.IsVirtualTable() {
+		b.ContainsIndexJoin = true
+	}
+
 	res := execPlan{outputCols: output}
 	res.root, err = b.factory.ConstructIndexJoin(
 		input.root, tab, keyCols, needed, res.reqOrdering(join), locking, join.RequiredPhysical().LimitHintInt64(),

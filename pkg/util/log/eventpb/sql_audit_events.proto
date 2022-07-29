@@ -42,6 +42,8 @@ message CommonSQLExecDetails {
   bool full_index_scan = 8 [(gogoproto.jsontag) = ",omitempty"];
   // The sequence number of the SQL transaction inside its session.
   uint32 txn_counter = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // Whether the query contains an index join.
+  bool has_index_join = 10 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
