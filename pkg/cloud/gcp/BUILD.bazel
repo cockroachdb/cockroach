@@ -5,6 +5,7 @@ go_library(
     name = "gcp",
     srcs = [
         "gcs_kms.go",
+        "gcs_retry.go",
         "gcs_storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/gcp",
@@ -23,11 +24,15 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_google_cloud_go_kms//apiv1",
         "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//googleapi",
         "@org_golang_google_api//impersonate",
         "@org_golang_google_api//iterator",
         "@org_golang_google_api//option",
         "@org_golang_google_genproto//googleapis/cloud/kms/v1:kms",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
         "@org_golang_google_protobuf//types/known/wrapperspb",
+        "@org_golang_x_net//http2",
         "@org_golang_x_oauth2//:oauth2",
     ],
 )
