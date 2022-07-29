@@ -131,6 +131,9 @@ type Builder struct {
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
 
+	// ContainsIndexJoin is set to true if the query contains an index join.
+	ContainsIndexJoin bool
+
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
 	MaxFullScanRows float64

@@ -409,6 +409,7 @@ func (p *planner) maybeLogStatementInternal(
 				BytesRead:                queryStats.bytesRead,
 				RowsRead:                 queryStats.rowsRead,
 				RowsWritten:              queryStats.rowsWritten,
+				HasIndexJoin:             p.curPlan.flags.IsSet(planFlagContainsIndexJoin),
 			}
 			db, _ := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, databaseName, tree.DatabaseLookupFlags{Required: true})
 			if db != nil {

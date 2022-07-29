@@ -92,6 +92,9 @@ message SampledQuery {
 
   // The number of rows written.
   int64 rows_written = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Whether the query contains an index join.
+  bool has_index_join = 22 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CapturedIndexUsageStats

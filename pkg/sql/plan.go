@@ -602,6 +602,9 @@ const (
 
 	// planFlagContainsMutation is set if the plan has any mutations.
 	planFlagContainsMutation
+
+	// planFlagContainsIndexJoin is set if the plan involves an index join.
+	planFlagContainsIndexJoin
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
