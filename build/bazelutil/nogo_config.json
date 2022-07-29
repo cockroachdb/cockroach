@@ -53,7 +53,8 @@
             "cockroach/pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/util/contextutil/timeout_error\\.go$": "invalid direct cast on error object",
-            "cockroach/pkg/util/sysutil/sysutil_.*": "type can change by system"
+            "cockroach/pkg/util/sysutil/sysutil_.*": "type can change by system",
+            "cockroach/pkg/cloud/gcp/gcs_retry\\.go$": "invalid direct cast on error object"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
