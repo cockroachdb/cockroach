@@ -1582,8 +1582,10 @@ func buildResumeSingleRangeBatch(
 
 		case *roachpb.ScanResponse:
 			scan := response
-			if scan.ResumeSpan == nil {
+			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
 				emptyResponse = false
+			}
+			if scan.ResumeSpan == nil {
 				continue
 			}
 			// This Scan wasn't completed - create a new request according to
@@ -1629,6 +1631,10 @@ func buildResumeSingleRangeBatch(
 				// minTargetBytes hasn't increased for the resume request, we
 				// use the double of the original target.
 				resumeReq.minTargetBytes = 2 * req.minTargetBytes
+				if resumeReq.minTargetBytes < 0 {
+					// Prevent the overflow.
+					resumeReq.minTargetBytes = math.MaxInt64
+				}
 			}
 		}
 	}

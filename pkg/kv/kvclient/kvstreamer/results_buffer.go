@@ -195,16 +195,17 @@ func (b *resultsBufferBase) checkIfCompleteLocked(r Result) {
 func (b *resultsBufferBase) accountForOverheadLocked(ctx context.Context, overheadMemUsage int64) {
 	b.budget.mu.AssertHeld()
 	b.Mutex.AssertHeld()
-	if overheadMemUsage > b.overheadAccountedFor {
+	if toConsume := overheadMemUsage - b.overheadAccountedFor; toConsume > 0 {
 		// We're allowing the budget to go into debt here since the results
 		// buffer doesn't have a way to push back on the Results. It would also
 		// be unfortunate to discard these Results - instead, we rely on the
 		// worker coordinator to make sure the budget gets out of debt.
-		if err := b.budget.consumeLocked(ctx, overheadMemUsage-b.overheadAccountedFor, true /* allowDebt */); err != nil {
+		if err := b.budget.consumeLocked(ctx, toConsume, true /* allowDebt */); err != nil {
 			b.setErrorLocked(err)
+			return
 		}
-	} else {
-		b.budget.releaseLocked(ctx, b.overheadAccountedFor-overheadMemUsage)
+	} else if toConsume < 0 {
+		b.budget.releaseLocked(ctx, -toConsume)
 	}
 	b.overheadAccountedFor = overheadMemUsage
 }
