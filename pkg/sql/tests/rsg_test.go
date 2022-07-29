@@ -341,7 +341,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	namedBuiltinChan := make(chan namedBuiltin)
 	go func() {
 		for {
-			for _, name := range builtins.AllBuiltinNames {
+			for _, name := range builtins.AllBuiltinNames() {
 				lower := strings.ToLower(name)
 				if strings.HasPrefix(lower, "crdb_internal.force_") {
 					continue
