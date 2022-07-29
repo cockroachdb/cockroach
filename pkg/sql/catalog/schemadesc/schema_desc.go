@@ -412,6 +412,23 @@ func (desc *immutable) GetPrivilegeDescriptor(
 	return desc.GetPrivileges(), nil
 }
 
+// ContainsUserDefinedTypes implements the HydratableDescriptor interface.
+func (desc *immutable) ContainsUserDefinedTypes() bool {
+	for _, fn := range desc.Functions {
+		for i := range fn.Overloads {
+			for _, t := range fn.Overloads[i].ArgTypes {
+				if t.UserDefined() {
+					return true
+				}
+			}
+			if fn.Overloads[i].ReturnType.UserDefined() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // IsSchemaNameValid returns whether the input name is valid for a user defined
 // schema.
 func IsSchemaNameValid(name string) error {

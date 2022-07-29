@@ -61,7 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -562,8 +562,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return nil, errors.Wrap(err, "creating virtual schema holder")
 	}
 
-	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
-	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
+	hydratedDescCache := hydrateddesc.NewCache(cfg.Settings)
+	cfg.registry.AddMetricStruct(hydratedDescCache.Metrics())
 
 	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigWatcher, codec, cfg.stopper)
 
@@ -604,7 +604,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.Settings,
 		leaseMgr,
 		virtualSchemas,
-		hydratedTablesCache,
+		hydratedDescCache,
 		spanConfig.splitter,
 		spanConfig.limiter,
 	)

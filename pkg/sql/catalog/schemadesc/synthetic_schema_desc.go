@@ -149,3 +149,7 @@ func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescr
 func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
 	return descpb.SchemaDescriptor_Function{}, false
 }
+
+func (p synthetic) ContainsUserDefinedTypes() bool {
+	return false
+}

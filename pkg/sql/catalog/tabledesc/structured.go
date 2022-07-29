@@ -1319,7 +1319,7 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
-// ContainsUserDefinedTypes implements the TableDescriptor interface.
+// ContainsUserDefinedTypes implements the HydratableDescriptor interface.
 func (desc *wrapper) ContainsUserDefinedTypes() bool {
 	return len(desc.UserDefinedTypeColumns()) > 0
 }

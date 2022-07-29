@@ -2055,6 +2055,10 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"sql.hydrated_table_cache.hits",
 					"sql.hydrated_table_cache.misses",
+					"sql.hydrated_udf_cache.hits",
+					"sql.hydrated_udf_cache.misses",
+					"sql.hydrated_schema_cache.hits",
+					"sql.hydrated_schema_cache.misses",
 				},
 			},
 		},

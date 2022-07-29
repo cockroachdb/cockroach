@@ -50,6 +50,9 @@ func (tc *Collection) getFunctionByID(
 		return nil, sqlerrors.NewUndefinedFunctionError(strconv.Itoa(int(fnID)))
 	}
 
-	// TODO(#83232): UDF hydration for user defined types.
-	return fn, nil
+	hydrated, err := tc.hydrateTypesInDescWithOptions(ctx, txn, fn, flags.IncludeOffline, flags.AvoidLeased)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated.(catalog.FunctionDescriptor), nil
 }

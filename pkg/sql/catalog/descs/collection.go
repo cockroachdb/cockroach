@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -45,21 +45,21 @@ func makeCollection(
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
-	hydratedTables *hydratedtables.Cache,
+	hydrated *hydrateddesc.Cache,
 	systemNamespace *systemDatabaseNamespaceCache,
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 	monitor *mon.BytesMonitor,
 ) Collection {
 	return Collection{
-		settings:       settings,
-		version:        settings.Version.ActiveVersion(ctx),
-		hydratedTables: hydratedTables,
-		virtual:        makeVirtualDescriptors(virtualSchemas),
-		leased:         makeLeasedDescriptors(leaseMgr),
-		stored:         makeStoredDescriptors(codec, systemNamespace, monitor),
-		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
-		direct:         makeDirect(ctx, codec, settings),
+		settings:  settings,
+		version:   settings.Version.ActiveVersion(ctx),
+		hydrated:  hydrated,
+		virtual:   makeVirtualDescriptors(virtualSchemas),
+		leased:    makeLeasedDescriptors(leaseMgr),
+		stored:    makeStoredDescriptors(codec, systemNamespace, monitor),
+		temporary: makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		direct:    makeDirect(ctx, codec, settings),
 	}
 }
 
@@ -107,9 +107,9 @@ type Collection struct {
 	// temporary contains logic to access temporary schema descriptors.
 	temporary temporaryDescriptors
 
-	// hydratedTables is node-level cache of table descriptors which utlize
+	// hydrated is node-level cache of table descriptors which utilize
 	// user-defined types.
-	hydratedTables *hydratedtables.Cache
+	hydrated *hydrateddesc.Cache
 
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.

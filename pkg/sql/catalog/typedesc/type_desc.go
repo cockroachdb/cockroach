@@ -839,6 +839,42 @@ func HydrateTypesInTableDescriptor(
 	return nil
 }
 
+// HydrateTypesInFunctionDescriptor uses res to install metadata in the types
+// present in a function descriptor.
+func HydrateTypesInFunctionDescriptor(
+	ctx context.Context, desc *descpb.FunctionDescriptor, res catalog.TypeDescriptorResolver,
+) error {
+	for i := range desc.Args {
+		if err := EnsureTypeIsHydrated(ctx, desc.Args[i].Type, res); err != nil {
+			return err
+		}
+	}
+	if err := EnsureTypeIsHydrated(ctx, desc.GetReturnType().Type, res); err != nil {
+		return err
+	}
+	return nil
+}
+
+// HydrateTypesInSchemaDescriptor uses res to install metadata in the types
+// present in a function descriptor.
+func HydrateTypesInSchemaDescriptor(
+	ctx context.Context, desc *descpb.SchemaDescriptor, res catalog.TypeDescriptorResolver,
+) error {
+	for _, f := range desc.Functions {
+		for i := range f.Overloads {
+			for _, t := range f.Overloads[i].ArgTypes {
+				if err := EnsureTypeIsHydrated(ctx, t, res); err != nil {
+					return err
+				}
+			}
+			if err := EnsureTypeIsHydrated(ctx, f.Overloads[i].ReturnType, res); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // HydrateTypeInfoWithName implements the TypeDescriptor interface.
 func (desc *immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
