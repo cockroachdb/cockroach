@@ -120,7 +120,7 @@ func (o *Outbox) close(ctx context.Context) {
 	// registered with the allocator (the allocator is shared by the outbox and
 	// the deselector).
 	o.Input = nil
-	o.unlimitedAllocator.ReleaseMemory(o.unlimitedAllocator.Used())
+	o.unlimitedAllocator.ReleaseAll()
 	o.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "outbox")
 }
 

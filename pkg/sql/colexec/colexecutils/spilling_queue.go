@@ -532,7 +532,7 @@ func (q *SpillingQueue) Close(ctx context.Context) error {
 	q.closed = true
 	q.testingObservability.spilled = q.diskQueue != nil
 	q.testingObservability.memoryUsage = q.unlimitedAllocator.Used()
-	q.unlimitedAllocator.ReleaseMemory(q.unlimitedAllocator.Used())
+	q.unlimitedAllocator.ReleaseAll()
 	// Eagerly release references to the in-memory items and scratch batches.
 	// Note that we don't lose the reference to 'items' slice itself so that it
 	// can be reused in case Close() is called by Reset().
