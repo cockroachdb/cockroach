@@ -600,7 +600,8 @@ func (b *Builder) buildFunction(
 func (b *Builder) buildUDF(
 	f *tree.FuncExpr, def *tree.FunctionDefinition, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
-	stmts, err := parser.Parse(f.ResolvedOverload().Body)
+	o := f.ResolvedOverload()
+	stmts, err := parser.Parse(o.Body)
 	if err != nil {
 		panic(err)
 	}
@@ -618,9 +619,10 @@ func (b *Builder) buildUDF(
 
 	out = b.factory.ConstructUDF(
 		&memo.UDFPrivate{
-			Name: def.Name,
-			Body: rels,
-			Typ:  f.ResolvedType(),
+			Name:       def.Name,
+			Body:       rels,
+			Typ:        f.ResolvedType(),
+			Volatility: o.Volatility,
 		},
 	)
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)

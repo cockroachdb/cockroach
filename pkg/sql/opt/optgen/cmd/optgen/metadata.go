@@ -256,6 +256,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"FuncReturnType":  {fullName: "tree.FuncReturnType", passByVal: true},
 		"FunctionOptions": {fullName: "tree.FunctionOptions", passByVal: true},
 		"FunctionBodyStr": {fullName: "tree.FunctionBodyStr", passByVal: true},
+		"Volatility":      {fullName: "volatility.V", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

@@ -1632,6 +1632,9 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 		}
 		shared.VolatilitySet.Add(volatility)
 
+	case *UDFExpr:
+		shared.VolatilitySet.Add(t.Volatility)
+
 	default:
 		if opt.IsUnaryOp(e) {
 			inputType := e.Child(0).(opt.ScalarExpr).DataType()
