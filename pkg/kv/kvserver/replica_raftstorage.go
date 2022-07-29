@@ -747,7 +747,7 @@ func clearRangeData(
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
 		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
-			return writer.ClearRawRange(start, end)
+			return writer.ClearRawRange(start, end, true, true)
 		}
 	} else {
 		clearRangeFn = storage.ClearRangeWithHeuristic
@@ -873,10 +873,15 @@ func (r *Replica) applySnapshot(
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
+	//
+	// NB: We do not expect to see range keys in the unreplicated state, so
+	// we don't drop a range tombstone across the range key space.
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err = unreplicatedSST.ClearRawRange(unreplicatedStart, unreplicatedEnd); err != nil {
+	if err = unreplicatedSST.ClearRawRange(
+		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 

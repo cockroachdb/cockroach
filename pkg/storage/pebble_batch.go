@@ -363,12 +363,20 @@ func (p *pebbleBatch) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearRawRange implements the Batch interface.
-func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
-	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], MVCCKey{Key: start})
-	if err := p.batch.DeleteRange(p.buf, EncodeMVCCKey(MVCCKey{Key: end}), nil); err != nil {
-		return err
+func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	p.buf = EngineKey{Key: start}.EncodeToBuf(p.buf[:0])
+	endRaw := EngineKey{Key: end}.Encode()
+	if pointKeys {
+		if err := p.batch.DeleteRange(p.buf, endRaw, pebble.Sync); err != nil {
+			return err
+		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+	if rangeKeys && p.SupportsRangeKeys() {
+		if err := p.batch.RangeKeyDelete(p.buf, endRaw, pebble.Sync); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Batch interface.

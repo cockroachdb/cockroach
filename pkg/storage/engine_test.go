@@ -1644,7 +1644,7 @@ func TestEngineClearRange(t *testing.T) {
 	// 1           								 o---o
 	//     a   b   c   d   e   f   g   h
 	//
-	// However, certain clearers cannot clear intents or range keys.
+	// However, certain clearers cannot clear intents, range keys, or point keys.
 	writeInitialData := func(t *testing.T, rw ReadWriter) {
 		var localTS hlc.ClockTimestamp
 		txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, wallTS(6), 1, 1)
@@ -1668,46 +1668,68 @@ func TestEngineClearRange(t *testing.T) {
 	testcases := map[string]struct {
 		clearRange      func(ReadWriter, roachpb.Key, roachpb.Key) error
 		clearsIntents   bool
+		clearsPointKeys bool
 		clearsRangeKeys bool
 	}{
 		"ClearRawRange": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return rw.ClearRawRange(start, end)
+				return rw.ClearRawRange(start, end, true /* pointKeys */, true /* rangeKeys */)
 			},
-			clearsIntents:   false,
+			clearsPointKeys: true,
 			clearsRangeKeys: true,
+			clearsIntents:   false,
+		},
+		"ClearRawRange point keys": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearRawRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+			},
+			clearsPointKeys: true,
+			clearsRangeKeys: false,
+			clearsIntents:   false,
+		},
+		"ClearRawRange range keys": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearRawRange(start, end, false /* pointKeys */, true /* rangeKeys */)
+			},
+			clearsPointKeys: false,
+			clearsRangeKeys: true,
+			clearsIntents:   false,
 		},
 
 		"ClearMVCCRange": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
 				return rw.ClearMVCCRange(start, end)
 			},
-			clearsIntents:   true,
+			clearsPointKeys: true,
 			clearsRangeKeys: true,
+			clearsIntents:   true,
 		},
 
 		"ClearMVCCIteratorRange": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
 				return rw.ClearMVCCIteratorRange(start, end)
 			},
-			clearsIntents:   true,
+			clearsPointKeys: true,
 			clearsRangeKeys: true,
+			clearsIntents:   true,
 		},
 
 		"ClearMVCCVersions": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
 				return rw.ClearMVCCVersions(MVCCKey{Key: start}, MVCCKey{Key: end})
 			},
-			clearsIntents:   false,
+			clearsPointKeys: true,
 			clearsRangeKeys: false,
+			clearsIntents:   false,
 		},
 
 		"ClearRangeWithHeuristic": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
 				return ClearRangeWithHeuristic(rw, rw, start, end)
 			},
-			clearsIntents:   false,
+			clearsPointKeys: true,
 			clearsRangeKeys: true,
+			clearsIntents:   false,
 		},
 	}
 	testutils.RunTrueAndFalse(t, "batch", func(t *testing.T, useBatch bool) {
@@ -1726,13 +1748,22 @@ func TestEngineClearRange(t *testing.T) {
 
 				require.NoError(t, tc.clearRange(rw, start, end))
 
-				// We always expect all point keys to be cleared. We'll find provisional
-				// values for the intents.
-				require.Equal(t, []MVCCKey{
-					pointKey("a", 6), pointKey("a", 5), pointKey("g", 6), pointKey("g", 2),
-				}, scanPointKeys(t, rw))
+				// Check point key clears. We'll find provisional values for the intents.
+				if tc.clearsPointKeys {
+					require.Equal(t, []MVCCKey{
+						pointKey("a", 6), pointKey("a", 5), pointKey("g", 6), pointKey("g", 2),
+					}, scanPointKeys(t, rw))
+				} else {
+					require.Equal(t, []MVCCKey{
+						pointKey("a", 6), pointKey("a", 5),
+						pointKey("b", 6), pointKey("b", 5),
+						pointKey("c", 5), pointKey("c", 1),
+						pointKey("e", 6), pointKey("e", 3),
+						pointKey("g", 6), pointKey("g", 2),
+					}, scanPointKeys(t, rw))
+				}
 
-				// Which separated intents we find will depend on the clearer.
+				// Check intent clears.
 				if tc.clearsIntents {
 					require.Equal(t, []roachpb.Key{roachpb.Key("a"), roachpb.Key("g")}, scanIntentKeys(t, rw))
 				} else {
@@ -1980,6 +2011,10 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 				require.Error(t, rw.PutEngineRangeKey(rk.StartKey, rk.EndKey, nil, nil))
 				require.Error(t, rw.ClearMVCCRangeKey(rk))
 				require.Error(t, rw.ClearAllRangeKeys(rk.StartKey, rk.EndKey))
+
+				// ClearRawRange doesn't error, for backwards compatibility.
+				require.NoError(t, rw.ClearRawRange(rk.StartKey, rk.EndKey,
+					false /* pointKeys */, true /* rangeKeys */))
 			})
 		}
 
@@ -2134,6 +2169,8 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 
 			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
 			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearRawRange(
+				rangeKey.StartKey, rangeKey.EndKey, false /* pointKeys */, true /* rangeKeys */))
 		})
 	}
 

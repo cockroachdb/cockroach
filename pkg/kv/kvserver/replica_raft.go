@@ -2193,7 +2193,7 @@ func handleTruncatedStateBelowRaftPreApply(
 	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
 		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
 		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
-		if err := readWriter.ClearRawRange(start, end); err != nil {
+		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
 			return false, errors.Wrapf(err,
 				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
 				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
