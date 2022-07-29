@@ -435,8 +435,6 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	bufferedMeta []execinfrapb.ProducerMetadata
-
 	// atomics is shared state between the Run goroutine and any routerOutput
 	// goroutines that call drainMeta.
 	atomics struct {
@@ -627,6 +625,8 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}); err != nil {
 		r.cancelOutputs(ctx, err)
 	}
+
+	var bufferedMeta []execinfrapb.ProducerMetadata
 	if inputInitialized {
 		// Retrieving stats and draining the metadata is only safe if the input
 		// to the hash router was properly initialized.
@@ -635,14 +635,14 @@ func (r *HashRouter) Run(ctx context.Context) {
 				span.RecordStructured(s.GetStats())
 			}
 			if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
-				r.bufferedMeta = append(r.bufferedMeta, *meta)
+				bufferedMeta = append(bufferedMeta, *meta)
 			}
 		}
-		r.bufferedMeta = append(r.bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
+		bufferedMeta = append(bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
 	}
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
-	r.waitForMetadata <- r.bufferedMeta
+	r.waitForMetadata <- bufferedMeta
 	close(r.waitForMetadata)
 
 	r.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "hash router")
@@ -687,7 +687,6 @@ func (r *HashRouter) resetForTests(ctx context.Context) {
 	r.setDrainState(hashRouterDrainStateRunning)
 	r.waitForMetadata = make(chan []execinfrapb.ProducerMetadata, 1)
 	r.atomics.numDrainedOutputs = 0
-	r.bufferedMeta = nil
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
 		select {
