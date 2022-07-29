@@ -47,24 +47,27 @@ func (si *SeqIdentifier) IsByID() bool {
 // Returns the identifier of the sequence or nil if no sequence was found.
 //
 // `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
-func GetSequenceFromFunc(
-	funcExpr *tree.FuncExpr,
-	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
-) (*SeqIdentifier, error) {
+func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
 	// TODO(mgartner): Plumb a function resolver here, or determine that the
 	// function should have already been resolved.
+	// TODO(chengxiong): Since we have funcExpr here, it's possible to narrow down
+	// overloads by using input types.
 	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return nil, err
 	}
 
-	fnProps, overloads := getBuiltinProperties(def.Name)
-	if fnProps != nil && fnProps.HasSequenceArguments {
+	hasSequenceArguments, err := def.GetHasSequenceArguments()
+	if err != nil {
+		return nil, err
+	}
+
+	if hasSequenceArguments {
 		found := false
-		for _, overload := range overloads {
+		for _, overload := range def.Definition {
 			// Find the overload that matches funcExpr.
 			if len(funcExpr.Exprs) == overload.Types.Length() {
 				found = true
@@ -137,17 +140,14 @@ func getSequenceIdentifier(expr tree.Expr) *SeqIdentifier {
 // e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
 //
 // `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
-func GetUsedSequences(
-	defaultExpr tree.Expr,
-	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
-) ([]SeqIdentifier, error) {
+func GetUsedSequences(defaultExpr tree.Expr) ([]SeqIdentifier, error) {
 	var seqIdentifiers []SeqIdentifier
 	_, err := tree.SimpleVisit(
 		defaultExpr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			switch t := expr.(type) {
 			case *tree.FuncExpr:
-				identifier, err := GetSequenceFromFunc(t, getBuiltinProperties)
+				identifier, err := GetSequenceFromFunc(t)
 				if err != nil {
 					return false, nil, err
 				}
@@ -170,14 +170,12 @@ func GetUsedSequences(
 //
 // `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
 func ReplaceSequenceNamesWithIDs(
-	defaultExpr tree.Expr,
-	nameToID map[string]descpb.ID,
-	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+	defaultExpr tree.Expr, nameToID map[string]descpb.ID,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch t := expr.(type) {
 		case *tree.FuncExpr:
-			identifier, err := GetSequenceFromFunc(t, getBuiltinProperties)
+			identifier, err := GetSequenceFromFunc(t)
 			if err != nil {
 				return false, nil, err
 			}
@@ -219,13 +217,11 @@ func ReplaceSequenceNamesWithIDs(
 //
 // `getBuiltinProperties` argument is commonly builtinsregistry.GetBuiltinProperties.
 func UpgradeSequenceReferenceInExpr(
-	expr *string,
-	usedSequenceIDsToNames map[descpb.ID]*tree.TableName,
-	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+	expr *string, usedSequenceIDsToNames map[descpb.ID]*tree.TableName,
 ) (hasUpgraded bool, err error) {
 	// Find the "reverse" mapping from sequence name to their IDs for those
 	// sequences referenced by-name in `expr`.
-	usedSequenceNamesToIDs, err := seqNameToIDMappingInExpr(*expr, usedSequenceIDsToNames, getBuiltinProperties)
+	usedSequenceNamesToIDs, err := seqNameToIDMappingInExpr(*expr, usedSequenceIDsToNames)
 	if err != nil {
 		return false, err
 	}
@@ -237,7 +233,7 @@ func UpgradeSequenceReferenceInExpr(
 		return false, err
 	}
 
-	newExpr, err := ReplaceSequenceNamesWithIDs(parsedExpr, usedSequenceNamesToIDs, getBuiltinProperties)
+	newExpr, err := ReplaceSequenceNamesWithIDs(parsedExpr, usedSequenceNamesToIDs)
 	if err != nil {
 		return false, err
 	}
@@ -265,15 +261,13 @@ func UpgradeSequenceReferenceInExpr(
 //
 // See its unit test for some examples.
 func seqNameToIDMappingInExpr(
-	expr string,
-	seqIDToNameMapping map[descpb.ID]*tree.TableName,
-	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+	expr string, seqIDToNameMapping map[descpb.ID]*tree.TableName,
 ) (map[string]descpb.ID, error) {
 	parsedExpr, err := parser.ParseExpr(expr)
 	if err != nil {
 		return nil, err
 	}
-	seqRefs, err := GetUsedSequences(parsedExpr, getBuiltinProperties)
+	seqRefs, err := GetUsedSequences(parsedExpr)
 	if err != nil {
 		return nil, err
 	}

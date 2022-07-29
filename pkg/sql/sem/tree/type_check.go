@@ -929,6 +929,7 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
 func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+	// TODO(Chengxiong): Move def.UnsupportedWithIssue check to function resolver implementation.
 	if def.UnsupportedWithIssue != 0 {
 		// Note: no need to embed the function name in the message; the
 		// caller will add the function name as prefix.
@@ -938,15 +939,20 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		}
 		return unimplemented.NewWithIssueDetail(def.UnsupportedWithIssue, def.Name, msg)
 	}
-	if def.Private {
-		return pgerror.Wrapf(errPrivateFunction, pgcode.ReservedName,
-			"%s()", errors.Safe(def.Name))
-	}
+
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil
 	}
 
+	// TODO(Chengxiong): Consider doing this check when we narrow down to an
+	// overload. This is fine at the moment since we don't allow creating
+	// aggregate/window functions yet. But, ideally, we should figure out a way
+	// to do this check after overload resolution.
+	fnCls, err := def.GetClass()
+	if err != nil {
+		return err
+	}
 	if expr.IsWindowFunctionApplication() {
 		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
@@ -960,7 +966,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	} else {
 		// If it is an aggregate function *not used OVER a window*, then
 		// we have an aggregation.
-		if def.Class == AggregateClass {
+		if fnCls == AggregateClass {
 			if sc.Properties.Derived.inFuncExpr &&
 				sc.Properties.required.rejectFlags&RejectNestedAggregates != 0 {
 				return NewAggInAggError()
@@ -971,7 +977,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 			sc.Properties.Derived.SeenAggregate = true
 		}
 	}
-	if def.Class == GeneratorClass {
+	if fnCls == GeneratorClass {
 		if sc.Properties.Derived.inFuncExpr &&
 			sc.Properties.required.rejectFlags&RejectNestedGenerators != 0 {
 			return NewInvalidNestedSRFError(sc.Properties.required.context)
@@ -1021,7 +1027,11 @@ func (sc *SemaContext) checkVolatility(v volatility.V) error {
 // CheckIsWindowOrAgg returns an error if the function definition is not a
 // window function or an aggregate.
 func CheckIsWindowOrAgg(def *FunctionDefinition) error {
-	switch def.Class {
+	cls, err := def.GetClass()
+	if err != nil {
+		return err
+	}
+	switch cls {
 	case AggregateClass:
 	case WindowClass:
 	default:
@@ -1051,6 +1061,7 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)
 	}
+
 	if semaCtx != nil {
 		// We'll need to remember we are in a function application to
 		// generate suitable errors in checkFunctionUsage().  We cannot
@@ -1072,7 +1083,11 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Definition, false, expr.Exprs...)
+	overloadImpls := make([]overloadImpl, 0, len(def.Definition))
+	for _, o := range def.Definition {
+		overloadImpls = append(overloadImpls, o)
+	}
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, overloadImpls, false, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
@@ -1093,7 +1108,11 @@ func (expr *FuncExpr) TypeCheck(
 	// chooses the overload with preferred type for the given category. For
 	// example, float8 is the preferred type for the numeric category in Postgres.
 	// To match Postgres' behavior, we should add that logic here too.
-	if def.FunctionProperties.Class == AggregateClass {
+	funcCls, err := def.GetClass()
+	if err != nil {
+		return nil, err
+	}
+	if funcCls == AggregateClass {
 		for i := range typedSubExprs {
 			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
 				var filtered []overloadImpl
@@ -1122,8 +1141,8 @@ func (expr *FuncExpr) TypeCheck(
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
-	if len(fns) > 0 && len(nullableArgFns) == 0 && def.FunctionProperties.Class != GeneratorClass &&
-		def.FunctionProperties.Class != AggregateClass {
+	if len(fns) > 0 && len(nullableArgFns) == 0 && funcCls != GeneratorClass &&
+		funcCls != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
@@ -1152,6 +1171,10 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
 	overloadImpl := fns[0].(*Overload)
+	if overloadImpl.Private {
+		return nil, pgerror.Wrapf(errPrivateFunction, pgcode.ReservedName,
+			"%s()", errors.Safe(def.Name))
+	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
@@ -1164,14 +1187,14 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		if def.Class == WindowClass {
+		if funcCls == WindowClass {
 			return nil, pgerror.Newf(pgcode.WrongObjectType,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
-		if def.Class != AggregateClass {
+		if funcCls != AggregateClass {
 			// Same error message as Postgres. If we have a window function, only
 			// aggregates accept a FILTER clause.
 			return nil, pgerror.Newf(pgcode.WrongObjectType,
@@ -1199,7 +1222,7 @@ func (expr *FuncExpr) TypeCheck(
 		expr.Exprs[i] = subExpr
 	}
 	expr.fn = overloadImpl
-	expr.fnProps = &def.FunctionProperties
+	expr.fnProps = &overloadImpl.FunctionProperties
 	expr.typ = overloadImpl.returnType()(typedSubExprs)
 	if expr.typ == UnknownReturnType {
 		typeNames := make([]string, 0, len(expr.Exprs))

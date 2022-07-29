@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -68,7 +67,7 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 	}
 	var seqIDs catalog.DescriptorIDSet
 	{
-		seqIdents, err := seqexpr.GetUsedSequences(e, builtinsregistry.GetBuiltinProperties)
+		seqIdents, err := seqexpr.GetUsedSequences(e)
 		if err != nil {
 			return nil, err
 		}

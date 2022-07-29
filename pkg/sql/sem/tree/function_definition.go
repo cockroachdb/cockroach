@@ -10,19 +10,23 @@
 
 package tree
 
-import "github.com/lib/pq/oid"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/lib/pq/oid"
+)
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
+// TODO(Chengxiong): Remove this struct entirely. Instead, use overloads from
+// function resolution or use "GetBuiltinProperties" if the need is to only look
+// at builtin functions(there are such existing use cases).
 type FunctionDefinition struct {
 	// Name is the short name of the function.
 	Name string
 
 	// Definition is the set of overloads for this function name.
-	// We use []overloadImpl here although all the uses of this struct
-	// could actually write a []Overload, because we want to share
-	// the code with typeCheckOverloadedExprs().
-	Definition []overloadImpl
+	Definition []*Overload
 
 	// FunctionProperties are the properties common to all overloads.
 	FunctionProperties
@@ -136,7 +140,7 @@ var _ = NormalClass
 func NewFunctionDefinition(
 	name string, props *FunctionProperties, def []Overload,
 ) *FunctionDefinition {
-	overloads := make([]overloadImpl, len(def))
+	overloads := make([]*Overload, len(def))
 
 	for i := range def {
 		if def[i].PreferredOverload {
@@ -144,6 +148,7 @@ func NewFunctionDefinition(
 			props.AmbiguousReturnType = true
 		}
 
+		def[i].FunctionProperties = *props
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{
@@ -170,4 +175,74 @@ var OidToBuiltinName map[oid.Oid]string
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
+
+// String implements the Stringer interface.
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
+
+// TODO(Chengxiong): Remove this method after we moved the
+// "UnsupportedWithIssue" check into function resolver implementation.
+func (fd *FunctionDefinition) undefined() bool {
+	return fd.UnsupportedWithIssue != 0
+}
+
+// GetClass returns function class by checking each overload's Class and returns
+// the homogeneous Class value if all overloads are the same Class. Ambiguous
+// error is returned if there is any overload with different Class.
+func (fd *FunctionDefinition) GetClass() (FunctionClass, error) {
+	if fd.undefined() {
+		return fd.Class, nil
+	}
+	return getFuncClass(fd.Name, fd.Definition)
+}
+
+// GetReturnLabel returns function ReturnLabel by checking each overload and
+// returns a ReturnLabel if all overloads have a ReturnLabel of the same length.
+// Ambiguous error is returned if there is any overload has ReturnLabel of a
+// different length. This is good enough since we don't create UDF with
+// ReturnLabel.
+func (fd *FunctionDefinition) GetReturnLabel() ([]string, error) {
+	if fd.undefined() {
+		return fd.ReturnLabels, nil
+	}
+	return getFuncReturnLabels(fd.Name, fd.Definition)
+}
+
+// GetHasSequenceArguments returns function's HasSequenceArguments flag by
+// checking each overload's HasSequenceArguments flag. Ambiguous error is
+// returned if there is any overload has a different flag.
+func (fd *FunctionDefinition) GetHasSequenceArguments() (bool, error) {
+	if fd.undefined() {
+		return fd.HasSequenceArguments, nil
+	}
+	return getHasSequenceArguments(fd.Name, fd.Definition)
+}
+
+func getFuncClass(fnName string, fns []*Overload) (FunctionClass, error) {
+	ret := fns[0].Class
+	for _, o := range fns {
+		if o.Class != ret {
+			return 0, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function class on %s", fnName)
+		}
+	}
+	return ret, nil
+}
+
+func getFuncReturnLabels(fnName string, fns []*Overload) ([]string, error) {
+	ret := fns[0].ReturnLabels
+	for _, o := range fns {
+		if len(ret) != len(o.ReturnLabels) {
+			return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function return label on %s", fnName)
+		}
+	}
+	return ret, nil
+}
+
+func getHasSequenceArguments(fnName string, fns []*Overload) (bool, error) {
+	ret := fns[0].HasSequenceArguments
+	for _, o := range fns {
+		if ret != o.HasSequenceArguments {
+			return false, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function sequence argument on %s", fnName)
+		}
+	}
+	return ret, nil
+}
