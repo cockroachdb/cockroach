@@ -918,6 +918,7 @@ var slowQueries = [...]benchQuery{
 func BenchmarkSlowQueries(b *testing.B) {
 	for _, query := range slowQueries {
 		h := newHarness(b, query, slowSchemas)
+		h.evalCtx.SessionData().ReorderJoinsLimit = 8
 		b.Run(query.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				h.runSimple(b, query, Explore)
