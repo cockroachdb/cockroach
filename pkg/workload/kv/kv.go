@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hash"
 	"math"
+	"math/big"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -36,11 +38,11 @@ import (
 
 const (
 	kvSchema = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		k %s NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL
 	)`
 	kvSchemaWithIndex = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		k %s NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
@@ -49,13 +51,13 @@ const (
 	shardedKvSchema = `(
 		k BIGINT NOT NULL,
 		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
+		shard INT4 AS (mod(%s, %d)) STORED CHECK (%s),
 		PRIMARY KEY (shard, k)
 	)`
 	shardedKvSchemaWithIndex = `(
 		k BIGINT NOT NULL,
 		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
+		shard INT4 AS (mod(%s, %d)) STORED CHECK (%s),
 		PRIMARY KEY (shard, k),
 		INDEX (v)
 	)`
@@ -72,6 +74,7 @@ type kv struct {
 	spanPercent                          int
 	spanLimit                            int
 	writesUseSelectForUpdate             bool
+	sfuDelay                             time.Duration
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
@@ -81,6 +84,7 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	keySize                              int
 }
 
 func init() {
@@ -143,6 +147,10 @@ var kvMeta = workload.Meta{
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
 			`Inject an enum column and use it`)
+		g.flags.IntVar(&g.keySize, `key-size`, 0,
+			`Use string key of appropriate size instead of int`)
+		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
+			`Delay before sfu write transaction commits or aborts`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -172,6 +180,7 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 					w.maxBlockSizeBytes, w.minBlockSizeBytes)
 			}
 			if w.sequential && w.splits > 0 {
+				// TODO(oleg): this could be fixed by making Tables() key range aware
 				return errors.New("'sequential' and 'splits' cannot both be enabled")
 			}
 			if w.sequential && w.zipfian {
@@ -190,15 +199,16 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
+	t := keyTransformerFromConfig(w)
 	table := workload.Table{
 		Name: `kv`,
 		// TODO(dan): Support initializing kv with data.
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
-				stride := (float64(w.cycleLength) - float64(math.MinInt64)) / float64(w.splits+1)
+				stride := (float64(math.MaxInt64) - float64(math.MinInt64)) / float64(w.splits+1)
 				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
-				return []interface{}{splitPoint}
+				return []interface{}{t.getKey(int64(splitPoint))}
 			},
 		),
 	}
@@ -216,13 +226,13 @@ func (w *kv) Tables() []workload.Table {
 			fmt.Fprintf(&checkConstraint, "%d", i)
 		}
 		checkConstraint.WriteString(")")
-		table.Schema = fmt.Sprintf(schema, w.shards, checkConstraint.String())
+		table.Schema = fmt.Sprintf(schema, t.keyToShardableSQL("k"), w.shards, checkConstraint.String())
 	} else {
+		s := kvSchema
 		if w.secondaryIndex {
-			table.Schema = kvSchemaWithIndex
-		} else {
-			table.Schema = kvSchema
+			s = kvSchemaWithIndex
 		}
+		table.Schema = fmt.Sprintf(s, t.keySQLType())
 	}
 	return []workload.Table{table}
 }
@@ -264,6 +274,8 @@ func (w *kv) Ops(
 		return workload.QueryLoad{}, err
 	}
 
+	t := keyTransformerFromConfig(w)
+
 	// Read statement
 	var buf strings.Builder
 	if w.shards == 0 {
@@ -293,7 +305,7 @@ func (w *kv) Ops(
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, `(mod($%d, %d), $%d)`, i+1, w.shards, i+1)
+			fmt.Fprintf(&buf, `(mod(%s, %d), $%d)`, t.keyToShardableSQL(fmt.Sprintf("$%d", i+1)), w.shards, i+1)
 		}
 	}
 	buf.WriteString(`)`)
@@ -368,10 +380,26 @@ func (w *kv) Ops(
 		} else {
 			op.g = newHashGenerator(seq)
 		}
+		op.t = t
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
 	return ql, nil
+}
+
+const minStringKeyDigits = 20
+
+func keyTransformerFromConfig(k *kv) keyTransformer {
+	if k.keySize > 0 {
+		remaining := k.keySize - minStringKeyDigits
+		if remaining < 0 {
+			panic("key size must by >= 20 to fit integer part")
+		}
+		return stringKeyTransformer{
+			fillerSize: remaining,
+		}
+	}
+	return intKeyTransformer{}
 }
 
 type kvOp struct {
@@ -384,6 +412,7 @@ type kvOp struct {
 	spanStmt        workload.StmtHandle
 	sfuStmt         workload.StmtHandle
 	g               keyGenerator
+	t               keyTransformer
 	numEmptyResults *int64 // accessed atomically
 }
 
@@ -392,7 +421,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.g.readKey()
+			args[i] = o.t.getKey(o.g.readKey())
 		}
 		start := timeutil.Now()
 		rows, err := o.readStmt.Query(ctx, args...)
@@ -434,7 +463,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	}
 	for i := 0; i < o.config.batchSize; i++ {
 		j := i * argCount
-		writeArgs[j+0] = o.g.writeKey()
+		writeArgs[j+0] = o.t.getKey(o.g.writeKey())
 		if sfuArgs != nil {
 			sfuArgs[i] = writeArgs[j]
 		}
@@ -465,8 +494,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			return err
 		}
 		// Simulate a transaction that does other work between the SFU and write.
-		// TODO(sumeer): this should be configurable.
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(o.config.sfuDelay)
 		if _, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...); err != nil {
 			// Multiple write transactions can contend and encounter
 			// a serialization failure. We swallow such an error.
@@ -528,6 +556,61 @@ func (s *sequence) write() int64 {
 // require that the key is present.
 func (s *sequence) read() int64 {
 	return atomic.LoadInt64(&s.val) % s.config.cycleLength
+}
+
+// Converts int64 based keys into database keys. Workload uses int64 based
+// keyspace to allow predictable sharding and splitting. Transformer allows
+// mapping integer key into string of arbitrary size for testing keys sized
+// while keeping other features workable.
+type keyTransformer interface {
+	// getKey transforms int keys into table keys for read and write operations.
+	getKey(int64) interface{}
+	// keySQLType returns an SQL type used by create table for key column.
+	keySQLType() string
+	// keyToShardableSql returns a part of SQL statement for sharded queries
+	// that transforms a key into value that could be used in mod(key, shards)
+	// expression.
+	keyToShardableSQL(fieldName string) string
+}
+
+// intKeyTransformer is a noop transformer that passes int keys as is.
+type intKeyTransformer struct{}
+
+func (e intKeyTransformer) getKey(key int64) interface{} {
+	return key
+}
+
+func (e intKeyTransformer) keySQLType() string {
+	return "BIGINT"
+}
+
+func (e intKeyTransformer) keyToShardableSQL(fieldName string) string {
+	return fieldName
+}
+
+// stringKeyTransformer turns int into a zero padded string representation (for
+// 64 bit unsigned integers) and appends a random characters up to desired
+// length. Note that filler is number of extra bytes on top of 20 digits and
+// the the key size parameter as passed to workload.
+type stringKeyTransformer struct {
+	fillerSize int
+}
+
+func (s stringKeyTransformer) getKey(i int64) interface{} {
+	filler := randutil.RandString(randutil.NewTestRandWithSeed(i), s.fillerSize, randutil.PrintableKeyAlphabet)
+	var bigKey big.Int
+	bigKey.Sub(big.NewInt(i), big.NewInt(math.MinInt64))
+	strKey := bigKey.String()
+	prefix := strings.Repeat("0", minStringKeyDigits-len(strKey))
+	return fmt.Sprintf("%s%s%s", prefix, strKey, filler)
+}
+
+func (s stringKeyTransformer) keySQLType() string {
+	return "STRING"
+}
+
+func (s stringKeyTransformer) keyToShardableSQL(fieldName string) string {
+	return fmt.Sprintf("crc32c(%s)", fieldName)
 }
 
 // keyGenerator generates read and write keys. Read keys may not yet exist and
