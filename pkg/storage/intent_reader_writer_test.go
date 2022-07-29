@@ -126,7 +126,7 @@ func (p *printWriter) ClearEngineKey(key EngineKey) error {
 	return p.Writer.ClearEngineKey(key)
 }
 
-func (p *printWriter) ClearRawRange(start, end roachpb.Key) error {
+func (p *printWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if bytes.HasPrefix(start, keys.LocalRangeLockTablePrefix) {
 		ltStart, err := keys.DecodeLockTableSingleKey(start)
 		if err != nil {
@@ -140,7 +140,7 @@ func (p *printWriter) ClearRawRange(start, end roachpb.Key) error {
 	} else {
 		fmt.Fprintf(&p.b, "ClearRawRange(%s, %s)\n", string(start), string(end))
 	}
-	return p.Writer.ClearRawRange(start, end)
+	return p.Writer.ClearRawRange(start, end, pointKeys, rangeKeys)
 }
 
 func (p *printWriter) PutUnversioned(key roachpb.Key, value []byte) error {

@@ -71,13 +71,13 @@ func (idw intentDemuxWriter) PutIntent(
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
 func (idw intentDemuxWriter) ClearMVCCRange(start, end roachpb.Key, buf []byte) ([]byte, error) {
-	err := idw.w.ClearRawRange(start, end)
+	err := idw.w.ClearRawRange(start, end, true, true)
 	if err != nil {
 		return buf, err
 	}
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
-	return buf, idw.w.ClearRawRange(lstart, lend)
+	return buf, idw.w.ClearRawRange(lstart, lend, true, true)
 }
 
 // wrappableReader is used to implement a wrapped Reader. A wrapped Reader

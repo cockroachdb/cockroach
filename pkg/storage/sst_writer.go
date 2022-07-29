@@ -135,12 +135,23 @@ func (fw *SSTWriter) Finish() error {
 	return nil
 }
 
-// ClearRawRange implements the Writer interface.
-func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
-	if err := fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end}); err != nil {
-		return err
+// ClearRawRange implements the Engine interface.
+func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	fw.scratch = EngineKey{Key: start}.EncodeToBuf(fw.scratch[:0])
+	endRaw := EngineKey{Key: end}.Encode()
+	if pointKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+			return err
+		}
 	}
-	return fw.ClearAllRangeKeys(start, end)
+	if rangeKeys && fw.supportsRangeKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.RangeKeyDelete(fw.scratch, endRaw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Writer interface.
