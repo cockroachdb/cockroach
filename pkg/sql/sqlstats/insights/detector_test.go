@@ -37,45 +37,23 @@ func TestAnyDetector(t *testing.T) {
 		require.True(t, detector.enabled())
 	})
 
-	t.Run("isOutlier is false without any detectors", func(t *testing.T) {
+	t.Run("examine is nil without any detectors", func(t *testing.T) {
 		detector := &anyDetector{}
-		require.False(t, detector.isOutlier(&Statement{}))
+		require.Empty(t, detector.examine(&Statement{}))
 	})
 
-	t.Run("isOutlier is false without any concerned detectors", func(t *testing.T) {
+	t.Run("examine is nil without any concerned detectors", func(t *testing.T) {
 		detector := &anyDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
-		require.False(t, detector.isOutlier(&Statement{}))
+		require.Empty(t, detector.examine(&Statement{}))
 	})
 
-	t.Run("isOutlier is true with at least one concerned detector", func(t *testing.T) {
-		detector := &anyDetector{[]detector{&fakeDetector{stubIsOutlier: true}, &fakeDetector{}}}
-		require.True(t, detector.isOutlier(&Statement{}))
+	t.Run("examine combines detector concerns", func(t *testing.T) {
+		detector := &anyDetector{[]detector{
+			&fakeDetector{stubExamine: []Concern{Concern_Slow}},
+			&fakeDetector{stubExamine: []Concern{Concern_UnusuallySlow}},
+		}}
+		require.Equal(t, []Concern{Concern_Slow, Concern_UnusuallySlow}, detector.examine(&Statement{}))
 	})
-
-	t.Run("isOutlier consults all detectors without short-circuiting", func(t *testing.T) {
-		// Detector implementations may wish to observe all statements, to
-		// build up their baseline sense of what "usual" is. To short-circuit
-		// would deny them that chance.
-		d1 := &fakeDetector{stubIsOutlier: true}
-		d2 := &fakeDetector{stubIsOutlier: true}
-		detector := &anyDetector{[]detector{d1, d2}}
-		detector.isOutlier(&Statement{})
-		require.True(t, d1.isOutlierCalled, "the first detector should be consulted")
-		require.True(t, d2.isOutlierCalled, "the second detector should be consulted")
-	})
-}
-
-type IsOutlierTestCase struct {
-	name             string
-	seedLatency      time.Duration
-	candidateLatency time.Duration
-	isOutlier        bool
-}
-
-type MetricsTestCase struct {
-	name         string
-	fingerprints int
-	assertion    func(*testing.T, Metrics)
 }
 
 func TestLatencyQuantileDetector(t *testing.T) {
@@ -91,35 +69,38 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		require.True(t, d.enabled())
 	})
 
-	t.Run("isOutlier", func(t *testing.T) {
+	t.Run("examine", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
 		LatencyQuantileDetectorInterestingThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
 
-		tests := []IsOutlierTestCase{{
+		tests := []struct {
+			name             string
+			seedLatency      time.Duration
+			candidateLatency time.Duration
+			concerns         []Concern
+		}{{
 			name:             "false with normal latency",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 100 * time.Millisecond,
-			isOutlier:        false,
 		}, {
 			name:             "true with higher latency",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 200 * time.Millisecond,
-			isOutlier:        true,
+			concerns:         []Concern{Concern_UnusuallySlow},
 		}, {
 			name:             "false with higher latency under interesting threshold",
 			seedLatency:      10 * time.Millisecond,
 			candidateLatency: 20 * time.Millisecond,
-			isOutlier:        false,
 		}}
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				d := newLatencyQuantileDetector(st, NewMetrics())
 				for i := 0; i < 1000; i++ {
-					d.isOutlier(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
+					d.examine(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
 				}
-				require.Equal(t, test.isOutlier, d.isOutlier(&Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
+				require.Equal(t, test.concerns, d.examine(&Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
 			})
 		}
 	})
@@ -130,7 +111,11 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
 		LatencyQuantileDetectorMemoryCap.Override(ctx, &st.SV, 1024)
 
-		tests := []MetricsTestCase{{
+		tests := []struct {
+			name         string
+			fingerprints int
+			assertion    func(*testing.T, Metrics)
+		}{{
 			name:         "reports distinct fingerprints",
 			fingerprints: 1,
 			assertion: func(t *testing.T, metrics Metrics) {
@@ -172,7 +157,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 				d := newLatencyQuantileDetector(st, metrics)
 				// Show the detector `test.fingerprints` distinct fingerprints.
 				for i := 0; i < test.fingerprints; i++ {
-					d.isOutlier(&Statement{
+					d.examine(&Statement{
 						LatencyInSeconds: LatencyQuantileDetectorInterestingThreshold.Get(&st.SV).Seconds(),
 						FingerprintID:    roachpb.StmtFingerprintID(i),
 					})
@@ -191,7 +176,7 @@ func BenchmarkLatencyQuantileDetector(b *testing.B) {
 	LatencyQuantileDetectorEnabled.Override(context.Background(), &settings.SV, true)
 	d := newLatencyQuantileDetector(settings, NewMetrics())
 	for i := 0; i < b.N; i++ {
-		d.isOutlier(&Statement{
+		d.examine(&Statement{
 			LatencyInSeconds: random.Float64(),
 		})
 	}
@@ -210,39 +195,37 @@ func TestLatencyThresholdDetector(t *testing.T) {
 		require.True(t, detector.enabled())
 	})
 
-	t.Run("isOutlier false when disabled", func(t *testing.T) {
+	t.Run("examine nil when disabled", func(t *testing.T) {
 		detector := latencyThresholdDetector{st: cluster.MakeTestingClusterSettings()}
-		require.False(t, detector.isOutlier(&Statement{LatencyInSeconds: 1}))
+		require.Empty(t, detector.examine(&Statement{LatencyInSeconds: 1}))
 	})
 
-	t.Run("isOutlier false when fast enough", func(t *testing.T) {
+	t.Run("examine nil when fast enough", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.False(t, detector.isOutlier(&Statement{LatencyInSeconds: 0.5}))
+		require.Empty(t, detector.examine(&Statement{LatencyInSeconds: 0.5}))
 	})
 
-	t.Run("isOutlier true beyond threshold", func(t *testing.T) {
+	t.Run("examine slow beyond threshold", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.True(t, detector.isOutlier(&Statement{LatencyInSeconds: 1}))
+		require.Equal(t, []Concern{Concern_Slow}, detector.examine(&Statement{LatencyInSeconds: 1}))
 	})
 }
 
 type fakeDetector struct {
-	stubEnabled     bool
-	stubIsOutlier   bool
-	isOutlierCalled bool
+	stubEnabled bool
+	stubExamine []Concern
 }
 
 func (f fakeDetector) enabled() bool {
 	return f.stubEnabled
 }
 
-func (f *fakeDetector) isOutlier(_ *Statement) bool {
-	f.isOutlierCalled = true
-	return f.stubIsOutlier
+func (f fakeDetector) examine(statement *Statement) []Concern {
+	return f.stubExamine
 }
 
 var _ detector = &fakeDetector{}
