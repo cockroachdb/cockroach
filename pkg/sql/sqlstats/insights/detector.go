@@ -20,7 +20,7 @@ import (
 
 type detector interface {
 	enabled() bool
-	isOutlier(*Statement) bool
+	examine(*Statement) []Concern
 }
 
 var _ detector = &anyDetector{}
@@ -40,14 +40,20 @@ func (a anyDetector) enabled() bool {
 	return false
 }
 
-func (a anyDetector) isOutlier(statement *Statement) bool {
-	// Because some detectors may need to observe all statements to build up
-	// their baseline sense of what "normal" is, we avoid short-circuiting.
-	result := false
+func (a anyDetector) examine(statement *Statement) (concerns []Concern) {
+	set := make(map[Concern]struct{})
+
 	for _, d := range a.detectors {
-		result = d.isOutlier(statement) || result
+		for _, concern := range d.examine(statement) {
+			set[concern] = struct{}{}
+		}
 	}
-	return result
+
+	for concern := range set {
+		concerns = append(concerns, concern)
+	}
+
+	return concerns
 }
 
 var desiredQuantiles = map[float64]float64{0.5: 0.05, 0.99: 0.001}
@@ -68,21 +74,23 @@ func (d latencyQuantileDetector) enabled() bool {
 	return LatencyQuantileDetectorEnabled.Get(&d.settings.SV)
 }
 
-func (d *latencyQuantileDetector) isOutlier(stmt *Statement) (decision bool) {
+func (d *latencyQuantileDetector) examine(stmt *Statement) (concerns []Concern) {
 	if !d.enabled() {
-		return false
+		return concerns
 	}
 
 	d.withFingerprintLatencySummary(stmt, func(latencySummary *quantile.Stream) {
 		latencySummary.Insert(stmt.LatencyInSeconds)
 		p50 := latencySummary.Query(0.5)
 		p99 := latencySummary.Query(0.99)
-		decision = stmt.LatencyInSeconds >= p99 &&
+		if stmt.LatencyInSeconds >= p99 &&
 			stmt.LatencyInSeconds >= 2*p50 &&
-			stmt.LatencyInSeconds >= LatencyQuantileDetectorInterestingThreshold.Get(&d.settings.SV).Seconds()
+			stmt.LatencyInSeconds >= LatencyQuantileDetectorInterestingThreshold.Get(&d.settings.SV).Seconds() {
+			concerns = append(concerns, Concern_SlowExecution)
+		}
 	})
 
-	return decision
+	return concerns
 }
 
 func (d *latencyQuantileDetector) withFingerprintLatencySummary(
@@ -138,6 +146,10 @@ func (l latencyThresholdDetector) enabled() bool {
 	return LatencyThreshold.Get(&l.st.SV) > 0
 }
 
-func (l latencyThresholdDetector) isOutlier(s *Statement) bool {
-	return l.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&l.st.SV).Seconds()
+func (l latencyThresholdDetector) examine(s *Statement) (concerns []Concern) {
+	if l.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&l.st.SV).Seconds() {
+		concerns = append(concerns, Concern_SlowExecution)
+	}
+
+	return concerns
 }
