@@ -46,7 +46,7 @@ import (
 var _ eval.ValueGenerator = &seriesValueGenerator{}
 var _ eval.ValueGenerator = &arrayValueGenerator{}
 
-func initGeneratorBuiltins() {
+func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
 		if v.props.Class != tree.GeneratorClass {

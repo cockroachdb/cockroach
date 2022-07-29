@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func initWindowBuiltins() {
+func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range windows {
 		if v.props.Class != tree.WindowClass {
