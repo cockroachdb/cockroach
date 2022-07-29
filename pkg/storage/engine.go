@@ -636,17 +636,17 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearEngineKey(key EngineKey) error
 
-	// ClearRawRange removes both point keys and range keys from start (inclusive)
-	// to end (exclusive) using a Pebble range tombstone. It can be applied to a
-	// range consisting of MVCCKeys or the more general EngineKeys -- it simply
-	// uses the roachpb.Key parameters as the Key field of an EngineKey. This
-	// implies that it does not clear intents unless the intent lock table is
-	// targeted explicitly.
+	// ClearRawRange removes point and/or range keys from start (inclusive) to end
+	// (exclusive) using Pebble range tombstones. It can be applied to a range
+	// consisting of MVCCKeys or the more general EngineKeys -- it simply uses the
+	// roachpb.Key parameters as the Key field of an EngineKey. This implies that
+	// it does not clear intents unless the intent lock table is targeted
+	// explicitly.
 	//
 	// Similar to the other Clear* methods, this method actually removes entries
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
-	ClearRawRange(start, end roachpb.Key) error
+	ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
 	// ClearMVCCRange removes MVCC keys from start (inclusive) to end (exclusive)
 	// using a Pebble range tombstone. It will remove everything in the span,
 	// including intents and range keys.
@@ -1224,7 +1224,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	for valid {
 		count++
 		if count > clearRangeMinKeys {
-			return writer.ClearRawRange(start, end)
+			return writer.ClearRawRange(start, end, true, true)
 		}
 		valid, err = iter.NextEngineKey()
 	}

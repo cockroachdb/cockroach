@@ -310,7 +310,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 			defer sst.Close()
-			err := sst.ClearRawRange(s.Key, s.EndKey)
+			err := sst.ClearRawRange(s.Key, s.EndKey, true, true)
 			require.NoError(t, err)
 			err = sst.Finish()
 			require.NoError(t, err)
