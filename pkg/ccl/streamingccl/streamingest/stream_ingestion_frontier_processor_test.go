@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -26,14 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,11 +43,24 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					// We create a job record to track persistence but we don't want it to
+					// be adopted as the processors are being manually executed in the test.
+					DisableAdoptions: true,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 
 	st := cluster.MakeTestingClusterSettings()
+	JobCheckpointFrequency.Override(ctx, &st.SV, 200*time.Millisecond)
+	streamingccl.StreamReplicationConsumerHeartbeatFrequency.Override(ctx, &st.SV, 100*time.Millisecond)
+
 	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -176,7 +188,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}, pa2: []streamingccl.Event{
 				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 2)),
 			}},
-			frontierStartTime: hlc.Timestamp{WallTime: 1, Logical: 3},
+			frontierStartTime:         hlc.Timestamp{WallTime: 1, Logical: 3},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 3},
 		},
 		{
 			name: "existing-job-checkpoint",
@@ -190,10 +203,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				{Span: pa1Span, Timestamp: hlc.Timestamp{WallTime: 4}},
 				{Span: pa2Span, Timestamp: hlc.Timestamp{WallTime: 3}},
 			},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 3},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-
 			topology := streamclient.Topology{
 				{
 					ID:                pa1,
@@ -222,6 +235,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				OldID: roachpb.MakeTenantID(tenantID),
 				NewID: roachpb.MakeTenantID(tenantID + 10),
 			}
+			spec.StartTime = tc.frontierStartTime
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
@@ -231,18 +245,26 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 
 			// Inject a mock client with the events being tested against.
+			doneCh := make(chan struct{})
+			defer close(doneCh)
 			sip.forceClientForTests = &mockStreamClient{
 				partitionEvents: tc.events,
+				doneCh:          doneCh,
 			}
 			defer func() {
 				require.NoError(t, sip.forceClientForTests.Close(ctx))
 			}()
+
+			jobID := registry.MakeJobID()
+
+			t.Logf("Using JobID: %v", jobID)
 
 			// Create a frontier processor.
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
 			frontierSpec.StreamAddresses = topology.StreamAddresses()
 			frontierSpec.TrackedSpans = []roachpb.Span{pa1Span, pa2Span}
 			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
+			frontierSpec.JobID = int64(jobID)
 
 			if !tc.frontierStartTime.IsEmpty() {
 				frontierSpec.HighWaterAtStart = tc.frontierStartTime
@@ -250,16 +272,19 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 			// Create a mock ingestion job.
 			record := jobs.Record{
+				JobID:       jobID,
 				Description: "fake ingestion job",
 				Username:    username.TestUserName(),
-				Details:     jobspb.StreamIngestionDetails{StreamAddress: "foo"},
+				Details:     jobspb.StreamIngestionDetails{StreamAddress: spec.StreamAddress},
 				// We don't use this so it does not matter what we set it too, as long
 				// as it is non-nil.
-				Progress: jobspb.ImportProgress{},
+				Progress: jobspb.StreamIngestionProgress{},
 			}
 			record.CreatedBy = &jobs.CreatedByInfo{
 				Name: "ingestion",
 			}
+			_, err = registry.CreateJobWithTxn(ctx, record, record.JobID, nil)
+			require.NoError(t, err)
 
 			frontierPost := execinfrapb.PostProcessSpec{}
 			frontierOut := distsqlutils.RowBuffer{}
@@ -272,6 +297,38 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 			ctxWithCancel, cancel := context.WithCancel(ctx)
 			defer cancel()
+
+			client := streamclient.GetRandomStreamClientSingletonForTesting()
+			defer func() {
+				require.NoError(t, client.Close(context.Background()))
+			}()
+			interceptable, ok := client.(streamclient.InterceptableStreamClient)
+			require.True(t, ok)
+			defer interceptable.ClearInterceptors()
+
+			// Record heartbeats in a list and terminate the client once the expected
+			// frontier timestamp has been reached
+			heartbeats := make([]hlc.Timestamp, 0)
+			interceptable.RegisterHeartbeatInterception(func(heartbeatTs hlc.Timestamp) {
+				heartbeats = append(heartbeats, heartbeatTs)
+				if tc.expectedFrontierTimestamp.LessEq(heartbeatTs) {
+					doneCh <- struct{}{}
+				}
+
+				// Ensure we never heartbeat a value later than what is persisted
+				job, err := registry.LoadJob(ctx, jobID)
+				require.NoError(t, err)
+				progress := job.Progress().Progress
+				if progress == nil {
+					if !heartbeatTs.Equal(spec.StartTime) {
+						t.Fatalf("heartbeat %v should equal start time of %v", heartbeatTs, spec.StartTime)
+					}
+				} else {
+					persistedHighwater := *progress.(*jobspb.Progress_HighWater).HighWater
+					require.True(t, heartbeatTs.LessEq(persistedHighwater))
+				}
+			})
+
 			fp.Run(ctxWithCancel)
 
 			if !frontierOut.ProducerClosed() {
@@ -288,37 +345,29 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				require.True(t, resolvedSpan.Timestamp.LessEq(frontierForSpans(fp.frontier, resolvedSpan.Span)))
 			}
 
-			var prevTimestamp hlc.Timestamp
-			for {
-				row, meta := frontierOut.Next()
-				if meta != nil {
-					if !tc.frontierStartTime.IsEmpty() {
-						require.True(t, testutils.IsError(meta.Err, fmt.Sprintf("got a resolved timestamp ."+
-							"* that is less than the frontier processor start time %s",
-							tc.frontierStartTime.String())))
-						return
-					}
-					t.Fatalf("unexpected meta record returned by frontier processor: %+v\n", *meta)
+			// Wait until the frontier terminates
+			_, meta := frontierOut.Next()
+			if meta != nil {
+				if !tc.frontierStartTime.IsEmpty() {
+					require.True(t, testutils.IsError(meta.Err, fmt.Sprintf("got a resolved timestamp ."+
+						"* that is less than the frontier processor start time %s",
+						tc.frontierStartTime.String())))
+					return
 				}
-				t.Logf("WOAH, row: %v", row)
-				if row == nil {
-					break
-				}
-				datum := row[0].Datum
-				protoBytes, ok := datum.(*tree.DBytes)
-				require.True(t, ok)
-
-				var ingestedTimestamp hlc.Timestamp
-				require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &ingestedTimestamp))
-				// Ensure that the rows emitted by the frontier never regress the ts or
-				// appear prior to a checkpoint.
-				if !prevTimestamp.IsEmpty() {
-					require.True(t, prevTimestamp.Less(ingestedTimestamp))
-					require.True(t, minCheckpointTs.Less(prevTimestamp))
-				}
-				t.Logf("Setting prev timestamp to (%+v)", ingestedTimestamp)
-				prevTimestamp = ingestedTimestamp
+				t.Fatalf("unexpected meta record returned by frontier processor: %+v\n", *meta)
 			}
+
+			// Ensure that the rows emitted by the frontier never regress the ts or
+			// appear prior to a checkpoint.
+			var prevTimestamp hlc.Timestamp
+			for _, heartbeatTs := range heartbeats {
+				if !prevTimestamp.IsEmpty() {
+					require.True(t, prevTimestamp.LessEq(heartbeatTs))
+					require.True(t, minCheckpointTs.LessEq(heartbeatTs))
+				}
+				prevTimestamp = heartbeatTs
+			}
+
 			// Check the final ts recorded by the frontier.
 			require.Equal(t, tc.expectedFrontierTimestamp, prevTimestamp)
 		})
