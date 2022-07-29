@@ -30,7 +30,7 @@ import (
 var supportedAlterTableStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {alterTableAddColumn, true},
 	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {alterTableDropColumn, true},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, false},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, true},
 }
 
 func init() {
