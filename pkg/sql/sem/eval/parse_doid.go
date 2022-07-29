@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -79,11 +78,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one function named '%s'", funcDef.Name)
 		}
-		def := funcDef.Definition[0]
-		overload, ok := def.(*tree.Overload)
-		if !ok {
-			return nil, errors.AssertionFailedf("invalid non-overload regproc %s", funcDef.Name)
-		}
+		overload := funcDef.Definition[0]
 		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
 	case oid.T_regtype:
 		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)

@@ -534,7 +534,6 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			continue
 		}
 		for _, ov := range def.Definition {
-			ov := ov.(*tree.Overload)
 			// Ignore documented unusable functions.
 			if strings.Contains(ov.Info, "Not usable") {
 				continue

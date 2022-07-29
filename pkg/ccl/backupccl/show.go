@@ -105,9 +105,9 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	mkStore cloud.ExternalStorageFromURIFactory,
+	_ cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
-	user username.SQLUsername,
+	_ username.SQLUsername,
 	resultsCh chan<- tree.Datums,
 ) error {
 	var memReserved int64
@@ -129,7 +129,7 @@ func (m manifestInfoReader) showBackup(
 		return err
 	}
 
-	datums, err := m.shower.fn(info)
+	datums, err := m.shower.fn(ctx, info)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
 
 func (m metadataSSTInfoReader) showBackup(
 	ctx context.Context,
-	mem *mon.BoundAccount,
+	_ *mon.BoundAccount,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
 	user username.SQLUsername,
@@ -249,15 +249,14 @@ func showBackupPlanHook(
 		case tree.BackupFileDetails:
 			shower = backupShowerFileSetup(backup.InCollection)
 		case tree.BackupSchemaDetails:
-			shower = backupShowerDefault(ctx, p, true, opts)
+			shower = backupShowerDefault(p, true, opts)
 		default:
-			shower = backupShowerDefault(ctx, p, false, opts)
+			shower = backupShowerDefault(p, false, opts)
 		}
 		infoReader = manifestInfoReader{shower: shower}
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
@@ -612,7 +611,7 @@ type backupShower struct {
 
 	// fn is the specific implementation of the shower that can either be a default, ranges, files,
 	// or JSON shower.
-	fn func(info backupInfo) ([]tree.Datums, error)
+	fn func(ctx context.Context, info backupInfo) ([]tree.Datums, error)
 }
 
 // backupShowerHeaders defines the schema for the table presented to the user.
@@ -656,11 +655,11 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 }
 
 func backupShowerDefault(
-	ctx context.Context, p sql.PlanHookState, showSchemas bool, opts map[string]string,
+	p sql.PlanHookState, showSchemas bool, opts map[string]string,
 ) backupShower {
 	return backupShower{
 		header: backupShowerHeaders(showSchemas, opts),
-		fn: func(info backupInfo) ([]tree.Datums, error) {
+		fn: func(ctx context.Context, info backupInfo) ([]tree.Datums, error) {
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
 				// Map database ID to descriptor name.
@@ -998,7 +997,7 @@ var backupShowerRanges = backupShower{
 		{Name: "end_key", Typ: types.Bytes},
 	},
 
-	fn: func(info backupInfo) (rows []tree.Datums, err error) {
+	fn: func(ctx context.Context, info backupInfo) (rows []tree.Datums, err error) {
 		for _, manifest := range info.manifests {
 			for _, span := range manifest.Spans {
 				rows = append(rows, tree.Datums{
@@ -1027,7 +1026,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 		{Name: "file_bytes", Typ: types.Int},
 	},
 
-		fn: func(info backupInfo) (rows []tree.Datums, err error) {
+		fn: func(ctx context.Context, info backupInfo) (rows []tree.Datums, err error) {
 
 			var manifestDirs []string
 			var localityAware bool
@@ -1161,7 +1160,7 @@ var jsonShower = backupShower{
 		{Name: "manifest", Typ: types.Jsonb},
 	},
 
-	fn: func(info backupInfo) ([]tree.Datums, error) {
+	fn: func(ctx context.Context, info backupInfo) ([]tree.Datums, error) {
 		rows := make([]tree.Datums, len(info.manifests))
 		for i, manifest := range info.manifests {
 			j, err := protoreflect.MessageToJSON(
