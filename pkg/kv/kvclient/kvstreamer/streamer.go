@@ -1552,7 +1552,6 @@ func buildResumeSingleRangeBatch(
 		union roachpb.RequestUnion_Scan
 	}, fp.numIncompleteScans)
 	var resumeReqIdx int
-	emptyResponse := true
 	for i, resp := range br.Responses {
 		position := req.positions[i]
 		reply := resp.GetInner()
@@ -1560,7 +1559,6 @@ func buildResumeSingleRangeBatch(
 		case *roachpb.GetResponse:
 			get := response
 			if get.ResumeSpan == nil {
-				emptyResponse = false
 				continue
 			}
 			// This Get wasn't completed - create a new request according to the
@@ -1583,7 +1581,6 @@ func buildResumeSingleRangeBatch(
 		case *roachpb.ScanResponse:
 			scan := response
 			if scan.ResumeSpan == nil {
-				emptyResponse = false
 				continue
 			}
 			// This Scan wasn't completed - create a new request according to
@@ -1616,7 +1613,7 @@ func buildResumeSingleRangeBatch(
 		}
 	}
 
-	if emptyResponse {
+	if !fp.hasResults() {
 		// We received an empty response.
 		atomic.AddInt64(&s.atomics.emptyBatchResponses, 1)
 		if req.minTargetBytes != 0 {
@@ -1629,6 +1626,10 @@ func buildResumeSingleRangeBatch(
 				// minTargetBytes hasn't increased for the resume request, we
 				// use the double of the original target.
 				resumeReq.minTargetBytes = 2 * req.minTargetBytes
+				if resumeReq.minTargetBytes < 0 {
+					// Prevent the overflow.
+					resumeReq.minTargetBytes = math.MaxInt64
+				}
 			}
 		}
 	}
