@@ -104,7 +104,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"gen_random_uuid": generateRandomUUID4Impl,
+	"gen_random_uuid": generateRandomUUID4Impl(),
 
 	"gen_salt": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},

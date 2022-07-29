@@ -2343,7 +2343,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						provolatile, proleakproof := builtin.Volatility.ToPostgres()
 
 						err := addRow(
-							h.BuiltinOid(name, &builtin),             // oid
+							tree.NewDOid(builtin.Oid),                // oid
 							dName,                                    // proname
 							nspOid,                                   // pronamespace
 							tree.DNull,                               // proowner
@@ -4183,7 +4183,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 						}
 						regprocForZeroOid := tree.NewDOidWithName(0, types.RegProc, "-")
 						err := addRow(
-							h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
+							tree.NewDOid(overload.Oid).AsRegProc(name), // aggfnoid
 							aggregateKind,     // aggkind
 							aggNumDirectArgs,  // aggnumdirectargs
 							regprocForZeroOid, // aggtransfn
@@ -4221,14 +4221,11 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 // rather than in the SQL builtins package, because the oidHasher can't live
 // there.
 func init() {
-	h := makeOidHasher()
 	tree.OidToBuiltinName = make(map[oid.Oid]string, len(tree.FunDefs))
+
 	for name, def := range tree.FunDefs {
 		for _, overload := range def.Definition {
-			builtinOid := h.BuiltinOid(name, overload)
-			id := builtinOid.Oid
-			tree.OidToBuiltinName[id] = name
-			overload.Oid = id
+			tree.OidToBuiltinName[overload.Oid] = name
 		}
 	}
 }
@@ -4436,20 +4433,15 @@ func (h oidHasher) UniqueConstraintOid(
 	return h.getOid()
 }
 
-func (h oidHasher) BuiltinOid(name string, builtin *tree.Overload) *tree.DOid {
-	h.writeTypeTag(functionTypeTag)
-	h.writeStr(name)
-	h.writeStr(builtin.Types.String())
-	h.writeStr(builtin.FixedReturnType().String())
-	return h.getOid()
-}
-
+// RegProc can only be used to construct RegProc datum for builtin functions.
+// It's currently only be used to construct rows in pg_catalog.pg_type which
+// requires type-relevant builtin functions.
 func (h oidHasher) RegProc(name string) tree.Datum {
 	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	if len(overloads) == 0 {
 		return tree.DNull
 	}
-	return h.BuiltinOid(name, &overloads[0]).AsRegProc(name)
+	return tree.NewDOid(overloads[0].Oid).AsRegProc(name)
 }
 
 func (h oidHasher) UserOid(userName username.SQLUsername) *tree.DOid {

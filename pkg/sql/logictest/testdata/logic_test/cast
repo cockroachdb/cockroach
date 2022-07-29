@@ -1271,8 +1271,8 @@ SELECT i, i::oid, i::oid::text,
   i::oid::regproc, i::oid::regprocedure, i::oid::regnamespace, i::oid::regclass, i::oid::regtype, i::oid::regrole
 FROM (VALUES (0), (1)) v(i)
 ----
-0  0  0  -  -  -  -  -  -
-1  1  1  1  1  1  1  1  1
+0  0  0  -          -          -  -  -  -
+1  1  1  array_agg  array_agg  1  1  1  1
 
 query TOOOOOOOOOOOO
 SELECT i, i::regproc::oid, i::regprocedure::oid, i::regnamespace::oid, i::regtype::oid, i::regclass::oid, i::regrole::oid,

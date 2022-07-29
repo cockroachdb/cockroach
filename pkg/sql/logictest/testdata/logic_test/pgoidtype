@@ -11,12 +11,12 @@ SELECT 3::OID::INT::OID
 query OOOOOOO
 SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGROLE, 1::REGTYPE
 ----
-1  1  1  1  1  1  1
+1  1  1  array_agg  array_agg  1  1
 
 query OOOOOO
 SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGROLE, 1::OID::REGTYPE
 ----
-1  1  1  1  1  1
+1  1  array_agg  array_agg  1  1
 
 query TTT
 SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
@@ -83,7 +83,7 @@ WHERE relname = 'pg_constraint'
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  upper  3615042040
+upper  upper  upper  827
 
 query error invalid function name
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
@@ -91,7 +91,7 @@ SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 query OOO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
 ----
-upper  upper  3615042040
+upper  upper  827
 
 query error unknown function: blah\(\)
 SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE

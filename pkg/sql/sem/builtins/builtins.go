@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -94,6 +95,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
+	"github.com/lib/pq/oid"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -158,7 +160,28 @@ func arrayProps() tree.FunctionProperties {
 	return tree.FunctionProperties{Category: builtinconstants.CategoryArray}
 }
 
+// builtinFuncOIDCnt is used as a counter to assign OIDs to builtin function
+// overloads. OIDs are assigned in the order of overloads being initialized by
+// go. That is, OIDs are given by alphabetical order of the file name a function
+// is declared and the order of tree.Overload is declared in that file. So
+// changing file names or function declaration position will change OIDs.
+var builtinFuncOIDCnt = 0
+
+// Please always use this function to creat builtinDefinition instead of
+// construct it directly. Otherwise, the new builtin function will not have an
+// OID.
 func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) builtinDefinition {
+	for i := range overloads {
+		builtinFuncOIDCnt++
+		if builtinFuncOIDCnt > oidext.CockroachPredefinedOIDMax {
+			panic(
+				errors.AssertionFailedf(
+					"builtin function oid exceeds maximum predefined oid %d", oidext.CockroachPredefinedOIDMax,
+				),
+			)
+		}
+		overloads[i].Oid = oid.Oid(builtinFuncOIDCnt)
+	}
 	return builtinDefinition{
 		props:     props,
 		overloads: overloads,
@@ -335,8 +358,8 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"substr":    substringImpls,
-	"substring": substringImpls,
+	"substr":    makeSubStringImpls(),
+	"substring": makeSubStringImpls(),
 
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
@@ -628,7 +651,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		}),
 
-	"uuid_generate_v4": generateRandomUUID4Impl,
+	"uuid_generate_v4": generateRandomUUID4Impl(),
 
 	"uuid_nil": generateConstantUUIDImpl(
 		uuid.Nil, "Returns a nil UUID constant.",
@@ -2343,8 +2366,8 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"experimental_uuid_v4": uuidV4Impl,
-	"uuid_v4":              uuidV4Impl,
+	"experimental_uuid_v4": uuidV4Impl(),
+	"uuid_v4":              uuidV4Impl(),
 
 	"greatest": makeBuiltin(
 		tree.FunctionProperties{
@@ -2881,8 +2904,8 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"extract":   extractBuiltin,
-	"date_part": extractBuiltin,
+	"extract":   extractBuiltin(),
+	"date_part": extractBuiltin(),
 
 	// TODO(knz,otan): Remove in 20.2.
 	"extract_duration": makeBuiltin(
@@ -3943,9 +3966,9 @@ value if you rely on the HLC for accuracy.`,
 
 	"jsonb_build_object": makeBuiltin(jsonProps(), jsonBuildObjectImpl),
 
-	"json_object": jsonObjectImpls,
+	"json_object": jsonObjectImpls(),
 
-	"jsonb_object": jsonObjectImpls,
+	"jsonb_object": jsonObjectImpls(),
 
 	"json_strip_nulls": makeBuiltin(jsonProps(), jsonStripNullsImpl),
 
@@ -7201,7 +7224,7 @@ expires until the statement bundle is collected`,
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
-	b := makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+	overloads := []tree.Overload{
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
@@ -7218,10 +7241,10 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 			"Calculates the number of bytes in `val`.",
 			volatility.Immutable,
 		),
-	)
+	}
 	if incBitOverload {
-		b.overloads = append(
-			b.overloads,
+		overloads = append(
+			overloads,
 			bitsOverload1(
 				func(_ *eval.Context, s *tree.DBitArray) (tree.Datum, error) {
 					return tree.NewDInt(tree.DInt(s.BitArray.BitLen())), nil
@@ -7230,152 +7253,154 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 			),
 		)
 	}
-	return b
+	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString}, overloads...)
 }
 
-var substringImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.String},
-			{"start_pos", types.Int},
+func makeSubStringImpls() builtinDefinition {
+	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.String},
+				{"start_pos", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				substring := getSubstringFromIndex(string(tree.MustBeDString(args[0])), int(tree.MustBeDInt(args[1])))
+				return tree.NewDString(substring), nil
+			},
+			Info:       "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
+			Volatility: volatility.Immutable,
 		},
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			substring := getSubstringFromIndex(string(tree.MustBeDString(args[0])), int(tree.MustBeDInt(args[1])))
-			return tree.NewDString(substring), nil
-		},
-		Info:       "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.String},
-			{"start_pos", types.Int},
-			{"length", types.Int},
-		},
-		SpecializedVecBuiltin: tree.SubstringStringIntInt,
-		ReturnType:            tree.FixedReturnType(types.String),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			str := string(tree.MustBeDString(args[0]))
-			start := int(tree.MustBeDInt(args[1]))
-			length := int(tree.MustBeDInt(args[2]))
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.String},
+				{"start_pos", types.Int},
+				{"length", types.Int},
+			},
+			SpecializedVecBuiltin: tree.SubstringStringIntInt,
+			ReturnType:            tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				str := string(tree.MustBeDString(args[0]))
+				start := int(tree.MustBeDInt(args[1]))
+				length := int(tree.MustBeDInt(args[2]))
 
-			substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDString(substring), nil
+				substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(substring), nil
+			},
+			Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
+				"including up to `length` characters.",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
-			"including up to `length` characters.",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.String},
-			{"regex", types.String},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.String},
+				{"regex", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
+				return regexpExtract(ctx, s, pattern, `\`)
+			},
+			Info:       "Returns a substring of `input` that matches the regular expression `regex`.",
+			Volatility: volatility.Immutable,
 		},
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			s := string(tree.MustBeDString(args[0]))
-			pattern := string(tree.MustBeDString(args[1]))
-			return regexpExtract(ctx, s, pattern, `\`)
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.String},
+				{"regex", types.String},
+				{"escape_char", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
+				escape := string(tree.MustBeDString(args[2]))
+				return regexpExtract(ctx, s, pattern, escape)
+			},
+			Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
+				"`escape_char` as your escape character instead of `\\`.",
+			Volatility: volatility.Immutable,
 		},
-		Info:       "Returns a substring of `input` that matches the regular expression `regex`.",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.String},
-			{"regex", types.String},
-			{"escape_char", types.String},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.VarBit},
+				{"start_pos", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bitString := tree.MustBeDBitArray(args[0])
+				start := int(tree.MustBeDInt(args[1]))
+				substring := getSubstringFromIndex(bitString.BitArray.String(), start)
+				return tree.ParseDBitArray(substring)
+			},
+			Info:       "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1).",
+			Volatility: volatility.Immutable,
 		},
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			s := string(tree.MustBeDString(args[0]))
-			pattern := string(tree.MustBeDString(args[1]))
-			escape := string(tree.MustBeDString(args[2]))
-			return regexpExtract(ctx, s, pattern, escape)
-		},
-		Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
-			"`escape_char` as your escape character instead of `\\`.",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.VarBit},
-			{"start_pos", types.Int},
-		},
-		ReturnType: tree.FixedReturnType(types.VarBit),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			bitString := tree.MustBeDBitArray(args[0])
-			start := int(tree.MustBeDInt(args[1]))
-			substring := getSubstringFromIndex(bitString.BitArray.String(), start)
-			return tree.ParseDBitArray(substring)
-		},
-		Info:       "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.VarBit},
-			{"start_pos", types.Int},
-			{"length", types.Int},
-		},
-		ReturnType: tree.FixedReturnType(types.VarBit),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			bitString := tree.MustBeDBitArray(args[0])
-			start := int(tree.MustBeDInt(args[1]))
-			length := int(tree.MustBeDInt(args[2]))
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.VarBit},
+				{"start_pos", types.Int},
+				{"length", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bitString := tree.MustBeDBitArray(args[0])
+				start := int(tree.MustBeDInt(args[1]))
+				length := int(tree.MustBeDInt(args[2]))
 
-			substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
-			if err != nil {
-				return nil, err
-			}
-			return tree.ParseDBitArray(substring)
+				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDBitArray(substring)
+			},
+			Info: "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1) and " +
+				"including up to `length` characters.",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1) and " +
-			"including up to `length` characters.",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.Bytes},
-			{"start_pos", types.Int},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.Bytes},
+				{"start_pos", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				byteString := string(*args[0].(*tree.DBytes))
+				start := int(tree.MustBeDInt(args[1]))
+				substring := getSubstringFromIndexBytes(byteString, start)
+				return tree.NewDBytes(tree.DBytes(substring)), nil
+			},
+			Info:       "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
+			Volatility: volatility.Immutable,
 		},
-		ReturnType: tree.FixedReturnType(types.Bytes),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			byteString := string(*args[0].(*tree.DBytes))
-			start := int(tree.MustBeDInt(args[1]))
-			substring := getSubstringFromIndexBytes(byteString, start)
-			return tree.NewDBytes(tree.DBytes(substring)), nil
-		},
-		Info:       "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"input", types.Bytes},
-			{"start_pos", types.Int},
-			{"length", types.Int},
-		},
-		ReturnType: tree.FixedReturnType(types.Bytes),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			byteString := string(*args[0].(*tree.DBytes))
-			start := int(tree.MustBeDInt(args[1]))
-			length := int(tree.MustBeDInt(args[2]))
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.Bytes},
+				{"start_pos", types.Int},
+				{"length", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				byteString := string(*args[0].(*tree.DBytes))
+				start := int(tree.MustBeDInt(args[1]))
+				length := int(tree.MustBeDInt(args[2]))
 
-			substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDBytes(tree.DBytes(substring)), nil
+				substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(substring)), nil
+			},
+			Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
+				"including up to `length` characters.",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
-			"including up to `length` characters.",
-		Volatility: volatility.Immutable,
-	},
-)
+	)
+}
 
 // Returns a substring of given string starting at given position.
 func getSubstringFromIndex(str string, start int) string {
@@ -7466,39 +7491,43 @@ func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (
 	return string(bytes[start:end]), nil
 }
 
-var generateRandomUUID4Impl = makeBuiltin(
-	tree.FunctionProperties{
-		Category: builtinconstants.CategoryIDGeneration,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{},
-		ReturnType: tree.FixedReturnType(types.Uuid),
-		Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-			uv, err := uuid.NewV4()
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+func generateRandomUUID4Impl() builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategoryIDGeneration,
 		},
-		Info:       "Generates a random version 4 UUID, and returns it as a value of UUID type.",
-		Volatility: volatility.Volatile,
-	},
-)
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				uv, err := uuid.NewV4()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info:       "Generates a random version 4 UUID, and returns it as a value of UUID type.",
+			Volatility: volatility.Volatile,
+		},
+	)
+}
 
-var uuidV4Impl = makeBuiltin(
-	tree.FunctionProperties{
-		Category: builtinconstants.CategoryIDGeneration,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{},
-		ReturnType: tree.FixedReturnType(types.Bytes),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			return tree.NewDBytes(tree.DBytes(uuid.MakeV4().GetBytes())), nil
+func uuidV4Impl() builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategoryIDGeneration,
 		},
-		Info:       "Returns a UUID.",
-		Volatility: volatility.Volatile,
-	},
-)
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDBytes(tree.DBytes(uuid.MakeV4().GetBytes())), nil
+			},
+			Info:       "Returns a UUID.",
+			Volatility: volatility.Volatile,
+		},
+	)
+}
 
 func generateConstantUUIDImpl(id uuid.UUID, info string) builtinDefinition {
 	return makeBuiltin(
@@ -8033,78 +8062,80 @@ var jsonBuildArrayImpl = tree.Overload{
 	NullableArgs: true,
 }
 
-var jsonObjectImpls = makeBuiltin(jsonProps(),
-	tree.Overload{
-		Types:      tree.ArgTypes{{"texts", types.StringArray}},
-		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			arr := tree.MustBeDArray(args[0])
-			if arr.Len()%2 != 0 {
-				return nil, errJSONObjectNotEvenNumberOfElements
-			}
-			builder := json.NewObjectBuilder(arr.Len() / 2)
-			for i := 0; i < arr.Len(); i += 2 {
-				if arr.Array[i] == tree.DNull {
-					return nil, errJSONObjectNullValueForKey
+func jsonObjectImpls() builtinDefinition {
+	return makeBuiltin(jsonProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"texts", types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				if arr.Len()%2 != 0 {
+					return nil, errJSONObjectNotEvenNumberOfElements
 				}
-				key, err := asJSONObjectKey(arr.Array[i])
-				if err != nil {
-					return nil, err
+				builder := json.NewObjectBuilder(arr.Len() / 2)
+				for i := 0; i < arr.Len(); i += 2 {
+					if arr.Array[i] == tree.DNull {
+						return nil, errJSONObjectNullValueForKey
+					}
+					key, err := asJSONObjectKey(arr.Array[i])
+					if err != nil {
+						return nil, err
+					}
+					val, err := tree.AsJSON(
+						arr.Array[i+1],
+						ctx.SessionData().DataConversionConfig,
+						ctx.GetLocation(),
+					)
+					if err != nil {
+						return nil, err
+					}
+					builder.Add(key, val)
 				}
-				val, err := tree.AsJSON(
-					arr.Array[i+1],
-					ctx.SessionData().DataConversionConfig,
-					ctx.GetLocation(),
-				)
-				if err != nil {
-					return nil, err
-				}
-				builder.Add(key, val)
-			}
-			return tree.NewDJSON(builder.Build()), nil
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
+				"exactly one dimension with an even number of members, in which case " +
+				"they are taken as alternating key/value pairs.",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
-			"exactly one dimension with an even number of members, in which case " +
-			"they are taken as alternating key/value pairs.",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types: tree.ArgTypes{{"keys", types.StringArray},
-			{"values", types.StringArray}},
-		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			keys := tree.MustBeDArray(args[0])
-			values := tree.MustBeDArray(args[1])
-			if keys.Len() != values.Len() {
-				return nil, errJSONObjectMismatchedArrayDim
-			}
-			builder := json.NewObjectBuilder(keys.Len())
-			for i := 0; i < keys.Len(); i++ {
-				if keys.Array[i] == tree.DNull {
-					return nil, errJSONObjectNullValueForKey
+		tree.Overload{
+			Types: tree.ArgTypes{{"keys", types.StringArray},
+				{"values", types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				keys := tree.MustBeDArray(args[0])
+				values := tree.MustBeDArray(args[1])
+				if keys.Len() != values.Len() {
+					return nil, errJSONObjectMismatchedArrayDim
 				}
-				key, err := asJSONObjectKey(keys.Array[i])
-				if err != nil {
-					return nil, err
+				builder := json.NewObjectBuilder(keys.Len())
+				for i := 0; i < keys.Len(); i++ {
+					if keys.Array[i] == tree.DNull {
+						return nil, errJSONObjectNullValueForKey
+					}
+					key, err := asJSONObjectKey(keys.Array[i])
+					if err != nil {
+						return nil, err
+					}
+					val, err := tree.AsJSON(
+						values.Array[i],
+						ctx.SessionData().DataConversionConfig,
+						ctx.GetLocation(),
+					)
+					if err != nil {
+						return nil, err
+					}
+					builder.Add(key, val)
 				}
-				val, err := tree.AsJSON(
-					values.Array[i],
-					ctx.SessionData().DataConversionConfig,
-					ctx.GetLocation(),
-				)
-				if err != nil {
-					return nil, err
-				}
-				builder.Add(key, val)
-			}
-			return tree.NewDJSON(builder.Build()), nil
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info: "This form of json_object takes keys and values pairwise from two " +
+				"separate arrays. In all other respects it is identical to the " +
+				"one-argument form.",
+			Volatility: volatility.Immutable,
 		},
-		Info: "This form of json_object takes keys and values pairwise from two " +
-			"separate arrays. In all other respects it is identical to the " +
-			"one-argument form.",
-		Volatility: volatility.Immutable,
-	},
-)
+	)
+}
 
 var jsonStripNullsImpl = tree.Overload{
 	Types:      tree.ArgTypes{{"from_json", types.Jsonb}},
@@ -8185,10 +8216,10 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 	tupleOverload := impl(types.AnyTuple)
 	tupleOverload.DistsqlBlocklist = true
 	overloads = append(overloads, tupleOverload)
-	return builtinDefinition{
-		props:     tree.FunctionProperties{Category: builtinconstants.CategoryArray},
-		overloads: overloads,
-	}
+	return makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryArray},
+		overloads...,
+	)
 }
 
 func setProps(props tree.FunctionProperties, d builtinDefinition) builtinDefinition {
@@ -8797,95 +8828,97 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	return arrayLower(a, dim-1)
 }
 
-var extractBuiltin = makeBuiltin(
-	tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			// extract timeSpan fromTime.
-			fromTS := args[1].(*tree.DTimestamp)
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
+func extractBuiltin() builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// extract timeSpan fromTime.
+				fromTS := args[1].(*tree.DTimestamp)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-			"hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			fromInterval := args[1].(*tree.DInterval)
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			return extractTimeSpanFromInterval(fromInterval, timeSpan)
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				fromInterval := args[1].(*tree.DInterval)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromInterval(fromInterval, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: millennium, century, decade, year,\n" +
+				"month, day, hour, minute, second, millisecond, microsecond, epoch",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: millennium, century, decade, year,\n" +
-			"month, day, hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			date := args[1].(*tree.DDate)
-			fromTime, err := date.ToTime()
-			if err != nil {
-				return nil, err
-			}
-			return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				date := args[1].(*tree.DDate)
+				fromTime, err := date.ToTime()
+				if err != nil {
+					return nil, err
+				}
+				return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-			"hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			fromTSTZ := args[1].(*tree.DTimestampTZ)
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				fromTSTZ := args[1].(*tree.DTimestampTZ)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch,\n" +
+				"timezone, timezone_hour, timezone_minute",
+			Volatility: volatility.Stable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-			"hour, minute, second, millisecond, microsecond, epoch,\n" +
-			"timezone, timezone_hour, timezone_minute",
-		Volatility: volatility.Stable,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			fromTime := args[1].(*tree.DTime)
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			return extractTimeSpanFromTime(fromTime, timeSpan)
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[1].(*tree.DTime)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromTime(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: volatility.Immutable,
-	},
-	tree.Overload{
-		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			fromTime := args[1].(*tree.DTimeTZ)
-			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-			return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[1].(*tree.DTimeTZ)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
+				"timezone, timezone_hour, timezone_minute",
+			Volatility: volatility.Immutable,
 		},
-		Info: "Extracts `element` from `input`.\n\n" +
-			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
-			"timezone, timezone_hour, timezone_minute",
-		Volatility: volatility.Immutable,
-	},
-)
+	)
+}
 
 func extractTimeSpanFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)
