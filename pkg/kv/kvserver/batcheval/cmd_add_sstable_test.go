@@ -186,7 +186,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			toReqTS: 1,
 			sst:     kvs{pointKV("a", 1, "a1"), rangeKV("c", "d", 2, "")},
 			expectErr: []string{
-				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for range key {c-d}/0.000000002,0`,
+				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for range key {c-d}`,
 				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
 			},
 		},
