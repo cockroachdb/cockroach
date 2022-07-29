@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -128,7 +129,7 @@ type instrumentationHelper struct {
 	costEstimate float64
 
 	// indexRecommendations is a string slice containing index recommendations for
-	// the planned statement. This is only set for EXPLAIN statements.
+	// the planned statement.
 	indexRecommendations []string
 
 	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
@@ -662,4 +663,36 @@ func (m execNodeTraceMetadata) annotateExplain(
 	}
 
 	return allRegions
+}
+
+// SetIndexRecommendations check if we should generate a new index recommendation.
+// If true it will generate, if false, use the value on index recommendations cache.
+func (ih *instrumentationHelper) SetIndexRecommendations(
+	idxRec *idxrecommendations.IndexRecCache, p *planner,
+) {
+	ctx := ih.origCtx
+
+	if idxRec.ShouldGenerateIndexRecommendation(ih.fingerprint, ih.planGist.Hash(), p.SessionData().Database) {
+		opc := &p.optPlanningCtx
+		err := opc.makeQueryIndexRecommendation(ctx)
+		if err != nil {
+			log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+		} else {
+			idxRec.UpdateIndexRecommendations(
+				ih.fingerprint,
+				ih.planGist.Hash(),
+				p.SessionData().Database,
+				ih.indexRecommendations,
+				true,
+			)
+		}
+	} else {
+		ih.indexRecommendations = idxRec.UpdateIndexRecommendations(
+			ih.fingerprint,
+			ih.planGist.Hash(),
+			p.SessionData().Database,
+			[]string{},
+			false,
+		)
+	}
 }

@@ -1,0 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "idxrecommendations",
+    srcs = ["idx_recommendations_cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlstats",
+        "//pkg/util/duration",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+get_x_data(name = "get_x_data")
