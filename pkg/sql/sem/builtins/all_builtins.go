@@ -22,35 +22,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// orderedStrings sorts a slice of strings lazily
-// for better performance.
-type orderedStrings struct {
-	strings []string
-	sorted  bool
-}
-
-func (o *orderedStrings) add(s string) {
-	if o.sorted {
-		o.insert(s)
-	} else {
-		o.strings = append(o.strings, s)
-	}
-}
-
-func (o *orderedStrings) sort() {
-	if !o.sorted {
-		sort.Strings(o.strings)
-	}
-	o.sorted = true
-}
-
-func (o *orderedStrings) insert(s string) {
-	i := sort.SearchStrings(o.strings, s)
-	o.strings = append(o.strings, "")
-	copy(o.strings[i+1:], o.strings[i:])
-	o.strings[i] = s
-}
-
 var allBuiltinNames orderedStrings
 
 // AllBuiltinNames returns a slice containing all the built-in function
@@ -186,4 +157,37 @@ func collectOverloads(
 		}
 	}
 	return makeBuiltin(props, r...)
+}
+
+// orderedStrings sorts a slice of strings lazily
+// for better performance.
+type orderedStrings struct {
+	strings []string
+	sorted  bool
+}
+
+// add a string without changing whether or not
+// the strings are sorted yet.
+func (o *orderedStrings) add(s string) {
+	if o.sorted {
+		o.insert(s)
+	} else {
+		o.strings = append(o.strings, s)
+	}
+}
+
+func (o *orderedStrings) sort() {
+	if !o.sorted {
+		sort.Strings(o.strings)
+	}
+	o.sorted = true
+}
+
+// insert assumes the strings are already sorted
+// and inserts s in the right place.
+func (o *orderedStrings) insert(s string) {
+	i := sort.SearchStrings(o.strings, s)
+	o.strings = append(o.strings, "")
+	copy(o.strings[i+1:], o.strings[i:])
+	o.strings[i] = s
 }

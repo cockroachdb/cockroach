@@ -34,7 +34,6 @@ go_test(
     name = "utilccl_test",
     size = "small",
     srcs = [
-        "builtins_test.go",
         "license_check_test.go",
         "license_test.go",
     ],
@@ -45,15 +44,11 @@ go_test(
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/sem/eval",
-        "//pkg/sql/sem/tree",
-        "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/util/envutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
