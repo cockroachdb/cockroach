@@ -2263,3 +2263,11 @@ SELECT indkey FROM pg_index WHERE indrelid = (SELECT oid FROM pg_class WHERE rel
 
 statement ok
 RESET distsql_workmem
+
+# Regression test for incorrect planning in the vectorized engine for
+# concatenating a string with a string array (#85295).
+query T
+SELECT ('foo'::STRING || col::STRING[])::STRING[] FROM (VALUES (ARRAY['bar':::STRING]), (ARRAY['baz':::STRING])) AS t (col);
+----
+{foo,bar}
+{foo,baz}
