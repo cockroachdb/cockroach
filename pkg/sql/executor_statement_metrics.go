@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -155,13 +156,14 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
+	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
 		Query:        stmt.StmtNoConstants,
 		QuerySummary: stmt.StmtSummary,
 		DistSQL:      flags.IsDistributed(),
 		Vec:          flags.IsSet(planFlagVectorized),
 		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
-		FullScan:     flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+		FullScan:     fullScan,
 		Failed:       stmtErr != nil,
 		Database:     planner.SessionData().Database,
 		PlanHash:     planner.instrumentation.planGist.Hash(),
@@ -186,6 +188,11 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
 		IndexRecommendations: planner.instrumentation.indexRecommendations,
+		Query:                stmt.StmtNoConstants,
+		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
+		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),
+		FullScan:             fullScan,
+		SessionData:          planner.SessionData(),
 	}
 
 	stmtFingerprintID, err :=
