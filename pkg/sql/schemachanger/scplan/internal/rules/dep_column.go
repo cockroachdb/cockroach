@@ -27,12 +27,10 @@ func init() {
 		"column", "column-name",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type((*scpb.ColumnName)(nil)),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.ColumnName)(nil)),
+				statusesToPublic(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
 	)
@@ -42,18 +40,16 @@ func init() {
 		"column", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type(
+				from.Type((*scpb.Column)(nil)),
+				to.Type(
 					(*scpb.ColumnName)(nil),
 					(*scpb.ColumnDefaultExpression)(nil),
 					(*scpb.ColumnOnUpdateExpression)(nil),
 					(*scpb.ColumnComment)(nil),
 					(*scpb.IndexColumn)(nil),
 				),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToPublic(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -64,15 +60,13 @@ func init() {
 		"expr", "column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type(
+				from.Type(
 					(*scpb.ColumnDefaultExpression)(nil),
 					(*scpb.ColumnOnUpdateExpression)(nil),
 				),
-				to.el.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_WRITE_ONLY),
+				to.Type((*scpb.Column)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		},
 	)
@@ -84,11 +78,10 @@ func init() {
 		"column-name", "column-type",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.ColumnName)(nil)),
-				to.el.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatusEq(from.node, to.node, scpb.Status_PUBLIC),
+				from.Type((*scpb.ColumnName)(nil)),
+				to.Type((*scpb.ColumnType)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -101,11 +94,10 @@ func init() {
 		"column-comment", "column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.ColumnComment)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatusEq(from.node, to.node, scpb.Status_PUBLIC),
+				from.Type((*scpb.ColumnComment)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -116,16 +108,14 @@ func init() {
 		"column", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type(
+				from.Type((*scpb.Column)(nil)),
+				to.Type(
 					(*scpb.ColumnType)(nil),
 					(*scpb.ColumnName)(nil),
 					(*scpb.ColumnComment)(nil),
 				),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatus(from.node, scpb.Status_WRITE_ONLY),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToAbsent(from, scpb.Status_WRITE_ONLY, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -136,15 +126,14 @@ func init() {
 		"dependent", "column-type",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type(
+				from.Type(
 					(*scpb.SequenceOwner)(nil),
 					(*scpb.ColumnDefaultExpression)(nil),
 					(*scpb.ColumnOnUpdateExpression)(nil),
 				),
-				to.el.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
+				to.Type((*scpb.ColumnType)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -155,15 +144,14 @@ func init() {
 		"dependent", "column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type(
+				from.Type(
 					(*scpb.ColumnName)(nil),
 					(*scpb.ColumnType)(nil),
 					(*scpb.ColumnComment)(nil),
 				),
-				to.el.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
+				to.Type((*scpb.Column)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -178,15 +166,13 @@ func init() {
 		func(from, to nodeVars) rel.Clauses {
 			status := rel.Var("status")
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				join(from.el, to.el, screl.DescID, "table-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				toPublic(from, to),
 				status.In(scpb.Status_WRITE_ONLY, scpb.Status_PUBLIC),
 				status.Entities(screl.CurrentStatus, from.node, to.node),
-				rel.Filter("columnHasSmallerID", from.el, to.el)(func(
-					from *scpb.Column, to *scpb.Column,
-				) bool {
+				filterElements("SmallerColumnIDFirst", from, to, func(from, to *scpb.Column) bool {
 					return from.ColumnID < to.ColumnID
 				}),
 			}
