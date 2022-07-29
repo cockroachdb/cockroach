@@ -1119,3 +1119,17 @@ explain(shape):
 • explain
 explain(gist):
 • explain
+
+# Regression test for #85324
+explain-plan-gist
+AgHyAQIA//8HHgAAByoFKiHyAQAA
+----
+• update
+│ table: ?
+│ set
+│
+└── • render
+    │
+    └── • scan
+          table: ?@?
+          spans: 15 spans
