@@ -855,6 +855,7 @@ func processReplicatedRangeTombstones(
 		if !ok {
 			break
 		}
+		// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
 		rangeKeys := iter.RangeKeys().AsRangeKeyValues()
 
 		if idx := sort.Search(len(rangeKeys), func(i int) bool {

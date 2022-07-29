@@ -466,12 +466,12 @@ func getExpectationsGenerator(
 						// so we will add them to history of current key for analysis.
 						// Bare range tombstones are ignored.
 						if r {
-							for _, r := range it.RangeKeys().AsRangeKeyValues() {
+							for _, r := range it.RangeKeys().AsRangeKeys() {
 								history = append(history, historyItem{
 									MVCCKeyValue: storage.MVCCKeyValue{
 										Key: storage.MVCCKey{
-											Key:       r.RangeKey.StartKey,
-											Timestamp: r.RangeKey.Timestamp,
+											Key:       r.StartKey,
+											Timestamp: r.Timestamp,
 										},
 										Value: nil,
 									},
@@ -622,13 +622,8 @@ func rangeFragmentsFromIt(t *testing.T, it storage.MVCCIterator) [][]storage.MVC
 		if !ok {
 			break
 		}
-		_, r := it.HasPointAndRange()
-		if r {
-			fragments := make([]storage.MVCCRangeKeyValue, len(it.RangeKeys().AsRangeKeyValues()))
-			for i, r := range it.RangeKeys().AsRangeKeyValues() {
-				fragments[i] = r.Clone()
-			}
-			result = append(result, fragments)
+		if _, hasRange := it.HasPointAndRange(); hasRange {
+			result = append(result, it.RangeKeys().Clone().AsRangeKeyValues())
 		}
 		it.NextKey()
 	}
