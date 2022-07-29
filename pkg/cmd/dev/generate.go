@@ -47,6 +47,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate optgen        # optgen targets (subset of 'dev generate go')
         dev generate execgen       # execgen targets (subset of 'dev generate go')
         dev generate schemachanger # schemachanger targets (subset of 'dev generate go')
+        dev generate testlogic     # logictest generated code (subset of 'dev generate bazel')
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
