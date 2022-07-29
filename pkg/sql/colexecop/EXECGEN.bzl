@@ -34,9 +34,17 @@ def gen_eg_go_rules(targets):
               export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
               $(location :execgen) -template $(SRCS) \
                   -fmt=false pkg/sql/colexec/$@ > $@
-              $(location :goimports) -w $@
+              GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+              GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+              # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+              env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
+                  $(location :goimports) -w $@
               """,
-            tools = [":execgen", ":goimports"],
+            exec_tools = [
+                ":execgen",
+                ":goimports",
+                "@go_sdk//:bin/go",
+            ],
             visibility = [":__pkg__", "//pkg/gen:__pkg__"],
         )
 
