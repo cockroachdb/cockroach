@@ -1,5 +1,36 @@
 rules
 ----
+columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
+    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
+    - sourceIndexNotSet($index)
+index-dependents(index, dep, table-id, index-id):
+    - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
+    - joinOnIndexID($dep, $index, $table-id, $index-id)
+indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
+    - $index[IndexID] = $index-id
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index-column[DescID] = $_
+    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
+joinOnColumnID(a, b, desc-id, col-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[ColumnID] = $col-id
+    - $b[ColumnID] = $col-id
+joinOnConstraintID(a, b, desc-id, constraint-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[ConstraintID] = $constraint-id
+    - $b[ConstraintID] = $constraint-id
+joinOnDescID(a, b, id):
+    - $a[DescID] = $id
+    - $b[DescID] = $id
+joinOnIndexID(a, b, desc-id, index-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[IndexID] = $index-id
+    - $b[IndexID] = $index-id
+joinReferencedDescID(referrer, referenced, id):
+    - $referrer[ReferencedDescID] = $id
+    - $referenced[DescID] = $id
 joinTarget(element, target):
     - $target[Type] = '*scpb.Target'
     - $target[Element] = $element
@@ -8,6 +39,8 @@ joinTargetNode(element, target, node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
+sourceIndexNotSet(index):
+    - $index[SourceIndexID] != 0
 toAbsent(target1, target2):
     - $target1[TargetStatus] = ABSENT
     - $target2[TargetStatus] = ABSENT
@@ -15,52 +48,9 @@ toAbsentInAbsent(target1, node1, target2, node2):
     - toAbsent($target1, $target2)
     - $node1[CurrentStatus] = ABSENT
     - $node2[CurrentStatus] = ABSENT
-joinReferencedDescID(referrer, referenced, id):
-    - $referrer[ReferencedDescID] = $id
-    - $referenced[DescID] = $id
-joinOnDescID(a, b, id):
-    - $a[DescID] = $id
-    - $b[DescID] = $id
-joinOnIndexID(a, b, desc-id, index-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[IndexID] = $index-id
-    - $b[IndexID] = $index-id
-joinOnColumnID(a, b, desc-id, col-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[ColumnID] = $col-id
-    - $b[ColumnID] = $col-id
-indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
-    - $index[IndexID] = $index-id
-    - $index-column[Type] = '*scpb.IndexColumn'
-    - $index-column[DescID] = $_
-    - joinOnColumnID($column, $index-column, $table-id, $column-id)
-    - joinOnIndexID($index, $index-column, $table-id, $index-id)
-joinOnConstraintID(a, b, desc-id, constraint-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[ConstraintID] = $constraint-id
-    - $b[ConstraintID] = $constraint-id
-index-dependents(index, dep, table-id, index-id):
-    - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
-    - joinOnIndexID($dep, $index, $table-id, $index-id)
-sourceIndexNotSet(index):
-    - $index[SourceIndexID] != 0
-columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
-    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
-    - sourceIndexNotSet($index)
 
 oprules
 ----
-- name: skip column removal ops on relation drop
-  from: column-node
-  query:
-    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $column[Type] = '*scpb.Column'
-    - joinOnDescID($relation, $column, $relation-id)
-    - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $column-target)
-    - joinTargetNode($column, $column-target, $column-node)
-    - $column-node[CurrentStatus] IN [PUBLIC, WRITE_ONLY]
 - name: skip column dependents removal ops on relation drop
   from: column-dep-node
   query:
@@ -74,37 +64,16 @@ oprules
     - joinTarget($column, $column-target)
     - joinTargetNode($column-dep, $column-dep-target, $column-dep-node)
     - $column-dep-target[TargetStatus] = ABSENT
-- name: skip index removal ops on relation drop
-  from: index-node
+- name: skip column removal ops on relation drop
+  from: column-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - joinOnDescID($relation, $index, $relation-id)
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($relation, $column, $relation-id)
     - joinTarget($relation, $relation-target)
-    - joinTargetNode($index, $index-target, $index-node)
-    - toAbsent($relation-target, $index-target)
-- name: skip index dependents removal ops on relation drop
-  from: index-dep-node
-  query:
-    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
-    - $index-dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexColumn']
-    - joinOnDescID($relation, $index, $relation-id)
-    - joinOnIndexID($index, $index-dep, $relation-id, $index-id)
-    - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $index-target)
-    - joinTarget($index, $index-target)
-    - joinTargetNode($index-dep, $index-dep-target, $index-dep-node)
-    - $index-dep-target[TargetStatus] = ABSENT
-- name: skip constraint removal ops on relation drop
-  from: constraint-node
-  query:
-    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
-    - joinOnDescID($relation, $constraint, $relation-id)
-    - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $constraint-target)
-    - joinTargetNode($constraint, $constraint-target, $constraint-node)
+    - toAbsent($relation-target, $column-target)
+    - joinTargetNode($column, $column-target, $column-node)
+    - $column-node[CurrentStatus] IN [PUBLIC, WRITE_ONLY]
 - name: skip constraint dependents removal ops on relation drop
   from: constraint-dep-node
   query:
@@ -118,6 +87,15 @@ oprules
     - toAbsent($relation-target, $constraint-target)
     - joinTargetNode($constraint-dep, $constraint-dep-target, $constraint-dep-node)
     - $constraint-dep-target[TargetStatus] = ABSENT
+- name: skip constraint removal ops on relation drop
+  from: constraint-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - joinOnDescID($relation, $constraint, $relation-id)
+    - joinTarget($relation, $relation-target)
+    - toAbsent($relation-target, $constraint-target)
+    - joinTargetNode($constraint, $constraint-target, $constraint-node)
 - name: skip element removal ops on descriptor drop
   from: dep-node
   query:
@@ -127,6 +105,28 @@ oprules
     - joinTarget($desc, $desc-target)
     - toAbsent($desc-target, $dep-target)
     - joinTargetNode($dep, $dep-target, $dep-node)
+- name: skip index dependents removal ops on relation drop
+  from: index-dep-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - $index-dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexColumn']
+    - joinOnDescID($relation, $index, $relation-id)
+    - joinOnIndexID($index, $index-dep, $relation-id, $index-id)
+    - joinTarget($relation, $relation-target)
+    - toAbsent($relation-target, $index-target)
+    - joinTarget($index, $index-target)
+    - joinTargetNode($index-dep, $index-dep-target, $index-dep-node)
+    - $index-dep-target[TargetStatus] = ABSENT
+- name: skip index removal ops on relation drop
+  from: index-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - joinOnDescID($relation, $index, $relation-id)
+    - joinTarget($relation, $relation-target)
+    - joinTargetNode($index, $index-target, $index-node)
+    - toAbsent($relation-target, $index-target)
 - name: skip table comment removal ops on descriptor drop
   from: dep-node
   query:
