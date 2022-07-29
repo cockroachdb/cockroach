@@ -37,6 +37,7 @@ func initializeMultiRegionMetadata(
 	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
+	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
 	if err := CheckClusterSupportsMultiRegion(execCfg); err != nil {
 		return nil, err
@@ -105,6 +106,7 @@ func initializeMultiRegionMetadata(
 		placement,
 		nil,
 		descpb.ZoneConfigExtensions{},
+		multiregion.WithSecondaryRegion(secondaryRegion),
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err

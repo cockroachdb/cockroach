@@ -908,7 +908,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETURN RETURNS RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -1021,6 +1021,9 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> alter_database_add_super_region
 %type <tree.Statement> alter_database_alter_super_region
 %type <tree.Statement> alter_database_drop_super_region
+%type <tree.Statement> alter_database_set_secondary_region_stmt
+%type <tree.Statement> alter_database_drop_secondary_region
+
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1256,7 +1259,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
-%type <str> region_name primary_region_clause opt_primary_region_clause
+%type <str> region_name primary_region_clause opt_primary_region_clause secondary_region_clause opt_secondary_region_clause
 %type <tree.DataPlacement> opt_placement_clause placement_clause
 %type <tree.NameList> region_name_list
 %type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
@@ -1839,6 +1842,9 @@ alter_database_stmt:
 | alter_database_add_super_region
 | alter_database_alter_super_region
 | alter_database_drop_super_region
+| alter_database_set_secondary_region_stmt
+| alter_database_drop_secondary_region
+
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1931,6 +1937,7 @@ alter_database_primary_region_stmt:
     }
   }
 
+
 alter_database_add_super_region:
   ALTER DATABASE database_name ADD SUPER REGION name VALUES name_list
   {
@@ -1957,6 +1964,23 @@ alter_database_alter_super_region:
       DatabaseName: tree.Name($3),
       SuperRegionName: tree.Name($7),
       Regions: $9.nameList(),
+    }
+  }
+
+alter_database_set_secondary_region_stmt:
+   ALTER DATABASE database_name SET secondary_region_clause
+   {
+     $$.val = &tree.AlterDatabaseSecondaryRegion{
+       DatabaseName: tree.Name($3),
+       SecondaryRegion: tree.Name($5),
+     }
+   }
+
+alter_database_drop_secondary_region:
+  ALTER DATABASE database_name DROP SECONDARY REGION
+  {
+    $$.val = &tree.AlterDatabaseDropSecondaryRegion{
+      DatabaseName: tree.Name($3),
     }
   }
 
@@ -9981,7 +10005,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -9995,9 +10019,10 @@ create_database_stmt:
       SurvivalGoal: $12.survivalGoal(),
       Placement: $13.dataPlacement(),
       Owner: $14.roleSpec(),
+      SecondaryRegion: tree.Name($15),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -10011,6 +10036,7 @@ create_database_stmt:
       Regions: $14.nameList(),
       SurvivalGoal: $15.survivalGoal(),
       Placement: $16.dataPlacement(),
+      SecondaryRegion: tree.Name($17),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
@@ -10024,6 +10050,18 @@ opt_primary_region_clause:
 
 primary_region_clause:
   PRIMARY REGION opt_equal region_name {
+    $$ = $4
+  }
+
+opt_secondary_region_clause:
+  secondary_region_clause
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+secondary_region_clause:
+  SECONDARY REGION opt_equal region_name {
     $$ = $4
   }
 
@@ -14841,6 +14879,7 @@ unreserved_keyword:
 | SEARCH
 | SECOND
 | SECURITY
+| SECONDARY
 | SERIALIZABLE
 | SEQUENCE
 | SEQUENCES
