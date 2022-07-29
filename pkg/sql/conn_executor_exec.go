@@ -1194,6 +1194,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
+	// Set index recommendations so it can be saved on statement statistics.
+	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner)
+
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
 	stmtFingerprintID = ex.recordStatementSummary(
