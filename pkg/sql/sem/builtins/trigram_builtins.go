@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 )
 
-func initTrigramBuiltins() {
+func init() {
 	for k, v := range trigramBuiltins {
 		v.props.Category = builtinconstants.CategoryTrigram
 		v.props.AvailableOnPublicSchema = true

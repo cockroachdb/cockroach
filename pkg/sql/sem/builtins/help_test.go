@@ -25,12 +25,14 @@ import (
 
 func TestHelpFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	numTestsRun := 0
 	// This test checks that all the built-in functions receive contextual help.
-	builtinsregistry.Iterate(func(f string, _ *tree.FunctionProperties, _ []tree.Overload) {
+	builtinsregistry.AddSubscription(func(f string, _ *tree.FunctionProperties, _ []tree.Overload) {
 		if unicode.IsUpper(rune(f[0])) {
 			return
 		}
 		t.Run(f, func(t *testing.T) {
+			numTestsRun++
 			_, err := parser.Parse("select " + f + "(??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
@@ -55,4 +57,8 @@ func TestHelpFunctions(t *testing.T) {
 			}
 		})
 	})
+
+	if numTestsRun < 1000 {
+		t.Errorf("Test saw %d builtins, probably load order is wrong", numTestsRun)
+	}
 }
