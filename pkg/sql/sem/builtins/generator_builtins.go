@@ -65,10 +65,10 @@ func genProps() tree.FunctionProperties {
 	}
 }
 
-func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
+func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
 		Class:        tree.GeneratorClass,
-		Category:     builtinconstants.CategoryGenerator,
+		Category:     builtinconstants.CategoryJSON,
 		ReturnLabels: returnLabels,
 	}
 }
@@ -366,16 +366,16 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"json_array_elements":       makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"jsonb_array_elements":      makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"json_array_elements_text":  makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"jsonb_array_elements_text": makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"json_array_elements":       makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"jsonb_array_elements":      makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"json_array_elements_text":  makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"jsonb_array_elements_text": makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
 	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
 	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
-	"json_each":                 makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
-	"jsonb_each":                makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
-	"json_each_text":            makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"jsonb_each_text":           makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"json_each":                 makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"jsonb_each":                makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"json_each_text":            makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"jsonb_each_text":           makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
 	"json_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
 		"Expands the object in from_json to a row whose columns match the record type defined by base.",
 	)),
@@ -1507,7 +1507,7 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 
 var jsonPopulateProps = tree.FunctionProperties{
 	Class:    tree.GeneratorClass,
-	Category: builtinconstants.CategoryGenerator,
+	Category: builtinconstants.CategoryJSON,
 }
 
 func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree.Overload {

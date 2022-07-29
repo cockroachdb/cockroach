@@ -877,6 +877,19 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Fuzzy String Matching functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### ID generation functions
 
 <table>
@@ -978,10 +991,6 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
@@ -1007,16 +1016,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
+<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
@@ -1025,6 +1038,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="json_remove_path"></a><code>json_remove_path(val: jsonb, path: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Remove the specified path from the JSON object.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_set"></a><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1037,12 +1054,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_valid"></a><code>json_valid(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given string is a valid JSON or not</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1057,6 +1082,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object"></a><code>jsonb_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_pretty"></a><code>jsonb_pretty(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given JSON value as a STRING indented and with newlines.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_set"></a><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1249,38 +1278,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; tuple{anyelement AS x, int AS n}</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object_keys"></a><code>json_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="json_to_record"></a><code>json_to_record(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary record from a JSON object.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_to_recordset"></a><code>json_to_recordset(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary set of records from a JSON array of objects.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object_keys"></a><code>jsonb_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_to_record"></a><code>jsonb_to_record(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary record from a JSON object.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_to_recordset"></a><code>jsonb_to_recordset(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary set of records from a JSON array of objects.</p>
@@ -2929,8 +2934,6 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -3111,6 +3114,8 @@ active for the current transaction.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.request_statement_bundle"></a><code>crdb_internal.request_statement_bundle(stmtFingerprint: <a href="string.html">string</a>, samplingProbability: <a href="float.html">float</a>, minExecutionLatency: <a href="interval.html">interval</a>, expiresAfter: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request statement bundle for a given statement fingerprint
@@ -3154,6 +3159,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td><td>Stable</td></tr>
