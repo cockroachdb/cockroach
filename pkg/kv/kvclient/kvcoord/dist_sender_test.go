@@ -189,7 +189,7 @@ func (l *simpleTransportAdapter) SkipReplica() {
 
 func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range l.replicas {
-		if l.replicas[i] == replica {
+		if l.replicas[i].IsSame(replica) {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < l.nextReplicaIdx {
@@ -584,6 +584,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	ctx := context.Background()
 
 	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[1]
+	recognizedLeaseHolderIncoming := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[2]
+	recognizedLeaseHolderIncoming.Type = roachpb.ReplicaTypeVoterIncoming()
 	unrecognizedLeaseHolder := roachpb.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
@@ -624,6 +626,15 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			expLeaseholder: nil,
 		},
 		{
+			name: "leaseholder in desc with different type",
+			nlhe: roachpb.NotLeaseHolderError{
+				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+				Lease:   &roachpb.Lease{Replica: recognizedLeaseHolderIncoming, Sequence: 1},
+			},
+			expLeaseholder: &recognizedLeaseHolderIncoming,
+			expLease:       true,
+		},
+		{
 			name: "leaseholder unknown",
 			nlhe: roachpb.NotLeaseHolderError{
 				RangeID: testUserRangeDescriptor3Replicas.RangeID,
@@ -647,20 +658,22 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 				))
 			}
 
-			first := true
+			var attempts int
+			var retryReplica roachpb.ReplicaDescriptor
 
 			var testFn simpleSendFn = func(
 				_ context.Context, args roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, error) {
+				attempts++
 				reply := &roachpb.BatchResponse{}
-				if first {
+				if attempts == 1 {
 					reply.Error = roachpb.NewError(&tc.nlhe)
-					first = false
 					return reply, nil
 				}
 				// Return an error to avoid activating a code path that would update the
 				// cache with the leaseholder from the successful response. That's not
 				// what this test wants to test.
+				retryReplica = args.Header.Replica
 				reply.Error = roachpb.NewErrorf("boom")
 				return reply, nil
 			}
@@ -683,9 +696,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
 				t.Fatalf("unexpected error: %v", pErr)
 			}
-			if first {
-				t.Fatal("the request did not retry")
-			}
+			require.Equal(t, 2, attempts)
 			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
 			require.NotNil(t, rng)
 
@@ -697,6 +708,12 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 					l := rng.Lease()
 					require.NotNil(t, l)
 					require.Equal(t, *tc.expLeaseholder, l.Replica)
+					// The transport retry will use the replica descriptor from the
+					// initial range descriptor, not the one returned in the NLHE, i.e.
+					// it won't have the non-nil type.
+					expRetryReplica := *tc.expLeaseholder
+					expRetryReplica.Type = nil
+					require.Equal(t, expRetryReplica, retryReplica)
 				} else {
 					require.Nil(t, rng.Lease())
 				}
