@@ -667,9 +667,11 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
-		wrappedConn, ok := conn.(*onConnectionClose)
+		onCloseWrapper, ok := conn.(*onConnectionClose)
 		require.True(t, ok)
-		require.Equal(t, crdbConn, wrappedConn.Conn)
+		onErrorWrapper, ok := onCloseWrapper.Conn.(*errorSourceConn)
+		require.True(t, ok)
+		require.Equal(t, crdbConn, onErrorWrapper.Conn)
 
 		conn.Close()
 		conns := tracker.GetConnsMap(tenantID)
@@ -710,9 +712,11 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
-		wrappedConn, ok := conn.(*onConnectionClose)
+		onCloseWrapper, ok := conn.(*onConnectionClose)
 		require.True(t, ok)
-		require.Equal(t, crdbConn, wrappedConn.Conn)
+		onErrorWrapper, ok := onCloseWrapper.Conn.(*errorSourceConn)
+		require.True(t, ok)
+		require.Equal(t, crdbConn, onErrorWrapper.Conn)
 
 		conn.Close()
 		conns := tracker.GetConnsMap(tenantID)

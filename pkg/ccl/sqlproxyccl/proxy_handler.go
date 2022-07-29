@@ -413,8 +413,18 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
+	// Wrap the client connection with an error annotater. WARNING: The TLS
+	// wrapper must be inside the errorSourceConn and not the other way around.
+	// The TLS connection attempts to cast errors to a net.Err and will behave
+	// incorrectly if handed a marked error.
+	clientConn := &errorSourceConn{
+		Conn:           fe.Conn,
+		readErrMarker:  errClientRead,
+		writeErrMarker: errClientWrite,
+	}
+
 	// Pass ownership of conn and crdbConn to the forwarder.
-	if err := f.run(fe.Conn, crdbConn); err != nil {
+	if err := f.run(clientConn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
 		return errors.Wrap(err, "running forwarder")
