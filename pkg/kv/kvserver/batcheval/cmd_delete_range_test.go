@@ -306,8 +306,8 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 			// PredicateDeleteRange should not have written any delete tombstones;
 			// therefore, any range key tombstones in the span should have been
 			// written before the request was issued.
-			for _, rKey := range iter.RangeKeys() {
-				require.Equal(t, true, rKey.RangeKey.Timestamp.Less(rKeyInfo.Timestamp))
+			for _, v := range iter.RangeKeys().Versions {
+				require.True(t, v.Timestamp.Less(rKeyInfo.Timestamp))
 			}
 			continue
 		}
@@ -337,13 +337,14 @@ func checkDeleteRangeTombstone(
 			break
 		}
 		require.True(t, ok)
-		for _, rkv := range iter.RangeKeys() {
-			if rkv.RangeKey.Timestamp.Equal(rangeKey.Timestamp) {
+		rangeKeys := iter.RangeKeys()
+		for _, v := range rangeKeys.Versions {
+			if v.Timestamp.Equal(rangeKey.Timestamp) {
 				if len(seen.RangeKey.StartKey) == 0 {
-					seen = rkv.Clone()
+					seen = rangeKeys.AsRangeKeyValue(v).Clone()
 				} else {
-					seen.RangeKey.EndKey = rkv.RangeKey.EndKey.Clone()
-					require.Equal(t, seen.Value, rkv.Value)
+					seen.RangeKey.EndKey = rangeKeys.Bounds.EndKey.Clone()
+					require.Equal(t, seen.Value, v.Value)
 				}
 				break
 			}

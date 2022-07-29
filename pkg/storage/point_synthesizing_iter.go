@@ -65,9 +65,9 @@ var pointSynthesizingIterPool = sync.Pool{
 type pointSynthesizingIter struct {
 	iter MVCCIterator
 
-	// rangeKeys contains any range keys that overlap the current key position,
-	// for which points will be synthesized.
-	rangeKeys []MVCCRangeKeyValue
+	// rangeKeys contains any range key versions that overlap the current key
+	// position, for which points will be synthesized.
+	rangeKeys MVCCRangeKeyVersions
 
 	// rangeKeysPos is the current key (along the rangeKeys span) that points will
 	// be synthesized for. It is only set if rangeKeys is non-empty, and may
@@ -172,14 +172,11 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 	if !i.iterValid {
 		i.clearRangeKeys()
 	} else if _, hasRange := i.iter.HasPointAndRange(); hasRange {
+		// TODO(erikgrinaker): Optimize this.
 		i.rangeKeysPos = append(i.rangeKeysPos[:0], i.iter.UnsafeKey().Key...)
 		if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
 			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
-			i.rangeKeys = i.rangeKeys[:0]
-			for _, rk := range i.iter.RangeKeys() {
-				// TODO(erikgrinaker): We should optimize the clone cost.
-				i.rangeKeys = append(i.rangeKeys, rk.Clone())
-			}
+			i.rangeKeys = i.iter.RangeKeys().Versions.Clone()
 		}
 		if !i.reverse {
 			i.rangeKeysIdx = 0
@@ -206,10 +203,10 @@ func (i *pointSynthesizingIter) updateAtPoint() {
 	} else if !i.reverse {
 		i.atPoint = i.rangeKeysIdx >= len(i.rangeKeys) ||
 			!point.Timestamp.IsSet() ||
-			i.rangeKeys[i.rangeKeysIdx].RangeKey.Timestamp.LessEq(point.Timestamp)
+			i.rangeKeys[i.rangeKeysIdx].Timestamp.LessEq(point.Timestamp)
 	} else {
 		i.atPoint = i.rangeKeysIdx < 0 || (point.Timestamp.IsSet() &&
-			point.Timestamp.LessEq(i.rangeKeys[i.rangeKeysIdx].RangeKey.Timestamp))
+			point.Timestamp.LessEq(i.rangeKeys[i.rangeKeysIdx].Timestamp))
 	}
 }
 
@@ -341,7 +338,7 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 	// If we're seeking to a specific version, skip newer range keys.
 	if len(i.rangeKeys) > 0 && seekKey.Timestamp.IsSet() && seekKey.Key.Equal(i.rangeKeysPos) {
 		i.rangeKeysIdx = sort.Search(len(i.rangeKeys), func(idx int) bool {
-			return i.rangeKeys[idx].RangeKey.Timestamp.LessEq(seekKey.Timestamp)
+			return i.rangeKeys[idx].Timestamp.LessEq(seekKey.Timestamp)
 		})
 	}
 
@@ -492,7 +489,7 @@ func (i *pointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 	// If we're seeking to a specific version, skip over older range keys.
 	if seekKey.Timestamp.IsSet() && seekKey.Key.Equal(i.rangeKeysPos) {
 		i.rangeKeysIdx = sort.Search(len(i.rangeKeys), func(idx int) bool {
-			return i.rangeKeys[idx].RangeKey.Timestamp.LessEq(seekKey.Timestamp)
+			return i.rangeKeys[idx].Timestamp.LessEq(seekKey.Timestamp)
 		}) - 1
 	}
 
@@ -569,7 +566,7 @@ func (i *pointSynthesizingIter) UnsafeKey() MVCCKey {
 	}
 	return MVCCKey{
 		Key:       i.rangeKeysPos,
-		Timestamp: i.rangeKeys[i.rangeKeysIdx].RangeKey.Timestamp,
+		Timestamp: i.rangeKeys[i.rangeKeysIdx].Timestamp,
 	}
 }
 
@@ -624,8 +621,8 @@ func (i *pointSynthesizingIter) RangeBounds() roachpb.Span {
 }
 
 // RangeKeys implements MVCCIterator.
-func (i *pointSynthesizingIter) RangeKeys() []MVCCRangeKeyValue {
-	return []MVCCRangeKeyValue{}
+func (i *pointSynthesizingIter) RangeKeys() MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{}
 }
 
 // ComputeStats implements MVCCIterator.
@@ -752,10 +749,10 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 		maxIdx = i.rangeKeysIdx + 1
 	}
 	if minIdx >= 0 && minIdx < len(i.rangeKeys) {
-		minKey = MVCCKey{Key: i.rangeKeysPos, Timestamp: i.rangeKeys[minIdx].RangeKey.Timestamp}
+		minKey = MVCCKey{Key: i.rangeKeysPos, Timestamp: i.rangeKeys[minIdx].Timestamp}
 	}
 	if maxIdx >= 0 && maxIdx < len(i.rangeKeys) {
-		maxKey = MVCCKey{Key: i.rangeKeysPos, Timestamp: i.rangeKeys[maxIdx].RangeKey.Timestamp}
+		maxKey = MVCCKey{Key: i.rangeKeysPos, Timestamp: i.rangeKeys[maxIdx].Timestamp}
 	}
 
 	iterKey := i.iter.Key()

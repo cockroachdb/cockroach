@@ -974,7 +974,7 @@ func mvccGetMetadata(
 
 	// If we land on a (bare) range key, step to look for a colocated point key.
 	if hasRange && !hasPoint {
-		rkTimestamp := iter.RangeKeys()[0].RangeKey.Timestamp
+		rkTimestamp := iter.RangeKeys().Versions[0].Timestamp
 
 		iter.Next()
 		if ok, err = iter.Valid(); err != nil {
@@ -1011,10 +1011,10 @@ func mvccGetMetadata(
 	// metadata), or the point version's timestamp if it was a tombstone.
 	if hasRange {
 		rangeKeys := iter.RangeKeys()
-		if rkv, ok := FirstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
+		if v, ok := rangeKeys.FirstAbove(unsafeKey.Timestamp); ok {
 			meta.Deleted = true
-			meta.Timestamp = rangeKeys[0].RangeKey.Timestamp.ToLegacyTimestamp()
-			keyLastSeen := rkv.RangeKey.Timestamp
+			meta.Timestamp = rangeKeys.Versions[0].Timestamp.ToLegacyTimestamp()
+			keyLastSeen := v.Timestamp
 			if unsafeVal.IsTombstone() {
 				keyLastSeen = unsafeKey.Timestamp
 			}
@@ -1665,7 +1665,7 @@ func mvccPutInternal(
 						// We must now be on a point key, but it may be covered by an
 						// existing MVCC range tombstone. If it isn't, account for it.
 						_, hasRange := iter.HasPointAndRange()
-						if !hasRange || iter.RangeKeys()[0].RangeKey.Timestamp.Less(prevUnsafeKey.Timestamp) {
+						if !hasRange || iter.RangeKeys().Versions[0].Timestamp.Less(prevUnsafeKey.Timestamp) {
 							prevValRaw := iter.UnsafeValue()
 							prevVal, err := DecodeMVCCValue(prevValRaw)
 							if err != nil {
@@ -2568,16 +2568,16 @@ func MVCCPredicateDeleteRange(
 			// TODO (msbutler): cache the range keys while the range bounds remain
 			// constant, since iter.RangeKeys() is expensive. Manual caching may not be necessary if
 			// https://github.com/cockroachdb/cockroach/issues/84379 lands.
-			rangeKeys := iter.RangeKeys()
-			if endTime.LessEq(rangeKeys[0].RangeKey.Timestamp) {
-				return false, false, false, roachpb.NewWriteTooOldError(endTime,
-					rangeKeys[0].RangeKey.Timestamp.Next(), k.Key.Clone())
+			newestRangeKey := iter.RangeKeys().Versions[0].Timestamp
+			if endTime.LessEq(newestRangeKey) {
+				return false, false, false, roachpb.NewWriteTooOldError(
+					endTime, newestRangeKey.Next(), k.Key.Clone())
 			}
 			if !hasPointKey {
 				// landed on bare range key.
 				return true, false, true, nil
 			}
-			if k.Timestamp.Less(rangeKeys[0].RangeKey.Timestamp) {
+			if k.Timestamp.Less(newestRangeKey) {
 				// The latest range tombstone shadows the point key; ok to continue run.
 				return true, false, true, nil
 			}
@@ -2872,12 +2872,11 @@ func MVCCDeleteRangeUsingTombstone(
 		if hasRange {
 			// Check if we've encountered a new range key stack.
 			if rangeBounds := iter.RangeBounds(); !rangeBounds.EndKey.Equal(prevRangeEnd) {
-				newest := iter.RangeKeys()[0].RangeKey
+				newest := iter.RangeKeys().Versions[0].Timestamp
 
 				// Check for conflict with newer range key.
-				if timestamp.LessEq(newest.Timestamp) {
-					return roachpb.NewWriteTooOldError(
-						timestamp, newest.Timestamp.Next(), newest.StartKey.Clone())
+				if timestamp.LessEq(newest) {
+					return roachpb.NewWriteTooOldError(timestamp, newest.Next(), rangeBounds.Key.Clone())
 				}
 
 				if ms != nil {
@@ -2899,7 +2898,7 @@ func MVCCDeleteRangeUsingTombstone(
 					msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp))
 					msDelta.RangeValCount++
 					msDelta.RangeValBytes += int64(len(valueRaw))
-					msDelta.GCBytesAge -= (timestamp.WallTime/1e9 - newest.Timestamp.WallTime/1e9) *
+					msDelta.GCBytesAge -= (timestamp.WallTime/1e9 - newest.WallTime/1e9) *
 						int64(EncodedMVCCKeyPrefixLength(rangeBounds.Key)+
 							EncodedMVCCKeyPrefixLength(rangeBounds.EndKey))
 				}
@@ -2944,10 +2943,10 @@ func MVCCDeleteRangeUsingTombstone(
 	if ms != nil {
 		// fragmentRangeKeys adjusts ms to fragment an existing range key stack
 		// at the given split point.
-		fragmentRangeKeys := func(rangeKeys []MVCCRangeKeyValue, splitKey roachpb.Key) {
-			for i, rkv := range rangeKeys {
-				keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
-				valBytes := int64(len(rkv.Value))
+		fragmentRangeKeys := func(rangeKeys MVCCRangeKeyStack, splitKey roachpb.Key) {
+			for i, v := range rangeKeys.Versions {
+				keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+				valBytes := int64(len(v.Value))
 				if i == 0 {
 					msDelta.RangeKeyCount++
 					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
@@ -2955,37 +2954,29 @@ func MVCCDeleteRangeUsingTombstone(
 				msDelta.RangeKeyBytes += keyBytes
 				msDelta.RangeValCount++
 				msDelta.RangeValBytes += valBytes
-				msDelta.GCBytesAge += (keyBytes + valBytes) * (timestamp.WallTime/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+				msDelta.GCBytesAge += (keyBytes + valBytes) * (timestamp.WallTime/1e9 - v.Timestamp.WallTime/1e9)
 			}
 		}
 
 		// maybeMergeRangeKeys adjusts ms to merge two abutting range key stacks if
 		// they have the same timestamps and values. It assumes the lhs end key
 		// equals the rhs start key, and that they are in descending order.
-		maybeMergeRangeKeys := func(lhs, rhs []MVCCRangeKeyValue) {
-			if len(lhs) != len(rhs) || len(lhs) == 0 {
+		maybeMergeRangeKeys := func(lhs, rhs MVCCRangeKeyStack) {
+			if !lhs.CanMergeRight(rhs) {
 				return
 			}
-			for i, l := range lhs {
-				if !l.RangeKey.Timestamp.Equal(rhs[i].RangeKey.Timestamp) {
-					return
-				} else if !bytes.Equal(l.Value, rhs[i].Value) {
-					return
-				}
-			}
-			mergeKey := rhs[0].RangeKey.StartKey
-			for i, rkv := range lhs {
-				keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
-				valBytes := int64(len(rkv.Value))
+			for i, v := range lhs.Versions {
+				keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+				valBytes := int64(len(v.Value))
 				if i == 0 {
 					msDelta.RangeKeyCount--
-					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(mergeKey))
+					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(rhs.Bounds.Key))
 				}
 				msDelta.RangeKeyBytes -= keyBytes
 				msDelta.RangeValCount--
 				msDelta.RangeValBytes -= valBytes
 				msDelta.GCBytesAge -= (keyBytes + valBytes) *
-					(timestamp.WallTime/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+					(timestamp.WallTime/1e9 - v.Timestamp.WallTime/1e9)
 			}
 		}
 
@@ -3005,16 +2996,16 @@ func MVCCDeleteRangeUsingTombstone(
 				case 1: // fragment
 					fragmentRangeKeys(iter.RangeKeys(), startKey)
 				case 0: // merge
-					lhs := iter.RangeKeys()
-					for i := range lhs {
-						lhs[i] = lhs[i].Clone()
+					lhs := iter.RangeKeys().Clone()
+					rhs := MVCCRangeKeyStack{
+						Bounds:   rangeKey.Bounds(),
+						Versions: MVCCRangeKeyVersions{{Timestamp: rangeKey.Timestamp, Value: valueRaw}},
 					}
-					rhs := []MVCCRangeKeyValue{{RangeKey: rangeKey, Value: valueRaw}}
 					iter.SeekGE(MVCCKey{Key: startKey})
 					if ok, err := iter.Valid(); err != nil {
 						return err
 					} else if ok {
-						rhs = append(rhs, iter.RangeKeys()...)
+						rhs.Versions = append(rhs.Versions, iter.RangeKeys().Versions...)
 					}
 					maybeMergeRangeKeys(lhs, rhs)
 				}
@@ -3040,16 +3031,16 @@ func MVCCDeleteRangeUsingTombstone(
 				case -1: // fragment
 					fragmentRangeKeys(iter.RangeKeys(), endKey)
 				case 0: // merge
-					lhs := []MVCCRangeKeyValue{{RangeKey: rangeKey, Value: valueRaw}}
-					rhs := iter.RangeKeys()
-					for i := range rhs {
-						rhs[i] = rhs[i].Clone()
+					lhs := MVCCRangeKeyStack{
+						Bounds:   rangeKey.Bounds(),
+						Versions: MVCCRangeKeyVersions{{Timestamp: rangeKey.Timestamp, Value: valueRaw}},
 					}
+					rhs := iter.RangeKeys().Clone()
 					iter.SeekLT(MVCCKey{Key: endKey})
 					if ok, err := iter.Valid(); err != nil {
 						return err
 					} else if ok {
-						lhs = append(lhs, iter.RangeKeys()...)
+						lhs.Versions = append(lhs.Versions, iter.RangeKeys().Versions...)
 					}
 					maybeMergeRangeKeys(lhs, rhs)
 				}
@@ -3558,7 +3549,7 @@ type iterForKeyVersions interface {
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
 	ValueProto(msg protoutil.Message) error
-	RangeKeys() []MVCCRangeKeyValue
+	RangeKeys() MVCCRangeKeyStack
 }
 
 // separatedIntentAndVersionIter is an implementation of iterForKeyVersions
@@ -3634,7 +3625,7 @@ func (s *separatedIntentAndVersionIter) HasPointAndRange() (bool, bool) {
 	return hasPoint, hasRange
 }
 
-func (s *separatedIntentAndVersionIter) RangeKeys() []MVCCRangeKeyValue {
+func (s *separatedIntentAndVersionIter) RangeKeys() MVCCRangeKeyStack {
 	return s.mvccIter.RangeKeys()
 }
 
@@ -4038,7 +4029,7 @@ func mvccResolveWriteIntent(
 			} else if valid {
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasPoint {
 					if unsafeKey := iter.UnsafeKey(); unsafeKey.Key.Equal(oldKey.Key) {
-						if !hasRange || iter.RangeKeys()[0].RangeKey.Timestamp.Less(unsafeKey.Timestamp) {
+						if !hasRange || iter.RangeKeys().Versions[0].Timestamp.Less(unsafeKey.Timestamp) {
 							unsafeValRaw := iter.UnsafeValue()
 							prevVal, prevValOK, err := tryDecodeSimpleMVCCValue(unsafeValRaw)
 							if !prevValOK && err == nil {
@@ -4149,8 +4140,8 @@ func mvccResolveWriteIntent(
 			// synthesize a point tombstone at the lowest range tombstone covering it.
 			// This is where the point key ceases to exist, contributing to GCBytesAge.
 			if len(unsafeNextValueRaw) > 0 {
-				if rk, found := FirstRangeKeyAbove(iter.RangeKeys(), unsafeNextKey.Timestamp); found {
-					unsafeNextKey.Timestamp = rk.RangeKey.Timestamp
+				if v, found := iter.RangeKeys().FirstAbove(unsafeNextKey.Timestamp); found {
+					unsafeNextKey.Timestamp = v.Timestamp
 					unsafeNextValueRaw = []byte{}
 				}
 			}
@@ -4608,18 +4599,15 @@ func MVCCGarbageCollect(
 		if ms != nil {
 			// We need to iterate ranges only to compute GCBytesAge if we are updating
 			// stats.
+			//
+			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
 			if _, hasRange := iter.HasPointAndRange(); hasRange && !lastRangeTombstoneStart.Equal(iter.RangeBounds().Key) {
 				rangeKeys := iter.RangeKeys()
-				newLen := len(rangeKeys)
-				if cap(rangeTombstoneTss) < newLen {
-					rangeTombstoneTss = make([]hlc.Timestamp, newLen)
-				} else {
-					rangeTombstoneTss = rangeTombstoneTss[:newLen]
+				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys.Bounds.Key...)
+				rangeTombstoneTss = rangeTombstoneTss[:0]
+				for _, v := range rangeKeys.Versions {
+					rangeTombstoneTss = append(rangeTombstoneTss, v.Timestamp)
 				}
-				for i, rkv := range rangeKeys {
-					rangeTombstoneTss[i] = rkv.RangeKey.Timestamp
-				}
-				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys[0].RangeKey.StartKey...)
 			} else if !hasRange {
 				lastRangeTombstoneStart = lastRangeTombstoneStart[:0]
 				rangeTombstoneTss = rangeTombstoneTss[:0]
@@ -4825,8 +4813,9 @@ func MVCCGarbageCollectRangeKeys(
 				break
 			}
 
+			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
 			bounds := iter.RangeBounds()
-			unsafeRangeKeys := iter.RangeKeys()
+			unsafeRangeKeys := iter.RangeKeys().AsRangeKeyValues()
 
 			// Check if preceding range tombstone is adjacent to GC'd one. If we
 			// started iterating too early, just skip to next key. If boundaries
@@ -5158,8 +5147,8 @@ func ComputeStatsForRangeWithVisitors(
 	// reverse chronological order and use this variable to keep track
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
+	var rangeKeys MVCCRangeKeyStack
 	mvccEndKey := MakeMVCCMetadataKey(end)
-	rangeKeys := []MVCCRangeKeyValue{}
 
 	for iter.SeekGE(MakeMVCCMetadataKey(start)); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
@@ -5173,9 +5162,9 @@ func ComputeStatsForRangeWithVisitors(
 		if hasRange {
 			if rangeStart := iter.RangeBounds().Key; !rangeStart.Equal(prevRangeStart) {
 				prevRangeStart = append(prevRangeStart[:0], rangeStart...)
-				rangeKeys = iter.RangeKeys()
+				rangeKeys = iter.RangeKeys().Clone()
 
-				for i, rkv := range rangeKeys {
+				for i, v := range rangeKeys.Versions {
 					// Only the top-most fragment contributes the key and its bounds, but
 					// all versions contribute timestamps and values.
 					//
@@ -5183,28 +5172,27 @@ func ComputeStatsForRangeWithVisitors(
 					// though it is actually variable-length, likely for historical
 					// reasons. But for range keys we may as well use the actual
 					// variable-length encoded size.
-					keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
-					valBytes := int64(len(rkv.Value))
+					keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					valBytes := int64(len(v.Value))
 					if i == 0 {
 						ms.RangeKeyCount++
-						keyBytes += int64(EncodedMVCCKeyPrefixLength(rkv.RangeKey.StartKey) +
-							EncodedMVCCKeyPrefixLength(rkv.RangeKey.EndKey))
+						keyBytes += int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key) +
+							EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
 					}
 					ms.RangeKeyBytes += keyBytes
 					ms.RangeValCount++
 					ms.RangeValBytes += valBytes
-					ms.GCBytesAge += (keyBytes + valBytes) *
-						(nowNanos/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+					ms.GCBytesAge += (keyBytes + valBytes) * (nowNanos/1e9 - v.Timestamp.WallTime/1e9)
 
 					if rangeKeyVisitor != nil {
-						if err := rangeKeyVisitor(rkv); err != nil {
+						if err := rangeKeyVisitor(rangeKeys.AsRangeKeyValue(v)); err != nil {
 							return enginepb.MVCCStats{}, err
 						}
 					}
 				}
 			}
-		} else if len(rangeKeys) > 0 {
-			rangeKeys = rangeKeys[:0]
+		} else if !rangeKeys.IsEmpty() {
+			rangeKeys = MVCCRangeKeyStack{}
 		}
 
 		if !hasPoint {
@@ -5247,8 +5235,8 @@ func ComputeStatsForRangeWithVisitors(
 		// only take them into account for versioned values.
 		var nextRangeTombstone hlc.Timestamp
 		if isValue {
-			if rkv, ok := FirstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
-				nextRangeTombstone = rkv.RangeKey.Timestamp
+			if v, ok := rangeKeys.FirstAbove(unsafeKey.Timestamp); ok {
+				nextRangeTombstone = v.Timestamp
 			}
 		}
 
@@ -5435,7 +5423,7 @@ func MVCCExportToSST(
 	var rows RowCounter
 	var curKey roachpb.Key // only used if exportAllRevisions
 	var resumeKey MVCCKey
-	var rangeKeys []MVCCRangeKeyValue
+	var rangeKeys MVCCRangeKeyStack
 	var rangeKeysEnd roachpb.Key
 	var rangeKeysSize int64
 
@@ -5464,7 +5452,7 @@ func MVCCExportToSST(
 		// We could be truncated in the middle of a point key version series, which
 		// would require adding on a \0 byte via Key.Next(), so let's assume that.
 		maxSize := rangeKeysSize
-		if s := maxSize + int64(len(rangeKeys)*(len(resumeKey)-len(rangeKeysEnd)+1)); s > maxSize {
+		if s := maxSize + int64(rangeKeys.Len()*(len(resumeKey)-len(rangeKeysEnd)+1)); s > maxSize {
 			maxSize = s
 		}
 		return maxSize
@@ -5527,37 +5515,43 @@ func MVCCExportToSST(
 		// comparisons. Pebble should expose an API to cheaply detect range key
 		// changes.
 		if len(rangeKeysEnd) > 0 && bytes.Compare(unsafeKey.Key, rangeKeysEnd) >= 0 {
-			for _, rkv := range rangeKeys {
-				mvccValue, ok, err := tryDecodeSimpleMVCCValue(rkv.Value)
+			for _, v := range rangeKeys.Versions {
+				mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
 				if !ok && err == nil {
-					mvccValue, err = decodeExtendedMVCCValue(rkv.Value)
+					mvccValue, err = decodeExtendedMVCCValue(v.Value)
 				}
 				if err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
-						"decoding mvcc value %s", rkv.Value)
+						"decoding mvcc value %s", v.Value)
 				}
 				// Export only the inner roachpb.Value, not the MVCCValue header.
 				mvccValue = MVCCValue{Value: mvccValue.Value}
-				if err := sstWriter.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+				if err := sstWriter.PutMVCCRangeKey(rangeKeys.AsRangeKey(v), mvccValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, err
 				}
 			}
 			rows.BulkOpSummary.DataSize += rangeKeysSize
-			rangeKeys, rangeKeysEnd, rangeKeysSize = rangeKeys[:0], nil, 0
+			rangeKeys, rangeKeysEnd, rangeKeysSize = MVCCRangeKeyStack{}, nil, 0
 		}
 
 		// If we find any new range keys and we haven't buffered any range keys yet,
 		// buffer them.
-		if hasRange && !skipTombstones && len(rangeKeys) == 0 {
-			rangeBounds := iter.RangeBounds()
-			rangeKeysEnd = append(rangeKeysEnd[:0], rangeBounds.EndKey...)
+		if hasRange && !skipTombstones && rangeKeys.IsEmpty() {
+			rangeKeys = iter.RangeKeys()
+			rangeKeysEnd = append(rangeKeysEnd[:0], rangeKeys.Bounds.EndKey...)
+			if !opts.ExportAllRevisions {
+				rangeKeys.Versions = rangeKeys.Versions[:1]
+			}
 
-			for _, rkv := range iter.RangeKeys() {
-				rangeKeys = append(rangeKeys, rkv.Clone())
-				rangeKeysSize += int64(len(rkv.RangeKey.StartKey) + len(rkv.RangeKey.EndKey) + len(rkv.Value))
-				if !opts.ExportAllRevisions {
-					break
-				}
+			// TODO(erikgrinaker): We should consider a CloneInto() method on the
+			// MVCCRangeKeyStack that allows reusing a byte buffer. See also TODO in
+			// Clone() about using a single allocation for the entire clone (all byte
+			// slices).
+			rangeKeys = rangeKeys.Clone()
+
+			for _, v := range rangeKeys.Versions {
+				rangeKeysSize += int64(
+					len(rangeKeys.Bounds.Key) + len(rangeKeys.Bounds.EndKey) + len(v.Value))
 			}
 
 			// Check if the range keys exceed a limit, using similar logic as point
@@ -5571,10 +5565,10 @@ func MVCCExportToSST(
 			// of some of the options and clean this up.
 			curSize := rows.BulkOpSummary.DataSize
 			reachedTargetSize := opts.TargetSize > 0 && uint64(curSize) >= opts.TargetSize
-			newSize := curSize + maxRangeKeysSizeIfTruncated(rangeBounds.Key)
+			newSize := curSize + maxRangeKeysSizeIfTruncated(rangeKeys.Bounds.Key)
 			reachedMaxSize := opts.MaxSize > 0 && newSize > int64(opts.MaxSize)
 			if paginated && (reachedTargetSize || reachedMaxSize) {
-				rangeKeys, rangeKeysEnd, rangeKeysSize = rangeKeys[:0], nil, 0
+				rangeKeys, rangeKeysEnd, rangeKeysSize = MVCCRangeKeyStack{}, nil, 0
 				resumeKey = unsafeKey.Clone()
 				break
 			}
@@ -5686,7 +5680,7 @@ func MVCCExportToSST(
 	// next export's range keys to overlap with this one, e.g.: [a-f) with resume
 	// key c@7 will export range keys [a-c\0) first, and then [c-f) when resuming,
 	// which overlaps at [c-c\0).
-	if len(rangeKeys) > 0 {
+	if !rangeKeys.IsEmpty() {
 		// Calculate the new rangeKeysSize due to the new resume bounds.
 		if len(resumeKey.Key) > 0 && rangeKeysEnd.Compare(resumeKey.Key) > 0 {
 			oldEndLen := len(rangeKeysEnd)
@@ -5694,21 +5688,21 @@ func MVCCExportToSST(
 			if resumeKey.Timestamp.IsSet() {
 				rangeKeysEnd = rangeKeysEnd.Next()
 			}
-			rangeKeysSize += int64(len(rangeKeys) * (len(rangeKeysEnd) - oldEndLen))
+			rangeKeysSize += int64(rangeKeys.Len() * (len(rangeKeysEnd) - oldEndLen))
 		}
-		for _, rkv := range rangeKeys {
-			rkv.RangeKey.EndKey = rangeKeysEnd
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(rkv.Value)
+		rangeKeys.Bounds.EndKey = rangeKeysEnd
+		for _, v := range rangeKeys.Versions {
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
 			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(rkv.Value)
+				mvccValue, err = decodeExtendedMVCCValue(v.Value)
 			}
 			if err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
-					"decoding mvcc value %s", rkv.Value)
+					"decoding mvcc value %s", v.Value)
 			}
 			// Export only the inner roachpb.Value, not the MVCCValue header.
 			mvccValue = MVCCValue{Value: mvccValue.Value}
-			if err := sstWriter.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+			if err := sstWriter.PutMVCCRangeKey(rangeKeys.AsRangeKey(v), mvccValue); err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, err
 			}
 		}

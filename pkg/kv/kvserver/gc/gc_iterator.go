@@ -11,7 +11,6 @@
 package gc
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -193,15 +192,13 @@ func (it *gcIterator) currentRangeTS() hlc.Timestamp {
 	if rangeTombstoneStartKey.Equal(it.cachedRangeTombstoneKey) {
 		return it.cachedRangeTombstoneTS
 	}
-
-	it.cachedRangeTombstoneTS = hlc.Timestamp{}
-	rangeKeys := it.it.RangeKeys()
-	if idx := sort.Search(len(rangeKeys), func(i int) bool {
-		return rangeKeys[i].RangeKey.Timestamp.LessEq(it.threshold)
-	}); idx < len(rangeKeys) {
-		it.cachedRangeTombstoneTS = rangeKeys[idx].RangeKey.Timestamp
-	}
 	it.cachedRangeTombstoneKey = append(it.cachedRangeTombstoneKey[:0], rangeTombstoneStartKey...)
+
+	if v, ok := it.it.RangeKeys().FirstBelow(it.threshold); ok {
+		it.cachedRangeTombstoneTS = v.Timestamp
+	} else {
+		it.cachedRangeTombstoneTS = hlc.Timestamp{}
+	}
 	return it.cachedRangeTombstoneTS
 }
 

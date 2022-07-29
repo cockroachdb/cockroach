@@ -154,15 +154,15 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				rangeKeysStart = append(rangeKeysStart[:0], rangeBounds.Key...)
 
 				// Emit events for these MVCC range tombstones, in chronological order.
-				rangeKeys := i.RangeKeys()
-				for i := len(rangeKeys) - 1; i >= 0; i-- {
+				versions := i.RangeKeys().Versions
+				for i := len(versions) - 1; i >= 0; i-- {
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeBounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeBounds.EndKey, 0)
 					err := outputFn(&roachpb.RangeFeedEvent{
 						DeleteRange: &roachpb.RangeFeedDeleteRange{
 							Span:      span,
-							Timestamp: rangeKeys[i].RangeKey.Timestamp,
+							Timestamp: versions[i].Timestamp,
 						},
 					})
 					if err != nil {
@@ -271,8 +271,7 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 					// to rangeKeysStart above, because NextIgnoringTime() could reveal
 					// additional MVCC range tombstones below StartTime that cover this
 					// point. We need to find a more performant way to handle this.
-					if !hasRange || !storage.HasRangeKeyBetween(
-						i.RangeKeys(), reorderBuf[l].Val.Value.Timestamp, ts) {
+					if !hasRange || !i.RangeKeys().HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
 						// TODO(sumeer): find out if it is deliberate that we are not populating
 						// PrevValue.Timestamp.
 						reorderBuf[l].Val.PrevValue.RawBytes = val

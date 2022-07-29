@@ -176,19 +176,20 @@ func verifyRDReplicatedOnlyMVCCIter(
 				}
 			}
 			if r {
-				rks := iter.RangeKeys()
-				if !rks[0].RangeKey.StartKey.Equal(rangeStart) {
+				rangeKeys := iter.RangeKeys().Clone()
+				if !rangeKeys.Bounds.Key.Equal(rangeStart) {
+					rangeStart = rangeKeys.Bounds.Key.Clone()
 					if !reverse {
-						for _, rk := range rks {
-							actualRanges = append(actualRanges, rk.RangeKey.Clone())
+						for _, v := range rangeKeys.Versions {
+							actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
 						}
 					} else {
-						for i := len(rks) - 1; i >= 0; i-- {
-							actualRanges = append([]storage.MVCCRangeKey{rks[i].RangeKey.Clone()},
+						for i := rangeKeys.Len() - 1; i >= 0; i-- {
+							actualRanges = append([]storage.MVCCRangeKey{
+								rangeKeys.AsRangeKey(rangeKeys.Versions[i])},
 								actualRanges...)
 						}
 					}
-					rangeStart = rks[0].RangeKey.StartKey.Clone()
 				}
 			}
 			next()

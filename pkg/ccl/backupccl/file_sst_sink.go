@@ -363,8 +363,9 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 		} else if !ok {
 			break
 		}
-		for _, rkv := range iter.RangeKeys() {
-			if err := s.sst.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
+		rangeKeys := iter.RangeKeys()
+		for _, v := range rangeKeys.Versions {
+			if err := s.sst.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
 				return err
 			}
 		}

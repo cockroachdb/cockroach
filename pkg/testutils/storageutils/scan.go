@@ -45,13 +45,14 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
-				for _, rkv := range iter.RangeKeys() {
-					if len(rkv.Value) == 0 {
-						rkv.Value = nil
-					}
-					kvs = append(kvs, rkv.Clone())
-				}
 				prevRangeStart = bounds.Key.Clone()
+				rangeKeys := iter.RangeKeys().Clone()
+				for _, v := range rangeKeys.Versions {
+					if len(v.Value) == 0 {
+						v.Value = nil
+					}
+					kvs = append(kvs, rangeKeys.AsRangeKeyValue(v))
+				}
 			}
 		}
 		if hasPoint {

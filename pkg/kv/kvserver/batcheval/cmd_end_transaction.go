@@ -1315,9 +1315,9 @@ func computeSplitRangeKeyStatsDelta(
 	// contribution of the range key fragmentation. The naïve calculation would be
 	// rhs.EncodedSize() - (keyLen(rhs.EndKey) - keyLen(lhs.EndKey))
 	// which simplifies to 2 * keyLen(rhs.StartKey) + tsLen(rhs.Timestamp).
-	for i, rkv := range iter.RangeKeys() {
-		keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
-		valBytes := int64(len(rkv.Value))
+	for i, v := range iter.RangeKeys().Versions {
+		keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(v.Timestamp))
+		valBytes := int64(len(v.Value))
 		if i == 0 {
 			delta.RangeKeyCount++
 			keyBytes += 2 * int64(storage.EncodedMVCCKeyPrefixLength(splitKey))
@@ -1325,7 +1325,7 @@ func computeSplitRangeKeyStatsDelta(
 		delta.RangeKeyBytes += keyBytes
 		delta.RangeValCount++
 		delta.RangeValBytes += valBytes
-		delta.GCBytesAge += (keyBytes + valBytes) * (nowNanos/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+		delta.GCBytesAge += (keyBytes + valBytes) * (nowNanos/1e9 - v.Timestamp.WallTime/1e9)
 	}
 
 	return delta, nil

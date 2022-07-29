@@ -409,13 +409,14 @@ func UpdateSSTTimestamps(
 		} else if !ok {
 			break
 		}
-		for _, rkv := range iter.RangeKeys() {
-			if rkv.RangeKey.Timestamp != from {
+		rangeKeys := iter.RangeKeys()
+		for _, v := range rangeKeys.Versions {
+			if v.Timestamp != from {
 				return nil, errors.Errorf("unexpected timestamp %s (expected %s) for range key %s",
-					rkv.RangeKey.Timestamp, from, rkv.RangeKey)
+					v.Timestamp, from, rangeKeys.Bounds)
 			}
-			rkv.RangeKey.Timestamp = to
-			if err = writer.PutRawMVCCRangeKey(rkv.RangeKey, rkv.Value); err != nil {
+			v.Timestamp = to
+			if err = writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
 				return nil, err
 			}
 		}
