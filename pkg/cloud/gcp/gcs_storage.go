@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	"golang.org/x/net/http2"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
@@ -174,6 +175,7 @@ func makeGCSStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
+	g.SetRetry(gcs.WithErrorFunc(shouldRetry))
 	bucket := g.Bucket(conf.Bucket)
 	if conf.BillingProject != `` {
 		bucket = bucket.UserProject(conf.BillingProject)
@@ -341,6 +343,24 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (g *gcsStorage) Close() error {
 	return g.client.Close()
+}
+
+func shouldRetry(err error) bool {
+	if defaultShouldRetry(err) {
+		return true
+	}
+
+	if e := (http2.StreamError{}); errors.As(err, &e) {
+		if e.Code == http2.ErrCodeInternal {
+			return true
+		}
+	}
+
+	if e := (errors.Wrapper)(nil); errors.As(err, &e) {
+		return shouldRetry(e.Unwrap())
+	}
+
+	return false
 }
 
 func init() {
