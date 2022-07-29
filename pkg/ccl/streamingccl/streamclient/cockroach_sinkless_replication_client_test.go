@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,8 @@ func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer log.Scope(t).Close(t)
+	// Skipped as this feature is not released in 21.2.
+	skip.WithIssue(t, 84119)
 	h, cleanup := streamingtest.NewReplicationHelper(t)
 	defer cleanup()
 
