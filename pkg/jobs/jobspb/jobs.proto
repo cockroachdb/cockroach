@@ -127,6 +127,9 @@ message StreamIngestionProgress {
 
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 4 [(gogoproto.nullable) = false];
+
+  // StreamAddresses are the source cluster addresses read from the latest topology.
+  repeated string stream_addresses = 5;
 }
 
 message StreamReplicationDetails {
