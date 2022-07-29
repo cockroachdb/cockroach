@@ -867,6 +867,17 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Fuzzy String Matching functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### ID generation functions
 
 <table>
@@ -968,10 +979,6 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
@@ -997,16 +1004,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
+<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
@@ -1015,6 +1026,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="json_remove_path"></a><code>json_remove_path(val: jsonb, path: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Remove the specified path from the JSON object.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_set"></a><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1027,12 +1042,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_valid"></a><code>json_valid(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given string is a valid JSON or not</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1047,6 +1070,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object"></a><code>jsonb_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_pretty"></a><code>jsonb_pretty(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given JSON value as a STRING indented and with newlines.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_set"></a><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1246,34 +1273,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; tuple{anyelement AS x, int AS n}</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object_keys"></a><code>json_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object_keys"></a><code>jsonb_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_keywords"></a><code>pg_get_keywords() &rarr; tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_options_to_table"></a><code>pg_options_to_table(options: <a href="string.html">string</a>[]) &rarr; tuple{string AS option_name, string AS option_value}</code></td><td><span class="funcdesc"><p>Converts the options array format to a table.</p>
@@ -3094,7 +3097,21 @@ active for the current transaction.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.pretty_span"></a><code>crdb_internal.pretty_span(raw_key_start: <a href="bytes.html">bytes</a>, raw_key_end: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="crdb_internal.probe_ranges"></a><code>crdb_internal.probe_ranges(timeout: <a href="interval.html">interval</a>, probe_type: unknown_enum) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data based on the results received when using the prober.
+Parameters
+timeout: interval for the maximum time the user wishes the prober to probe a range.
+probe_type: enum indicating which kind of probe the prober should conduct (options are read or write).
+Example usage
+number of failed write probes: select count(1) from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, ‘write’) where error != ‘’;
+50 slowest probes: select range_id, error, end_to_end_latency_ms from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, true) order by end_to_end_latency_ms desc limit 50;
+Notes
+If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
+Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
+A write probe will effectively probe reads as well.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
 </span></td><td>Volatile</td></tr>
@@ -3143,6 +3160,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td><td>Stable</td></tr>
@@ -3213,25 +3232,6 @@ table. Returns an error if validation fails.</p>
 <tbody>
 <tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
 </span></td><td>Stable</td></tr></tbody>
-</table>
-
-### TUPLE{INT AS RANGE_ID, STRING AS ERROR, INT AS END_TO_END_LATENCY_MS, STRING AS VERBOSE_TRACE} functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.probe_ranges"></a><code>crdb_internal.probe_ranges(timeout: <a href="interval.html">interval</a>, probe_type: unknown_enum) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data based on the results received when using the prober.
-Parameters
-timeout: interval for the maximum time the user wishes the prober to probe a range.
-probe_type: enum indicating which kind of probe the prober should conduct (options are read or write).
-Example usage
-number of failed write probes: select count(1) from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, ‘write’) where error != ‘’;
-50 slowest probes: select range_id, error, end_to_end_latency_ms from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, true) order by end_to_end_latency_ms desc limit 50;
-Notes
-If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
-Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
-A write probe will effectively probe reads as well.</p>
-</span></td><td>Volatile</td></tr></tbody>
 </table>
 
 ### Trigrams functions

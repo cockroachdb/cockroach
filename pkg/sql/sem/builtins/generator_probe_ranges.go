@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +48,8 @@ func initProbeRangesBuiltins() {
 var probeRangesGenerators = map[string]builtinDefinition{
 	"crdb_internal.probe_ranges": makeBuiltin(
 		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
+			Class:    tree.GeneratorClass,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
