@@ -42,7 +42,7 @@ func TestFuncNull(t *testing.T) {
 		}
 	}
 
-	for _, name := range builtins.AllBuiltinNames {
+	for _, name := range builtins.AllBuiltinNames() {
 		switch strings.ToLower(name) {
 		case "crdb_internal.force_panic", "crdb_internal.force_log_fatal", "pg_sleep":
 			continue

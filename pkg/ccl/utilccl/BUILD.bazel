@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "utilccl",
-    srcs = ["license_check.go"],
+    srcs = [
+        "builtins.go",
+        "license_check.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,6 +17,8 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/tree",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -29,6 +34,7 @@ go_test(
     name = "utilccl_test",
     size = "small",
     srcs = [
+        "builtins_test.go",
         "license_check_test.go",
         "license_test.go",
     ],
@@ -38,11 +44,15 @@ go_test(
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/util/envutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
