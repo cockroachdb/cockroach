@@ -218,7 +218,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		for _, mtc := range memoryTestCases {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
-				tu.testAllocator.ReleaseMemory(tu.testAllocator.Used())
+				tu.testAllocator.ReleaseAll()
 				o := newRouterOutputOp(
 					routerOutputOpArgs{
 						types:               typs,
@@ -895,7 +895,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			// Clear the testAllocator for use.
-			tu.testAllocator.ReleaseMemory(tu.testAllocator.Used())
+			tu.testAllocator.ReleaseAll()
 			diskAcc := tu.testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(

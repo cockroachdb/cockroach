@@ -1009,6 +1009,6 @@ func (ht *HashTable) Reset(_ context.Context) {
 // table is not added to the slice of objects that are released on the flow
 // cleanup.
 func (ht *HashTable) Release() {
-	ht.allocator.ReleaseMemory(ht.allocator.Used())
+	ht.allocator.ReleaseAll()
 	*ht = HashTable{}
 }

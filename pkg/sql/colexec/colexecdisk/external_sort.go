@@ -424,7 +424,7 @@ func (s *externalSorter) Next() coldata.Batch {
 			// We are now done with the merger, so we can release the memory
 			// used for the output batches (all of which have been enqueued into
 			// the new partition).
-			s.outputUnlimitedAllocator.ReleaseMemory(s.outputUnlimitedAllocator.Used())
+			s.outputUnlimitedAllocator.ReleaseAll()
 			// Make sure to close out all partitions we have just read from.
 			//
 			// Note that this operation is a noop for the general sort and is

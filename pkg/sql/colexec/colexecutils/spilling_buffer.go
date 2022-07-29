@@ -313,7 +313,7 @@ func (b *SpillingBuffer) Close(ctx context.Context) {
 	if b.closed {
 		return
 	}
-	b.unlimitedAllocator.ReleaseMemory(b.unlimitedAllocator.Used())
+	b.unlimitedAllocator.ReleaseAll()
 	b.closeSpillingQueue(ctx)
 
 	// Release all references so they can be garbage collected.

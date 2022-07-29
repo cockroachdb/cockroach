@@ -387,6 +387,13 @@ func (a *Allocator) ReleaseMemory(size int64) {
 	a.acc.Shrink(a.ctx, size)
 }
 
+// ReleaseAll releases all of the reservations from the allocator. The usage of
+// this method implies that the memory account of the allocator is not shared
+// with any other component.
+func (a *Allocator) ReleaseAll() {
+	a.ReleaseMemory(a.Used())
+}
+
 // sizeOfDecimals returns the size of the given decimals slice. It only accounts
 // for the size of the decimal objects starting from the given index. For that
 // reason, sizeOfDecimals is relatively cheap when startIdx >= length, and
