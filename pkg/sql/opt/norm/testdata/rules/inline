@@ -66,13 +66,21 @@ project
            └── i:2 = 8 [outer=(2), constraints=(/2: [/8 - /8]; tight), fd=()-->(2)]
 
 norm expect=InlineConstVar
-SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4)
+SELECT k FROM b WHERE i=4 AND i IN (1, 2, 3, 4)
 ----
-values
+project
  ├── columns: k:1!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 = 4 [outer=(2), constraints=(/2: [/4 - /4]; tight), fd=()-->(2)]
 
 # Case that requires multiple iterations to fully inline.
 norm expect=InlineConstVar
