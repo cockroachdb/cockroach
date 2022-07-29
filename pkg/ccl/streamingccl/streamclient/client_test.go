@@ -11,6 +11,8 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -20,12 +22,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type testStreamClient struct{}
 
 var _ Client = testStreamClient{}
+
+// Dial implements Client interface.
+func (sc testStreamClient) Dial(ctx context.Context) error {
+	return nil
+}
 
 // Create implements the Client interface.
 func (sc testStreamClient) Create(
@@ -36,10 +46,10 @@ func (sc testStreamClient) Create(
 
 // Plan implements the Client interface.
 func (sc testStreamClient) Plan(ctx context.Context, ID streaming.StreamID) (Topology, error) {
-	return Topology([]PartitionInfo{
-		{SrcAddr: streamingccl.PartitionAddress("test://host1")},
-		{SrcAddr: streamingccl.PartitionAddress("test://host2")},
-	}), nil
+	return Topology{
+		{SrcAddr: "test://host1"},
+		{SrcAddr: "test://host2"},
+	}, nil
 }
 
 // Heartbeat implements the Client interface.
@@ -103,6 +113,57 @@ func (t testStreamSubscription) Events() <-chan streamingccl.Event {
 // Err implements the Subscription interface.
 func (t testStreamSubscription) Err() error {
 	return nil
+}
+
+func TestGetFirstActiveClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	client := GetRandomStreamClientSingletonForTesting()
+	defer func() {
+		require.NoError(t, client.Close(context.Background()))
+	}()
+	interceptable, ok := client.(InterceptableStreamClient)
+	require.True(t, ok)
+
+	streamAddresses := []string{
+		"randomgen://test0/",
+		"<invalid-url-test1>",
+		"randomgen://test2/",
+		"invalidScheme://test3",
+		"randomgen://test4/",
+		"randomgen://test5/",
+		"randomgen://test6/",
+	}
+	addressDialCount := map[string]int{}
+	for _, addr := range streamAddresses {
+		addressDialCount[addr] = 0
+	}
+
+	// Track dials and error for all but test3 and test4
+	interceptable.RegisterDialInterception(func(streamURL *url.URL) error {
+		addr := streamURL.String()
+		addressDialCount[addr]++
+		if addr != streamAddresses[3] && addr != streamAddresses[4] {
+			return errors.Errorf("injected dial error")
+		}
+		return nil
+	})
+
+	client, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	require.NoError(t, err)
+
+	// Should've dialed the valid schemes up to the 5th one where it should've
+	// succeeded
+	require.Equal(t, 1, addressDialCount[streamAddresses[0]])
+	require.Equal(t, 0, addressDialCount[streamAddresses[1]])
+	require.Equal(t, 1, addressDialCount[streamAddresses[2]])
+	require.Equal(t, 0, addressDialCount[streamAddresses[3]])
+	require.Equal(t, 1, addressDialCount[streamAddresses[4]])
+	require.Equal(t, 0, addressDialCount[streamAddresses[5]])
+	require.Equal(t, 0, addressDialCount[streamAddresses[6]])
+
+	// The 5th should've succeded as it was a valid scheme and succeeded Dial
+	require.Equal(t, client.(*randomStreamClient).streamURL.String(), streamAddresses[4])
 }
 
 // ExampleClientUsage serves as documentation to indicate how a stream

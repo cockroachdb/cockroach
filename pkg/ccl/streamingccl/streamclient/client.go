@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,9 @@ type Client interface {
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
 	Create(ctx context.Context, tenantID roachpb.TenantID) (streaming.StreamID, error)
+
+	// Dial checks if the source is able to be connected to for queries
+	Dial(ctx context.Context) error
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -87,6 +91,15 @@ type Client interface {
 // Topology is a configuration of stream partitions. These are particular to a
 // stream. It specifies the number and addresses of partitions of the stream.
 type Topology []PartitionInfo
+
+// StreamAddresses returns the list of source addresses in a topology
+func (t Topology) StreamAddresses() []string {
+	var addresses []string
+	for _, partition := range t {
+		addresses = append(addresses, string(partition.SrcAddr))
+	}
+	return addresses
+}
 
 // PartitionInfo describes a partition of a replication stream, i.e. a set of key
 // spans in a source cluster in which changes will be emitted.
@@ -147,6 +160,28 @@ func NewStreamClient(
 	}
 
 	return streamClient, nil
+}
+
+// GetFirstActiveClient iterates through each provided stream address
+// and returns the first client it's able to successfully Dial.
+func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
+	var combinedError error = nil
+	for _, address := range streamAddresses {
+		streamAddress := streamingccl.StreamAddress(address)
+		client, err := NewStreamClient(ctx, streamAddress)
+		if err == nil {
+			err = client.Dial(ctx)
+			if err == nil {
+				return client, err
+			}
+		}
+
+		// Note the failure and attempt the next address
+		log.Errorf(ctx, "failed to connect to address %s: %s", streamAddress, err.Error())
+		combinedError = errors.CombineErrors(combinedError, err)
+	}
+
+	return nil, errors.Wrap(combinedError, "failed to connect to any partition address")
 }
 
 /*
