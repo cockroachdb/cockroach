@@ -11,7 +11,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -89,8 +92,16 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 	validChoices := []string{"base", "ccl", "opt", "sqlite", "sqliteccl"}
 	if len(choices) == 0 {
-		// Default to all targets.
-		choices = append(choices, validChoices...)
+		// Default to all targets if --bigtest, else all non-sqlite targets.
+		if bigtest {
+			choices = append(choices, validChoices...)
+		} else {
+			for _, choice := range validChoices {
+				if !strings.HasPrefix(choice, "sqlite") {
+					choices = append(choices, choice)
+				}
+			}
+		}
 	}
 	for _, choice := range choices {
 		valid := false
@@ -116,9 +127,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
-	targets := make([]string, len(choices))
+	var targets []string
 	args := []string{"test"}
-	for idx, choice := range choices {
+	for _, choice := range choices {
 		var testsDir string
 		switch choice {
 		case "base":
@@ -129,13 +140,25 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			testsDir = "//pkg/sql/opt/exec/execbuilder/tests"
 		case "sqlite":
 			testsDir = "//pkg/sql/sqlitelogictest/tests"
+			bigtest = true
 		case "sqliteccl":
 			testsDir = "//pkg/ccl/sqlitelogictestccl/tests"
+			bigtest = true
 		}
 		if config != "" {
 			testsDir = testsDir + "/" + config
+			exists, err := d.os.IsDir(filepath.Join(workspace, strings.TrimPrefix(testsDir, "//")))
+			if err != nil && errors.Is(err, os.ErrNotExist) {
+				// The config isn't supported for this choice.
+				continue
+			} else if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
 		}
-		targets[idx] = testsDir + "/..."
+		targets = append(targets, testsDir+"/...")
 
 		if rewrite {
 			dir := filepath.Join(filepath.Dir(strings.TrimPrefix(testsDir, "//")), "testdata")
@@ -149,6 +172,10 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
+	if len(targets) == 0 {
+		log.Printf("WARNING: no tests found")
+		return nil
+	}
 	args = append(args, targets...)
 	args = append(args, "--test_env=GOTRACEBACK=all")
 	if numCPUs != 0 {
@@ -203,6 +230,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 	if files != "" || subtests != "" {
 		args = append(args, "--test_filter", munge(files)+"/"+subtests)
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
