@@ -252,6 +252,35 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestToJSONAsChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (1, 'hello')`)
+		sqlDB.CheckQueryResults(t,
+			`SELECT crdb_internal.to_json_as_changefeed_with_flags(foo.*) from foo`,
+			[][]string{{`{"after": {"a": 1, "b": "hello"}}`}},
+		)
+		sqlDB.CheckQueryResults(t,
+			`SELECT crdb_internal.to_json_as_changefeed_with_flags(foo.*, 'updated', 'diff') from foo`,
+			[][]string{{`{"after": {"a": 1, "b": "hello"}, "before": null, "updated": "0.0000000000"}`}},
+		)
+
+		sqlDB.CheckQueryResults(t,
+			`SELECT crdb_internal.to_json_as_changefeed_with_flags(foo.*, 'updated', 'envelope=row') from foo`,
+			[][]string{{`{"__crdb__": {"updated": "0.0000000000"}, "a": 1, "b": "hello"}`}},
+		)
+
+		sqlDB.ExpectErr(t, `unknown envelope: lobster`,
+			`SELECT crdb_internal.to_json_as_changefeed_with_flags(foo.*, 'updated', 'envelope=lobster') from foo`)
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
