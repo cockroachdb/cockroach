@@ -183,7 +183,7 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 	return tenID, nil
 }
 
-func initRegularBuiltins() {
+func init() {
 	for k, v := range regularBuiltins {
 		registerBuiltin(k, v)
 	}

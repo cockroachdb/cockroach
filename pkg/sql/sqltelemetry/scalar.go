@@ -14,12 +14,25 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // BuiltinCounter creates a telemetry counter for a built-in function.
 // This is to be incremented upon type checking of a function application.
 func BuiltinCounter(name, signature string) telemetry.Counter {
 	return telemetry.GetCounterOnce(fmt.Sprintf("sql.plan.builtins.%s%s", name, signature))
+}
+
+func init() {
+	builtinsregistry.AddSubscription(func(name string, _ *tree.FunctionProperties, os []tree.Overload) {
+		for _, o := range os {
+			c := BuiltinCounter(name, o.Signature(false))
+			*o.OnTypeCheck = func() {
+				telemetry.Inc(c)
+			}
+		}
+	})
 }
 
 // UnaryOpCounter creates a telemetry counter for a scalar unary operator.

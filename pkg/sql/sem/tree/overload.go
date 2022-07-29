@@ -136,8 +136,10 @@ type Overload struct {
 	// Body is the SQL string body of a user-defined function.
 	Body string
 
-	// OnTypeCheck is incremented every time this overload is type checked.
-	OnTypeCheck func()
+	// OnTypeCheck is called every time this overload is type checked.
+	// This is a pointer so that it can be set in a builtinsregistry hook, which
+	// gets a copy of the overload struct.
+	OnTypeCheck *func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.

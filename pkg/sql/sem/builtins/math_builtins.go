@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func initMathBuiltins() {
+func init() {
 	// Add all mathBuiltins to the builtins map after a sanity check.
 	for k, v := range mathBuiltins {
 		registerBuiltin(k, v)
