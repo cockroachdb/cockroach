@@ -15,6 +15,15 @@ option go_package = "insights";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+enum Concern {
+  // SlowExecution is for statement executions that either take longer than a predetermined
+  // threshold, configured by the sql.stats.insights.experimental.latency_threshold
+  // cluster setting, or that take significantly "longer than usual" for their statement
+  // fingerprint, based on some heuristics we're developing, which can be enabled by the
+  // sql.stats.insights.experimental.latency_quantile_detection.enabled cluster setting.
+  SlowExecution = 0;
+}
+
 message Session {
   bytes id = 1 [(gogoproto.customname) = "ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
@@ -57,4 +66,6 @@ message Insight {
   Session session = 1;
   Transaction transaction = 2;
   Statement statement = 3;
+
+  repeated Concern concerns = 4;
 }
