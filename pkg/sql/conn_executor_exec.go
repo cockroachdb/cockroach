@@ -1068,6 +1068,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var stmtFingerprintID roachpb.StmtFingerprintID
+	var stats topLevelQueryStats
 	defer func() {
 		planner.maybeLogStatement(
 			ctx,
@@ -1080,6 +1081,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
+			&stats,
 		)
 	}()
 
@@ -1165,7 +1167,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		distribute = DistributionTypeAlways
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	stats, err := ex.execWithDistSQLEngine(
+	stats, err = ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
 	if res.Err() == nil {

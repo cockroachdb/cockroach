@@ -36,15 +36,18 @@ build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=
 test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
-# CI should always run with `--config=ci`.
+# CI should always run with `--config=ci` or `--config=cinolint`.
+# Prefer the first to the second unless some other job will handle linting the
+# same code you're building.
+build:ci --config=cinolint
 build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
-test:ci --test_env=GO_TEST_WRAP_TESTV=1
+test:cinolint --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
-test:ci --test_output=errors
+test:cinolint --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
-test:ci --test_tmpdir=/artifacts/tmp
+build:cinolint --test_tmpdir=/artifacts/tmp
 
 build:cross --stamp
 
