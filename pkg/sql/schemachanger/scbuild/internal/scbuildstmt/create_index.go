@@ -361,6 +361,7 @@ func maybeCreateAndAddShardCol(
 			ColumnID:    shardColID,
 			TypeT:       scpb.TypeT{Type: types.Int4},
 			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
+			IsVirtual:   true,
 		},
 	}
 	addColumn(b, spec, n)
