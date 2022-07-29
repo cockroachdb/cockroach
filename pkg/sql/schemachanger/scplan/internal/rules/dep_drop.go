@@ -34,12 +34,10 @@ func init() {
 		"descriptor", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, IsDescriptor),
-				elementTypes(to, isSimpleDependent),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				joinOnDescID(from.el, to.el, "desc-id"),
+				from.typeFilter(IsDescriptor),
+				to.typeFilter(isSimpleDependent),
+				joinOnDescID(from, to, "desc-id"),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		})
 
@@ -49,10 +47,10 @@ func init() {
 		"descriptor", "idx-or-col",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, IsDescriptor),
-				elementTypes(to, isSubjectTo2VersionInvariant),
-				toAbsentInAbsent(from.target, from.node, to.target, to.node),
-				joinOnDescID(from.el, to.el, "desc-id"),
+				from.typeFilter(IsDescriptor),
+				to.typeFilter(isSubjectTo2VersionInvariant),
+				joinOnDescID(from, to, "desc-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -75,12 +73,10 @@ func init() {
 		"referenced-descriptor", "referencing-via-attr",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, IsDescriptor),
-				elementTypes(to, isSimpleDependent),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				joinReferencedDescID(to.el, from.el, "desc-id"),
+				from.typeFilter(IsDescriptor),
+				to.typeFilter(isSimpleDependent),
+				joinReferencedDescID(to, from, "desc-id"),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -91,14 +87,12 @@ func init() {
 		"referenced-descriptor", "referencing-via-type",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, IsDescriptor),
-				elementTypes(to, isSimpleDependent, isWithTypeT),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
-					refID := screl.GetDescID(ref)
-					typeT := getTypeTOrPanic(e)
+				from.typeFilter(IsDescriptor),
+				to.typeFilter(isSimpleDependent, isWithTypeT),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				filterElements("RefByTypeT", from, to, func(from, to scpb.Element) bool {
+					refID := screl.GetDescID(from)
+					typeT := getTypeTOrPanic(to)
 					return typeT != nil && idInIDs(typeT.ClosedTypeIDs, refID)
 				}),
 			}
@@ -111,14 +105,12 @@ func init() {
 		"referenced-descriptor", "referencing-via-expr",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, IsDescriptor),
-				elementTypes(to, isSimpleDependent, isWithExpression),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
-					refID := screl.GetDescID(ref)
-					expr := getExpressionOrPanic(e)
+				from.typeFilter(IsDescriptor),
+				to.typeFilter(isSimpleDependent, isWithExpression),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				filterElements("RefByExpression", from, to, func(from, to scpb.Element) bool {
+					refID := screl.GetDescID(from)
+					expr := getExpressionOrPanic(to)
 					return expr != nil && (idInIDs(expr.UsesTypeIDs, refID) || idInIDs(expr.UsesSequenceIDs, refID))
 				}),
 			}

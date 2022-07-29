@@ -27,17 +27,15 @@ func init() {
 		"old-index", "new-index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "table-id"),
-				targetStatus(from.target, scpb.ToAbsent),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_VALIDATED),
-				currentStatus(to.node, scpb.Status_PUBLIC),
-				rel.Filter(
-					"primary-indexes-depend-on-each-other", from.el, to.el,
-				)(func(idx, otherIdx *scpb.PrimaryIndex) bool {
-					return idx.SourceIndexID == otherIdx.IndexID || idx.IndexID == otherIdx.SourceIndexID
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				from.targetStatus(scpb.ToAbsent),
+				to.targetStatus(scpb.ToPublic),
+				from.currentStatus(scpb.Status_VALIDATED),
+				to.currentStatus(scpb.Status_PUBLIC),
+				filterElements("primaryIndexesDependency", from, to, func(i1, i2 *scpb.PrimaryIndex) bool {
+					return i1.SourceIndexID == i2.IndexID || i1.IndexID == i2.SourceIndexID
 				}),
 			}
 		},
@@ -54,18 +52,16 @@ func init() {
 		"index", "index-dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type(
+				from.Type(
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				to.el.Type(
+				to.Type(
 					(*scpb.IndexName)(nil),
 					(*scpb.IndexComment)(nil),
 				),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_BACKFILL_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToPublic(from, scpb.Status_BACKFILL_ONLY, to, scpb.Status_PUBLIC),
 			}
 		})
 
@@ -77,17 +73,17 @@ func init() {
 		"temp-index", "index-partitioning",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.TemporaryIndex)(nil)),
-				to.el.Type(
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type(
 					(*scpb.IndexColumn)(nil),
 					(*scpb.IndexPartitioning)(nil),
 					(*scpb.SecondaryIndexPartial)(nil),
 				),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatus(from.target, scpb.Transient),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.targetStatus(scpb.Transient),
+				to.targetStatus(scpb.ToPublic),
+				from.currentStatus(scpb.Status_DELETE_ONLY),
+				to.currentStatus(scpb.Status_PUBLIC),
 			}
 		})
 
@@ -98,17 +94,15 @@ func init() {
 		"child", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type(
+				from.Type(
 					(*scpb.IndexComment)(nil),
 				),
-				to.el.Type(
+				to.Type(
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -118,14 +112,13 @@ func init() {
 		"index-name", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.IndexName)(nil)),
-				to.el.Type(
+				from.Type((*scpb.IndexName)(nil)),
+				to.Type(
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatusEq(from.node, to.node, scpb.Status_PUBLIC),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -148,12 +141,10 @@ func init() {
 		"index-column", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.IndexColumn)(nil)),
-				to.el.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_ABSENT),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				from.Type((*scpb.IndexColumn)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -163,12 +154,10 @@ func init() {
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.SecondaryIndex)(nil)),
-				to.el.Type((*scpb.IndexColumn)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_DELETE_ONLY, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -178,12 +167,10 @@ func init() {
 		"index-column", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.IndexColumn)(nil)),
-				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_ABSENT),
-				currentStatus(to.node, scpb.Status_TRANSIENT_ABSENT),
+				from.Type((*scpb.IndexColumn)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_TRANSIENT_ABSENT),
 			}
 		},
 	)
@@ -193,12 +180,10 @@ func init() {
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.TemporaryIndex)(nil)),
-				to.el.Type((*scpb.IndexColumn)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_TRANSIENT_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_TRANSIENT_DELETE_ONLY, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -213,10 +198,10 @@ func init() {
 		"index", "child",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				indexDependents(from.el, to.el, "table-id", "index-id"),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_VALIDATED),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				from.typeFilter(isIndex),
+				to.typeFilter(isIndexDependent),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_VALIDATED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -227,9 +212,10 @@ func init() {
 		"dependent", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				indexDependents(to.el, from.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
+				from.typeFilter(isIndexDependent),
+				to.typeFilter(isIndex),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -244,14 +230,18 @@ func init() {
 		"temp", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.TemporaryIndex)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "desc-id"),
-				joinOn(from.el, screl.IndexID, to.el, screl.TemporaryIndexID, "temp-index-id"),
-				targetStatus(from.target, scpb.Transient),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_WRITE_ONLY),
-				currentStatus(to.node, scpb.Status_BACKFILLED),
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				joinOn(
+					from, screl.IndexID,
+					to, screl.TemporaryIndexID,
+					"temp-index-id",
+				),
+				from.targetStatus(scpb.Transient),
+				to.targetStatus(scpb.ToPublic),
+				from.currentStatus(scpb.Status_WRITE_ONLY),
+				to.currentStatus(scpb.Status_BACKFILLED),
 			}
 		},
 	)
@@ -268,18 +258,15 @@ func init() {
 		"primary-index", "second-index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "table-id"),
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
 				joinOn(
-					from.el, screl.IndexID,
-					to.el, screl.SourceIndexID,
+					from, screl.IndexID,
+					to, screl.SourceIndexID,
 					"primary-index-id",
 				),
-				targetStatus(from.target, scpb.ToPublic),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_BACKFILL_ONLY),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_BACKFILL_ONLY),
 			}
 		})
 	registerDepRule(
@@ -288,14 +275,14 @@ func init() {
 		"primary-index", "second-index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "table-id"),
-				joinOn(from.el, screl.IndexID, to.el, screl.SourceIndexID, "primary-index-id"),
-				targetStatus(from.target, scpb.ToPublic),
-				targetStatus(to.target, scpb.Transient),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_DELETE_ONLY),
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				joinOn(from, screl.IndexID, to, screl.SourceIndexID, "primary-index-id"),
+				from.targetStatus(scpb.ToPublic),
+				to.targetStatus(scpb.Transient),
+				from.currentStatus(scpb.Status_PUBLIC),
+				to.currentStatus(scpb.Status_DELETE_ONLY),
 			}
 		})
 }
@@ -310,36 +297,15 @@ func init() {
 		"index-a", "index-b",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.TemporaryIndex)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "descID"),
-				targetStatus(from.target, scpb.Transient),
-				targetStatus(to.target, scpb.ToAbsent),
-				currentStatus(from.node, scpb.Status_TRANSIENT_ABSENT),
-				currentStatus(to.node, scpb.Status_ABSENT),
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from, to, "desc-id"),
+				from.targetStatus(scpb.Transient),
+				to.targetStatus(scpb.ToAbsent),
+				from.currentStatus(scpb.Status_TRANSIENT_ABSENT),
+				to.currentStatus(scpb.Status_ABSENT),
 			}
 		})
-	registerDepRule("indexes reach absent at the same time as other indexes",
-		scgraph.SameStagePrecedence,
-		"index-a", "index-b",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				joinOnDescID(from.el, to.el, "descID"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-
-				// Use the index ID to provide an ordering for dropping the indexes
-				// to ensure that there is no cycle in the edges.
-				//
-				// TODO(ajwerner): It'd be nice to be able to express this in rel
-				// directly.
-				rel.Filter("indexes-id-less", "a", "b")(func(a, b scpb.Element) bool {
-					aID, _ := screl.GetIndexID(a)
-					bID, _ := screl.GetIndexID(b)
-					return aID < bID
-				}),
-			}
-		})
+	// TODO(postamar): reimplement rule
+	// "indexes reach absent at the same time as other indexes"
 }

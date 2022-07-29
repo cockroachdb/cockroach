@@ -1,18 +1,14 @@
 rules
 ----
-columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
-    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
-    - sourceIndexNotSet($index)
-index-dependents(index, dep, table-id, index-id):
-    - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
-    - joinOnIndexID($dep, $index, $table-id, $index-id)
-indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
-    - $index[IndexID] = $index-id
+columnInIndex(index-column, index, table-id, column-id, index-id):
     - $index-column[Type] = '*scpb.IndexColumn'
     - $index-column[DescID] = $_
-    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - $index-column[ColumnID] = $column-id
+    - $index[IndexID] = $index-id
     - joinOnIndexID($index, $index-column, $table-id, $index-id)
+columnInPrimaryIndexSwap(index-column, index, table-id, column-id, index-id):
+    - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - sourceIndexNotSet($index)
 joinOnColumnID(a, b, desc-id, col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
@@ -44,10 +40,9 @@ sourceIndexNotSet(index):
 toAbsent(target1, target2):
     - $target1[TargetStatus] = ABSENT
     - $target2[TargetStatus] = ABSENT
-toAbsentInAbsent(target1, node1, target2, node2):
-    - toAbsent($target1, $target2)
-    - $node1[CurrentStatus] = ABSENT
-    - $node2[CurrentStatus] = ABSENT
+toPublic(target1, target2):
+    - $target1[TargetStatus] = PUBLIC
+    - $target2[TargetStatus] = PUBLIC
 
 oprules
 ----
@@ -60,8 +55,9 @@ oprules
     - joinOnDescID($relation, $column, $relation-id)
     - joinOnColumnID($column, $column-dep, $relation-id, $column-id)
     - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $column-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTarget($column, $column-target)
+    - $column-target[TargetStatus] = ABSENT
     - joinTargetNode($column-dep, $column-dep-target, $column-dep-node)
     - $column-dep-target[TargetStatus] = ABSENT
 - name: skip column removal ops on relation drop
@@ -71,8 +67,9 @@ oprules
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($relation, $column, $relation-id)
     - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $column-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTargetNode($column, $column-target, $column-node)
+    - $column-target[TargetStatus] = ABSENT
     - $column-node[CurrentStatus] IN [PUBLIC, WRITE_ONLY]
 - name: skip constraint dependents removal ops on relation drop
   from: constraint-dep-node
@@ -83,8 +80,9 @@ oprules
     - joinOnDescID($relation, $constraint, $relation-id)
     - joinOnConstraintID($constraint, $constraint-dep, $relation-id, $constraint-id)
     - joinTarget($relation, $relation-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTarget($constraint, $constraint-target)
-    - toAbsent($relation-target, $constraint-target)
+    - $constraint-target[TargetStatus] = ABSENT
     - joinTargetNode($constraint-dep, $constraint-dep-target, $constraint-dep-node)
     - $constraint-dep-target[TargetStatus] = ABSENT
 - name: skip constraint removal ops on relation drop
@@ -94,17 +92,19 @@ oprules
     - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
     - joinOnDescID($relation, $constraint, $relation-id)
     - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $constraint-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTargetNode($constraint, $constraint-target, $constraint-node)
+    - $constraint-target[TargetStatus] = ABSENT
 - name: skip element removal ops on descriptor drop
   from: dep-node
   query:
-    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
+    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
     - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.EnumTypeValue']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-target)
-    - toAbsent($desc-target, $dep-target)
+    - $desc-target[TargetStatus] = ABSENT
     - joinTargetNode($dep, $dep-target, $dep-node)
+    - $dep-target[TargetStatus] = ABSENT
 - name: skip index dependents removal ops on relation drop
   from: index-dep-node
   query:
@@ -114,8 +114,9 @@ oprules
     - joinOnDescID($relation, $index, $relation-id)
     - joinOnIndexID($index, $index-dep, $relation-id, $index-id)
     - joinTarget($relation, $relation-target)
-    - toAbsent($relation-target, $index-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTarget($index, $index-target)
+    - $index-target[TargetStatus] = ABSENT
     - joinTargetNode($index-dep, $index-dep-target, $index-dep-node)
     - $index-dep-target[TargetStatus] = ABSENT
 - name: skip index removal ops on relation drop
@@ -125,8 +126,9 @@ oprules
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
     - joinOnDescID($relation, $index, $relation-id)
     - joinTarget($relation, $relation-target)
+    - $relation-target[TargetStatus] = ABSENT
     - joinTargetNode($index, $index-target, $index-node)
-    - toAbsent($relation-target, $index-target)
+    - $index-target[TargetStatus] = ABSENT
 - name: skip table comment removal ops on descriptor drop
   from: dep-node
   query:
@@ -134,5 +136,6 @@ oprules
     - $dep[Type] IN ['*scpb.ColumnComment', '*scpb.IndexComment', '*scpb.ConstraintComment', '*scpb.TableComment']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-target)
-    - toAbsent($desc-target, $dep-target)
+    - $desc-target[TargetStatus] = ABSENT
     - joinTargetNode($dep, $dep-target, $dep-node)
+    - $dep-target[TargetStatus] = ABSENT
