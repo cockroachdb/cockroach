@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",

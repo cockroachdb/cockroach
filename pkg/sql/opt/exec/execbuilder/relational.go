@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -673,8 +674,8 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
+	stats := scan.Relational().Stats
 	if !tab.IsVirtualTable() && isUnfiltered {
-		stats := scan.Relational().Stats
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
 			b.ContainsFullTableScan = true
@@ -682,6 +683,22 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		} else {
 			b.ContainsFullIndexScan = true
 			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
+		}
+		if stats.Available && stats.RowCount > b.MaxFullScanRows {
+			b.MaxFullScanRows = stats.RowCount
+		}
+	}
+
+	// Save the total estimated number of rows scanned and the time since stats
+	// were collected.
+	if stats.Available {
+		b.TotalScanRows += stats.RowCount
+		if tab.StatisticCount() > 0 {
+			// The first stat is the most recent one.
+			nanosSinceStatsCollected := timeutil.Since(tab.Statistic(0).CreatedAt())
+			if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
+				b.NanosSinceStatsCollected = nanosSinceStatsCollected
+			}
 		}
 	}
 

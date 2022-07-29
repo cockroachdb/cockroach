@@ -2465,6 +2465,14 @@ contains common SQL event/execution details.
 | `TransactionID` | Transaction ID of the query. | no |
 | `DatabaseID` | Database ID of the query. | no |
 | `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
+| `MaxFullScanRowsEstimate` | Maximum number of rows scanned by a full scan, as estimated by the optimizer. | no |
+| `TotalScanRowsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer. | no |
+| `OutputRowsEstimate` | The number of rows output by the query, as estimated by the optimizer. | no |
+| `StatsAvailable` | Whether table statistics were available to the optimizer when planning the query. | no |
+| `NanosSinceStatsCollected` | The maximum number of nanoseconds that have passed since stats were collected on any table scanned by this query. | no |
+| `BytesRead` | The number of bytes read from disk. | no |
+| `RowsRead` | The number of rows read from disk. | no |
+| `RowsWritten` | The number of rows written. | no |
 
 
 #### Common fields
