@@ -255,7 +255,7 @@ func (gt *grpcTransport) SkipReplica() {
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.replicas {
-		if gt.replicas[i] == replica {
+		if gt.replicas[i].IsSame(replica) {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.nextReplicaIdx {
