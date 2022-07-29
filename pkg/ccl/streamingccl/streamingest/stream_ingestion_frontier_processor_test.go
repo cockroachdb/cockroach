@@ -103,12 +103,12 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		require.NoError(t, err)
 		return roachpb.KeyValue{Key: key, Value: v}
 	}
-	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
-		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
-	}
-	sampleCheckpointWithLogicTS := func(span roachpb.Span, ts int64, logicalTs int32) []jobspb.ResolvedSpan {
-		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts, Logical: logicalTs}}}
-	}
+	// sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
+	// 	return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
+	// }
+	// sampleCheckpointWithLogicTS := func(span roachpb.Span, ts int64, logicalTs int32) []jobspb.ResolvedSpan {
+	// 	return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts, Logical: logicalTs}}}
+	// }
 
 	for _, tc := range []struct {
 		name                      string
@@ -117,17 +117,17 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		frontierStartTime         hlc.Timestamp
 		jobCheckpoint             []jobspb.ResolvedSpan
 	}{
-		{
-			name: "same-resolved-ts-across-partitions",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 4)),
-			}},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
-		},
+		// {
+		// 	name: "same-resolved-ts-across-partitions",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 4)),
+		// 	}},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
+		// },
 		{
 			// No progress should be reported to the job since partition 2 has not
 			// emitted a resolved ts.
@@ -138,73 +138,73 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				streamingccl.MakeKVEvent(sampleKV()),
 			}},
 		},
-		{
-			// No progress should be reported to the job since partition 2 has not
-			// emitted a resolved ts.
-			name: "no-checkpoint-from-one-partition",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{}},
-		},
-		{
-			name: "one-partition-ahead-of-the-other",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
-			}},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
-		},
-		{
-			name: "some-interleaved-timestamps",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 2)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 3)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 5)),
-			}},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
-		},
-		{
-			name: "some-interleaved-logical-timestamps",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 2)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
-			}},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
-		},
-		{
-			// The frontier should error out as it receives a checkpoint with a ts
-			// lower than its start time.
-			name: "partition-checkpoint-lower-than-start-ts",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 2)),
-			}},
-			frontierStartTime:         hlc.Timestamp{WallTime: 1, Logical: 3},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 3},
-		},
-		{
-			name: "existing-job-checkpoint",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 5)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
-			}},
-			frontierStartTime: hlc.Timestamp{WallTime: 1},
-			jobCheckpoint: []jobspb.ResolvedSpan{
-				{Span: pa1Span, Timestamp: hlc.Timestamp{WallTime: 4}},
-				{Span: pa2Span, Timestamp: hlc.Timestamp{WallTime: 3}},
-			},
-			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 3},
-		},
+		// {
+		// 	// No progress should be reported to the job since partition 2 has not
+		// 	// emitted a resolved ts.
+		// 	name: "no-checkpoint-from-one-partition",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
+		// 	}, pa2: []streamingccl.Event{}},
+		// },
+		// {
+		// 	name: "one-partition-ahead-of-the-other",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
+		// 	}},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
+		// },
+		// {
+		// 	name: "some-interleaved-timestamps",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 2)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 3)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 5)),
+		// 	}},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
+		// },
+		// {
+		// 	name: "some-interleaved-logical-timestamps",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 2)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 1)),
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
+		// 	}},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
+		// },
+		// {
+		// 	// The frontier should error out as it receives a checkpoint with a ts
+		// 	// lower than its start time.
+		// 	name: "partition-checkpoint-lower-than-start-ts",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 2)),
+		// 	}},
+		// 	frontierStartTime:         hlc.Timestamp{WallTime: 1, Logical: 3},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 3},
+		// },
+		// {
+		// 	name: "existing-job-checkpoint",
+		// 	events: partitionToEvent{pa1: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 5)),
+		// 	}, pa2: []streamingccl.Event{
+		// 		streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
+		// 	}},
+		// 	frontierStartTime: hlc.Timestamp{WallTime: 1},
+		// 	jobCheckpoint: []jobspb.ResolvedSpan{
+		// 		{Span: pa1Span, Timestamp: hlc.Timestamp{WallTime: 4}},
+		// 		{Span: pa2Span, Timestamp: hlc.Timestamp{WallTime: 3}},
+		// 	},
+		// 	expectedFrontierTimestamp: hlc.Timestamp{WallTime: 3},
+		// },
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
@@ -256,9 +256,13 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 			frontierSpec.JobID = int64(jobID)
 
+			t.Logf("Using JobID: %v", jobID)
+
 			if !tc.frontierStartTime.IsEmpty() {
 				frontierSpec.HighWaterAtStart = tc.frontierStartTime
 			}
+
+			t.Logf("Using highwater: %v", frontierSpec.HighWaterAtStart)
 
 			// Create a mock ingestion job.
 			record := jobs.Record{
@@ -273,11 +277,13 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			record.CreatedBy = &jobs.CreatedByInfo{
 				Name: "ingestion",
 			}
+			t.Logf("Creating job for record: %v", record)
 			_, err = registry.CreateJobWithTxn(ctx, record, record.JobID, nil)
 			require.NoError(t, err)
 
 			frontierPost := execinfrapb.PostProcessSpec{}
 			frontierOut := distsqlutils.RowBuffer{}
+			t.Logf("Creating new frontier processor: %v", record)
 			frontierProc, err := newStreamIngestionFrontierProcessor(&flowCtx, 0, /* processorID*/
 				frontierSpec, sip, &frontierPost, &frontierOut)
 			require.NoError(t, err)
@@ -288,10 +294,12 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			ctxWithCancel, cancel := context.WithCancel(ctx)
 			defer cancel()
 
+			t.Logf("Creating random stream client singleton")
 			client := streamclient.GetRandomStreamClientSingletonForTesting()
 			defer func() {
 				require.NoError(t, client.Close())
 			}()
+			t.Logf("Creating interceptable client: %v", client)
 			interceptable, ok := client.(streamclient.InterceptableStreamClient)
 			require.True(t, ok)
 			defer interceptable.ClearInterceptors()
@@ -299,7 +307,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// Record heartbeats in a list and terminate the client once the expected
 			// frontier timestamp has been reached
 			heartbeats := make([]hlc.Timestamp, 0)
+			t.Logf("Registering heartbeat niterception")
 			interceptable.RegisterHeartbeatInterception(func(heartbeatTs hlc.Timestamp) {
+				t.Logf("Intercepting heartbeat: %v", heartbeatTs)
 				heartbeats = append(heartbeats, heartbeatTs)
 				if tc.expectedFrontierTimestamp.LessEq(heartbeatTs) {
 					doneCh <- struct{}{}
@@ -315,10 +325,12 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 					}
 				} else {
 					persistedHighwater := *progress.(*jobspb.Progress_HighWater).HighWater
+					t.Logf("Persisted highwater: %v", persistedHighwater)
 					require.True(t, heartbeatTs.LessEq(persistedHighwater))
 				}
 			})
 
+			t.Logf("Running frontier processor")
 			fp.Run(ctxWithCancel)
 
 			if !frontierOut.ProducerClosed() {
@@ -326,6 +338,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 
 			minCheckpointTs := hlc.Timestamp{}
+			t.Logf("Looking at checkpoints: %v", tc.jobCheckpoint)
 			for _, resolvedSpan := range tc.jobCheckpoint {
 				if minCheckpointTs.IsEmpty() || resolvedSpan.Timestamp.Less(minCheckpointTs) {
 					minCheckpointTs = resolvedSpan.Timestamp
@@ -336,7 +349,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 
 			// Wait until the frontier terminates
+			t.Logf("Waiting for frontier to terminate")
 			_, meta := frontierOut.Next()
+			t.Logf("Checking error: %v", meta)
 			if meta != nil {
 				if !tc.frontierStartTime.IsEmpty() {
 					require.True(t, testutils.IsError(meta.Err, fmt.Sprintf("got a resolved timestamp ."+
@@ -347,6 +362,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				t.Fatalf("unexpected meta record returned by frontier processor: %+v\n", *meta)
 			}
 
+			t.Logf("Checking heartbeats: %v", len(heartbeats))
 			// Ensure that the rows emitted by the frontier never regress the ts or
 			// appear prior to a checkpoint.
 			var prevTimestamp hlc.Timestamp
