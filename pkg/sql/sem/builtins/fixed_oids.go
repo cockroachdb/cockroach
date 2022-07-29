@@ -1,3 +1,13 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package builtins
 
 import (
@@ -472,6 +482,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.table_span(table_id: int) -> bytes[]`:                                                                                  1321,
 	`crdb_internal.tenant_span(tenant_id: int) -> bytes[]`:                                                                                1320,
 	`crdb_internal.testing_callback(name: string) -> int`:                                                                                 321,
+	`crdb_internal.to_json_as_changefeed_with_flags(tuple, string...) -> bytes`:                                                           466,
 	`crdb_internal.trace_id() -> int`:                                                                                                     1290,
 	`crdb_internal.trim_tenant_prefix(key: bytes) -> bytes`:                                                                               1318,
 	`crdb_internal.trim_tenant_prefix(keys: bytes[]) -> bytes[]`:                                                                          1319,

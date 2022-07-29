@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/keys",
         "//pkg/kv",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
