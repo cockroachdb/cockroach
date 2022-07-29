@@ -2406,3 +2406,73 @@ CREATE TABLE visible (visible INT4)
 CREATE TABLE visible (visible INT4) -- fully parenthesized
 CREATE TABLE visible (visible INT4) -- literals removed
 CREATE TABLE _ (_ INT4) -- identifiers removed
+
+# The following test cases check parsing support for creating a not visible index.
+parse
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) NOT VISIBLE)
+----
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) NOT VISIBLE)
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) NOT VISIBLE) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INDEX (_ ASC, _ DESC) STORING (_) NOT VISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > 3 NOT VISIBLE)
+----
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > 3 NOT VISIBLE)
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE ((c) > (3)) NOT VISIBLE) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > _ NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INVERTED INDEX (_ ASC, _ DESC) WHERE _ > 3 NOT VISIBLE) -- identifiers removed
+
+# Creating an invisible unique index inside a table definition is supported by
+# the grammar rule, but the parser will throw an error for the following
+# statement. This is because the parser is doing a round trip in
+# `pkg/testutils/sqlutils/pretty.go`. In sql.y, creating an unique index in a
+# CREATE TABLE statement returns a new structure tree.UniqueConstraintTableDef.
+# However, creating a unique constraint with not visible index is not supported by
+# the parser. When the parser does a round trip for the following statement, it
+# formats it to a pretty statement using the unique constraint definition. But
+# the parser does not support unique constraint with not visible index syntax. So
+# it will fail while parsing the pretty statement. Since logictest also performs
+# a roundtrip check in pkg/sql/logictest/logic.go, logictest would also fail.
+# But the following statement would still work in a cluster.
+# This is a known issue. See more details in
+# https://github.com/cockroachdb/cockroach/pull/65825.
+error
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 NOT VISIBLE)
+----
+
+# The following test cases make sure that creating an invisible primary index is
+# not supported by the parser.
+error
+CREATE TABLE a (b INT8 PRIMARY KEY NOT VISIBLE)
+----
+
+error
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") NOT VISIBLE)
+----
+at or near "visible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") NOT VISIBLE)
+                                                              ^
+HINT: try \h CREATE TABLE
+
+# The following test cases make sure that creating any constraints with
+# not visible index is not supported by the parser.
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) NOT VISIBLE)
+----
+at or near "visible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) NOT VISIBLE)
+                                                                 ^
+HINT: try \h CREATE TABLE
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
+----
+at or near "visible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
+                                                                               ^
+HINT: try \h CREATE TABLE
