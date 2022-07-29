@@ -4599,18 +4599,15 @@ func MVCCGarbageCollect(
 		if ms != nil {
 			// We need to iterate ranges only to compute GCBytesAge if we are updating
 			// stats.
+			//
+			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
 			if _, hasRange := iter.HasPointAndRange(); hasRange && !lastRangeTombstoneStart.Equal(iter.RangeBounds().Key) {
-				rangeKeys := iter.RangeKeys().AsRangeKeyValues()
-				newLen := len(rangeKeys)
-				if cap(rangeTombstoneTss) < newLen {
-					rangeTombstoneTss = make([]hlc.Timestamp, newLen)
-				} else {
-					rangeTombstoneTss = rangeTombstoneTss[:newLen]
+				rangeKeys := iter.RangeKeys()
+				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys.Bounds.Key...)
+				rangeTombstoneTss = rangeTombstoneTss[:0]
+				for _, v := range rangeKeys.Versions {
+					rangeTombstoneTss = append(rangeTombstoneTss, v.Timestamp)
 				}
-				for i, rkv := range rangeKeys {
-					rangeTombstoneTss[i] = rkv.RangeKey.Timestamp
-				}
-				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys[0].RangeKey.StartKey...)
 			} else if !hasRange {
 				lastRangeTombstoneStart = lastRangeTombstoneStart[:0]
 				rangeTombstoneTss = rangeTombstoneTss[:0]
@@ -4816,6 +4813,7 @@ func MVCCGarbageCollectRangeKeys(
 				break
 			}
 
+			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
 			bounds := iter.RangeBounds()
 			unsafeRangeKeys := iter.RangeKeys().AsRangeKeyValues()
 
