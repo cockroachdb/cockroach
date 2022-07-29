@@ -15,15 +15,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules",
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
     deps = [
-        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/schemachanger/scplan/internal/opgen",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
-        "//pkg/sql/types",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
@@ -33,14 +30,22 @@ go_library(
 
 go_test(
     name = "rules_test",
-    srcs = ["rules_test.go"],
+    srcs = [
+        "assertions_test.go",
+        "rules_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":rules"],
     deps = [
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/internal/opgen",
         "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/types",
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
