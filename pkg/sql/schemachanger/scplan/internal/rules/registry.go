@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -145,8 +146,34 @@ func (v nodeVars) joinTargetNode() rel.Clause {
 	return screl.JoinTargetNode(v.el, v.target, v.node)
 }
 
+func (v nodeVars) currentStatus(status ...scpb.Status) rel.Clause {
+	if len(status) == 0 {
+		panic(errors.AssertionFailedf("empty current status values"))
+	}
+	if len(status) == 1 {
+		return v.node.AttrEq(screl.CurrentStatus, status[0])
+	}
+	in := make([]interface{}, len(status))
+	for i, s := range status {
+		in[i] = s
+	}
+	return v.node.AttrIn(screl.CurrentStatus, in...)
+}
+
 func (v nodeVars) joinTarget() rel.Clause {
 	return screl.JoinTarget(v.el, v.target)
+}
+
+func (v nodeVars) targetStatus(status scpb.TargetStatus) rel.Clause {
+	return v.target.AttrEq(screl.TargetStatus, status.Status())
+}
+
+// Type delegates to the element var Type method.
+func (v nodeVars) Type(valuesForTypeOf ...interface{}) rel.Clause {
+	if len(valuesForTypeOf) == 0 {
+		panic(errors.AssertionFailedf("empty type list for %q", v.el))
+	}
+	return v.el.Type(valuesForTypeOf[0], valuesForTypeOf[1:]...)
 }
 
 func mkNodeVars(elStr string) nodeVars {

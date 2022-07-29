@@ -10,7 +10,10 @@
 
 package scexec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+)
 
 // TestingKnobs are testing knobs which affect the running of declarative
 // schema changes.
@@ -27,8 +30,12 @@ type TestingKnobs struct {
 	// for concurrent schema changes to finish.
 	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
 
+	// OnPostCommitPlanError is called whenever the schema changer job returns an
+	// error on building the state or on planning the stages.
+	OnPostCommitPlanError func(state *scpb.CurrentState, err error) error
+
 	// OnPostCommitError is called whenever the schema changer job returns an
-	// error.
+	// error during stage execution.
 	OnPostCommitError func(p scplan.Plan, stageIdx int, err error) error
 
 	// RunBeforeBackfill is called just before starting the backfill.

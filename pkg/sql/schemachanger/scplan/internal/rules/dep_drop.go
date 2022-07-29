@@ -36,10 +36,8 @@ func init() {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				joinOnDescID(from.el, to.el, "desc-id"),
+				joinOnDescID(from, to, "desc-id"),
+				depEdgeToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		})
 
@@ -51,8 +49,8 @@ func init() {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSubjectTo2VersionInvariant),
-				toAbsentInAbsent(from.target, from.node, to.target, to.node),
-				joinOnDescID(from.el, to.el, "desc-id"),
+				joinOnDescID(from, to, "desc-id"),
+				depEdgeToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -77,10 +75,8 @@ func init() {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				joinReferencedDescID(to.el, from.el, "desc-id"),
+				joinReferencedDescID(to, from, "desc-id"),
+				depEdgeToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -93,12 +89,10 @@ func init() {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent, isWithTypeT),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
-					refID := screl.GetDescID(ref)
-					typeT := getTypeTOrPanic(e)
+				depEdgeToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				depEdgeElementFilter("RefByTypeT", from, to, func(from, to scpb.Element) bool {
+					refID := screl.GetDescID(from)
+					typeT := getTypeTOrPanic(to)
 					return typeT != nil && idInIDs(typeT.ClosedTypeIDs, refID)
 				}),
 			}
@@ -113,12 +107,10 @@ func init() {
 			return rel.Clauses{
 				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent, isWithExpression),
-				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_DROPPED),
-				currentStatus(to.node, scpb.Status_ABSENT),
-				rel.Filter("RefByTypeT", from.el, to.el)(func(ref, e scpb.Element) bool {
-					refID := screl.GetDescID(ref)
-					expr := getExpressionOrPanic(e)
+				depEdgeToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				depEdgeElementFilter("RefByExpression", from, to, func(from, to scpb.Element) bool {
+					refID := screl.GetDescID(from)
+					expr := getExpressionOrPanic(to)
 					return expr != nil && (idInIDs(expr.UsesTypeIDs, refID) || idInIDs(expr.UsesSequenceIDs, refID))
 				}),
 			}

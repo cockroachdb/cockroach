@@ -11,9 +11,7 @@
 package rules
 
 import (
-	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,59 +34,105 @@ func idInIDs(objects []descpb.ID, id descpb.ID) bool {
 	return false
 }
 
-func currentStatus(node rel.Var, status scpb.Status) rel.Clause {
-	return node.AttrEq(screl.CurrentStatus, status)
-}
-
-func targetStatus(target rel.Var, status scpb.TargetStatus) rel.Clause {
-	return target.AttrEq(screl.TargetStatus, status.Status())
-}
-
-func targetStatusEq(aTarget, bTarget rel.Var, status scpb.TargetStatus) rel.Clause {
-	return rel.And(targetStatus(aTarget, status), targetStatus(bTarget, status))
-}
-
-func currentStatusEq(aNode, bNode rel.Var, status scpb.Status) rel.Clause {
-	return rel.And(currentStatus(aNode, status), currentStatus(bNode, status))
-}
-
-func join(a, b rel.Var, attr rel.Attr, eqVarName rel.Var) rel.Clause {
+func join(a, b nodeVars, attr rel.Attr, eqVarName rel.Var) rel.Clause {
 	return joinOn(a, attr, b, attr, eqVarName)
 }
 
-func joinOn(a rel.Var, aAttr rel.Attr, b rel.Var, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
+var _ = join
+
+func joinOn(a nodeVars, aAttr rel.Attr, b nodeVars, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
 	return rel.And(
-		a.AttrEqVar(aAttr, eqVarName),
-		b.AttrEqVar(bAttr, eqVarName),
+		a.el.AttrEqVar(aAttr, eqVarName),
+		b.el.AttrEqVar(bAttr, eqVarName),
 	)
 }
 
+func depEdgeElementFilter(name string, a, b nodeVars, fn interface{}) rel.Clause {
+	return rel.Filter(name, a.el, b.el)(fn)
+}
+
+func anyDepEdgeToPublic(from, to nodeVars) rel.Clause {
+	return toPublicUntyped(from.target, to.target)
+}
+
+func depEdgeToPublic(
+	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+) rel.Clause {
+	return rel.And(
+		anyDepEdgeToPublic(from, to),
+		from.currentStatus(fromStatus),
+		to.currentStatus(toStatus),
+	)
+}
+
+func anyDepEdgeToAbsent(from, to nodeVars) rel.Clause {
+	return toAbsentUntyped(from.target, to.target)
+}
+
+func depEdgeToAbsent(
+	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+) rel.Clause {
+	return rel.And(
+		anyDepEdgeToAbsent(from, to),
+		from.currentStatus(fromStatus),
+		to.currentStatus(toStatus),
+	)
+}
+
+func joinOnDescID(a, b nodeVars, descriptorIDVar rel.Var) rel.Clause {
+	return joinOnDescIDUntyped(a.el, b.el, descriptorIDVar)
+}
+
+func joinReferencedDescID(a, b nodeVars, descriptorIDVar rel.Var) rel.Clause {
+	return joinReferencedDescIDUntyped(a.el, b.el, descriptorIDVar)
+}
+
+func joinOnColumnID(a, b nodeVars, relationIDVar, columnIDVar rel.Var) rel.Clause {
+	return joinOnColumnIDUntyped(a.el, b.el, relationIDVar, columnIDVar)
+}
+
+func joinOnIndexID(a, b nodeVars, relationIDVar, indexIDVar rel.Var) rel.Clause {
+	return joinOnIndexIDUntyped(a.el, b.el, relationIDVar, indexIDVar)
+}
+
+func joinOnConstraintID(a, b nodeVars, relationIDVar, constraintID rel.Var) rel.Clause {
+	return joinOnConstraintIDUntyped(a.el, b.el, relationIDVar, constraintID)
+}
+
+func columnInIndex(
+	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+) rel.Clause {
+	return columnInIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+}
+
+func columnInPrimaryIndexSwap(
+	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+) rel.Clause {
+	return columnInPrimaryIndexSwapUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+}
+
 var (
-	toAbsent = screl.Schema.Def2(
+	toPublicUntyped = screl.Schema.Def2(
+		"toPublic",
+		"target1", "target2",
+		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
+			return rel.Clauses{
+				target1.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
+				target2.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
+			}
+		})
+
+	toAbsentUntyped = screl.Schema.Def2(
 		"toAbsent",
 		"target1", "target2",
 		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
 			return rel.Clauses{
-				targetStatusEq(target1, target2, scpb.ToAbsent),
+				target1.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+				target2.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 			}
 		})
 
-	toAbsentIn = func(status scpb.Status) rel.Rule4 {
-		ss := status.String()
-		return screl.Schema.Def4(
-			fmt.Sprintf("toAbsentIn%s%s", ss[0:1], strings.ToLower(ss[1:])),
-			"target1", "node1", "target2", "node2",
-			func(
-				target1 rel.Var, node1 rel.Var, target2 rel.Var, node2 rel.Var,
-			) rel.Clauses {
-				return rel.Clauses{
-					toAbsent(target1, target2),
-					currentStatusEq(node1, node2, status),
-				}
-			})
-	}
-	toAbsentInAbsent     = toAbsentIn(scpb.Status_ABSENT)
-	joinReferencedDescID = screl.Schema.Def3(
+	joinReferencedDescIDUntyped = screl.Schema.Def3(
 		"joinReferencedDescID", "referrer", "referenced", "id", func(
 			referrer, referenced, id rel.Var,
 		) rel.Clauses {
@@ -97,7 +141,7 @@ var (
 				referenced.AttrEqVar(screl.DescID, id),
 			}
 		})
-	joinOnDescID = screl.Schema.Def3(
+	joinOnDescIDUntyped = screl.Schema.Def3(
 		"joinOnDescID", "a", "b", "id", func(
 			a, b, id rel.Var,
 		) rel.Clauses {
@@ -105,73 +149,52 @@ var (
 				id.Entities(screl.DescID, a, b),
 			}
 		})
-	joinOnIndexID = screl.Schema.Def4(
+	joinOnIndexIDUntyped = screl.Schema.Def4(
 		"joinOnIndexID", "a", "b", "desc-id", "index-id", func(
 			a, b, descID, indexID rel.Var,
 		) rel.Clauses {
 			return rel.Clauses{
-				joinOnDescID(a, b, descID),
+				joinOnDescIDUntyped(a, b, descID),
 				indexID.Entities(screl.IndexID, a, b),
 			}
 		},
 	)
-	joinOnColumnID = screl.Schema.Def4(
+	joinOnColumnIDUntyped = screl.Schema.Def4(
 		"joinOnColumnID", "a", "b", "desc-id", "col-id", func(
 			a, b, descID, colID rel.Var,
 		) rel.Clauses {
 			return rel.Clauses{
-				joinOnDescID(a, b, descID),
+				joinOnDescIDUntyped(a, b, descID),
 				colID.Entities(screl.ColumnID, a, b),
 			}
 		},
 	)
-	joinOnConstraintID = screl.Schema.Def4(
+	joinOnConstraintIDUntyped = screl.Schema.Def4(
 		"joinOnConstraintID", "a", "b", "desc-id", "constraint-id", func(
 			a, b, descID, constraintID rel.Var,
 		) rel.Clauses {
 			return rel.Clauses{
-				joinOnDescID(a, b, descID),
+				joinOnDescIDUntyped(a, b, descID),
 				constraintID.Entities(screl.ConstraintID, a, b),
 			}
 		},
 	)
-	indexDependents = screl.Schema.Def4("index-dependents",
-		"index", "dep",
-		"table-id", "index-id", func(
-			index, dep, tableID, indexID rel.Var,
-		) rel.Clauses {
-			return rel.Clauses{
-				dep.Type(
-					(*scpb.IndexName)(nil),
-					(*scpb.IndexPartitioning)(nil),
-					(*scpb.SecondaryIndexPartial)(nil),
-					(*scpb.IndexComment)(nil),
-					(*scpb.IndexColumn)(nil),
-				),
-				index.Type(
-					(*scpb.PrimaryIndex)(nil),
-					(*scpb.TemporaryIndex)(nil),
-					(*scpb.SecondaryIndex)(nil),
-				),
-				joinOnIndexID(dep, index, "table-id", "index-id"),
-			}
-		})
 
-	indexContainsColumn = screl.Schema.Def6(
-		"indexContainsColumn",
-		"index", "column", "index-column", "table-id", "column-id", "index-id", func(
-			index, column, indexColumn, tableID, columnID, indexID rel.Var,
+	columnInIndexUntyped = screl.Schema.Def5(
+		"columnInIndex",
+		"index-column", "index", "table-id", "column-id", "index-id", func(
+			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
 			return rel.Clauses{
-				index.AttrEqVar(screl.IndexID, indexID),
 				indexColumn.Type((*scpb.IndexColumn)(nil)),
 				indexColumn.AttrEqVar(screl.DescID, rel.Blank),
-				joinOnColumnID(column, indexColumn, tableID, columnID),
-				joinOnIndexID(index, indexColumn, tableID, indexID),
+				indexColumn.AttrEqVar(screl.ColumnID, columnID),
+				index.AttrEqVar(screl.IndexID, indexID),
+				joinOnIndexIDUntyped(index, indexColumn, tableID, indexID),
 			}
 		})
 
-	sourceIndexNotSet = screl.Schema.Def1("sourceIndexNotSet", "index", func(
+	sourceIndexNotSetUntyped = screl.Schema.Def1("sourceIndexNotSet", "index", func(
 		index rel.Var,
 	) rel.Clauses {
 		return rel.Clauses{
@@ -179,16 +202,16 @@ var (
 		}
 	})
 
-	columnInPrimaryIndexSwap = screl.Schema.Def6(
+	columnInPrimaryIndexSwapUntyped = screl.Schema.Def5(
 		"columnInPrimaryIndexSwap",
-		"index", "column", "index-column", "table-id", "column-id", "index-id", func(
-			index, column, indexColumn, tableID, columnID, indexID rel.Var,
+		"index-column", "index", "table-id", "column-id", "index-id", func(
+			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
 			return rel.Clauses{
-				indexContainsColumn(
-					index, column, indexColumn, tableID, columnID, indexID,
+				columnInIndexUntyped(
+					indexColumn, index, tableID, columnID, indexID,
 				),
-				sourceIndexNotSet(index),
+				sourceIndexNotSetUntyped(index),
 			}
 		})
 )
@@ -221,10 +244,7 @@ func elementTypes(nv nodeVars, filters ...func(element scpb.Element) bool) rel.C
 		types = append(types, e)
 		return nil
 	})
-	if len(types) == 0 {
-		panic(errors.AssertionFailedf("empty type list for var %q", nv))
-	}
-	return nv.el.Type(types[0], types[1:]...)
+	return nv.Type(types...)
 }
 
 func nonNilElement(element scpb.Element) scpb.Element {
@@ -242,8 +262,20 @@ func IsDescriptor(e scpb.Element) bool {
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
+	return isIndex(e) || isColumn(e)
+}
+
+func isIndex(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.Column, *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
+	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
+		return true
+	}
+	return false
+}
+
+func isColumn(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.Column:
 		return true
 	}
 	return false
@@ -395,5 +427,78 @@ func init() {
 			}
 			panic(errors.AssertionFailedf("getExpression should support %T but doesn't", e))
 		})
+	})
+}
+
+func isColumnDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnType:
+		return true
+	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
+		return true
+	}
+	return isColumnTypeDependent(e)
+}
+
+func isColumnTypeDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
+		return true
+	}
+	return false
+}
+
+// Assert that isColumnDependent covers all dependent elements of a column
+// element.
+func init() {
+	_ = forEachElement(func(e scpb.Element) error {
+		// Exclude columns themselves.
+		switch e.(type) {
+		case *scpb.Column:
+			return nil
+		}
+		// A column dependent should have a ColumnID attribute.
+		e = nonNilElement(e)
+		_, err := screl.Schema.GetAttribute(screl.ColumnID, e)
+		if isColumnDependent(e) {
+			if err != nil {
+				panic(err)
+			}
+		} else if err == nil {
+			panic(errors.AssertionFailedf("isColumnDependent should include %T but doesn't", e))
+		}
+		return nil
+	})
+}
+
+func isIndexDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn:
+		return true
+	case *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial:
+		return true
+	}
+	return false
+}
+
+// Assert that isIndexDependent covers all dependent elements of an index
+// element.
+func init() {
+	_ = forEachElement(func(e scpb.Element) error {
+		// Exclude indexes themselves.
+		if isIndex(e) {
+			return nil
+		}
+		// An index dependent should have an IndexID attribute.
+		e = nonNilElement(e)
+		_, err := screl.Schema.GetAttribute(screl.IndexID, e)
+		if isIndexDependent(e) {
+			if err != nil {
+				panic(err)
+			}
+		} else if err == nil {
+			panic(errors.AssertionFailedf("isIndexDependent should include %T but doesn't", e))
+		}
+		return nil
 	})
 }

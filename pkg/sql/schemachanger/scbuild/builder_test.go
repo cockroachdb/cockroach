@@ -233,7 +233,7 @@ var _ sort.Interface = nodeEntries{}
 
 func formatElementForDisplay(t *testing.T, e scpb.Element) []byte {
 	marshaled, err := sctestutils.ProtoToYAML(
-		e, false /* emitDefaults */, nil,
+		e, false /* emitDefaults */, nil, /* rewrites */
 	)
 	require.NoError(t, err)
 	dec := yaml.NewDecoder(strings.NewReader(marshaled))
