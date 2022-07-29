@@ -415,8 +415,10 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	if l > 0 {
 		idxConstraint = new(constraint.Constraint)
 		idxConstraint.Spans.Alloc(l)
-		var sp constraint.Span
-		idxConstraint.Spans.Append(&sp)
+		for i := 0; i < l; i++ {
+			var sp constraint.Span
+			idxConstraint.Spans.Append(&sp)
+		}
 	}
 
 	var invertedConstraint inverted.Spans
