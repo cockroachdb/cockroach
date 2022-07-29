@@ -63,11 +63,16 @@ genrule(
     cmd = """
       $(location //pkg/sql/colexec/execgen/cmd/execgen) \
         -fmt=false pkg/col/coldata/$@ > $@
-      $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+      GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+      GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+      # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+      env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
     """,
     exec_tools = [
         "//pkg/sql/colexec/execgen/cmd/execgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@go_sdk//:bin/go",
     ],
     visibility = [
         ":__pkg__",
