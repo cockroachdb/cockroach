@@ -13,10 +13,13 @@ package tests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -25,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -34,6 +38,16 @@ import (
 
 const (
 	defaultTimeout = 1 * time.Hour
+
+	// Metrics for recording and sending to roachperf.
+	decommissionMetric = "decommission"
+	upreplicateMetric  = "decommission:upreplicate"
+	estimatedMetric    = "decommission:estimated"
+	bytesUsedMetric    = "targetBytesUsed"
+
+	// Used to calculate estimated decommission time. Should remain in sync with
+	// setting `kv.snapshot_recovery.max_rate` in store_snapshot.go.
+	defaultSnapshotRateMb = 32
 )
 
 type decommissionBenchSpec struct {
@@ -174,11 +188,57 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 	})
 }
 
-// decommBenchTicker is a simple struct for encapsulating function
-// closures to be called before and after an operation to be benchmarked.
-type decommBenchTicker struct {
-	pre  func()
-	post func()
+// fireAfter executes fn after the duration elapses. If the context expires
+// first, it will not be executed.
+func fireAfter(ctx context.Context, duration time.Duration, fn func()) {
+	go func() {
+		var fireTimer timeutil.Timer
+		defer fireTimer.Stop()
+		fireTimer.Reset(duration)
+		select {
+		case <-ctx.Done():
+		case <-fireTimer.C:
+			fireTimer.Read = true
+			fn()
+		}
+	}()
+}
+
+// createDecommissionBenchPerfArtifacts initializes a histogram registry for
+// measuring decommission performance metrics. Metrics initialized via opNames
+// will be registered with the registry and are intended to be used as
+// long-running metrics measured by the elapsed time between each "tick",
+// rather than utilizing the values recorded in the histogram, and can be
+// recorded in the perfBuf by utilizing the returned tickByName(name) function.
+func createDecommissionBenchPerfArtifacts(
+	opNames ...string,
+) (reg *histogram.Registry, tickByName func(name string), perfBuf *bytes.Buffer) {
+	// Create a histogram registry for recording multiple decommission metrics,
+	// following the "bulk job" form of measuring performance.
+	// See runDecommissionBench for more explanation.
+	reg = histogram.NewRegistry(
+		defaultTimeout,
+		histogram.MockWorkloadName,
+	)
+
+	perfBuf = bytes.NewBuffer([]byte{})
+	jsonEnc := json.NewEncoder(perfBuf)
+
+	registeredOpNames := make(map[string]struct{})
+	for _, opName := range opNames {
+		registeredOpNames[opName] = struct{}{}
+		reg.GetHandle().Get(opName)
+	}
+
+	tickByName = func(name string) {
+		reg.Tick(func(tick histogram.Tick) {
+			if _, ok := registeredOpNames[name]; ok && tick.Name == name {
+				_ = jsonEnc.Encode(tick.Snapshot())
+			}
+		})
+	}
+
+	return reg, tickByName, perfBuf
 }
 
 // setupDecommissionBench performs the initial cluster setup needed prior to
@@ -227,6 +287,43 @@ func setupDecommissionBench(
 		// Wait for initial up-replication.
 		err := WaitFor3XReplication(ctx, t, db)
 		require.NoError(t, err)
+	}
+}
+
+// trackBytesUsed repeatedly checks the number of bytes used by stores on the
+// target node and records them into the bytesUsedMetric histogram.
+func trackBytesUsed(
+	ctx context.Context,
+	db *gosql.DB,
+	targetNodeAtomic *uint32,
+	hists *histogram.Histograms,
+	tickByName func(name string),
+) error {
+	const statsInterval = 3 * time.Second
+	var statsTimer timeutil.Timer
+	defer statsTimer.Stop()
+	for {
+		statsTimer.Reset(statsInterval)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-statsTimer.C:
+			statsTimer.Read = true
+			var bytesUsed int64
+
+			// If we have a target node, read the bytes used and record them.
+			if logicalNodeID := atomic.LoadUint32(targetNodeAtomic); logicalNodeID > 0 {
+				if err := db.QueryRow(
+					`SELECT ifnull(sum(used), 0) FROM crdb_internal.kv_store_status WHERE node_id=$1`,
+					logicalNodeID,
+				).Scan(&bytesUsed); err != nil {
+					return err
+				}
+
+				hists.Get(bytesUsedMetric).RecordValue(bytesUsed)
+				tickByName(bytesUsedMetric)
+			}
+		}
 	}
 }
 
@@ -304,7 +401,7 @@ func runDecommissionBench(
 
 	maxRate := tpccMaxRate(benchSpec.warehouses)
 	rampDuration := 3 * time.Minute
-	rampStarted := make(chan struct{}, 1)
+	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
 		`./cockroach workload fixtures import tpcc --warehouses=%d`, benchSpec.warehouses,
 	)
@@ -319,7 +416,7 @@ func runDecommissionBench(
 	if benchSpec.load {
 		m.Go(
 			func(ctx context.Context) error {
-				rampStarted <- struct{}{}
+				close(rampStarted)
 
 				// Run workload effectively indefinitely, to be later killed by context
 				// cancellation once decommission has completed.
@@ -336,13 +433,19 @@ func runDecommissionBench(
 		)
 	}
 
-	// Utilize the "bulk job" form of recording performance which, rather than
-	// record the workload operation rate with the histograms recorded in a
-	// per-second "tick", we will simply tick at the start of the decommission
-	// and again at the completion. Roachperf will use the elapsed time between
-	// these ticks to plot the duration of the decommission.
-	tick, perfBuf := initBulkJobPerfArtifacts("decommission", testTimeout)
-	recorder := &decommBenchTicker{pre: tick, post: tick}
+	// Create a histogram registry for recording multiple decommission metrics.
+	// Note that "decommission.*" metrics are special in that they are
+	// long-running metrics measured by the elapsed time between each tick,
+	// as opposed to the histograms of workload operation latencies or other
+	// recorded values that are typically output in a "tick" each second.
+	reg, tickByName, perfBuf := createDecommissionBenchPerfArtifacts(
+		decommissionMetric,
+		estimatedMetric,
+		bytesUsedMetric,
+	)
+
+	// The logical node id of the current decommissioning node.
+	var targetNodeAtomic uint32
 
 	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
@@ -358,15 +461,30 @@ func runDecommissionBench(
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(rampDuration):
-				// Workload ramp-up complete.
+			case <-time.After(rampDuration + 1*time.Minute):
+				// Workload ramp-up complete, plus 1 minute of recording workload stats.
 			}
 		}
 
 		m.ExpectDeath()
 		defer m.ResetDeaths()
-		return runSingleDecommission(ctx, h, pinnedNode, benchSpec.whileDown,
-			false /* reuse */, recorder, nil /* upreplicateTicker */)
+		err := runSingleDecommission(ctx, h, pinnedNode, &targetNodeAtomic, benchSpec.snapshotRate,
+			benchSpec.whileDown, false /* reuse */, true /* estimateDuration */, tickByName)
+
+		// Include an additional minute of buffer time post-decommission to gather
+		// workload stats.
+		time.Sleep(1 * time.Minute)
+
+		return err
+	})
+
+	m.Go(func(ctx context.Context) error {
+		hists := reg.GetHandle()
+
+		db := c.Conn(ctx, t.L(), pinnedNode)
+		defer db.Close()
+
+		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
 	})
 
 	if err := m.WaitE(); err != nil {
@@ -396,7 +514,7 @@ func runDecommissionBenchLong(
 
 	maxRate := tpccMaxRate(benchSpec.warehouses)
 	rampDuration := 3 * time.Minute
-	rampStarted := make(chan struct{}, 1)
+	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
 		`./cockroach workload fixtures import tpcc --warehouses=%d`, benchSpec.warehouses,
 	)
@@ -412,7 +530,7 @@ func runDecommissionBenchLong(
 	if benchSpec.load {
 		m.Go(
 			func(ctx context.Context) error {
-				rampStarted <- struct{}{}
+				close(rampStarted)
 
 				// Run workload indefinitely, to be later killed by context
 				// cancellation once decommission has completed.
@@ -429,44 +547,17 @@ func runDecommissionBenchLong(
 		)
 	}
 
-	// Create a histogram registry for recording multiple decommission metrics,
-	// following the "bulk job" form of measuring performance.
-	// See runDecommissionBench for more explanation.
-	reg := histogram.NewRegistry(
-		defaultTimeout,
-		histogram.MockWorkloadName,
+	// Create a histogram registry for recording multiple decommission metrics.
+	// Note that "decommission.*" metrics are special in that they are
+	// long-running metrics measured by the elapsed time between each tick,
+	// as opposed to the histograms of workload operation latencies or other
+	// recorded values that are typically output in a "tick" each second.
+	reg, tickByName, perfBuf := createDecommissionBenchPerfArtifacts(
+		decommissionMetric, upreplicateMetric, bytesUsedMetric,
 	)
 
-	perfBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(perfBuf)
-
-	// Initialize operation-specific metric ticks.
-	opNames := []string{"decommission", "decommission:upreplicate"}
-	opTickByName := make(map[string]func())
-
-	makeOpTick := func(reg *histogram.Registry, jsonEnc *json.Encoder, opName string) func() {
-		return func() {
-			reg.Tick(func(tick histogram.Tick) {
-				if tick.Name == opName {
-					_ = jsonEnc.Encode(tick.Snapshot())
-				}
-			})
-		}
-	}
-
-	for _, opName := range opNames {
-		reg.GetHandle().Get(opName)
-		opTickByName[opName] = makeOpTick(reg, jsonEnc, opName)
-	}
-
-	decommRecorder := &decommBenchTicker{
-		pre:  opTickByName["decommission"],
-		post: opTickByName["decommission"],
-	}
-	upreplicateRecorder := &decommBenchTicker{
-		pre:  opTickByName["decommission:upreplicate"],
-		post: opTickByName["decommission:upreplicate"],
-	}
+	// The logical node id of the current decommissioning node.
+	var targetNodeAtomic uint32
 
 	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
@@ -482,22 +573,35 @@ func runDecommissionBenchLong(
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(rampDuration):
-				// Workload ramp-up complete.
+			case <-time.After(rampDuration + 1*time.Minute):
+				// Workload ramp-up complete, plus 1 minute of recording workload stats.
 			}
 		}
 
 		for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= benchSpec.duration; {
 			m.ExpectDeath()
-			err := runSingleDecommission(ctx, h, pinnedNode, benchSpec.whileDown,
-				true /* reuse */, decommRecorder, upreplicateRecorder)
+			err := runSingleDecommission(ctx, h, pinnedNode, &targetNodeAtomic, benchSpec.snapshotRate,
+				benchSpec.whileDown, true /* reuse */, false /* estimateDuration */, tickByName)
 			m.ResetDeaths()
 			if err != nil {
 				return err
 			}
 		}
 
+		// Include an additional minute of buffer time post-decommission to gather
+		// workload stats.
+		time.Sleep(1 * time.Minute)
+
 		return nil
+	})
+
+	m.Go(func(ctx context.Context) error {
+		hists := reg.GetHandle()
+
+		db := c.Conn(ctx, t.L(), pinnedNode)
+		defer db.Close()
+
+		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
 	})
 
 	if err := m.WaitE(); err != nil {
@@ -515,8 +619,10 @@ func runSingleDecommission(
 	ctx context.Context,
 	h *decommTestHelper,
 	pinnedNode int,
-	stopFirst, reuse bool,
-	decommTicker, upreplicateTicker *decommBenchTicker,
+	targetLogicalNodeAtomic *uint32,
+	snapshotRateMb int,
+	stopFirst, reuse, estimateDuration bool,
+	tickByName func(name string),
 ) error {
 	target := h.getRandNodeOtherThan(pinnedNode)
 	targetLogicalNodeID, err := h.getLogicalNodeID(ctx, target)
@@ -530,6 +636,7 @@ func runSingleDecommission(
 
 	// Gather metadata for logging purposes and wait for balance.
 	var bytesUsed, rangeCount, totalRanges int64
+	var candidateStores, avgBytesPerReplica int64
 	{
 		dbNode := h.c.Conn(ctx, h.t.L(), target)
 		defer dbNode.Close()
@@ -548,9 +655,25 @@ func runSingleDecommission(
 		}
 
 		if err := dbNode.QueryRow(
-			`SELECT sum(range_count), sum(used) FROM crdb_internal.kv_store_status where node_id = $1`,
+			"SELECT range_count, used "+
+				"FROM crdb_internal.kv_store_status where node_id = $1 LIMIT 1",
 			targetLogicalNodeID,
 		).Scan(&rangeCount, &bytesUsed); err != nil {
+			return err
+		}
+
+		if err := dbNode.QueryRow(
+			"SELECT avg(range_size)::int "+
+				"FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
+			targetLogicalNodeID,
+		).Scan(&avgBytesPerReplica); err != nil {
+			return err
+		}
+
+		if err := dbNode.QueryRow(
+			"SELECT count(store_id) FROM crdb_internal.kv_store_status where node_id != $1",
+			targetLogicalNodeID,
+		).Scan(&candidateStores); err != nil {
 			return err
 		}
 	}
@@ -560,10 +683,19 @@ func runSingleDecommission(
 		h.stop(ctx, target)
 	}
 
+	atomic.StoreUint32(targetLogicalNodeAtomic, uint32(targetLogicalNodeID))
+	if estimateDuration {
+		estimateDecommissionDuration(
+			ctx, h.t.L(), tickByName, snapshotRateMb, bytesUsed, candidateStores,
+			rangeCount, avgBytesPerReplica,
+		)
+	}
+
 	h.t.Status(fmt.Sprintf("decommissioning node%d (n%d)", target, targetLogicalNodeID))
-	targetLogicalNodeIDList := option.NodeListOption{targetLogicalNodeID}
+
 	tBegin := timeutil.Now()
-	decommTicker.pre()
+	tickByName(decommissionMetric)
+	targetLogicalNodeIDList := option.NodeListOption{targetLogicalNodeID}
 	if _, err := h.decommission(
 		ctx, targetLogicalNodeIDList, pinnedNode, "--wait=all",
 	); err != nil {
@@ -575,7 +707,8 @@ func runSingleDecommission(
 	if err := h.checkDecommissioned(ctx, targetLogicalNodeID, pinnedNode); err != nil {
 		return err
 	}
-	decommTicker.post()
+	atomic.StoreUint32(targetLogicalNodeAtomic, uint32(0))
+	tickByName(decommissionMetric)
 	elapsed := timeutil.Since(tBegin)
 
 	h.t.Status(fmt.Sprintf("decommissioned node%d (n%d) in %s (ranges: %d, size: %s)",
@@ -606,8 +739,9 @@ func runSingleDecommission(
 		if err != nil {
 			return err
 		}
+		atomic.StoreUint32(targetLogicalNodeAtomic, uint32(newLogicalNodeID))
 
-		upreplicateTicker.pre()
+		tickByName(upreplicateMetric)
 		h.t.Status("waiting for replica counts to balance across nodes")
 		{
 			dbNode := h.c.Conn(ctx, h.t.L(), pinnedNode)
@@ -645,8 +779,57 @@ func runSingleDecommission(
 				return err
 			}
 		}
-		upreplicateTicker.post()
+		atomic.StoreUint32(targetLogicalNodeAtomic, 0)
+		tickByName(upreplicateMetric)
 	}
 
 	return nil
+}
+
+// estimateDecommissionDuration attempts to come up with a rough estimate for
+// the theoretical minimum decommission duration as well as the estimated
+// actual duration of the decommission and writes them to the log and the
+// recorded perf artifacts as ticks.
+func estimateDecommissionDuration(
+	ctx context.Context,
+	log *logger.Logger,
+	tickByName func(name string),
+	snapshotRateMb int,
+	bytesUsed int64,
+	candidateStores int64,
+	rangeCount int64,
+	avgBytesPerReplica int64,
+) {
+	tickByName(estimatedMetric)
+
+	if snapshotRateMb == 0 {
+		snapshotRateMb = defaultSnapshotRateMb
+	}
+	snapshotRateBytes := float64(snapshotRateMb * 1024 * 1024)
+
+	// The theoretical minimum decommission time is simply:
+	// bytesToMove = bytesUsed / candidateStores
+	// minTime = bytesToMove / bytesPerSecond
+	minSeconds := (float64(bytesUsed) / float64(candidateStores)) / snapshotRateBytes
+	minDuration := time.Duration(minSeconds * float64(time.Second))
+
+	// The estimated decommission time incorporates the concept of replicas,
+	// which are the unit on which we send snapshots. Thus,
+	// snapshotsToSend = ceil(replicaCount / candidateStores)
+	// avgTimePerSnapshot = avgBytesPerReplica / bytesPerSecond
+	// estTime = snapshotsToSend * avgTimePerSnapshot
+	estSeconds := math.Ceil(float64(rangeCount)/float64(candidateStores)) *
+		float64(avgBytesPerReplica) / snapshotRateBytes
+	estDuration := time.Duration(estSeconds * float64(time.Second))
+
+	log.Printf(
+		"Given %d replicas with %s avg replica size, decommission time is estimated at:\n"+
+			"\ttheoretical min: %s"+
+			"\t      estimated: %s",
+		rangeCount, humanizeutil.IBytes(avgBytesPerReplica), minDuration, estDuration,
+	)
+
+	fireAfter(ctx, estDuration, func() {
+		tickByName(estimatedMetric)
+	})
 }
