@@ -1996,16 +1996,18 @@ func planProjectionOperators(
 		}
 		leftExpr, rightExpr := t.TypedLeft(), t.TypedRight()
 		if t.Operator.Symbol == treebin.Concat {
-			// Concat requires special handling.
+			// Concat requires special handling since it has special rules when
+			// one of the arguments is an array or a string. We don't have
+			// native vectorized support for arrays yet, so we don't have to do
+			// anything extra for them, but we do need to handle the string
+			// case.
 			leftType, rightType := leftExpr.ResolvedType(), rightExpr.ResolvedType()
-			if leftType.Family() != rightType.Family() {
-				// When we have two different types, we perform the STRING
-				// concatenation.
+			if t.Op.ReturnType == types.String && leftType.Family() != rightType.Family() {
+				// This is a special case of the STRING concatenation - we have
+				// to plan a cast of the non-string type to a STRING.
 				if leftType.Family() == types.StringFamily {
-					// Need to cast the right expr to the STRING.
 					rightExpr = tree.NewTypedCastExpr(rightExpr, types.String)
 				} else if rightType.Family() == types.StringFamily {
-					// Need to cast the left expr to the STRING.
 					leftExpr = tree.NewTypedCastExpr(leftExpr, types.String)
 				} else {
 					// This is unexpected.
