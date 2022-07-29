@@ -409,6 +409,7 @@ func (p *planner) maybeLogStatementInternal(
 				BytesRead:                queryStats.bytesRead,
 				RowsRead:                 queryStats.rowsRead,
 				RowsWritten:              queryStats.rowsWritten,
+				HasIndexJoin:             p.curPlan.flags.IsSet(planFlagContainsIndexJoin),
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {

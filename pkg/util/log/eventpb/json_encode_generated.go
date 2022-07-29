@@ -3413,6 +3413,14 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.RowsWritten), 10)
 	}
 
+	if m.HasIndexJoin {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HasIndexJoin\":true"...)
+	}
+
 	return printComma, b
 }
 

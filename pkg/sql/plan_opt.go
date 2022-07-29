@@ -610,6 +610,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
+	var containsIndexJoin bool
 	var gf *explain.PlanGistFactory
 	if !opc.p.SessionData().DisablePlanGists {
 		gf = explain.NewPlanGistFactory(f)
@@ -628,6 +629,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		containsIndexJoin = bld.ContainsIndexJoin
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
@@ -649,10 +651,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		containsIndexJoin = bld.ContainsIndexJoin
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
-
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
 	if gf != nil {
@@ -692,6 +694,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsMutation {
 		planTop.flags.Set(planFlagContainsMutation)
+	}
+	if containsIndexJoin {
+		planTop.flags.Set(planFlagContainsIndexJoin)
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem

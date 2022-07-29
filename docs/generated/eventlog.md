@@ -2472,6 +2472,7 @@ contains common SQL event/execution details.
 | `BytesRead` | The number of bytes read from disk. | no |
 | `RowsRead` | The number of rows read from disk. | no |
 | `RowsWritten` | The number of rows written. | no |
+| `HasIndexJoin` | Whether the query contains an index join. | no |
 
 
 #### Common fields
