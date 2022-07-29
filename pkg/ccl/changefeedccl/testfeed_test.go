@@ -951,10 +951,22 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	if strings.Compare(c.resolved, path) >= 0 {
+	tsFromPath := func(p string) string {
+		return strings.Split(filepath.Base(p), "-")[0]
+	}
+
+	// Skip files with timestamp greater than the previously observed timestamp.
+	// Note: theoretically, we should be able to skip any file with timestamp
+	// greater *or equal* to the previously observed timestamp.  However, alter
+	// changefeed pose a problem, since a table maybe added with initial scan
+	// option, causing new events (possibly including resolved event) to be
+	// emitted as of previously emitted timestamp.
+	// See https://github.com/cockroachdb/cockroach/issues/84102
+	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
 		// Already output this in a previous walkDir.
 		return nil
 	}
+
 	if strings.HasSuffix(path, `RESOLVED`) {
 		resolvedPayload, err := ioutil.ReadFile(path)
 		if err != nil {
