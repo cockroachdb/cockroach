@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -140,7 +142,7 @@ type instrumentationHelper struct {
 	costEstimate float64
 
 	// indexRecommendations is a string slice containing index recommendations for
-	// the planned statement. This is only set for EXPLAIN statements.
+	// the planned statement.
 	indexRecommendations []string
 
 	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
@@ -670,4 +672,66 @@ func (m execNodeTraceMetadata) annotateExplain(
 	}
 
 	return allRegions
+}
+
+// SetIndexRecommendations checks if we should generate a new index recommendation.
+// If true it will generate and update the idx recommendations cache,
+// if false, uses the value on index recommendations cache and updates its counter.
+func (ih *instrumentationHelper) SetIndexRecommendations(
+	ctx context.Context, idxRec *idxrecommendations.IndexRecCache, planner *planner,
+) {
+	opc := planner.optPlanningCtx
+	opc.reset(ctx)
+	stmtType := opc.p.stmt.AST.StatementType()
+
+	if idxRec.ShouldGenerateIndexRecommendation(
+		ih.fingerprint,
+		ih.planGist.Hash(),
+		planner.SessionData().Database,
+		stmtType,
+	) {
+		f := opc.optimizer.Factory()
+		// EvalContext() has the context with the already closed span, so we
+		// need to update with the current context.
+		// The replacement of the context here isn't ideal, but the current
+		// implementation of contexts would need to change
+		// significantly to accommodate this case.
+		evalCtx := opc.p.EvalContext()
+		oldCtx := evalCtx.Context
+		evalCtx.Context = ctx
+		defer func() {
+			evalCtx.Context = oldCtx
+		}()
+
+		f.Init(evalCtx, &opc.catalog)
+		f.FoldingControl().AllowStableFolds()
+		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, &opc.catalog, f, opc.p.stmt.AST)
+		err := bld.Build()
+		if err != nil {
+			log.Warningf(ctx, "unable to build memo: %s", err)
+		} else {
+			err = opc.makeQueryIndexRecommendation(ctx)
+			if err != nil {
+				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+			} else {
+				idxRec.UpdateIndexRecommendations(
+					ih.fingerprint,
+					ih.planGist.Hash(),
+					planner.SessionData().Database,
+					stmtType,
+					ih.indexRecommendations,
+					true,
+				)
+			}
+		}
+	} else {
+		ih.indexRecommendations = idxRec.UpdateIndexRecommendations(
+			ih.fingerprint,
+			ih.planGist.Hash(),
+			planner.SessionData().Database,
+			stmtType,
+			[]string{},
+			false,
+		)
+	}
 }
