@@ -5,7 +5,8 @@
 # SimplifySelectFilters simplifies the Filters operator in several possible
 # ways:
 #   - Removes True operands
-#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Replaces the Filters operator with False if any operand is False, Null, or
+#     a contradiction
 #   - Flattens nested And operands by merging their conditions into parent
 #   - Simplifies Or operands where one side is a Null to the other side
 #   - Simplifies Is operands where the right side is True or False
