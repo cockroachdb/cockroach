@@ -135,8 +135,10 @@ type Overload struct {
 	// statement which will be executed as a common table expression in the query.
 	SQLFn SQLFnOverload
 
-	// OnTypeCheck is incremented every time this overload is type checked.
-	OnTypeCheck func()
+	// OnTypeCheck is called every time this overload is type checked.
+	// This is a pointer so that it can be set in a builtinsregistry hook, which
+	// gets a copy of the overload struct.
+	OnTypeCheck *func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.
