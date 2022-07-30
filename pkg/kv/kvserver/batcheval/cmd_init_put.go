@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
@@ -31,6 +32,10 @@ func InitPut(
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.InitPutRequest)
 	h := cArgs.Header
+
+	if args.FailOnTombstones && kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+		args.FailOnTombstones = false
+	}
 
 	var err error
 	if args.Blind {

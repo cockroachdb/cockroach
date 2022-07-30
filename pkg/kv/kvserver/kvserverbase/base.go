@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -227,3 +228,10 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 // MaxCommandSizeDefault is the default for the kv.raft.command.max_size
 // cluster setting.
 const MaxCommandSizeDefault = 64 << 20
+
+// GlobalMVCCRangeTombstoneForTesting will write an MVCC range tombstone at the
+// bottom of the SQL table data keyspace during cluster bootstrapping, for
+// performance and correctness testing. This shouldn't affect data written above
+// it, but activates range key-specific code paths in the storage layer.
+var GlobalMVCCRangeTombstoneForTesting = envutil.EnvOrDefaultBool(
+	"COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE", false)
