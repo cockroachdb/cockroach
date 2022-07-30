@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/envutil",
         "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/quotapool",

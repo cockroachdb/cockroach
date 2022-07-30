@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -201,6 +202,14 @@ func WriteInitialClusterData(
 		// NOTE: We don't do stats computations in any of the puts below. Instead,
 		// we write everything and then compute the stats over the whole range.
 
+		// If requested, write an MVCC range tombstone at the bottom of the
+		// keyspace, for performance and correctness testing.
+		if kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
+				return err
+			}
+		}
+
 		// Range descriptor.
 		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
@@ -266,5 +275,31 @@ func WriteInitialClusterData(
 		}
 	}
 
+	return nil
+}
+
+// writeGlobalMVCCRangeTombstone writes an MVCC range tombstone across the
+// entire table data keyspace of the range. This is used to test that storage
+// operations are correct and performant in the presence of range tombstones. An
+// MVCC range tombstone below all other data should in principle not affect
+// anything at all.
+func writeGlobalMVCCRangeTombstone(
+	ctx context.Context, w storage.Writer, desc *roachpb.RangeDescriptor, ts hlc.Timestamp,
+) error {
+	rangeKey := storage.MVCCRangeKey{
+		StartKey:  desc.StartKey.AsRawKey(),
+		EndKey:    desc.EndKey.AsRawKey(),
+		Timestamp: ts,
+	}
+	if rangeKey.EndKey.Compare(keys.TableDataMin) <= 0 {
+		return nil
+	}
+	if rangeKey.StartKey.Compare(keys.TableDataMin) < 0 {
+		rangeKey.StartKey = keys.TableDataMin
+	}
+	if err := w.PutMVCCRangeKey(rangeKey, storage.MVCCValue{}); err != nil {
+		return err
+	}
+	log.Warningf(ctx, "wrote global MVCC range tombstone %s", rangeKey)
 	return nil
 }

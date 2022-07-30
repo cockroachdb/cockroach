@@ -18,6 +18,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
