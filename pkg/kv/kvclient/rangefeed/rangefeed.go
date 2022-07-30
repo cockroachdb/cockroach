@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -359,6 +360,9 @@ func (f *RangeFeed) processEvents(
 				f.onSSTable(ctx, ev.SST)
 			case ev.DeleteRange != nil:
 				if f.onDeleteRange == nil {
+					if kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+						continue
+					}
 					return errors.AssertionFailedf(
 						"received unexpected rangefeed DeleteRange event with no OnDeleteRange handler: %s", ev)
 				}
