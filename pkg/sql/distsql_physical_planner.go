@@ -312,11 +312,8 @@ const (
 	// cannotDistribute indicates that a plan cannot be distributed.
 	cannotDistribute distRecommendation = iota
 
-	// shouldNotDistribute indicates that a plan could suffer if distributed.
-	shouldNotDistribute
-
-	// canDistribute indicates that a plan will probably not benefit but will
-	// probably not suffer if distributed.
+	// canDistribute indicates that a plan can be distributed, but it's not
+	// clear whether it'll be benefit from that.
 	canDistribute
 
 	// shouldDistribute indicates that a plan will likely benefit if distributed.
@@ -324,14 +321,10 @@ const (
 )
 
 // compose returns the recommendation for a plan given recommendations for two
-// parts of it: if we shouldNotDistribute either part, then we
-// shouldNotDistribute the overall plan either.
+// parts of it.
 func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 	if a == cannotDistribute || b == cannotDistribute {
 		return cannotDistribute
-	}
-	if a == shouldNotDistribute || b == shouldNotDistribute {
-		return shouldNotDistribute
 	}
 	if a == shouldDistribute || b == shouldDistribute {
 		return shouldDistribute

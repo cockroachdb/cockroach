@@ -304,7 +304,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 	// of processors (if there is such).
 	recommendation := shouldDistribute
 	if physPlan != nil && !physPlan.IsLastStageDistributed() {
-		recommendation = shouldNotDistribute
+		recommendation = cannotDistribute
 	}
 	for _, expr := range exprs {
 		if err := checkExpr(expr); err != nil {
