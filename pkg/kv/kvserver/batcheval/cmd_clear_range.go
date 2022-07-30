@@ -134,7 +134,13 @@ func ClearRange(
 		return pd, nil
 	}
 
-	if err := readWriter.ClearMVCCRange(from, to); err != nil {
+	// If we're writing Pebble range tombstones, use ClearRangeWithHeuristic to
+	// avoid writing range tombstones across empty spans -- in particular, across
+	// the range key span, since we expect range keys to be rare.
+	const pointKeyThreshold, rangeKeyThreshold = 2, 2
+	if err := storage.ClearRangeWithHeuristic(
+		readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+	); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil

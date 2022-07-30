@@ -560,9 +560,6 @@ func (s spanSetWriter) ClearIntent(
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
-	if !s.spansOnly {
-		panic("cannot do timestamp checking for clearing EngineKey")
-	}
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
