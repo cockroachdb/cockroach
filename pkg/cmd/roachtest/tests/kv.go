@@ -57,6 +57,7 @@ func registerKV(r registry.Registry) {
 		encryption               bool
 		sequential               bool
 		admissionControlDisabled bool
+		globalMVCCRangeTombstone bool
 		concMultiplier           int
 		ssds                     int
 		raid0                    bool
@@ -86,7 +87,11 @@ func registerKV(r registry.Registry) {
 		if opts.ssds > 1 && !opts.raid0 {
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 		}
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		settings := install.MakeClusterSettings()
+		if opts.globalMVCCRangeTombstone {
+			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
+		}
+		c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
 
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
@@ -180,6 +185,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 32, readPercent: 95, admissionControlDisabled: true},
 		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
+		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
+		{nodes: 3, cpus: 32, readPercent: 95, globalMVCCRangeTombstone: true},
 
 		// Configs with large block sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
@@ -257,6 +264,9 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.admissionControlDisabled {
 			nameParts = append(nameParts, "no-admission")
+		}
+		if opts.globalMVCCRangeTombstone {
+			nameParts = append(nameParts, "mvcc-range-keys=global")
 		}
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
