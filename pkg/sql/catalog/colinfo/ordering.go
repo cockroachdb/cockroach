@@ -30,6 +30,19 @@ type ColumnOrderInfo struct {
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
+// Equal returns whether two ColumnOrderings are the same.
+func (ordering ColumnOrdering) Equal(other ColumnOrdering) bool {
+	if len(ordering) != len(other) {
+		return false
+	}
+	for i, o := range ordering {
+		if o.ColIdx != other[i].ColIdx || o.Direction != other[i].Direction {
+			return false
+		}
+	}
+	return true
+}
+
 func (ordering ColumnOrdering) String(columns ResultColumns) string {
 	var buf bytes.Buffer
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)

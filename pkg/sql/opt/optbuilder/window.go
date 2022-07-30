@@ -202,7 +202,19 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		)
 	}
 
+	// First construct all frames with the PARTITION BY clause - this allows the
+	// execution to be more distributed.
 	for _, f := range frames {
+		if f.Partition.Empty() {
+			continue
+		}
+		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
+	}
+	// Now construct all frames without the PARTITION BY clause.
+	for _, f := range frames {
+		if !f.Partition.Empty() {
+			continue
+		}
 		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
 	}
 }
