@@ -396,7 +396,7 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearMVCCIteratorRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearMVCCIteratorRange(_, _ roachpb.Key, _, _ bool) error {
 	panic("not implemented")
 }
 

@@ -392,28 +392,72 @@ func (p *pebbleBatch) ClearMVCCVersions(start, end MVCCKey) error {
 	return p.batch.DeleteRange(p.buf, EncodeMVCCKey(end), nil)
 }
 
-// ClearIterRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
-	iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		LowerBound: start,
-		UpperBound: end,
-	})
-	defer iter.Close()
-
-	for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
-		if valid, err := iter.Valid(); err != nil {
-			return err
-		} else if !valid {
-			break
+// ClearMVCCIteratorRange implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
+	clearPointKeys := func(start, end roachpb.Key) error {
+		iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
+		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+			if valid, err := iter.Valid(); err != nil {
+				return err
+			} else if !valid {
+				break
+			}
+			// NB: UnsafeRawKey could be a serialized lock table key, and not just an
+			// MVCCKey.
+			if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
+				return err
+			}
 		}
+		return nil
+	}
 
-		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
-		// MVCCKey.
-		if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
+	if pointKeys {
+		if err := clearPointKeys(start, end); err != nil {
 			return err
 		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+
+	clearRangeKeys := func(start, end roachpb.Key) error {
+		iter := p.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   IterKeyTypeRangesOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
+		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+			if valid, err := iter.Valid(); err != nil {
+				return err
+			} else if !valid {
+				break
+			}
+			// TODO(erikgrinaker): We should consider reusing a buffer for the
+			// encoding here, but we don't expect to see many range keys.
+			rangeKeys := iter.RangeKeys()
+			startRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.Key})
+			endRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.EndKey})
+			for _, v := range rangeKeys.Versions {
+				if err := p.batch.RangeKeyUnset(startRaw, endRaw,
+					EncodeMVCCTimestampSuffix(v.Timestamp), nil); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	if rangeKeys {
+		if err := clearRangeKeys(start, end); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRangeKey implements the Engine interface.
