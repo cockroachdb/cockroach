@@ -352,7 +352,7 @@ func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearMVCCIteratorRange(start.Key, end.Key)
+		return batch.ClearMVCCIteratorRange(start.Key, end.Key, true, true)
 	})
 }
 

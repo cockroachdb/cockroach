@@ -665,14 +665,18 @@ type Writer interface {
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
 	ClearMVCCVersions(start, end MVCCKey) error
-	// ClearMVCCIteratorRange removes all keys in the given span using an MVCC
-	// iterator, by clearing individual keys (including intents) with Pebble point
-	// tombstones. It will also clear all range keys in the span.
+	// ClearMVCCIteratorRange removes all point and/or range keys in the given
+	// span using an MVCC iterator, by clearing individual keys (including
+	// intents).
 	//
 	// Similar to the other Clear* methods, this method actually removes entries
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
-	ClearMVCCIteratorRange(start, end roachpb.Key) error
+	//
+	// TODO(erikgrinaker): This should be a separate function rather than an
+	// interface method, but we keep it for now to make use of UnsafeRawKey() when
+	// clearing keys.
+	ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
 
 	// ClearAllRangeKeys deletes all range keys (and all versions) from start
 	// (inclusive) to end (exclusive). This can be used both for MVCC range keys

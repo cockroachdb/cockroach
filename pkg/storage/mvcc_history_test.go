@@ -901,7 +901,7 @@ func cmdClearRange(e *evalCtx) error {
 	// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
 	// it does not handle separated intents.
 	if util.ConstantWithMetamorphicTestBool("clear-range-using-iterator", false) {
-		return e.engine.ClearMVCCIteratorRange(key, endKey)
+		return e.engine.ClearMVCCIteratorRange(key, endKey, true, true)
 	}
 	return e.engine.ClearMVCCRange(key, endKey)
 }
