@@ -1,0 +1,87 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, _bool BOOL, _bytes BYTES, _bit BIT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+# Verify that the window functions with the same PARTITION BY clause are
+# evaluated as a single distributed windower stage followed by a couple of
+# single-node stages.
+query T
+EXPLAIN (DISTSQL) SELECT
+  avg(a) OVER (),
+  min(b) OVER (PARTITION BY a),
+  avg(c) OVER (ORDER BY b),
+  max(c) OVER (PARTITION BY a)
+FROM data
+----
+distribution: full
+vectorized: true
+·
+• window
+│
+└── • window
+    │
+    └── • window
+        │
+        └── • scan
+              missing stats
+              table: data@data_pkey
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFv2jwUhu-_X2Gdq0TfQcFOgDZXZi2bIrXQBdR1mtBkiNWi0YQlYWtV8d8nh1aUCGxGyG6qJs7j857nWPgFsp9z8KF3d3PVDfrEugyGo-HnK5sMe1e9ixERv-4tYZPBbS8klo3kcRZbk7fnm244CkbBoE8-fCXCxuLr6dvqILzshWplojjxtFkpceRjOLgmkcgFIMRJJPviUWbgfwMKCAwQXEDwAKEFY4RFmkxlliWp-uSlAILoCfwmwixeLHP1eowwTVIJ_gvks3wuwYeRmMxlKEUkU6cJCJHMxWxelFGlufrzffFDPgPCRTJfPsaZTwSSCZIpIAwXQr1oOJSIOCKUJPmDTGG8QkiW-WvZTbXJM3kQ2cN2HU5hvBojZLm4l-DTFe6Jv9lnGSdpJFMZbe1U7FJu8MssjpLfMnVa21Xf2_YJV06vg77Fma3-695Z3LVLfWwyspoy0tIIurefLE5VosEyVymRM-Qu8jZyD3lrb0B3b0BtebqjvGu_O7Sc_b9JoxIg7yBv783hbeWgh59FevRZdGjDYTWdRnqySbdrO43scMnseMms4bg1SWYnk9ypTbJ7uGT3eMluw_FqkuyeTPJZbZK9wyV7x0v2Gk6rJsneySSf_5PLa0eCUGaLJM5kKevunZuqBxndy3XDWbJMp_ImTaZFmfXjoOCKn9JIZvl69fUhiNdLKuDhcKsK3KkCn1eBqaFpWqab72mmh5kWdrfgZhl2tTBletqrMmk9bJi0HjZMWg8bJm3o2dB0q8qk21V062GDbj1s0K2HDboNPRua7lTRfVZFtx426NbDBt162KDb0LOh6fMqummle8NAG4QbaINxA21Qburb1PjfXR7j1X9_AgAA__-og3q5
+
+# Verify that all window functions with the PARTITION BY clause are distributed.
+query T
+EXPLAIN (DISTSQL) SELECT
+  avg(a) OVER (),
+  min(b) OVER (PARTITION BY a),
+  max(c) OVER (PARTITION BY a ORDER BY b),
+  avg(c) OVER (ORDER BY b),
+  max(d) OVER (PARTITION BY b ORDER BY c),
+  min(d) OVER (PARTITION BY a)
+FROM data
+----
+distribution: full
+vectorized: true
+·
+• window
+│
+└── • window
+    │
+    └── • window
+        │
+        └── • window
+            │
+            └── • window
+                │
+                └── • scan
+                      missing stats
+                      table: data@data_pkey
+                      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMmN9v4kYQx9_7V6zmCdRFsGvz82nTO1oh5UJK0PWqClULXiWoxKa2ae8U5X-v7CSXmB8zoLEbXhDG_uzMd2e_o8EPkPy9ggEMv1xfXoyuRO3j6GZ68-tlXdwML4cfpsL-c1uzdTH-PJyIWl2K-2VYm79cX19MpqPpaHwlfvpd2Oyu_Vpb7L8rxpOPw0n2dV6X-bLfHyzcyZYI9i4xf11i8ZzJ_gdtXfw8GX8SgU0tSAijwF3Ze5fA4A9QIEGDBA8k-CChDTMJ6zhauCSJ4uyRhxwYBV9h0JKwDNebNPt5JmERxQ4GD5Au05WDAUztfOUmzgYubrZAQuBSu1zlYbLQJvv4c_2X-wYSPkSrzX2YDISVYi7FQooAJNysbfZbo6mEDQOhRJTeuRhmjxKiTfoc-TXg_Ju4s8ldMZRRMHucSUhSe-tgoB7lAQWv62zCKA5c7ILCSvkq2xp_W4ZB9K-Lm-1i1LcbPhAm29ZPo6ua0fWXb36dpUNXpEO1aCEXX2rGq785mEb_mOkab9LsEWm0NJ40vjRtabrSdE5UqgtKvaqU4iXTL0r9glLvsNKOND1pultiX4X4FQnRWyW7-PxLzaj9afZfMu1K0zuYaftgpmgeak8eh8_J9zxUK9-4_sF0OoV01PFdR3G6TlM1mrqivqNKK37nXftOeTqUOu--U6JSvGRV9x19vH00yz660fQqso8urRjdd7VPeTqUPm_7lKgUL1nV9vGOt4_Hso_XaPoV2ccrrRi9d7VPeTqUd972KVEpXrKq7eMfbx-fZR-_0WxXZB-_tGL039U-5elQ_nnbp0SleMn-zz-Ne9KcuGQdhYnbErR_5VYm1AW37mlXkmgTL9x1HC3yME-X45zLp9_AJenT3eeLUfh0K0vweLjLgRUrtGqz6D5OK5TWHLjHgRUrtOqwVLdwWqO0x4GJauGwYoVWxBnHaU2ccW-bbr2lfRz2Ubjoj9Y23EZhrXG6w-kpOEzsNxGZFZrqKQRNnNIup6fgMNFTcJjqKQRN9BRCNdFTepyegsNEtXCY6ikETZxxnKZ6Sp_TUxRrWiBoQjYVmxecMjeFUxMDb2TgzQzMoYE5NfDGBsWaGwiaKhpvcqBw6rzzZgfFGh7UzvRwktFxmhJOxOYFJ41O4NSZ2ZmcTjI6TlNGx2nS6AROGZ1QThkdH58or-E0VTRidOMFJ42O46TRd2aok4xOzCIsmhJOxOYFJ41O4NSZ2RmkTjI6TlNGx2nS6AROGZ1QTr0IwCcp6u84TlOvAogpjhecfBmA45TR9c4khRp99vjDfwEAAP__ad9y-A==
