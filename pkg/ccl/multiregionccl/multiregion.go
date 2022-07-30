@@ -13,15 +13,17 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
@@ -31,7 +33,10 @@ func init() {
 
 func initializeMultiRegionMetadata(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
+	descIDGenerator eval.DescIDGenerator,
+	settings *cluster.Settings,
+	clusterID uuid.UUID,
+	clusterOrganization string,
 	liveRegions sql.LiveClusterRegions,
 	goal tree.SurvivalGoal,
 	primaryRegion catpb.RegionName,
@@ -39,7 +44,9 @@ func initializeMultiRegionMetadata(
 	dataPlacement tree.DataPlacement,
 	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
-	if err := CheckClusterSupportsMultiRegion(execCfg); err != nil {
+	if err := CheckClusterSupportsMultiRegion(
+		settings, clusterID, clusterOrganization,
+	); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +101,7 @@ func initializeMultiRegionMetadata(
 
 	// Generate a unique ID for the multi-region enum type descriptor here as
 	// well.
-	regionEnumID, err := descidgen.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+	regionEnumID, err := descIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +124,13 @@ func initializeMultiRegionMetadata(
 
 // CheckClusterSupportsMultiRegion returns whether the current cluster supports
 // multi-region features.
-func CheckClusterSupportsMultiRegion(execCfg *sql.ExecutorConfig) error {
+func CheckClusterSupportsMultiRegion(
+	settings *cluster.Settings, clusterID uuid.UUID, organization string,
+) error {
 	return utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings,
-		execCfg.NodeInfo.LogicalClusterID(),
-		execCfg.Organization(),
+		settings,
+		clusterID,
+		organization,
 		"multi-region features",
 	)
 }

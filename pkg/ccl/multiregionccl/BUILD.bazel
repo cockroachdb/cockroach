@@ -8,15 +8,17 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/util/uuid",
     ],
 )
 
