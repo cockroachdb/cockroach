@@ -678,19 +678,6 @@ type Writer interface {
 	// clearing keys.
 	ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
 
-	// ClearAllRangeKeys deletes all range keys (and all versions) from start
-	// (inclusive) to end (exclusive). This can be used both for MVCC range keys
-	// or the more general engine range keys. For any range key that straddles the
-	// start and end boundaries, only the segments within the boundaries will be
-	// cleared. Clears are idempotent.
-	//
-	// This method is primarily intended for MVCC garbage collection and similar
-	// internal use. It will do an internal scan across the span first to check
-	// whether it contains any range keys at all, and clear the smallest single
-	// span that covers all range keys (if any), to avoid dropping Pebble range
-	// tombstones across unnecessary spans.
-	ClearAllRangeKeys(start, end roachpb.Key) error
-
 	// ClearMVCCRangeKey deletes an MVCC range key from start (inclusive) to end
 	// (exclusive) at the given timestamp. For any range key that straddles the
 	// start and end boundaries, only the segments within the boundaries will be
@@ -1251,8 +1238,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	}
 
 	// Use a separate iterator to look for any range keys, to avoid dropping
-	// unnecessary range keys. Pebble.ClearAllRangeKeys also checks this, but we
-	// may be writing to an SSTWriter here which can't know.
+	// unnecessary range keys.
 	//
 	// TODO(erikgrinaker): Review the engine clear methods and heuristics to come
 	// up with a better scheme for avoiding dropping unnecessary range tombstones
@@ -1269,7 +1255,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 		return err
 	}
 	if valid {
-		return writer.ClearAllRangeKeys(start, end)
+		return writer.ClearRawRange(start, end, false, true)
 	}
 	return nil
 }

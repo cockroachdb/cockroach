@@ -651,16 +651,6 @@ func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	return s.w.ClearMVCCRangeKey(rangeKey)
 }
 
-func (s spanSetWriter) ClearAllRangeKeys(start, end roachpb.Key) error {
-	if !s.spansOnly {
-		panic("cannot do timestamp checking for ClearAllRangeKeys")
-	}
-	if err := s.checkAllowedRange(start, end); err != nil {
-		return err
-	}
-	return s.w.ClearAllRangeKeys(start, end)
-}
-
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
