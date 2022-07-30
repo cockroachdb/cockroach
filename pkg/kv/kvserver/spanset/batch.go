@@ -609,11 +609,13 @@ func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
 	return s.w.ClearMVCCVersions(start, end)
 }
 
-func (s spanSetWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCIteratorRange(start, end)
+	return s.w.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys)
 }
 
 func (s spanSetWriter) PutMVCCRangeKey(
