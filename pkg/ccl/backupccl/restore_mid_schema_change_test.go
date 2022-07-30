@@ -223,6 +223,11 @@ func restoreMidSchemaChange(
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
 		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB)
-		sqlDB.CheckQueryResultsRetry(t, "SELECT * from crdb_internal.invalid_objects", [][]string{})
+
+		// Because crdb_internal.invalid_objects is a virtual table, by default, the
+		// query will take a lease on the database sqlDB is connected to and only run
+		// the query on the given database. The "" prefix prevents this lease
+		// acquisition and allows the query to fetch all descriptors in the cluster.
+		sqlDB.CheckQueryResultsRetry(t, `SELECT * from "".crdb_internal.invalid_objects`, [][]string{})
 	}
 }
