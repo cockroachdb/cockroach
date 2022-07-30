@@ -647,14 +647,13 @@ type Writer interface {
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
 	ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
-	// ClearMVCCRange removes MVCC keys from start (inclusive) to end (exclusive)
-	// using a Pebble range tombstone. It will remove everything in the span,
-	// including intents and range keys.
+	// ClearMVCCRange removes MVCC point and/or range keys (including intents)
+	// from start (inclusive) to end (exclusive) using Pebble range tombstones.
 	//
 	// Similar to the other Clear* methods, this method actually removes entries
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
-	ClearMVCCRange(start, end roachpb.Key) error
+	ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
 	// ClearMVCCVersions removes MVCC point key versions from start (inclusive) to
 	// end (exclusive) using a Pebble range tombstone. It is meant for efficiently
 	// clearing a subset of versions of a key, since the parameters are MVCCKeys

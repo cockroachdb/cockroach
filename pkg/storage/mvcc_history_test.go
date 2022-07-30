@@ -903,7 +903,7 @@ func cmdClearRange(e *evalCtx) error {
 	if util.ConstantWithMetamorphicTestBool("clear-range-using-iterator", false) {
 		return e.engine.ClearMVCCIteratorRange(key, endKey, true, true)
 	}
-	return e.engine.ClearMVCCRange(key, endKey)
+	return e.engine.ClearMVCCRange(key, endKey, true, true)
 }
 
 func cmdClearRangeKey(e *evalCtx) error {
