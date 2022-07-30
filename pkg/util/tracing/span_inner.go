@@ -104,8 +104,35 @@ func (s *spanInner) Finish() {
 	}
 
 	if s.otelSpan != nil {
+		// It is ok to access s.crdb after calling s.crdb.finish() since it will be cleaned up by the parent of this func
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		for _, kv := range s.crdb.mu.lazyTags {
+			switch v := kv.Value.(type) {
+			case LazyTag:
+				for _, tag := range v.Render() {
+					s.otelSpan.SetAttributes(
+						attribute.KeyValue{
+							// format string with the parent key as prefix
+							Key:   attribute.Key(fmt.Sprintf("%s-%s", kv.Key, tag.Key)),
+							Value: tag.Value,
+						})
+				}
+			case fmt.Stringer:
+				s.otelSpan.SetAttributes(attribute.KeyValue{
+					Key:   attribute.Key(kv.Key),
+					Value: attribute.StringValue(v.String()),
+				})
+			default:
+				s.otelSpan.SetAttributes(attribute.KeyValue{
+					Key:   attribute.Key(kv.Key),
+					Value: attribute.StringValue(fmt.Sprintf("<can't render %T>", kv.Value)),
+				})
+			}
+		}
 		s.otelSpan.End()
 	}
+
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
