@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -206,23 +205,6 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		EncodeMVCCKeyPrefix(rangeKey.StartKey),
 		EncodeMVCCKeyPrefix(rangeKey.EndKey),
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
-}
-
-// ClearAllRangeKeys implements the Writer interface.
-func (fw *SSTWriter) ClearAllRangeKeys(start roachpb.Key, end roachpb.Key) error {
-	if !fw.supportsRangeKeys {
-		return nil // noop
-	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
-	fw.DataSize += int64(len(start)) + int64(len(end))
-	// TODO(erikgrinaker): Consider omitting this if there are no range key in the
-	// SST, to avoid dropping unnecessary range tombstones. However, this may not
-	// be safe, because the caller may want to ingest the SST including the range
-	// tombstone into an engine that does have range keys that should be cleared.
-	return fw.fw.RangeKeyDelete(EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
 }
 
 // PutEngineRangeKey implements the Writer interface.

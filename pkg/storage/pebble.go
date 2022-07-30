@@ -1204,30 +1204,6 @@ func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		pebble.Sync)
 }
 
-// ClearAllRangeKeys implements the Engine interface.
-func (p *Pebble) ClearAllRangeKeys(start, end roachpb.Key) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
-	// Look for any range keys in the span before dropping a range tombstone, and
-	// use the smallest possible span that covers them, to avoid dropping range
-	// tombstones across unnecessary spans. We don't worry about races here,
-	// because this is a non-MVCC operation where the caller must guarantee
-	// appropriate isolation.
-	clearFrom, clearTo, err := pebbleFindRangeKeySpan(p.db,
-		EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
-	if err != nil {
-		return err
-	} else if clearFrom == nil || clearTo == nil {
-		return nil
-	}
-	return p.db.RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
-}
-
 // PutMVCCRangeKey implements the Engine interface.
 func (p *Pebble) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	// NB: all MVCC APIs currently assume all range keys are range tombstones.
@@ -2161,10 +2137,6 @@ func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
-	panic("not implemented")
-}
-
 func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
@@ -2343,41 +2315,4 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
-}
-
-// pebbleFindRangeKeySpan returns the minimum span within the given bounds that
-// covers all contained range keys. If there are no range keys within the
-// bounds, this returns nil keys.
-func pebbleFindRangeKeySpan(r pebble.Reader, lower, upper []byte) ([]byte, []byte, error) {
-	iter := r.NewIter(&pebble.IterOptions{
-		KeyTypes:   pebble.IterKeyTypeRangesOnly,
-		LowerBound: lower,
-		UpperBound: upper,
-	})
-	defer func() {
-		// We handle errors during iteration.
-		_ = iter.Close()
-	}()
-
-	// Look for a range key. If none are found, return nil bounds.
-	if !iter.SeekGE(lower) {
-		return nil, nil, iter.Error()
-	}
-	rangeStart, _ := iter.RangeBounds()
-	start := append([]byte{}, rangeStart...)
-
-	// Find the end of the span.
-	if !iter.SeekLT(upper) {
-		if err := iter.Error(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, errors.AssertionFailedf("unexpected missing range key in %s-%s", lower, upper)
-	}
-	_, rangeEnd := iter.RangeBounds()
-	end := append([]byte{}, rangeEnd...)
-
-	if bytes.Compare(start, end) >= 0 {
-		return nil, nil, errors.AssertionFailedf("range key end %s at or before start %s", end, start)
-	}
-	return start, end, nil
 }

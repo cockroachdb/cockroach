@@ -2027,7 +2027,6 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 				require.Error(t, rw.PutRawMVCCRangeKey(rk, []byte{}))
 				require.Error(t, rw.PutEngineRangeKey(rk.StartKey, rk.EndKey, nil, nil))
 				require.Error(t, rw.ClearMVCCRangeKey(rk))
-				require.Error(t, rw.ClearAllRangeKeys(rk.StartKey, rk.EndKey))
 
 				// ClearRawRange doesn't error, for backwards compatibility.
 				require.NoError(t, rw.ClearRawRange(rk.StartKey, rk.EndKey,
@@ -2083,8 +2082,8 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		}, scanRangeKeys(t, rw))
 
 		// Clear all range keys in the [c-f) span. Twice for idempotency.
-		require.NoError(t, rw.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
-		require.NoError(t, rw.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.NoError(t, rw.ClearRawRange(roachpb.Key("c"), roachpb.Key("f"), false, true))
+		require.NoError(t, rw.ClearRawRange(roachpb.Key("c"), roachpb.Key("f"), false, true))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "c", 1, MVCCValue{}),
 			rangeKV("f", "g", 2, MVCCValue{}),
@@ -2185,7 +2184,6 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 			require.Contains(t, err.Error(), "range keys not supported")
 
 			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
 			require.NoError(t, w.ClearRawRange(
 				rangeKey.StartKey, rangeKey.EndKey, false /* pointKeys */, true /* rangeKeys */))
 		})
@@ -2284,64 +2282,6 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 			})
 		}
 	}
-}
-
-// TestUnindexedBatchClearAllRangeKeys tests that range keys are properly
-// cleared via an unindexed batch. This tests an optimization in
-// pebbleBatch.ClearAllRangeKeys that tightens the span bounds to existing keys
-// to avoid dropping unnecessary Pebble range tombstones, which must handle the
-// range keys in the unindexed batch correctly.
-func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	eng := NewDefaultInMemForTesting()
-	defer eng.Close()
-
-	// Write a range key [a-d)@1 into the engine.
-	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("a", "d", 1), MVCCValue{}))
-
-	// Set up an unindexed batch, and write [e-h)@2 into it. Then clear
-	// all range keys in the [c-f) span via the batch and commit it.
-	batch := eng.NewUnindexedBatch(true /* writeOnly */)
-	defer batch.Close()
-
-	require.NoError(t, batch.PutMVCCRangeKey(rangeKey("e", "h", 2), MVCCValue{}))
-	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
-	require.NoError(t, batch.Commit(false /* sync */))
-
-	// Read range keys back from engine. We should find [a-c)@1 and [f-h)@2.
-	require.Equal(t, []MVCCRangeKeyValue{
-		rangeKV("a", "c", 1, MVCCValue{}),
-		rangeKV("f", "h", 2, MVCCValue{}),
-	}, scanRangeKeys(t, eng))
-
-	// Now, set up another unindexed batch without any range keys, and clear
-	// all range keys in [b-g) via it.
-	batch = eng.NewUnindexedBatch(true /* writeOnly */)
-	defer batch.Close()
-
-	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("b"), roachpb.Key("g")))
-	require.NoError(t, batch.Commit(false /* sync */))
-
-	// Read range keys back from engine. We should find [a-b)@1 and [g-h)@2.
-	require.Equal(t, []MVCCRangeKeyValue{
-		rangeKV("a", "b", 1, MVCCValue{}),
-		rangeKV("g", "h", 2, MVCCValue{}),
-	}, scanRangeKeys(t, eng))
-
-	// Now clear everything. Twice, for idempotency.
-	batch = eng.NewUnindexedBatch(true /* writeOnly */)
-	defer batch.Close()
-	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
-	require.NoError(t, batch.Commit(false /* sync */))
-
-	batch = eng.NewUnindexedBatch(true /* writeOnly */)
-	defer batch.Close()
-	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
-	require.NoError(t, batch.Commit(false /* sync */))
-
-	require.Empty(t, scanRangeKeys(t, eng))
 }
 
 // TODO(erikgrinaker): The below test helpers should be moved to
