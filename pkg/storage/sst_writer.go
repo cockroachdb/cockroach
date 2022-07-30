@@ -154,7 +154,7 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys 
 }
 
 // ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 

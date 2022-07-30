@@ -874,7 +874,7 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Clear [a-z) in a separate SST.
-	require.NoError(t, eng.ClearMVCCRange(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, eng.ClearMVCCRange(roachpb.Key("a"), roachpb.Key("z"), true, true))
 	require.NoError(t, eng.Flush())
 
 	testcases := map[string]struct {
