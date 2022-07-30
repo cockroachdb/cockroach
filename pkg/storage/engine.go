@@ -1192,78 +1192,123 @@ func WriteSyncNoop(eng Engine) error {
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
-// (exclusive), including any range keys. Depending on the number of keys, it
-// will either use ClearRawRange or clear individual keys. It works with
-// EngineKeys, so don't expect it to find and clear separated intents if
-// [start,end) refers to MVCC key space.
-func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
-	iter := reader.NewEngineIterator(IterOptions{UpperBound: end})
-	defer iter.Close()
+// (exclusive), including any range keys, but does not clear intents unless the
+// lock table is targeted explicitly. Depending on the number of keys, it will
+// either write a Pebble range tombstone or clear individual keys. If it uses
+// a range tombstone, it will tighten the span to the first encountered key.
+//
+// pointKeyThreshold and rangeKeyThreshold specify the number of point/range
+// keys respectively where it will switch to Pebble range tombstones. A
+// threshold of 0 disables checking for and clearing that key type.
+//
+// NB: An initial scan will be done to determine the type of clear, so a large
+// threshold will potentially involve scanning a large number of keys twice.
+//
+// TODO(erikgrinaker): Consider tightening the end of the range tombstone span
+// too, by doing a SeekLT when we reach the threshold. It's unclear whether it's
+// really worth it.
+func ClearRangeWithHeuristic(
+	r Reader, w Writer, start, end roachpb.Key, pointKeyThreshold, rangeKeyThreshold int,
+) error {
+	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
+		iter := r.NewEngineIterator(IterOptions{
+			KeyTypes:   IterKeyTypePointsOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
 
-	// It is expensive for there to be many range deletion tombstones in the same
-	// sstable because all of the tombstones in an sstable are loaded whenever the
-	// sstable is accessed. So we avoid using range deletion unless there is some
-	// minimum number of keys. The value here was pulled out of thin air. It might
-	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix Pebble to handle large numbers of tombstones in an
-	// sstable better. Note that we are referring to storage-level tombstones here,
-	// and not MVCC tombstones.
-	const clearRangeMinKeys = 64
-	// Peek into the range to see whether it's large enough to justify
-	// ClearRawRange. Note that the work done here is bounded by
-	// clearRangeMinKeys, so it will be fairly cheap even for large
-	// ranges.
-	//
-	// TODO(sumeer): Could add the iterated keys to the batch, so we don't have
-	// to do the scan again. If there are too many keys, this will mean a mix of
-	// point tombstones and range tombstone.
-	count := 0
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: start})
-	for valid {
-		count++
-		if count > clearRangeMinKeys {
-			return writer.ClearRawRange(start, end, true, true)
+		// Scan, and drop a range tombstone if we reach the threshold. We tighten the
+		// span to the first encountered key, since we can cheaply do so.
+		var ok bool
+		var err error
+		var count int
+		var firstKey roachpb.Key
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			count++
+			if len(firstKey) == 0 {
+				key, err := iter.UnsafeEngineKey()
+				if err != nil {
+					return err
+				}
+				firstKey = key.Key.Clone()
+			}
+			if count >= threshold {
+				return w.ClearRawRange(firstKey, end, true /* pointKeys */, false /* rangeKeys */)
+			}
 		}
-		valid, err = iter.NextEngineKey()
-	}
-	if err != nil {
+		if err != nil || count == 0 {
+			return err
+		}
+		// Clear individual points.
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			key, err := iter.UnsafeEngineKey()
+			if err != nil {
+				return err
+			}
+			if err = w.ClearEngineKey(key); err != nil {
+				return err
+			}
+		}
 		return err
 	}
-	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
-	for valid {
-		var k EngineKey
-		if k, err = iter.UnsafeEngineKey(); err != nil {
-			break
+
+	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
+		iter := r.NewEngineIterator(IterOptions{
+			KeyTypes:   IterKeyTypeRangesOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
+
+		// Scan, and drop a range tombstone if we reach the threshold.
+		var ok bool
+		var err error
+		var count int
+		var firstKey roachpb.Key
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			count += len(iter.EngineRangeKeys())
+			if len(firstKey) == 0 {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				firstKey = bounds.Key.Clone()
+			}
+			if count >= threshold {
+				return w.ClearRawRange(firstKey, end, false /* pointKeys */, true /* rangeKeys */)
+			}
 		}
-		if err = writer.ClearEngineKey(k); err != nil {
-			break
+		if err != nil || count == 0 {
+			return err
 		}
-		valid, err = iter.NextEngineKey()
-	}
-	if err != nil {
+		// Clear individual range keys.
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return err
+			}
+			for _, v := range iter.EngineRangeKeys() {
+				if err := w.ClearEngineRangeKey(bounds.Key, bounds.EndKey, v.Version); err != nil {
+					return err
+				}
+			}
+		}
 		return err
 	}
 
-	// Use a separate iterator to look for any range keys, to avoid dropping
-	// unnecessary range keys.
-	//
-	// TODO(erikgrinaker): Review the engine clear methods and heuristics to come
-	// up with a better scheme for avoiding dropping unnecessary range tombstones
-	// across range key spans.
-	iter = reader.NewEngineIterator(IterOptions{
-		KeyTypes:   IterKeyTypeRangesOnly,
-		LowerBound: start,
-		UpperBound: end,
-	})
-	defer iter.Close()
+	if pointKeyThreshold > 0 {
+		if err := clearPointKeys(r, w, start, end, pointKeyThreshold); err != nil {
+			return err
+		}
+	}
 
-	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
-	if err != nil {
-		return err
+	if rangeKeyThreshold > 0 {
+		if err := clearRangeKeys(r, w, start, end, rangeKeyThreshold); err != nil {
+			return err
+		}
 	}
-	if valid {
-		return writer.ClearRawRange(start, end, false, true)
-	}
+
 	return nil
 }
 
