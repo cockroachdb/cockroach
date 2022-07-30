@@ -178,18 +178,11 @@ func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) err
 
 // PutRawMVCCRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !fw.supportsRangeKeys {
-		return errors.New("range keys not supported by SST writer")
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey)) + int64(len(value))
-	return fw.fw.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value)
+	return fw.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // ClearMVCCRangeKey implements the Writer interface.
@@ -200,20 +193,31 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey))
-	return fw.fw.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+	return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutEngineRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+	if !fw.supportsRangeKeys {
+		return errors.New("range keys not supported by SST writer")
+	}
 	// MVCC values don't account for the timestamp, so we don't account
 	// for the suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
 	return fw.fw.RangeKeySet(
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value)
+}
+
+// ClearEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	// MVCC values don't account for the timestamp, so we don't account for the
+	// suffix here.
+	fw.DataSize += int64(len(start)) + int64(len(end))
+	return fw.fw.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble

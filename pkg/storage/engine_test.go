@@ -2025,12 +2025,15 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				require.Error(t, rw.PutMVCCRangeKey(rk, MVCCValue{}))
 				require.Error(t, rw.PutRawMVCCRangeKey(rk, []byte{}))
-				require.Error(t, rw.PutEngineRangeKey(rk.StartKey, rk.EndKey, nil, nil))
 				require.Error(t, rw.ClearMVCCRangeKey(rk))
 
-				// ClearRawRange doesn't error, for backwards compatibility.
-				require.NoError(t, rw.ClearRawRange(rk.StartKey, rk.EndKey,
-					false /* pointKeys */, true /* rangeKeys */))
+				// Engine methods don't do validation, but just pass through to Pebble.
+				require.NoError(t, rw.PutEngineRangeKey(
+					rk.StartKey, rk.EndKey, EncodeMVCCTimestampSuffix(rk.Timestamp), nil))
+				require.NoError(t, rw.ClearEngineRangeKey(
+					rk.StartKey, rk.EndKey, EncodeMVCCTimestampSuffix(rk.Timestamp)))
+				require.NoError(t, rw.ClearRawRange(
+					rk.StartKey, rk.EndKey, false /* pointKeys */, true /* rangeKeys */))
 			})
 		}
 
@@ -2184,6 +2187,8 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 			require.Contains(t, err.Error(), "range keys not supported")
 
 			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ClearEngineRangeKey(
+				rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp)))
 			require.NoError(t, w.ClearRawRange(
 				rangeKey.StartKey, rangeKey.EndKey, false /* pointKeys */, true /* rangeKeys */))
 		})

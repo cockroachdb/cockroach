@@ -1190,18 +1190,11 @@ func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, range
 
 // ClearMVCCRangeKey implements the Engine interface.
 func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
-	if !p.SupportsRangeKeys() {
-		// These databases cannot contain range keys, so clearing is a noop.
-		return nil
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		pebble.Sync)
+	return p.ClearEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutMVCCRangeKey implements the Engine interface.
@@ -1219,19 +1212,11 @@ func (p *Pebble) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 
 // PutRawMVCCRangeKey implements the Engine interface.
 func (p *Pebble) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !p.SupportsRangeKeys() {
-		return errors.Errorf("range keys not supported by Pebble database version %s",
-			p.db.FormatMajorVersion())
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value,
-		pebble.Sync)
+	return p.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // Merge implements the Engine interface.
@@ -1296,16 +1281,18 @@ func (p *Pebble) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
 	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
 	return p.db.RangeKeySet(
-		EngineKey{Key: start}.Encode(),
-		EngineKey{Key: end}.Encode(),
-		suffix,
-		value,
-		pebble.Sync)
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, pebble.Sync)
+}
+
+// ClearEngineRangeKey implements the Engine interface.
+func (p *Pebble) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !p.SupportsRangeKeys() {
+		// These databases cannot contain range keys, so clearing is a noop.
+		return nil
+	}
+	return p.db.RangeKeyUnset(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, pebble.Sync)
 }
 
 // LogData implements the Engine interface.
@@ -2130,6 +2117,10 @@ func (p *pebbleReadOnly) PutRawMVCCRangeKey(MVCCRangeKey, []byte) error {
 }
 
 func (p *pebbleReadOnly) PutEngineRangeKey(roachpb.Key, roachpb.Key, []byte, []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearEngineRangeKey(roachpb.Key, roachpb.Key, []byte) error {
 	panic("not implemented")
 }
 
