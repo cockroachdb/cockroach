@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -461,17 +460,11 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 
 // ClearMVCCRangeKey implements the Engine interface.
 func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.batch.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		nil)
+	return p.ClearEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutMVCCRangeKey implements the Batch interface.
@@ -489,19 +482,11 @@ func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) er
 
 // PutRawMVCCRangeKey implements the Batch interface.
 func (p *pebbleBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !p.SupportsRangeKeys() {
-		return errors.Errorf("range keys not supported by Pebble database version %s",
-			p.db.FormatMajorVersion())
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.batch.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value,
-		nil)
+	return p.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // PutEngineRangeKey implements the Engine interface.
@@ -510,17 +495,17 @@ func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
 	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
 	return p.batch.RangeKeySet(
-		EngineKey{Key: start}.Encode(),
-		EngineKey{Key: end}.Encode(),
-		suffix,
-		value,
-		nil,
-	)
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, nil)
+}
+
+// ClearEngineRangeKey implements the Engine interface.
+func (p *pebbleBatch) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !p.SupportsRangeKeys() {
+		return nil // noop
+	}
+	return p.batch.RangeKeyUnset(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, nil)
 }
 
 // Merge implements the Batch interface.
