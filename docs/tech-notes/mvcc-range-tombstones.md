@@ -223,6 +223,9 @@ as conflict checks and stats updates, similarly to other `Writer` methods.
 * `PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)`: Writes
   a raw range key directly to Pebble. Only for specialized low-level use.
 
+* `ClearEngineRangeKey(start, end roachpb.Key, suffix []byte)`: Clears a raw
+  range key directly in Pebble. Only for specialized low-level use.
+
 Other `Writer` methods may also affect range keys, e.g. `ClearMVCCRange`, but
 they rely on these primitives internally. See the interface documentation for
 details.
