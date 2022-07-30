@@ -104,8 +104,13 @@ func (s *spanInner) Finish() {
 	}
 
 	if s.otelSpan != nil {
+		// Serialize the lazy tags.
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		s.otelSpan.SetAttributes(s.crdb.getLazyTagsKvLocked()...)
 		s.otelSpan.End()
 	}
+
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}

@@ -965,6 +965,38 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	return rs
 }
 
+// getLazyTagsKvLocked returns a list of lazy tags as a
+// slice of attribute.KeyValue.
+//
+// It flattens lazy tags with children and attaches the parent's
+// key as a prefix on each child.
+func (s *crdbSpan) getLazyTagsKvLocked() []attribute.KeyValue {
+	var lazyTagsKv []attribute.KeyValue
+	for _, kv := range s.mu.lazyTags {
+		switch v := kv.Value.(type) {
+		case LazyTag:
+			for _, tag := range v.Render() {
+				lazyTagsKv = append(lazyTagsKv, attribute.KeyValue{
+					// Format string with the parent key as prefix.
+					Key:   attribute.Key(fmt.Sprintf("%s-%s", kv.Key, tag.Key)),
+					Value: tag.Value,
+				})
+			}
+		case fmt.Stringer:
+			lazyTagsKv = append(lazyTagsKv, attribute.KeyValue{
+				Key:   attribute.Key(kv.Key),
+				Value: attribute.StringValue(v.String()),
+			})
+		default:
+			lazyTagsKv = append(lazyTagsKv, attribute.KeyValue{
+				Key:   attribute.Key(kv.Key),
+				Value: attribute.StringValue(fmt.Sprintf("<can't render %T>", kv.Value)),
+			})
+		}
+	}
+	return lazyTagsKv
+}
+
 // addChildLocked adds a child to the receiver.
 //
 // The receiver's lock must be held.
