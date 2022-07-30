@@ -104,8 +104,25 @@ func (s *spanInner) Finish() {
 	}
 
 	if s.otelSpan != nil {
+		// Serialize the lazy tags.
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		for _, lazyTagGroup := range s.crdb.getLazyTagGroupsLocked() {
+			for _, tag := range lazyTagGroup.Tags {
+				key := attribute.Key(tag.Key)
+				if lazyTagGroup.Name != tracingpb.AnonymousTagGroupName {
+					key = attribute.Key(fmt.Sprintf("%s-%s", lazyTagGroup.Name, tag.Key))
+				}
+				s.otelSpan.SetAttributes(attribute.KeyValue{
+					Key:   key,
+					Value: attribute.StringValue(tag.Value),
+				})
+			}
+		}
+
 		s.otelSpan.End()
 	}
+
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
