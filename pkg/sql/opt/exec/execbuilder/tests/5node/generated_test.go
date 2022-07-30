@@ -169,6 +169,13 @@ func TestExecBuild_distsql_union(
 	runExecBuildLogicTest(t, "distsql_union")
 }
 
+func TestExecBuild_distsql_window(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_window")
+}
+
 func TestExecBuild_experimental_distsql_planning_5node(
 	t *testing.T,
 ) {
