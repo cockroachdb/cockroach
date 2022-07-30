@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -268,7 +267,7 @@ func (p *planner) createArrayType(
 	arrayTypeKey := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
-	id, err := descidgen.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -300,9 +299,7 @@ func (p *planner) createArrayType(
 
 func (p *planner) createUserDefinedEnum(params runParams, n *createTypeNode) error {
 	// Generate a stable ID for the new type.
-	id, err := descidgen.GenerateUniqueDescID(
-		params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec,
-	)
+	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
 	if err != nil {
 		return err
 	}

@@ -2715,6 +2715,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			StmtDiagnosticsRequestInserter: ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
 			CatalogBuiltins:                &p.evalCatalogBuiltins,
 			QueryCancelKey:                 ex.queryCancelKey,
+			DescIDGenerator:                ex.server.cfg.DescIDGenerator,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,

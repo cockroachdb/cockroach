@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
@@ -1165,7 +1164,7 @@ func remapPublicSchemas(
 		// if the database does not have a public schema backed by a descriptor
 		// (meaning they were created before 22.1), we need to create a public
 		// schema descriptor for it.
-		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return err
 		}

@@ -251,7 +251,8 @@ func createPostgresSchemas(
 		dbDesc catalog.DatabaseDescriptor, schema *tree.CreateSchema,
 	) (*schemadesc.Mutable, error) {
 		desc, _, err := sql.CreateUserDefinedSchemaDescriptor(
-			ctx, sessionData, schema, txn, descriptors, execCfg, dbDesc, false, /* allocateID */
+			ctx, sessionData, schema, txn, descriptors, execCfg.InternalExecutor,
+			execCfg.DescIDGenerator, dbDesc, false, /* allocateID */
 		)
 		if err != nil {
 			return nil, err

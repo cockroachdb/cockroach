@@ -1307,6 +1307,9 @@ type ExecutorConfig struct {
 
 	// RangeProber is used in calls to crdb_internal.probe_ranges.
 	RangeProber eval.RangeProber
+
+	// DescIDGenerator generates unique descriptor IDs.
+	DescIDGenerator eval.DescIDGenerator
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
