@@ -378,9 +378,9 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys
 }
 
 // ClearMVCCRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key) error {
+func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, p.scratch)
+	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, p.scratch)
 	return err
 }
 

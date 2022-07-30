@@ -592,11 +592,11 @@ func (s spanSetWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKey
 	return s.w.ClearRawRange(start, end, pointKeys, rangeKeys)
 }
 
-func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCRange(start, end)
+	return s.w.ClearMVCCRange(start, end, pointKeys, rangeKeys)
 }
 
 func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
