@@ -449,7 +449,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 
 // RoleExists is part of the cat.Catalog interface.
 func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, oc.planner.ExecCfg(), oc.planner.Txn(), role)
+	return RoleExists(ctx, oc.planner.ExecCfg().InternalExecutor, oc.planner.Txn(), role)
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.

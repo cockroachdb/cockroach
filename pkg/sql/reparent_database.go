@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -109,7 +108,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	ctx, p, codec := params.ctx, params.p, params.ExecCfg().Codec
 
 	// Make a new schema corresponding to the target db.
-	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, codec)
+	id, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return err
 	}

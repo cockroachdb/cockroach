@@ -436,15 +436,15 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 
 // RoleExists returns true if the role exists.
 func (p *planner) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, p.ExecCfg(), p.Txn(), role)
+	return RoleExists(ctx, p.execCfg.InternalExecutor, p.Txn(), role)
 }
 
 // RoleExists returns true if the role exists.
 func RoleExists(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role username.SQLUsername,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, role username.SQLUsername,
 ) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
-	row, err := execCfg.InternalExecutor.QueryRowEx(
+	row, err := ie.QueryRowEx(
 		ctx, "read-users", txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		query, role,

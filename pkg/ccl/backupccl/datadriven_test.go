@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -679,7 +678,8 @@ func TestDataDriven(t *testing.T) {
 				codec := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).Codec
 				dummyTable := systemschema.SettingsTable
 				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					id, err := descidgen.GenerateUniqueDescID(ctx, db, codec)
+					id, err := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).
+						DescIDGenerator.GenerateUniqueDescID(ctx)
 					if err != nil {
 						return err
 					}

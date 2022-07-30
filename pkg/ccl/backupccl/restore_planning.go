@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -153,7 +152,7 @@ func synthesizePGTempSchema(
 			return errors.Newf("attempted to synthesize temp schema during RESTORE but found"+
 				" another schema already using the same schema key %s", schemaName)
 		}
-		synthesizedSchemaID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		synthesizedSchemaID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return err
 		}
@@ -517,7 +516,7 @@ func allocateDescriptorRewrites(
 			}
 		}
 
-		tempSysDBID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		tempSysDBID, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -874,7 +873,7 @@ func allocateDescriptorRewrites(
 		if descriptorCoverage == tree.AllDescriptors {
 			newID = db.GetID()
 		} else {
-			newID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+			newID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -945,7 +944,7 @@ func allocateDescriptorRewrites(
 	// Generate new IDs for the schemas, tables, and types that need to be
 	// remapped.
 	for _, desc := range descriptorsToRemap {
-		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -2218,7 +2217,9 @@ func planDatabaseModifiersForRestore(
 	if defaultPrimaryRegion == "" {
 		return nil, nil, nil
 	}
-	if err := multiregionccl.CheckClusterSupportsMultiRegion(p.ExecCfg()); err != nil {
+	if err := multiregionccl.CheckClusterSupportsMultiRegion(
+		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
+	); err != nil {
 		return nil, nil, errors.WithHintf(
 			err,
 			"try disabling the default PRIMARY REGION by using RESET CLUSTER SETTING %s",

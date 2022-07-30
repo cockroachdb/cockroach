@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -216,6 +217,13 @@ type Context struct {
 	// QueryCancelKey is the key used by the pgwire protocol to cancel the
 	// query currently running in this session.
 	QueryCancelKey pgwirecancel.BackendKeyData
+
+	DescIDGenerator DescIDGenerator
+}
+
+// DescIDGenerator generates unique descriptor IDs.
+type DescIDGenerator interface {
+	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
 }
 
 var _ tree.ParseTimeContext = &Context{}

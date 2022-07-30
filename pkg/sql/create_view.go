@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -204,7 +203,8 @@ func (n *createViewNode) startExec(params runParams) error {
 				}
 			} else {
 				// If we aren't replacing anything, make a new table descriptor.
-				id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+				id, err := params.EvalContext().DescIDGenerator.
+					GenerateUniqueDescID(params.ctx)
 				if err != nil {
 					return err
 				}
