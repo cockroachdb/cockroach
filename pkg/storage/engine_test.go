@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -1740,11 +1741,51 @@ func TestEngineClearRange(t *testing.T) {
 			clearsIntents:   false,
 		},
 
-		"ClearRangeWithHeuristic": {
+		"ClearRangeWithHeuristic individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end)
+				return ClearRangeWithHeuristic(rw, rw, start, end, math.MaxInt, math.MaxInt)
 			},
 			clearsPointKeys: true,
+			clearsRangeKeys: true,
+			clearsIntents:   false,
+		},
+		"ClearRangeWithHeuristic ranged": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end, 1, 1)
+			},
+			clearsPointKeys: true,
+			clearsRangeKeys: true,
+			clearsIntents:   false,
+		},
+		"ClearRangeWithHeuristic point keys individual": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end, math.MaxInt, 0)
+			},
+			clearsPointKeys: true,
+			clearsRangeKeys: false,
+			clearsIntents:   false,
+		},
+		"ClearRangeWithHeuristic point keys ranged": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end, 1, 0)
+			},
+			clearsPointKeys: true,
+			clearsRangeKeys: false,
+			clearsIntents:   false,
+		},
+		"ClearRangeWithHeuristic range keys individual": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end, 0, math.MaxInt)
+			},
+			clearsPointKeys: false,
+			clearsRangeKeys: true,
+			clearsIntents:   false,
+		},
+		"ClearRangeWithHeuristic range keys ranged": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end, 0, 1)
+			},
+			clearsPointKeys: false,
 			clearsRangeKeys: true,
 			clearsIntents:   false,
 		},
