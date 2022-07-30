@@ -1166,8 +1166,8 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool
 }
 
 // ClearMVCCRange implements the Engine interface.
-func (p *Pebble) ClearMVCCRange(start, end roachpb.Key) error {
-	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, nil)
+func (p *Pebble) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, nil)
 	return err
 }
 
@@ -2094,7 +2094,7 @@ func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key, pointKeys, rangeK
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 
