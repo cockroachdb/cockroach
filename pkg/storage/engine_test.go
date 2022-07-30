@@ -1707,11 +1707,28 @@ func TestEngineClearRange(t *testing.T) {
 
 		"ClearMVCCIteratorRange": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return rw.ClearMVCCIteratorRange(start, end)
+				return rw.ClearMVCCIteratorRange(start, end, true /* pointKeys */, true /* rangeKeys */)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: true,
 			clearsIntents:   true,
+		},
+		"ClearMVCCIteratorRange point keys": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearMVCCIteratorRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+			},
+			clearsPointKeys: true,
+			clearsRangeKeys: false,
+			clearsIntents:   true,
+		},
+
+		"ClearMVCCIteratorRange range keys": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearMVCCIteratorRange(start, end, false /* pointKeys */, true /* rangeKeys */)
+			},
+			clearsPointKeys: false,
+			clearsRangeKeys: true,
+			clearsIntents:   false,
 		},
 
 		"ClearMVCCVersions": {
