@@ -715,6 +715,13 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
 
+	// ClearEngineRangeKey clears the given range key. This is a general-purpose
+	// and low-level method that should be used sparingly, only when the other
+	// Clear* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error
+
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"

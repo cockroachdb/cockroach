@@ -644,6 +644,16 @@ func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value [
 	return s.w.PutEngineRangeKey(start, end, suffix, value)
 }
 
+func (s spanSetWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ClearEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ClearEngineRangeKey(start, end, suffix)
+}
+
 func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
