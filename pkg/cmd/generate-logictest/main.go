@@ -199,6 +199,12 @@ func (t *testdir) dump() error {
 }
 
 func dumpTestForFile(f io.Writer, prefix, file string, whichFunc string) {
+	if strings.HasPrefix(file, "_") {
+		// Ignore test files that start with "_", which are reserved as
+		// temporary files used during development and debugging. Tests in these
+		// files can be tested with the auto-generated TestLogic_tmp test.
+		return
+	}
 	mungedFile := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(file, "/", ""), "-", "_"), ".", "_")
 	fmt.Fprintf(f, "\nfunc %s_%s(\n", prefix, mungedFile)
 	fmt.Fprintln(f, "\tt *testing.T,\n) {")
