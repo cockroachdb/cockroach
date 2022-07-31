@@ -445,19 +445,31 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	var results int
 	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
-			if keyType == storage.IterKeyTypeRangesOnly {
-				// TODO(erikgrinaker): We should handle range keys, but we skip them for now.
-				return nil
-			}
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				var key storage.EngineKey
-				if key, err = iter.UnsafeEngineKey(); err != nil {
-					return err
-				}
-				kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
-				results++
-				if results == debugCtx.maxResults {
-					return iterutil.StopIteration()
+				switch keyType {
+				case storage.IterKeyTypePointsOnly:
+					key, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
+					results++
+					if results == debugCtx.maxResults {
+						return iterutil.StopIteration()
+					}
+
+				case storage.IterKeyTypeRangesOnly:
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, v := range iter.EngineRangeKeys() {
+						kvserver.PrintEngineRangeKeyValue(bounds, v)
+						results++
+						if results == debugCtx.maxResults {
+							return iterutil.StopIteration()
+						}
+					}
 				}
 			}
 			return err
