@@ -28,6 +28,7 @@ const (
 	subtestsFlag = "subtests"
 	configFlag   = "config"
 	showSQLFlag  = "show-sql"
+	noGenFlag    = "no-gen"
 )
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
