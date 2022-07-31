@@ -280,6 +280,8 @@ func runPlanInsidePlan(
 		// We currently don't support cases when both the "inner" and the
 		// "outer" plans have subqueries due to limitations of how we're
 		// propagating the results of the subqueries.
+		// TODO(mgartner): Fix error message for routines so that it doesn't say
+		// "apply joins".
 		if len(params.p.curPlan.subqueryPlans) != 0 {
 			return unimplemented.NewWithIssue(66447, `apply joins with subqueries in the "inner" and "outer" contexts are not supported`)
 		}

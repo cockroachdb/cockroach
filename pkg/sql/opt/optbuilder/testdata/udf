@@ -22,23 +22,23 @@ CREATE FUNCTION two() RETURNS INT LANGUAGE SQL AS $$
 $$
 ----
 
-build
+build format=show-scalars
 SELECT one()
 ----
 project
  ├── columns: one:2
  ├── values
- │    └── ()
+ │    └── tuple
  └── projections
       └── udf: one [as=one:2]
            └── project
                 ├── columns: "?column?":1!null
                 ├── values
-                │    └── ()
+                │    └── tuple
                 └── projections
-                     └── 1 [as="?column?":1]
+                     └── const: 1 [as="?column?":1]
 
-build
+build format=show-scalars
 SELECT *, one() FROM abc
 ----
 project
@@ -50,11 +50,11 @@ project
            └── project
                 ├── columns: "?column?":6!null
                 ├── values
-                │    └── ()
+                │    └── tuple
                 └── projections
-                     └── 1 [as="?column?":6]
+                     └── const: 1 [as="?column?":6]
 
-build
+build format=show-scalars
 SELECT * FROM abc WHERE one() = c
 ----
 project
@@ -69,12 +69,12 @@ project
                 │    └── project
                 │         ├── columns: "?column?":6!null
                 │         ├── values
-                │         │    └── ()
+                │         │    └── tuple
                 │         └── projections
-                │              └── 1 [as="?column?":6]
-                └── c:3
+                │              └── const: 1 [as="?column?":6]
+                └── variable: c:3
 
-build
+build format=show-scalars
 SELECT a + one(), b + two() FROM abc WHERE c = two()
 ----
 project
@@ -85,42 +85,42 @@ project
  │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  │    └── filters
  │         └── eq
- │              ├── c:3
+ │              ├── variable: c:3
  │              └── udf: two
  │                   ├── project
  │                   │    ├── columns: "?column?":6!null
  │                   │    ├── values
- │                   │    │    └── ()
+ │                   │    │    └── tuple
  │                   │    └── projections
- │                   │         └── 1 [as="?column?":6]
+ │                   │         └── const: 1 [as="?column?":6]
  │                   └── project
  │                        ├── columns: "?column?":7!null
  │                        ├── values
- │                        │    └── ()
+ │                        │    └── tuple
  │                        └── projections
- │                             └── 2 [as="?column?":7]
+ │                             └── const: 2 [as="?column?":7]
  └── projections
       ├── plus [as="?column?":9]
-      │    ├── a:1
+      │    ├── variable: a:1
       │    └── udf: one
       │         └── project
       │              ├── columns: "?column?":8!null
       │              ├── values
-      │              │    └── ()
+      │              │    └── tuple
       │              └── projections
-      │                   └── 1 [as="?column?":8]
+      │                   └── const: 1 [as="?column?":8]
       └── plus [as="?column?":12]
-           ├── b:2
+           ├── variable: b:2
            └── udf: two
                 ├── project
                 │    ├── columns: "?column?":10!null
                 │    ├── values
-                │    │    └── ()
+                │    │    └── tuple
                 │    └── projections
-                │         └── 1 [as="?column?":10]
+                │         └── const: 1 [as="?column?":10]
                 └── project
                      ├── columns: "?column?":11!null
                      ├── values
-                     │    └── ()
+                     │    └── tuple
                      └── projections
-                          └── 2 [as="?column?":11]
+                          └── const: 2 [as="?column?":11]

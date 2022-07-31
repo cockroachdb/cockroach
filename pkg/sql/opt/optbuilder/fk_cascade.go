@@ -125,7 +125,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 //
 // The input to the mutation is a Select on top of a Scan. For example:
 //
-//── delete child
+// ── delete child
 //    ├── columns: <none>
 //    ├── fetch columns: c:8 child.p:9
 //    └── select
@@ -191,6 +191,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
+		// TODO(mgartner): Disallow this fast path if there is a UDF invocation.
 		if sel.Relational().HasSubquery {
 			return nil, false
 		}
