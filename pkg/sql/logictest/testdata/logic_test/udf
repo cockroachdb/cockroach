@@ -312,3 +312,42 @@ ALTER FUNCTION f() SET SCHEMA test_sc
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
+
+subtest execution
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1)
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 2-1';
+
+query I
+SELECT one()
+----
+1
+
+query I colnames
+SELECT * FROM one()
+----
+one
+1
+
+query III colnames
+SELECT *, one() FROM ab WHERE a = one()
+----
+a  b  one
+1  1  1
+
+query III colnames
+SELECT *, one() FROM ab WHERE b = one()
+----
+a  b  one
+1  1  1
+4  1  1
+5  1  1
+
+query II colnames
+SELECT * FROM ab WHERE b = one() + 1
+----
+a  b
+2  2
