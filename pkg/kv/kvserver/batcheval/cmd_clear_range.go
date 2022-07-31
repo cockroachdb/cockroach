@@ -174,9 +174,7 @@ func computeStatsDelta(
 	}
 
 	// If we can't use the fast stats path, or race test is enabled, compute stats
-	// across the key span to be cleared. In this case we must also look for MVCC
-	// range tombstones that straddle the span bounds, since we must adjust the
-	// stats for their new key bounds.
+	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
 		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
@@ -198,60 +196,30 @@ func computeStatsDelta(
 		}
 		delta = computed
 
-		// If we're not clearing the whole range, we need to adjust for any MVCC
-		// range tombstones that straddle the span bounds. These will now be
-		// truncated, or possibly split into two. We take care not to peek outside
-		// the range bounds.
-		//
-		// Conveniently, due to the symmetry of the range keys and their start/end
-		// bounds around the truncation point, this is equivalent to twice what was
-		// removed at each bound. This applies both in the truncation and
-		// split-in-two cases, again due to symmetry.
-		//
-		// TODO(erikgrinaker): Consolidate this logic with the corresponding logic
-		// during range splits/merges and MVCC range tombstone writes.
+		// If we're not clearing the entire range, we need to adjust for the
+		// fragmentation of any MVCC range tombstones that straddle the span bounds.
+		// The clearing of the inner fragments has already been accounted for above.
+		// We take care not to peek outside the Raft range bounds.
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			iter = readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,
 				LowerBound: leftPeekBound,
 				UpperBound: rightPeekBound,
 			})
-			defer iter.Close()
+			defer rkIter.Close()
 
-			addTruncatedRangeKeyStats := func(bound roachpb.Key) error {
-				iter.SeekGE(storage.MVCCKey{Key: bound})
-				if ok, err := iter.Valid(); err != nil {
-					return err
-				} else if ok && iter.RangeBounds().Key.Compare(bound) < 0 {
-					for i, v := range iter.RangeKeys().Versions {
-						keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(v.Timestamp))
-						valBytes := int64(len(v.Value))
-						if i == 0 {
-							delta.RangeKeyCount--
-							keyBytes += 2 * int64(storage.EncodedMVCCKeyPrefixLength(bound))
-						}
-						delta.RangeKeyBytes -= keyBytes
-						delta.RangeValCount--
-						delta.RangeValBytes -= valBytes
-						delta.GCBytesAge -= (keyBytes + valBytes) *
-							(delta.LastUpdateNanos/1e9 - v.Timestamp.WallTime/1e9)
-					}
-				}
-				return nil
+			if cmp, lhs, err := storage.PeekRangeKeysLeft(rkIter, from); err != nil {
+				return enginepb.MVCCStats{}, err
+			} else if cmp > 0 {
+				delta.Subtract(storage.UpdateStatsOnRangeKeySplit(from, lhs.Versions))
 			}
 
-			if !leftPeekBound.Equal(from) {
-				if err := addTruncatedRangeKeyStats(from); err != nil {
-					return enginepb.MVCCStats{}, err
-				}
-			}
-
-			if !rightPeekBound.Equal(to) {
-				if err := addTruncatedRangeKeyStats(to); err != nil {
-					return enginepb.MVCCStats{}, err
-				}
+			if cmp, rhs, err := storage.PeekRangeKeysRight(rkIter, to); err != nil {
+				return enginepb.MVCCStats{}, err
+			} else if cmp < 0 {
+				delta.Subtract(storage.UpdateStatsOnRangeKeySplit(to, rhs.Versions))
 			}
 		}
 	}

@@ -572,6 +572,42 @@ func TestMVCCRangeKeyStackCanMergeRight(t *testing.T) {
 	}
 }
 
+func TestMVCCRangeKeyStackExcise(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	initialRangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}})
+
+	testcases := []struct {
+		from, to    int
+		expect      bool
+		expectStack []int
+	}{
+		{0, 10, true, []int{}},
+		{10, 0, false, []int{7, 5, 3}}, // wrong order
+		{0, 0, false, []int{7, 5, 3}},
+		{0, 2, false, []int{7, 5, 3}},
+		{8, 9, false, []int{7, 5, 3}},
+		{3, 7, true, []int{}},
+		{4, 7, true, []int{3}},
+		{4, 6, true, []int{7, 3}},
+		{5, 6, true, []int{7, 3}},
+		{4, 5, true, []int{7, 3}},
+		{5, 5, true, []int{7, 3}},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d,%d", tc.from, tc.to), func(t *testing.T) {
+			expect := rangeKeyStack("a", "f", nil)
+			for _, ts := range tc.expectStack {
+				expect.Versions = append(expect.Versions, rangeKeyVersion(ts, MVCCValue{}))
+			}
+
+			rangeKeys := initialRangeKeys.Clone()
+			require.Equal(t, tc.expect, rangeKeys.Excise(wallTS(tc.from), wallTS(tc.to)))
+			require.Equal(t, expect, rangeKeys)
+		})
+	}
+}
+
 func TestMVCCRangeKeyStackFirstAbove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -666,35 +702,78 @@ func TestMVCCRangeKeyStackHasBetween(t *testing.T) {
 	}
 }
 
+func TestMVCCRangeKeyStackRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	initialRangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}})
+
+	testcases := []struct {
+		ts          int
+		expect      bool
+		expectStack []int
+	}{
+		{0, false, []int{7, 5, 3}},
+		{2, false, []int{7, 5, 3}},
+		{3, true, []int{7, 5}},
+		{4, false, []int{7, 5, 3}},
+		{5, true, []int{7, 3}},
+		{6, false, []int{7, 5, 3}},
+		{7, true, []int{5, 3}},
+		{8, false, []int{7, 5, 3}},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
+			expect := rangeKeyStack("a", "f", nil)
+			for _, ts := range tc.expectStack {
+				expect.Versions = append(expect.Versions, rangeKeyVersion(ts, MVCCValue{}))
+			}
+
+			rangeKeys := initialRangeKeys.Clone()
+			removed, ok := rangeKeys.Remove(wallTS(tc.ts))
+			require.Equal(t, tc.expect, ok)
+			if ok {
+				require.Equal(t, wallTS(tc.ts), removed.Timestamp)
+			} else {
+				require.Empty(t, removed)
+			}
+
+			require.Equal(t, expect, rangeKeys)
+		})
+	}
+}
+
 func TestMVCCRangeKeyStackTrim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}})
+	initialRangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}})
 
 	testcases := []struct {
-		from, to int
-		expect   []int
+		from, to    int
+		expect      bool
+		expectStack []int
 	}{
-		{0, 10, []int{7, 5, 3}},
-		{10, 0, []int{}}, // wrong order
-		{0, 0, []int{}},
-		{0, 2, []int{}},
-		{8, 9, []int{}},
-		{3, 7, []int{7, 5, 3}},
-		{4, 7, []int{7, 5}},
-		{4, 6, []int{5}},
-		{5, 6, []int{5}},
-		{4, 5, []int{5}},
-		{5, 5, []int{5}},
+		{0, 10, false, []int{7, 5, 3}},
+		{10, 0, true, []int{}}, // wrong order
+		{0, 0, true, []int{}},
+		{0, 2, true, []int{}},
+		{8, 9, true, []int{}},
+		{3, 7, false, []int{7, 5, 3}},
+		{4, 7, true, []int{7, 5}},
+		{4, 6, true, []int{5}},
+		{5, 6, true, []int{5}},
+		{4, 5, true, []int{5}},
+		{5, 5, true, []int{5}},
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d,%d", tc.from, tc.to), func(t *testing.T) {
 			expect := rangeKeyStack("a", "f", nil)
-			for _, ts := range tc.expect {
+			for _, ts := range tc.expectStack {
 				expect.Versions = append(expect.Versions, rangeKeyVersion(ts, MVCCValue{}))
 			}
 
-			require.Equal(t, expect, rangeKeys.Trim(wallTS(tc.from), wallTS(tc.to)))
+			rangeKeys := initialRangeKeys.Clone()
+			require.Equal(t, tc.expect, rangeKeys.Trim(wallTS(tc.from), wallTS(tc.to)))
+			require.Equal(t, expect, rangeKeys)
 		})
 	}
 }
