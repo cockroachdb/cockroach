@@ -1,3 +1,7 @@
+# LogicTest: !local-legacy-schema-changer
+# See issue #87266, this test is disabled due to an unexpected hang on drop
+# database.
+
 # Test that sequences are encoded and decoded/printed properly.
 subtest show_sequences
 

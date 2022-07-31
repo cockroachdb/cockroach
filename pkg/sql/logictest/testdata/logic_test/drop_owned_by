@@ -1,3 +1,6 @@
+# LogicTest: !local-legacy-schema-changer
+# Skipped on legacy schema changer since it unsupported.
+
 # Test dropping nothing.
 statement ok
 DROP OWNED BY testuser
