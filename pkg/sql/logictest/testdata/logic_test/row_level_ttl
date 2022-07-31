@@ -543,6 +543,8 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expres
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
 
+# Tested below anyway, so we can skip this statement for legacy schema changer.
+skipif config local-legacy-schema-changer
 statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"
 ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 

@@ -4139,6 +4139,9 @@ SET CLUSTER SETTING jobs.registry.interval.base = .00001;
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec'
 
+# See issue #87266, this table prevents the legacy schema changer from dropping
+# the database, which is unexpected
+skipif config local-legacy-schema-changer
 statement error job .* was paused before it completed with reason: pause point "schemachanger.before.exec" hit
 CREATE TABLE grandchild80828 (parent_id INT NOT NULL REFERENCES child80828(pid) ON DELETE CASCADE);
 

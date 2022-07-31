@@ -240,13 +240,18 @@ var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
 }
 
 // LogicTestConfigs contains all possible cluster configs. A test file can
-// specify a list of configs they run on in a file-level comment like:
+// specify a list of configs to run in a file-level comment like:
 //
 //	# LogicTest: default distsql
 //
 // The test is run once on each configuration (in different subtests).
-// If no configs are indicated, the default one is used (unless overridden
-// via -config).
+//
+// If no configs are indicated in a test file, the default configs are used.
+// See DefaultConfigNames for the list of default configs.
+//
+// Note: If you add a new config, it will not automatically run in CI for any
+// test files. It must either be included in the list of default configs or name
+// explicitly in a file-level "LogicTest:" comment.
 var LogicTestConfigs = []TestClusterConfig{
 	{
 		Name:                "local",
@@ -524,6 +529,7 @@ var (
 	// DefaultConfigNames is the list of default configs captured by the DefaultConfigName.
 	DefaultConfigNames = []string{
 		"local",
+		"local-legacy-schema-changer",
 		"local-vec-off",
 		"fakedist",
 		"fakedist-vec-off",
