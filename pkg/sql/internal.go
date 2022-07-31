@@ -132,6 +132,33 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
+func (ie *InternalExecutor) runWithConnEx(
+	ctx context.Context,
+	txn *kv.Txn,
+	w ieResultWriter,
+	sd *sessiondata.SessionData,
+	stmtBuf *StmtBuf,
+	wg *sync.WaitGroup,
+	syncCallback func([]resWithPos),
+	errCallback func(error),
+) {
+	ex := ie.initConnEx(ctx, txn, w, sd, stmtBuf, syncCallback)
+	wg.Add(1)
+	go func() {
+		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			errCallback(err)
+		}
+		w.finish()
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
+		wg.Done()
+	}()
+}
+
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // takes in a StmtBuf into which commands can be pushed and a WaitGroup that
 // will be signaled when connEx.run() returns.
@@ -149,10 +176,8 @@ func (ie *InternalExecutor) initConnEx(
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
-	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
-	errCallback func(error),
-) {
+) *connExecutor {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -206,21 +231,7 @@ func (ie *InternalExecutor) initConnEx(
 	}
 
 	ex.executorType = executorTypeInternal
-
-	wg.Add(1)
-	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-			errCallback(err)
-		}
-		w.finish()
-		closeMode := normalClose
-		if txn != nil {
-			closeMode = externalTxnClose
-		}
-		ex.close(ctx, closeMode)
-		wg.Done()
-	}()
+	return ex
 }
 
 type ieIteratorResult struct {
@@ -740,7 +751,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.runWithConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
