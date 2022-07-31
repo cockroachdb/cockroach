@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -246,18 +247,30 @@ func getReplicationStreamSpec(
 }
 
 func completeReplicationStream(
-	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, successfulIngestion bool,
 ) error {
-	// Update the producer job that a cutover happens on the consumer side.
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
 	const useReadLock = false
 	return registry.UpdateJobWithTxn(evalCtx.Ctx(), jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			// Updates the streamingestion status, make the job resumer exit running
+			// when picking up the new status.
 			if (md.Status == jobs.StatusRunning || md.Status == jobs.StatusPending) &&
-				!md.Progress.GetStreamReplication().IngestionCutOver {
-				p := md.Progress
-				p.GetStreamReplication().IngestionCutOver = true
-				ju.UpdateProgress(p)
+				md.Progress.GetStreamReplication().StreamIngestionStatus ==
+					jobspb.StreamReplicationProgress_NOT_FINISHED {
+				if successfulIngestion {
+					md.Progress.GetStreamReplication().StreamIngestionStatus =
+						jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
+					md.Progress.RunningStatus = "succeeding this producer job as the corresponding " +
+						"stream ingestion finished successfully"
+				} else {
+					fmt.Println("producer update stream ingestion status")
+					md.Progress.GetStreamReplication().StreamIngestionStatus =
+						jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
+					md.Progress.RunningStatus = "canceling this producer job as the corresponding " +
+						"stream ingestion did not finish successfully"
+				}
+				ju.UpdateProgress(md.Progress)
 			}
 			return nil
 		})

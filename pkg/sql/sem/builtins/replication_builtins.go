@@ -298,6 +298,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"stream_id", types.Int},
+				{"successful_ingestion", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -307,13 +308,15 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				if err := mgr.CompleteReplicationStream(evalCtx, evalCtx.Txn, streaming.StreamID(streamID)); err != nil {
+				successfulIngestion := bool(tree.MustBeDBool(args[1]))
+				if err := mgr.CompleteReplicationStream(evalCtx, evalCtx.Txn,
+					streaming.StreamID(streamID), successfulIngestion); err != nil {
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(streamID)), err
 			},
-			Info: "This function can be used on the producer side to complete and clean up a replication stream " +
-				"after the consumer receives a cutover event and finishes the ingestion",
+			Info: "This function can be used on the producer side to complete and clean up a replication stream." +
+				"'successful_ingestion' indicates whether the stream ingestion finished successfully.",
 			Volatility: volatility.Volatile,
 		},
 	),
