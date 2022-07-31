@@ -110,6 +110,9 @@ const header = `// Copyright 2022 The Cockroach Authors.
 //   ./dev generate go
 //   go generate ./pkg/sql/sem/tree
 //
+// If you use the dev command and you have added a new tree expression, like
+// tree.XYZ in a new file, you may get the confusing error: undefined: XYZ.
+// Run './dev generate bazel' to fix this.
 package tree
 `
 
