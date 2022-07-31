@@ -136,7 +136,6 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 
 func (ie *InternalExecutor) runWithConnEx(
 	ctx context.Context,
-	txn *kv.Txn,
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
@@ -144,6 +143,7 @@ func (ie *InternalExecutor) runWithConnEx(
 	syncCallback func([]resWithPos),
 	errCallback func(error),
 ) {
+	txn := ie.txn
 	ex := ie.initConnEx(ctx, txn, w, sd, stmtBuf, syncCallback)
 	wg.Add(1)
 	go func() {
@@ -754,7 +754,7 @@ func (ie *InternalExecutor) execInternal(
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
 	ie.txn = txn
-	ie.runWithConnEx(ctx, ie.txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.runWithConnEx(ctx, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
