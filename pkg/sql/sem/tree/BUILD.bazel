@@ -78,6 +78,7 @@ go_library(
         "returning.go",
         "revoke.go",
         "role_spec.go",
+        "routine.go",
         "run_control.go",
         "schedule.go",
         "schema_feature_name.go",

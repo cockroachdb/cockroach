@@ -1,0 +1,33 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT
+)
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+
+query T
+EXPLAIN SELECT one()
+----
+distribution: local
+vectorized: true
+·
+• values
+  size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT * FROM t WHERE a = one()
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: a = one()
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
