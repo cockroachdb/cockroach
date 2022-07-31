@@ -960,6 +960,7 @@ func (s *Server) newConnExecutor(
 	descsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.descCollection = descsCollection
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{}
+	ex.extraTxnState.jobs = &jobsCollection{}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
@@ -1279,7 +1280,7 @@ type connExecutor struct {
 		// job. The jobs are staged via the function QueueJob in
 		// pkg/sql/planner.go. The staged jobs are executed once the transaction
 		// that staged them commits.
-		jobs jobsCollection
+		jobs *jobsCollection
 
 		// schemaChangeJobRecords is a map of descriptor IDs to job Records.
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
@@ -1682,7 +1683,7 @@ func (ns *prepStmtNamespace) resetTo(
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
-	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.jobs = &jobsCollection{}
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
@@ -2736,7 +2737,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		MemMetrics:             &ex.memMetrics,
 		Descs:                  ex.extraTxnState.descCollection,
 		TxnModesSetter:         ex,
-		Jobs:                   &ex.extraTxnState.jobs,
+		Jobs:                   ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
@@ -3004,7 +3005,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
-			ex.extraTxnState.jobs,
+			*ex.extraTxnState.jobs,
 		); err != nil {
 			handleErr(err)
 		}
