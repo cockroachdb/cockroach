@@ -512,6 +512,7 @@ var (
 	// DefaultConfigNames is the list of default configs captured by the DefaultConfigName.
 	DefaultConfigNames = []string{
 		"local",
+		"local-legacy-schema-changer",
 		"local-vec-off",
 		"fakedist",
 		"fakedist-vec-off",
