@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -760,8 +759,8 @@ type rangeKeyBatcher struct {
 	pendingSize int64
 }
 
-// addAndMaybeFlushRangeFragment will try to add fragment to existing batch
-// and flush it if batch is full.
+// addAndMaybeFlushRangeKeys will try to add a range key stack to the existing
+// batch and flush it if the batch is full.
 // unsafeRangeKeyValues contains all range key values with the same key range
 // that has to be GCd.
 // To ensure the resulting batch is not too large, we need to account for all
@@ -769,27 +768,26 @@ type rangeKeyBatcher struct {
 // newest and will stop if we either reach batch size or reach the newest
 // provided version. Only the last version of this iteration will be flushed.
 // If more versions remained after flush, process would be resumed.
-func (b *rangeKeyBatcher) addAndMaybeFlushRangeFragment(
-	ctx context.Context, unsafeRangeKeyValues []storage.MVCCRangeKeyValue,
+func (b *rangeKeyBatcher) addAndMaybeFlushRangeKeys(
+	ctx context.Context, rangeKeys storage.MVCCRangeKeyStack,
 ) error {
-	maxKey := len(unsafeRangeKeyValues) - 1
+	maxKey := rangeKeys.Len() - 1
 	for i := maxKey; i >= 0; i-- {
-		rk := unsafeRangeKeyValues[i].RangeKey
-		rangeSize := int64(len(rk.StartKey)) + int64(len(rk.EndKey)) + storage.MVCCVersionTimestampSize
+		rangeKeySize := int64(rangeKeys.AsRangeKey(rangeKeys.Versions[i]).EncodedSize())
 		hasData := len(b.pending) > 0 || i < maxKey
-		if hasData && (b.pendingSize+rangeSize) >= b.batchSize {
+		if hasData && (b.pendingSize+rangeKeySize) >= b.batchSize {
 			// If we need to send a batch, add previous key from history that we
 			// already accounted for and flush pending.
 			if i < maxKey {
-				b.addRangeKey(unsafeRangeKeyValues[i+1].RangeKey)
+				b.addRangeKey(rangeKeys.AsRangeKey(rangeKeys.Versions[i+1]))
 			}
 			if err := b.flushPendingFragments(ctx); err != nil {
 				return err
 			}
 		}
-		b.pendingSize += rangeSize
+		b.pendingSize += rangeKeySize
 	}
-	b.addRangeKey(unsafeRangeKeyValues[0].RangeKey)
+	b.addRangeKey(rangeKeys.AsRangeKey(rangeKeys.Versions[0]))
 	return nil
 }
 
@@ -848,29 +846,27 @@ func processReplicatedRangeTombstones(
 		batchSize: KeyVersionChunkBytes,
 	}
 	for {
-		ok, err := iter.Valid()
-		if err != nil {
+		if ok, err := iter.Valid(); err != nil {
 			return err
-		}
-		if !ok {
+		} else if !ok {
 			break
 		}
-		// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
-		rangeKeys := iter.RangeKeys().AsRangeKeyValues()
 
-		if idx := sort.Search(len(rangeKeys), func(i int) bool {
-			return rangeKeys[i].RangeKey.Timestamp.LessEq(gcThreshold)
-		}); idx < len(rangeKeys) {
-			if err = b.addAndMaybeFlushRangeFragment(ctx, rangeKeys[idx:]); err != nil {
+		// Fetch range keys and filter out those above the GC threshold.
+		rangeKeys := iter.RangeKeys()
+		hasSurvivors := rangeKeys.Trim(hlc.Timestamp{}, gcThreshold)
+
+		if !rangeKeys.IsEmpty() {
+			if err := b.addAndMaybeFlushRangeKeys(ctx, rangeKeys); err != nil {
 				return err
 			}
 			info.NumRangeKeysAffected++
-			keyBytes := storage.MVCCVersionTimestampSize * int64(len(rangeKeys)-idx)
-			if idx == 0 {
-				keyBytes += int64(len(rangeKeys[0].RangeKey.StartKey) + len(rangeKeys[0].RangeKey.EndKey))
+			keyBytes := storage.MVCCVersionTimestampSize * int64(rangeKeys.Len())
+			if !hasSurvivors {
+				keyBytes += int64(len(rangeKeys.Bounds.Key)) + int64(len(rangeKeys.Bounds.EndKey))
 			}
 			info.AffectedVersionsRangeKeyBytes += keyBytes
-			for _, v := range rangeKeys[idx:] {
+			for _, v := range rangeKeys.Versions {
 				info.AffectedVersionsRangeValBytes += int64(len(v.Value))
 			}
 		}
