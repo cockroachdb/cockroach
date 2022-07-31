@@ -209,7 +209,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-{{ template "declareTestdataSetupFunctions" . }}`
+{{ template "declareTestdataSetupFunctions" . }}
+
+// TestLogic_tmp runs any tests that are prefixed with "_", in which a dedicated
+// test is not generated for. This allows developers to create and run temporary
+// test files that are not checked into the repository, without repeatedly
+// regenerating and reverting changes to this file, generated_test.go.
+//
+// TODO(mgartner): Add file filtering so that individual files can be run,
+// instead of all files with the "_" prefix.
+func TestLogic_tmp(t *testing.T) {
+    defer leaktest.AfterTest(t)()
+	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, "_*"))
+}
+`
 
 // There is probably room for optimization here. Among other things:
 // some tests may declare a testdata dependency they don't actually need, and

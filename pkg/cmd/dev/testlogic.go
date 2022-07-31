@@ -54,7 +54,6 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run")
-	testLogicCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
@@ -79,7 +78,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		subtests      = mustGetFlagString(cmd, subtestsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
-		noGen         = mustGetFlagBool(cmd, noGenFlag)
 		showSQL       = mustGetFlagBool(cmd, showSQLFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		stress        = mustGetFlagBool(cmd, stressFlag)
@@ -118,13 +116,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
-	}
-
-	if !noGen {
-		err := d.generateLogicTest(cmd)
-		if err != nil {
-			return err
-		}
 	}
 
 	var targets []string
