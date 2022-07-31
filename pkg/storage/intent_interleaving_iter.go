@@ -120,7 +120,8 @@ type intentInterleavingIter struct {
 	//   exhausted).
 	// - intentKey!=nil, iterValid=false, cmp=-dir.
 	// - If both are invalid. cmp is undefined and valid=false.
-	intentCmp int
+	intentCmp   int
+	curAtIntent bool
 	// When intentCmp == 0, this will be set to indicate whether iter is on an
 	// unversioned position on a bare range key copositioned with the intent.
 	// This will never happen in the forward direction due to
@@ -495,10 +496,12 @@ func (i *intentInterleavingIter) computePos() {
 	// INVARIANT: i.iterValid || i.intentKey != nil
 	if !i.iterValid {
 		i.intentCmp = -i.dir
+		i.curAtIntent = true
 		return
 	}
 	if i.intentKey == nil {
 		i.intentCmp = i.dir
+		i.curAtIntent = false
 	} else {
 		i.intentCmp = i.intentKey.Compare(i.iterKey.Key)
 		if i.intentCmp == 0 {
@@ -537,10 +540,14 @@ func (i *intentInterleavingIter) computePos() {
 					}
 				}
 				i.iterBareRangeAtIntent = false
+				i.curAtIntent = true
 			} else {
 				hasPoint, hasRange := i.iter.HasPointAndRange()
 				i.iterBareRangeAtIntent = !hasPoint && hasRange && i.iterKey.Timestamp.IsEmpty()
+				i.curAtIntent = i.iterBareRangeAtIntent
 			}
+		} else {
+			i.curAtIntent = i.dir != i.intentCmp
 		}
 	}
 }
@@ -610,7 +617,6 @@ func (i *intentInterleavingIter) Next() {
 	}
 	if i.dir < 0 {
 		// Switching from reverse to forward iteration.
-		isCurAtIntent := i.isCurAtIntentIterReverse()
 		i.dir = +1
 		if !i.valid {
 			// Both iterators are exhausted, since intentKey is synchronized with
@@ -635,7 +641,7 @@ func (i *intentInterleavingIter) Next() {
 			return
 		}
 		// At least one of the iterators is not exhausted.
-		if isCurAtIntent {
+		if i.curAtIntent {
 			// iter precedes the intentIter, so must be at the lowest version of the
 			// preceding key, at a bare range key whose start key is colocated with
 			// the intent, or exhausted. So step it forward. It will now point to
@@ -651,6 +657,7 @@ func (i *intentInterleavingIter) Next() {
 				return
 			}
 			i.intentCmp = 0
+			// i.curAtIntent remains true.
 			if !i.iterValid {
 				i.err = errors.Errorf("intent has no provisional value")
 				i.valid = false
@@ -683,9 +690,9 @@ func (i *intentInterleavingIter) Next() {
 			}
 			// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
 			i.intentCmp = +1
+			// i.curAtIntent remains false.
 			if util.RaceEnabled && iterState == pebble.IterValid {
-				cmp := i.intentKey.Compare(i.iterKey.Key)
-				if cmp <= 0 {
+				if cmp := i.intentKey.Compare(i.iterKey.Key); cmp <= 0 {
 					i.err = errors.Errorf("intentIter incorrectly positioned, cmp: %d", cmp)
 					i.valid = false
 					return
@@ -696,7 +703,7 @@ func (i *intentInterleavingIter) Next() {
 	if !i.valid {
 		return
 	}
-	if i.isCurAtIntentIterForward() {
+	if i.curAtIntent {
 		// The iterator is positioned at an intent in intentIter. iter must be
 		// positioned at the provisional value. Note that the code below does not
 		// specifically care if a bug (external to this code) violates the
@@ -722,9 +729,9 @@ func (i *intentInterleavingIter) Next() {
 		}
 		// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
 		i.intentCmp = +1
+		i.curAtIntent = false
 		if util.RaceEnabled && i.intentKey != nil {
-			cmp := i.intentKey.Compare(i.iterKey.Key)
-			if cmp <= 0 {
+			if cmp := i.intentKey.Compare(i.iterKey.Key); cmp <= 0 {
 				i.err = errors.Errorf("intentIter incorrectly positioned, cmp: %d", cmp)
 				i.valid = false
 				return
@@ -765,7 +772,7 @@ func (i *intentInterleavingIter) NextKey() {
 	if !i.valid {
 		return
 	}
-	if i.intentCmp <= 0 {
+	if i.curAtIntent {
 		// The iterator is positioned at an intent in intentIter. iter must be
 		// positioned at the provisional value.
 		if i.intentCmp != 0 {
@@ -812,58 +819,17 @@ func (i *intentInterleavingIter) NextKey() {
 	i.computePos()
 }
 
-// TODO(erikgrinaker): Consider computing this once and storing it as a struct
-// field when repositioning the iterator, instead of repeatedly calling it. The
-// forward/reverse methods are called at least once per step, with two more
-// calls for UnsafeKey() and UnsafeValue(), and this has a measurable cost
-// (especially in the reverse direction).
-//
-// gcassert:inline
-func (i *intentInterleavingIter) isCurAtIntentIter() bool {
-	// When both iter and intentIter are exhausted, the return value is
-	// immaterial since this function won't be called. We examine the remaining
-	// cases below.
-	//
-	// During forward iteration (dir > 0), we have the following cases:
-	// - iter is exhausted: intentCmp < 0. This will never happen and callers
-	//   check. Returns true.
-	// - intentIter is exhausted: intentCmp > 0. Returns false.
-	// - Neither is exhausted:
-	//   - intentCmp < 0. This will never happen and callers check. Returns true.
-	//   - intentCmp = 0. Returns true.
-	//   - intentCmp > 0. Returns false.
-	//
-	// During reverse iteration (dir < 0), we have the following cases:
-	// - iter is exhausted: intentCmp > 0. Returns true.
-	// - intentIter is exhausted: intentCmp < 0. Returns false.
-	// - Neither is exhausted:
-	//   - intentCmp > 0. Returns true.
-	//   - intentCmp = 0. Returns false unless copositioned with bare range key.
-	//   - intentCmp < 0. Returns false.
-	return (i.dir > 0 && i.isCurAtIntentIterForward()) || (i.dir < 0 && i.isCurAtIntentIterReverse())
-}
-
-// gcassert:inline
-func (i *intentInterleavingIter) isCurAtIntentIterForward() bool {
-	return i.intentCmp <= 0
-}
-
-// gcassert:inline
-func (i *intentInterleavingIter) isCurAtIntentIterReverse() bool {
-	return i.intentCmp > 0 || (i.intentCmp == 0 && i.iterBareRangeAtIntent)
-}
-
 func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
 	// If there is a separated intent there cannot also be an interleaved intent
 	// for the same key.
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		return MVCCKey{Key: i.intentKey}
 	}
 	return i.iterKey
 }
 
 func (i *intentInterleavingIter) UnsafeValue() []byte {
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		return i.intentIter.UnsafeValue()
 	}
 	return i.iter.UnsafeValue()
@@ -878,7 +844,7 @@ func (i *intentInterleavingIter) Key() MVCCKey {
 }
 
 func (i *intentInterleavingIter) Value() []byte {
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		return i.intentIter.Value()
 	}
 	return i.iter.Value()
@@ -890,7 +856,7 @@ func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
 	if i.iterValid {
 		hasPoint, hasRange = i.iter.HasPointAndRange()
 	}
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		// When hasRange and i.dir > 0, i.iter must be at a provisional value, so
 		// hasPoint must be true for i.iter and the range must also cover the intent.
 		if util.RaceEnabled && hasRange && i.dir > 0 {
@@ -1017,7 +983,6 @@ func (i *intentInterleavingIter) Prev() {
 	}
 	if i.dir > 0 {
 		// Switching from forward to reverse iteration.
-		isCurAtIntent := i.isCurAtIntentIterForward()
 		i.dir = -1
 		if !i.valid {
 			// Both iterators are exhausted, so step both backward.
@@ -1038,7 +1003,7 @@ func (i *intentInterleavingIter) Prev() {
 			return
 		}
 		// At least one of the iterators is not exhausted.
-		if isCurAtIntent {
+		if i.curAtIntent {
 			// iter is after the intentIter, so must be at the provisional value.
 			// Step it backward. It will now point to a key that is before the
 			// intent key, or a range key whose start key is colocated with the
@@ -1075,7 +1040,7 @@ func (i *intentInterleavingIter) Prev() {
 	if !i.valid {
 		return
 	}
-	if i.isCurAtIntentIterReverse() {
+	if i.curAtIntent {
 		// The iterator is positioned at an intent in intentIter, and iter is
 		// exhausted, positioned at a versioned value of a preceding key, or
 		// positioned on the start of a range key colocated with the intent.
@@ -1107,6 +1072,7 @@ func (i *intentInterleavingIter) Prev() {
 		}
 		// iterValid == true. So positioned at iter.
 		i.intentCmp = -1
+		i.curAtIntent = false
 		if i.intentKey != nil {
 			i.computePos()
 			if i.intentCmp > 0 {
@@ -1137,14 +1103,14 @@ func (i *intentInterleavingIter) Prev() {
 }
 
 func (i *intentInterleavingIter) UnsafeRawKey() []byte {
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		return i.intentIter.UnsafeRawEngineKey()
 	}
 	return i.iter.UnsafeRawKey()
 }
 
 func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
-	if i.isCurAtIntentIter() {
+	if i.curAtIntent {
 		if i.intentKeyAsNoTimestampMVCCKey == nil {
 			// Slow-path: tryDecodeLockKey was not able to initialize.
 			if cap(i.intentKeyAsNoTimestampMVCCKeyBacking) < len(i.intentKey)+1 {
