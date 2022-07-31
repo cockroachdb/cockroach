@@ -72,6 +72,8 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	txn *kv.Txn
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -751,7 +753,8 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.runWithConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.txn = txn
+	ie.runWithConnEx(ctx, ie.txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
