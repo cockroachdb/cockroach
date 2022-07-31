@@ -544,10 +544,10 @@ func (i *MVCCIncrementalIterator) RangeKeys() MVCCRangeKeyStack {
 	// for the same range key. However, callers may avoid calling RangeKeys()
 	// unnecessarily, and we may optimize parent iterators, so let's measure.
 	rangeKeys := i.iter.RangeKeys()
-	if i.ignoringTime {
-		return rangeKeys
+	if !i.ignoringTime {
+		rangeKeys.Trim(i.startTime.Next(), i.endTime)
 	}
-	return rangeKeys.Trim(i.startTime.Next(), i.endTime)
+	return rangeKeys
 }
 
 // UnsafeValue implements SimpleMVCCIterator.

@@ -365,6 +365,17 @@ type MVCCRangeKey struct {
 	Timestamp hlc.Timestamp
 }
 
+// AsStack returns the range key as a range key stack with the given value.
+func (k MVCCRangeKey) AsStack(valueRaw []byte) MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{
+		Bounds: k.Bounds(),
+		Versions: MVCCRangeKeyVersions{{
+			Timestamp: k.Timestamp,
+			Value:     valueRaw,
+		}},
+	}
+}
+
 // Bounds returns the range key bounds as a Span.
 func (k MVCCRangeKey) Bounds() roachpb.Span {
 	return roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}
@@ -549,6 +560,12 @@ func (s MVCCRangeKeyStack) CoversTimestamp(ts hlc.Timestamp) bool {
 	return s.Versions.Covers(ts)
 }
 
+// Excise removes the versions in the given [from, to] span (inclusive, in
+// order) in place, returning true if any versions were removed.
+func (s *MVCCRangeKeyStack) Excise(from, to hlc.Timestamp) bool {
+	return s.Versions.Excise(from, to)
+}
+
 // FirstAbove does a binary search for the first range key version at or above
 // the given timestamp. Returns false if no matching range key was found.
 func (s MVCCRangeKeyStack) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
@@ -577,15 +594,31 @@ func (s MVCCRangeKeyStack) Len() int {
 	return len(s.Versions)
 }
 
+// Newest returns the timestamp of the newest range key in the stack.
+func (s MVCCRangeKeyStack) Newest() hlc.Timestamp {
+	return s.Versions.Newest()
+}
+
+// Oldest returns the timestamp of the oldest range key in the stack.
+func (s MVCCRangeKeyStack) Oldest() hlc.Timestamp {
+	return s.Versions.Oldest()
+}
+
+// Remove removes the given version from the stack, returning true if it was
+// found.
+func (s *MVCCRangeKeyStack) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	return s.Versions.Remove(ts)
+}
+
 // Timestamps returns the timestamps of all versions.
 func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
 	return s.Versions.Timestamps()
 }
 
-// Trim trims the versions to the time span [from, to] (both inclusive).
-func (s MVCCRangeKeyStack) Trim(from, to hlc.Timestamp) MVCCRangeKeyStack {
-	s.Versions = s.Versions.Trim(from, to)
-	return s
+// Trim trims the versions to the time span [from, to] (both inclusive in order)
+// in place. Returns true if any versions were removed.
+func (s *MVCCRangeKeyStack) Trim(from, to hlc.Timestamp) bool {
+	return s.Versions.Trim(from, to)
 }
 
 // Clone clones the versions.
@@ -600,6 +633,34 @@ func (v MVCCRangeKeyVersions) Clone() MVCCRangeKeyVersions {
 // Covers returns true if any version in the stack is above the given timestamp.
 func (v MVCCRangeKeyVersions) Covers(ts hlc.Timestamp) bool {
 	return !v.IsEmpty() && ts.LessEq(v[0].Timestamp)
+}
+
+// Excise removes the versions in the given [from, to] span (inclusive, in
+// order) in place, returning true if any versions were removed.
+func (v *MVCCRangeKeyVersions) Excise(from, to hlc.Timestamp) bool {
+	// We assume that to will often be near the current time, and use a linear
+	// rather than a binary search, which will often match on the first range key.
+	start := len(*v)
+	for i, version := range *v {
+		if version.Timestamp.LessEq(to) {
+			start = i
+			break
+		}
+	}
+
+	// We then use a binary search to find the lower bound.
+	end := sort.Search(len(*v), func(i int) bool {
+		return (*v)[i].Timestamp.Less(from)
+	})
+
+	if start >= end {
+		return false
+	} else if start == 0 {
+		*v = (*v)[end:]
+	} else {
+		*v = append((*v)[:start], (*v)[end:]...)
+	}
+	return true
 }
 
 // FirstAbove does a binary search for the first range key version at or above
@@ -643,6 +704,44 @@ func (v MVCCRangeKeyVersions) IsEmpty() bool {
 	return len(v) == 0
 }
 
+// Newest returns the timestamp of the newest range key in the stack.
+func (v MVCCRangeKeyVersions) Newest() hlc.Timestamp {
+	if v.IsEmpty() {
+		return hlc.Timestamp{}
+	}
+	return v[0].Timestamp
+}
+
+// Oldest returns the timestamp of the oldest range key in the stack.
+func (v MVCCRangeKeyVersions) Oldest() hlc.Timestamp {
+	if v.IsEmpty() {
+		return hlc.Timestamp{}
+	}
+	return v[len(v)-1].Timestamp
+}
+
+// Remove removes the given timestamp in place, returning it and true if it was
+// found.
+func (v *MVCCRangeKeyVersions) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	if v.IsEmpty() {
+		return MVCCRangeKeyVersion{}, false
+	}
+	// Fast path: check first version.
+	if (*v)[0].Timestamp.Equal(ts) {
+		r := (*v)[0]
+		*v = (*v)[1:]
+		return r, true
+	}
+	if i := sort.Search(len(*v), func(i int) bool {
+		return (*v)[i].Timestamp.LessEq(ts)
+	}); i < len(*v) && (*v)[i].Timestamp.Equal(ts) {
+		r := (*v)[i]
+		*v = append((*v)[:i], (*v)[i+1:]...)
+		return r, true
+	}
+	return MVCCRangeKeyVersion{}, false
+}
+
 // Timestamps returns the timestamps of all versions.
 func (v MVCCRangeKeyVersions) Timestamps() []hlc.Timestamp {
 	timestamps := make([]hlc.Timestamp, 0, len(v))
@@ -652,24 +751,32 @@ func (v MVCCRangeKeyVersions) Timestamps() []hlc.Timestamp {
 	return timestamps
 }
 
-// Trim trims the versions to the time span [from, to] (both inclusive).
-func (v MVCCRangeKeyVersions) Trim(from, to hlc.Timestamp) MVCCRangeKeyVersions {
+// Trim trims the versions to the time span [from, to] (both inclusive in
+// order) in place. Returns true if any versions were removed.
+func (v *MVCCRangeKeyVersions) Trim(from, to hlc.Timestamp) bool {
+	var removed bool
+
 	// We assume that to will often be near the current time, and use a linear
 	// rather than a binary search, which will often match on the first range key.
-	start := len(v)
-	for i, version := range v {
+	start := len(*v)
+	for i, version := range *v {
 		if version.Timestamp.LessEq(to) {
 			start = i
 			break
 		}
 	}
-	v = v[start:]
+	*v = (*v)[start:]
+	removed = start > 0
 
 	// We then use a binary search to find the lower bound.
-	end := sort.Search(len(v), func(i int) bool {
-		return v[i].Timestamp.Less(from)
-	})
-	return v[:end]
+	if end := sort.Search(len(*v), func(i int) bool {
+		return (*v)[i].Timestamp.Less(from)
+	}); end < len(*v) {
+		*v = (*v)[:end]
+		removed = true
+	}
+
+	return removed
 }
 
 // Clone clones the version.
