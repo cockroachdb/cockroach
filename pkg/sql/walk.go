@@ -345,6 +345,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterDatabaseAlterSuperRegion{}):           "alter database drop super region",
 	reflect.TypeOf(&alterDatabaseSecondaryRegion{}):            "alter database secondary region",
 	reflect.TypeOf(&alterDatabaseDropSecondaryRegion{}):        "alter database secondary region",
+	reflect.TypeOf(&alterDatabaseSetZoneConfigExtensionNode{}): "alter database configure zone extension",
 	reflect.TypeOf(&alterDefaultPrivilegesNode{}):              "alter default privileges",
 	reflect.TypeOf(&alterFunctionOptionsNode{}):                "alter function",
 	reflect.TypeOf(&alterFunctionRenameNode{}):                 "alter function rename",
