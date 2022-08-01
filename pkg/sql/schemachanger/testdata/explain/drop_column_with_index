@@ -1,8 +1,8 @@
 /* setup */
-create table t (i int primary key, j int, index (j));
+CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j));
 
 /* test */
-EXPLAIN (ddl) alter table t drop column j;
+EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j;
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›; 
  ├── StatementPhase

@@ -11,7 +11,6 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
 +object {104 106 _crdb_internal_region} -> 107
 +object {104 106 table_regional_by_table} -> 108
 
-
 test
 DROP DATABASE multi_region_test_db CASCADE
 ----

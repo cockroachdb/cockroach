@@ -1,8 +1,8 @@
 /* setup */
-create table t (i int primary key, j int, index((j+1)));
+create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
 
 /* test */
-EXPLAIN (ddl) alter table t drop column j cascade;
+EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j CASCADE;
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; 
  ├── StatementPhase
