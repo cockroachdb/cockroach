@@ -11,10 +11,12 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // Function names are used in expressions in the FuncExpr node.
@@ -35,7 +37,15 @@ type FunctionReferenceResolver interface {
 	// the input of this method, so that we can try to narrow down the scope of
 	// overloads a bit earlier and decrease the possibility of ambiguous error
 	// on function properties.
-	ResolveFunction(name *UnresolvedName, path SearchPath) (*FunctionDefinition, error)
+	ResolveFunction(
+		ctx context.Context, name *UnresolvedName, path SearchPath,
+	) (*ResolvedFunctionDefinition, error)
+
+	// ResolveFunctionByOID looks up a function overload by using a given oid.
+	// Error is thrown if there is no function with the same oid.
+	ResolveFunctionByOID(
+		ctx context.Context, oid oid.Oid,
+	) (*Overload, error)
 }
 
 // ResolvableFunctionReference implements the editable reference call of a
@@ -62,7 +72,11 @@ func (ref *ResolvableFunctionReference) Resolve(
 			// Use the default resolution logic if there is no resolver.
 			fd, err = t.ResolveFunction(path)
 		} else {
-			fd, err = resolver.ResolveFunction(t, path)
+			// TODO(Chengxiong): plumb a context through when fixing all use cases of
+			// ResolvableFunctionReference.Resolve in later commits.
+			// TODO(Chengxiong): fix ResolvableFunctionReference.Resolve to return
+			// ResolvedFunctionDefinition.
+			// fd, err = resolver.ResolveFunction(context.Background(), t, path)
 		}
 		if err != nil {
 			return nil, err
@@ -77,6 +91,9 @@ func (ref *ResolvableFunctionReference) Resolve(
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved
 // function from a built-in function name. Helper for grammar rules and
 // execbuilder.
+//
+// TODO(Chengxiong): get rid of FunctionDefinition entirely and use
+// ResolvedFunctionDefinition instead.
 func WrapFunction(n string) ResolvableFunctionReference {
 	fd, ok := FunDefs[n]
 	if !ok {
@@ -94,6 +111,8 @@ type FunctionReference interface {
 
 var _ FunctionReference = &UnresolvedName{}
 var _ FunctionReference = &FunctionDefinition{}
+var _ FunctionReference = &ResolvedFunctionDefinition{}
 
-func (*UnresolvedName) functionReference()     {}
-func (*FunctionDefinition) functionReference() {}
+func (*UnresolvedName) functionReference()             {}
+func (*FunctionDefinition) functionReference()         {}
+func (*ResolvedFunctionDefinition) functionReference() {}
