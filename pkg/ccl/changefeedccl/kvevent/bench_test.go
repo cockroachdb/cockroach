@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -31,9 +32,15 @@ import (
 
 func BenchmarkMemBuffer(b *testing.B) {
 	rand, _ := randutil.NewTestRand()
+	spansToPool := 1500000
+	spanPool := make([]roachpb.Span, spansToPool)
+	for i := 0; i < spansToPool; i++ {
+		spanPool[i] = generateSpan(b, rand)
+	}
+	b.ResetTimer()
 
-	run := func() {
-		ba, release := getBoundAccountWithBudget(4096)
+	run := func(b *testing.B) int {
+		ba, release := getBoundAccountWithBudget(1 << 26)
 		defer release()
 
 		metrics := kvevent.MakeMetrics(time.Minute)
@@ -62,7 +69,14 @@ func BenchmarkMemBuffer(b *testing.B) {
 		numRows := 0
 		wg.GoCtx(func(ctx context.Context) error {
 			for {
-				err := buf.Add(ctx, kvevent.MakeResolvedEvent(generateSpan(b, rand), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE))
+				var span roachpb.Span
+				if numRows < spansToPool {
+					span = spanPool[numRows]
+				} else {
+					panic("Increase the number of spans to pool")
+				}
+
+				err := buf.Add(ctx, kvevent.MakeResolvedEvent(span, hlc.Timestamp{}, jobspb.ResolvedSpan_NONE))
 				if err != nil {
 					return err
 				}
@@ -71,6 +85,8 @@ func BenchmarkMemBuffer(b *testing.B) {
 		})
 
 		<-waitCh
+		stopProducers()
+
 		writtenRows := numRows
 
 		for i := 0; i < writtenRows; i++ {
@@ -81,12 +97,15 @@ func BenchmarkMemBuffer(b *testing.B) {
 			a := e.DetachAlloc()
 			a.Release(context.Background())
 		}
-		stopProducers()
+		return writtenRows
 	}
 
+	writtenRows := 0.0
 	for i := 0; i < b.N; i++ {
-		run()
+		writtenRows += float64(run(b))
 	}
+
+	log.Infof(context.Background(), "%f average events in buffer", writtenRows/float64(b.N))
 }
 
 func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
