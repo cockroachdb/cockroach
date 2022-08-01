@@ -1,0 +1,39 @@
+/* setup */
+create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
+
+/* test */
+ALTER TABLE t DROP COLUMN j CASCADE;
+EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; 
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 4 elements transitioning toward ABSENT
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+           ├── 6 elements transitioning toward PUBLIC
+           │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 2}
+           │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+           │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 3}
+           │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 3}
+           │    ├── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    └── ABSENT        → PUBLIC IndexName:{DescID: 104, Name: t_expr_idx, IndexID: 2}
+           └── 16 Mutation operations
+                ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
+                ├── RefreshStats {"TableID":104}
+                ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
+                ├── MakeColumnPublic {"ColumnID":3,"TableID":104}
+                ├── RefreshStats {"TableID":104}
+                ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_id...","TableID":104}
+                ├── SetIndexName {"IndexID":2,"Name":"t_expr_idx","TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+                ├── MakeAddedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+                ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

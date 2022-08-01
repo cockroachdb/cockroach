@@ -1,11 +1,11 @@
 setup
-create table t (i int primary key, j int, index((j+1)));
+create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
 ----
 ...
 +object {100 101 t} -> 104
 
 test
-alter table t drop column j cascade;
+ALTER TABLE t DROP COLUMN j CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
