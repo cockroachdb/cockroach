@@ -1041,7 +1041,7 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 	loader := &b.r.raftMu.stateLoader
 	return loader.SetRangeAppliedState(
 		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
-		b.state.Stats, &b.state.RaftClosedTimestamp, &b.asAlloc,
+		b.state.Stats, b.state.RaftClosedTimestamp, &b.asAlloc,
 	)
 }
 
