@@ -1027,7 +1027,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
@@ -1060,7 +1060,7 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
@@ -1105,7 +1105,7 @@ func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
 func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
@@ -1150,7 +1150,7 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
 func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
@@ -1182,7 +1182,7 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
 func TestChangefeedExternalIODisabled(t *testing.T) {
@@ -7108,4 +7108,33 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
+}
+
+// Regression for #85008.
+func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE mytable (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (0)`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE mytable`)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`mytable: [0]->{"after": {"id": 0}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TABLE mytable ADD COLUMN val INT DEFAULT 0`)
+		assertPayloads(t, cf, []string{
+			`mytable: [0]->{"after": {"id": 0, "val": 0}}`,
+		})
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (1,1)`)
+		assertPayloads(t, cf, []string{
+			`mytable: [1]->{"after": {"id": 1, "val": 1}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
