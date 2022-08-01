@@ -929,17 +929,6 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
 func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
-	// TODO(Chengxiong): Move def.UnsupportedWithIssue check to function resolver implementation.
-	if def.UnsupportedWithIssue != 0 {
-		// Note: no need to embed the function name in the message; the
-		// caller will add the function name as prefix.
-		const msg = "this function is not yet supported"
-		if def.UnsupportedWithIssue < 0 {
-			return unimplemented.New(def.Name+"()", msg)
-		}
-		return unimplemented.NewWithIssueDetail(def.UnsupportedWithIssue, def.Name, msg)
-	}
-
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil

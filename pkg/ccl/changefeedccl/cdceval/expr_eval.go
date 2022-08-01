@@ -217,7 +217,8 @@ func newExprEval(
 	evalCtx = nil // From this point, only e.evalCtx should be used.
 
 	// Configure semantic context.
-	e.semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	e.semaCtx.SearchPath = &sessiondata.DefaultSearchPath
+	e.semaCtx.FunctionResolver = &CDCFunctionResolver{}
 	e.semaCtx.Properties.Require("cdc",
 		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
 	)
@@ -600,38 +601,30 @@ func checkFunctionSupported(
 		}
 	}
 
-	switch fn := fnCall.Func.FunctionReference.(type) {
-	case *tree.UnresolvedName:
-		funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
-		if err != nil {
-			return nil, unsupportedFunctionErr()
-		}
-		fnCall = &tree.FuncExpr{
-			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
-			Type:  fnCall.Type,
-			Exprs: fnCall.Exprs,
-		}
-		if _, isCDCFn := cdcFunctions[funDef.Name]; isCDCFn {
-			return fnCall, nil
-		}
-		return checkFunctionSupported(fnCall, semaCtx)
-	case *tree.FunctionDefinition:
-		fnName, fnClass = fn.Name, fn.Class
-		if fnCall.ResolvedOverload() != nil {
-			if _, isCDC := cdcFunctions[fnName]; isCDC {
-				return fnCall, nil
-			}
-			fnVolatility = fnCall.ResolvedOverload().Volatility
-		} else {
-			// Pick highest volatility overload.
-			for _, overload := range fn.Definition {
-				if overload.Volatility > fnVolatility {
-					fnVolatility = overload.Volatility
-				}
+	funcDef, err := fnCall.Func.Resolve(context.Background(), semaCtx.SearchPath, semaCtx.FunctionResolver)
+	if err != nil {
+		return nil, unsupportedFunctionErr()
+	}
+
+	if _, isCDCFn := cdcFunctions[funcDef.Name]; isCDCFn {
+		return fnCall, nil
+	}
+
+	fnClass, err = funcDef.GetClass()
+	if err != nil {
+		return nil, err
+	}
+	fnName = funcDef.Name
+	if fnCall.ResolvedOverload() != nil {
+		fnVolatility = fnCall.ResolvedOverload().Volatility
+	} else {
+		// Pick highest volatility overload.
+		for _, o := range funcDef.Overloads {
+			overload := o.Overload
+			if overload.Volatility > fnVolatility {
+				fnVolatility = overload.Volatility
 			}
 		}
-	default:
-		return nil, errors.AssertionFailedf("unexpected function expression of type %T", fn)
 	}
 
 	// Aggregates, generators and window functions are not supported.
@@ -711,7 +704,8 @@ const rejectInvalidCDCExprs = (tree.RejectAggregates | tree.RejectGenerators |
 // newSemaCtx returns new tree.SemaCtx configured for cdc without type resolver.
 func newSemaCtx() *tree.SemaContext {
 	sema := tree.MakeSemaContext()
-	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	sema.SearchPath = &sessiondata.DefaultSearchPath
+	sema.FunctionResolver = &CDCFunctionResolver{}
 	sema.Properties.Require("cdc", rejectInvalidCDCExprs)
 	return &sema
 }

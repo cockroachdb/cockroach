@@ -269,7 +269,7 @@ func normalizeSelectClause(
 	// Setup sema ctx to handle cdc expressions. We want to make sure we only
 	// override some properties, while keeping other properties (type resolver)
 	// intact.
-	semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: semaCtx.SearchPath}
+	semaCtx.FunctionResolver = &CDCFunctionResolver{}
 	semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 
 	resolveType := func(ref tree.ResolvableTypeReference) (tree.ResolvableTypeReference, bool, error) {
@@ -375,20 +375,11 @@ func (v *checkForPrevVisitor) VisitPost(e tree.Expr) tree.Expr {
 // is a function call that cdc implements using the diff from a rangefeed.
 func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
 	if f, ok := e.(*tree.FuncExpr); ok {
-		var name string
-		switch fn := f.Func.FunctionReference.(type) {
-		case *tree.UnresolvedName:
-			funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
-			if err != nil {
-				return false
-			}
-			name = funDef.Name
-		case *tree.FunctionDefinition:
-			name = fn.Name
-		default:
-			name = f.String()
+		funcDef, err := f.Func.Resolve(context.Background(), semaCtx.SearchPath, semaCtx.FunctionResolver)
+		if err != nil {
+			return false
 		}
-		return name == "cdc_prev"
+		return funcDef.Name == "cdc_prev"
 	}
 	return false
 }
