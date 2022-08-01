@@ -7,6 +7,7 @@ go_library(
         "constraint.go",
         "doc.go",
         "expr_eval.go",
+        "func_resolver.go",
         "functions.go",
         "parse.go",
         "validation.go",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/normalize",
         "//pkg/sql/sem/tree",
@@ -46,6 +48,7 @@ go_test(
     name = "cdceval_test",
     srcs = [
         "expr_eval_test.go",
+        "func_resolver_test.go",
         "functions_test.go",
         "main_test.go",
         "validation_test.go",
