@@ -211,7 +211,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 			c.batch = c.allocator.NewMemBatchWithFixedCapacity(c.typs, 1 /* minCapacity */)
 			reallocated = true
 		} else {
-			c.batch.ResetInternalBatch()
+			c.allocator.ResetBatch(c.batch)
 		}
 	}
 	if reallocated {
