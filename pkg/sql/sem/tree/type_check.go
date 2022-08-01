@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -928,7 +929,7 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
-func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionDefinition) error {
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil
@@ -1015,7 +1016,7 @@ func (sc *SemaContext) checkVolatility(v volatility.V) error {
 
 // CheckIsWindowOrAgg returns an error if the function definition is not a
 // window function or an aggregate.
-func CheckIsWindowOrAgg(def *FunctionDefinition) error {
+func CheckIsWindowOrAgg(def *ResolvedFunctionDefinition) error {
 	cls, err := def.GetClass()
 	if err != nil {
 		return err
@@ -1041,7 +1042,7 @@ func (expr *FuncExpr) TypeCheck(
 		searchPath = semaCtx.SearchPath
 		resolver = semaCtx.FunctionResolver
 	}
-	def, err := expr.Func.Resolve(searchPath, resolver)
+	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,9 +1073,9 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	overloadImpls := make([]overloadImpl, 0, len(def.Definition))
-	for _, o := range def.Definition {
-		overloadImpls = append(overloadImpls, o)
+	overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
+	for i := range def.Overloads {
+		overloadImpls = append(overloadImpls, def.Overloads[i])
 	}
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, overloadImpls, false, expr.Exprs...)
 	if err != nil {
@@ -1084,7 +1085,7 @@ func (expr *FuncExpr) TypeCheck(
 	var nullableArgFns []overloadImpl
 	var notNullableArgsFn []overloadImpl
 	for _, f := range fns {
-		if f.(*Overload).NullableArgs {
+		if f.(QualifiedOverload).NullableArgs {
 			nullableArgFns = append(nullableArgFns, f)
 		} else {
 			notNullableArgsFn = append(notNullableArgsFn, f)
@@ -1139,37 +1140,51 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	// Throw a typing error if overload resolution found either no compatible candidates
-	// or if it found an ambiguity.
-	// TODO(nvanbenschoten): now that we can distinguish these, we can improve the
-	//   error message the two report (e.g. "add casts please")
-	if len(fns) != 1 {
-		typeNames := make([]string, 0, len(expr.Exprs))
-		for _, expr := range typedSubExprs {
-			typeNames = append(typeNames, expr.ResolvedType().String())
-		}
-		var desStr string
-		if desired.Family() != types.AnyFamily {
-			desStr = fmt.Sprintf(" (desired <%s>)", desired)
-		}
-		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
-		if len(fns) == 0 {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", sig)
-		}
-		fnsStr := formatCandidates(expr.Func.String(), fns)
-		return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
+	if len(fns) == 0 {
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, typedSubExprs, desired))
 	}
-	overloadImpl := fns[0].(*Overload)
+
+	// Get overloads from the most significant schema in search path.
+	typeCheckedOverloads := make([]QualifiedOverload, len(fns))
+	for i := range fns {
+		typeCheckedOverloads[i] = fns[i].(QualifiedOverload)
+	}
+	favoredOverloads, err := getMostSignificantOverloads(typeCheckedOverloads, searchPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Throw ambiguity error if there are more than one candidate overloads from
+	// same schema.
+	if len(favoredOverloads) > 1 {
+		return nil, pgerror.Newf(
+			pgcode.AmbiguousFunction,
+			"ambiguous call: %s, candidates are:\n%s",
+			getFuncSig(expr, typedSubExprs, desired),
+			formatCandidates(expr.Func.String(), fns),
+		)
+	}
+
+	// Just pick the first overload from the search path.
+	overloadImpl := favoredOverloads[0].Overload
 	if overloadImpl.Private {
 		return nil, pgerror.Wrapf(errPrivateFunction, pgcode.ReservedName,
 			"%s()", errors.Safe(def.Name))
+	}
+	if resolver != nil && overloadImpl.UDFContainsOnlySignature {
+		overloadImpl, err = resolver.ResolveFunctionByOID(ctx, overloadImpl.Oid)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		if err := CheckIsWindowOrAgg(def); err != nil {
-			return nil, err
+		if overloadImpl.Class != WindowClass && overloadImpl.Class != AggregateClass {
+			return nil, pgerror.Newf(pgcode.WrongObjectType,
+				"OVER specified, but %s() is neither a window function nor an aggregate function",
+				def.Name)
 		}
 		if expr.Type == DistinctFuncType {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "DISTINCT is not implemented for window functions")
@@ -2923,3 +2938,51 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// getMostSignificantOverloads returns overloads from the most significant
+// schema in the search path. If search path is not provided or empty, all
+// overloads are returned.
+func getMostSignificantOverloads(
+	overloads []QualifiedOverload, searchPath SearchPath,
+) ([]QualifiedOverload, error) {
+	if searchPath == nil || searchPath == EmptySearchPath {
+		return overloads, nil
+	}
+
+	UDFFound := false
+	for _, o := range overloads {
+		if o.IsUDF {
+			UDFFound = true
+			break
+		}
+	}
+
+	if !UDFFound {
+		// If there is no UDF, there is no need to go through the search path. This
+		// is based on the fact that pg_catalog is either implicitly or explicitly
+		// in the search path. And there are quite a few hacks which make builtin
+		// function overrides with name qualified with a different schema from the
+		// original one which is not in search path.
+		return overloads, nil
+	}
+
+	ret := make([]QualifiedOverload, 0, len(overloads))
+	err := searchPath.IterateSearchPath(func(schema string) error {
+
+		found := false
+		for i := range overloads {
+			if overloads[i].Schema == schema {
+				found = true
+				ret = append(ret, overloads[i])
+			}
+		}
+		if found {
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}

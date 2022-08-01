@@ -9,7 +9,6 @@
 package cdceval
 
 import (
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -172,27 +171,6 @@ func prevRowAsJSON(evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
 
 	rec.memo.prevJSON = prevJSON
 	return prevJSON, nil
-}
-
-type cdcCustomFunctionResolver struct {
-	tree.SearchPath
-}
-
-// Resolve implements tree.CustomFunctionDefinitionResolver
-func (cdcCustomFunctionResolver) Resolve(name string) *tree.FunctionDefinition {
-	fn, found := cdcFunctions[name]
-	if found {
-		return fn
-	}
-	fn, found = cdcFunctions[strings.ToLower(name)]
-	if found {
-		return fn
-	}
-	fn, found = tree.FunDefs[name]
-	if found {
-		return fn
-	}
-	return nil
 }
 
 func makeStringSet(vals ...string) map[string]struct{} {
