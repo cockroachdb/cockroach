@@ -201,6 +201,7 @@ func randomizeHashAggregatorMaxBuffered() {
 func NewHashAggregator(
 	args *colexecagg.NewAggregatorArgs,
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
+	hashTableAllocator *colmem.Allocator,
 	outputUnlimitedAllocator *colmem.Allocator,
 	maxOutputBatchMemSize int64,
 ) colexecop.ResettableOperator {
@@ -212,7 +213,7 @@ func NewHashAggregator(
 	}
 	hashAgg := &hashAggregator{
 		OneInputNode:          colexecop.NewOneInputNode(args.Input),
-		hashTableAllocator:    args.Allocator,
+		hashTableAllocator:    hashTableAllocator,
 		spec:                  args.Spec,
 		state:                 hashAggregatorBuffering,
 		inputTypes:            args.InputTypes,

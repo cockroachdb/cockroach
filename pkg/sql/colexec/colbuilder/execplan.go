@@ -877,17 +877,21 @@ func NewColOperator(
 					hashAggregatorUnlimitedMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
+					hashTableUnlimitedMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
+						ctx, flowCtx, opName+"-hashtable", spec.ProcessorID,
+					)
 					newAggArgs.Allocator = colmem.NewAllocator(
 						ctx, hashAggregatorUnlimitedMemAccount, factory,
 					)
 					newAggArgs.MemAccount = hashAggregatorUnlimitedMemAccount
 					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
+					hashTableAllocator := colmem.NewAllocator(ctx, hashTableUnlimitedMemAccount, factory)
 					maxOutputBatchMemSize := execinfra.GetWorkMemLimit(flowCtx)
 					// The second argument is nil because we disable the
 					// tracking of the input tuples.
 					result.Root = colexec.NewHashAggregator(
 						newAggArgs, nil, /* newSpillingQueueArgs */
-						outputUnlimitedAllocator, maxOutputBatchMemSize,
+						hashTableAllocator, outputUnlimitedAllocator, maxOutputBatchMemSize,
 					)
 				} else {
 					// We will divide the available memory equally between the
@@ -911,6 +915,9 @@ func NewColOperator(
 					hashAggregatorMemAccount, hashAggregatorMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 						ctx, flowCtx, hashAggregationMemLimit, opName, spec.ProcessorID,
 					)
+					hashTableMemAccount := args.MonitorRegistry.CreateExtraMemAccountForSpillStrategy(
+						string(hashAggregatorMemMonitorName),
+					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
 					// spilling queue because it looks at how much memory it has
@@ -920,6 +927,7 @@ func NewColOperator(
 					)
 					newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
 					newAggArgs.MemAccount = hashAggregatorMemAccount
+					hashTableAllocator := colmem.NewAllocator(ctx, hashTableMemAccount, factory)
 					inMemoryHashAggregator := colexec.NewHashAggregator(
 						newAggArgs,
 						&colexecutils.NewSpillingQueueArgs{
@@ -930,6 +938,7 @@ func NewColOperator(
 							FDSemaphore:        args.FDSemaphore,
 							DiskAcc:            args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},
+						hashTableAllocator,
 						outputUnlimitedAllocator,
 						maxOutputBatchMemSize,
 					)
@@ -954,12 +963,17 @@ func NewColOperator(
 							newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
 							newAggArgs.MemAccount = ehaMemAccount
 							newAggArgs.Input = input
+							ehaHashTableMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
+								ctx, flowCtx, ehaOpName+"-hashtable", spec.ProcessorID,
+							)
+							ehaHashTableAllocator := colmem.NewAllocator(ctx, ehaHashTableMemAccount, factory)
 							eha, toClose := colexecdisk.NewExternalHashAggregator(
 								flowCtx,
 								args,
 								&newAggArgs,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								ehaHashTableAllocator,
 								// Note that here we can use the same allocator
 								// object as we passed to the in-memory hash
 								// aggregator because only one (either in-memory

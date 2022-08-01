@@ -28,7 +28,7 @@ type MonitorRegistry struct {
 }
 
 // GetMonitors returns all the monitors from the registry.
-func (r MonitorRegistry) GetMonitors() []*mon.BytesMonitor {
+func (r *MonitorRegistry) GetMonitors() []*mon.BytesMonitor {
 	return r.monitors
 }
 
@@ -42,7 +42,7 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 
 // getMemMonitorName returns a unique (for this MonitorRegistry) memory monitor
 // name.
-func (r MonitorRegistry) getMemMonitorName(
+func (r *MonitorRegistry) getMemMonitorName(
 	opName redact.RedactableString, processorID int32, suffix redact.RedactableString,
 ) redact.RedactableString {
 	return redact.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.monitors))
@@ -94,6 +94,25 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
 	r.accounts = append(r.accounts, &bufferingMemAccount)
 	return &bufferingMemAccount, monitorName
+}
+
+// CreateExtraMemAccountForSpillStrategy can be used to derive another memory
+// account that is bound to the memory monitor specified by the monitorName. It
+// is expected that such a monitor with a such name was already created by the
+// MonitorRegistry. If no such monitor is found, then nil is returned.
+func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
+	monitorName string,
+) *mon.BoundAccount {
+	// Iterate backwards since most likely that we want to create an account
+	// bound to the most recently created monitor.
+	for i := len(r.monitors) - 1; i >= 0; i-- {
+		if r.monitors[i].Name() == monitorName {
+			bufferingMemAccount := r.monitors[i].MakeBoundAccount()
+			r.accounts = append(r.accounts, &bufferingMemAccount)
+			return &bufferingMemAccount
+		}
+	}
+	return nil
 }
 
 // CreateUnlimitedMemAccount instantiates an unlimited memory monitor and a
