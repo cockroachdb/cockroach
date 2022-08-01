@@ -3504,6 +3504,28 @@ SELECT encode(descriptor, 'hex') AS descriptor
 		}
 	}
 
+	if err := t.maybeDropDatabases(); err != nil {
+		return err
+	}
+
+	// Ensure after dropping all databases state is still valid.
+	invalidObjects, err = validate()
+	if err != nil {
+		return errors.Wrap(err, "running object validation after database drops failed")
+	}
+	if invalidObjects != "" {
+		return errors.Errorf(
+			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
+		)
+	}
+
+	return nil
+}
+
+func (t *logicTest) maybeDropDatabases() error {
+	if t.cfg.SkipDropDatabases {
+		return nil
+	}
 	var dbNames pq.StringArray
 	if err := t.db.QueryRow(
 		`SELECT array_agg(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,
@@ -3544,18 +3566,6 @@ SELECT encode(descriptor, 'hex') AS descriptor
 			return err
 		}
 	}
-
-	// Ensure after dropping all databases state is still valid.
-	invalidObjects, err = validate()
-	if err != nil {
-		return errors.Wrap(err, "running object validation after database drops failed")
-	}
-	if invalidObjects != "" {
-		return errors.Errorf(
-			"descriptor validation failed after dropping databases:\n%s", invalidObjects,
-		)
-	}
-
 	return nil
 }
 
