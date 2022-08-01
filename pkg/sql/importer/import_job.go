@@ -522,7 +522,7 @@ func prepareNewTablesForIngestion(
 	}
 	seqVals := make(map[descpb.ID]int64, len(importTables))
 	for _, tableDesc := range importTables {
-		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -637,7 +637,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 		// Verification steps have passed, generate a new schema ID. We do this
 		// last because we want to avoid calling GenerateUniqueDescID if there's
 		// any kind of error in the prior stages of import.
-		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return nil, err
 		}

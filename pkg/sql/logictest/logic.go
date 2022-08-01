@@ -1171,7 +1171,8 @@ func (t *logicTest) newCluster(
 					ForceProductionValues:           serverArgs.ForceProductionValues,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain: true,
+					DeterministicExplain:            true,
+					UseTransactionalDescIDGenerator: true,
 				},
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",

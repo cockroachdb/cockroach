@@ -145,16 +145,6 @@ func (s *Store) MergeRange(
 		return err
 	}
 
-	if leftRepl.leaseholderStats != nil {
-		leftRepl.leaseholderStats.ResetRequestCounts()
-	}
-	if leftRepl.writeStats != nil {
-		// Note: this could be drastically improved by adding a replicaStats method
-		// that merges stats. Resetting stats is typically bad for the rebalancing
-		// logic that depends on them.
-		leftRepl.writeStats.ResetRequestCounts()
-	}
-
 	leftRepl.loadStats.merge(rightRepl.loadStats)
 
 	// Clear the concurrency manager's lock and txn wait-queues to redirect the

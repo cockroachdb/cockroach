@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -2715,6 +2716,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			StmtDiagnosticsRequestInserter: ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
 			CatalogBuiltins:                &p.evalCatalogBuiltins,
 			QueryCancelKey:                 ex.queryCancelKey,
+			DescIDGenerator:                ex.getDescIDGenerator(),
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
@@ -3270,6 +3272,14 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
+}
+
+func (ex *connExecutor) getDescIDGenerator() eval.DescIDGenerator {
+	if ex.server.cfg.TestingKnobs.UseTransactionalDescIDGenerator &&
+		ex.state.mu.txn != nil {
+		return descidgen.NewTransactionalGenerator(ex.server.cfg.Codec, ex.state.mu.txn)
+	}
+	return ex.server.cfg.DescIDGenerator
 }
 
 // StatementCounters groups metrics for counting different types of

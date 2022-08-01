@@ -137,16 +137,12 @@ func (r *Replica) sendWithoutRangeID(
 ) (_ *roachpb.BatchResponse, _ *StoreWriteBytes, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 
-	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
-		r.leaseholderStats.RecordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
-	}
-
-	if r.loadStats != nil {
-		r.loadStats.requests.RecordCount(float64(len(ba.Requests)), 0)
-		r.loadStats.writeBytes.RecordCount(getBatchRequestWriteBytes(ba), 0)
-	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
+
+	// Record summary throughput information about the batch request for
+	// accounting.
+	r.recordBatchRequestLoad(ctx, ba)
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
@@ -1001,6 +997,29 @@ func (r *Replica) executeAdminBatch(
 	br.Add(resp)
 	br.Txn = resp.Header().Txn
 	return br, nil
+}
+
+// recordBatchRequestLoad records the load information about a batch request issued
+// against this replica.
+func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchRequest) {
+	if r.loadStats == nil {
+		log.VEventf(
+			ctx,
+			3,
+			"Unable to record load of batch request for r%d, load stats is not initialized",
+			ba.Header.RangeID,
+		)
+		return
+	}
+
+	// adjustedQPS is the adjusted number of queries per second, that is a cost
+	// estimate of a BatchRequest. See getBatchRequestQPS() for the
+	// calculation.
+	adjustedQPS := r.getBatchRequestQPS(ctx, ba)
+
+	r.loadStats.batchRequests.RecordCount(adjustedQPS, ba.Header.GatewayNodeID)
+	r.loadStats.requests.RecordCount(float64(len(ba.Requests)), ba.Header.GatewayNodeID)
+	r.loadStats.writeBytes.RecordCount(getBatchRequestWriteBytes(ba), ba.Header.GatewayNodeID)
 }
 
 // getBatchRequestQPS calculates the cost estimation of a BatchRequest. The

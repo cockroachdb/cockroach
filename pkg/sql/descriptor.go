@@ -20,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -35,10 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,7 +94,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := p.extendedEvalCtx.DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -174,7 +176,7 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 		return descpb.InvalidID, nil
 	}
 
-	publicSchemaID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	publicSchemaID, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return descpb.InvalidID, err
 	}
@@ -352,7 +354,10 @@ func (p *planner) checkRegionIsCurrentlyActive(ctx context.Context, region catpb
 // CCL-licensed multi-region initialization code.
 var InitializeMultiRegionMetadataCCL = func(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
+	descIDGenerator eval.DescIDGenerator,
+	settings *cluster.Settings,
+	clusterID uuid.UUID,
+	clusterOrganization string,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
 	primaryRegion catpb.RegionName,
@@ -443,7 +448,10 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 	regionConfig, err := InitializeMultiRegionMetadataCCL(
 		ctx,
-		p.ExecCfg(),
+		p.EvalContext().DescIDGenerator,
+		p.EvalContext().Settings,
+		p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Organization(),
 		liveRegions,
 		survivalGoal,
 		catpb.RegionName(primaryRegion),

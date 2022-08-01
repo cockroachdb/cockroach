@@ -45,7 +45,9 @@ import (
 // statements passed to the function will be all statements from all
 // previous test and setup blocks combined.
 func cumulativeTest(
-	t *testing.T, dir string, tf func(t *testing.T, setup, stmts []parser.Statement),
+	t *testing.T,
+	dir string,
+	tf func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement),
 ) {
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		var setup []parser.Statement
@@ -64,7 +66,7 @@ func cumulativeTest(
 					lines = append(lines, stmt.SQL)
 				}
 				t.Run(strings.Join(lines, "; "), func(t *testing.T) {
-					tf(t, setup, stmts)
+					tf(t, path, d.Rewrite, setup, stmts)
 				})
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -93,9 +95,9 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 		return n
 	}
 	var testRollbackCase func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, ord, n int,
 	)
-	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement) {
 		n := countRevertiblePostCommitStages(t, setup, stmts)
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -105,7 +107,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 		for i := 1; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("rollback stage %d of %d", i, n),
-				func(t *testing.T) { testRollbackCase(t, setup, stmts, i) },
+				func(t *testing.T) { testRollbackCase(t, path, rewrite, setup, stmts, i, n) },
 			) {
 				return
 			}
@@ -113,14 +115,27 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 	}
 
 	testRollbackCase = func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, ord, n int,
 	) {
 		var numInjectedFailures uint32
+		var numCheckedExplainInRollback uint32
 		beforeStage := func(p scplan.Plan, stageIdx int) error {
+			s := p.Stages[stageIdx]
 			if atomic.LoadUint32(&numInjectedFailures) > 0 {
+				// At this point, if a failure has already been injected, any stage
+				// should be non-revertible.
+				require.Equal(t, scop.PostCommitNonRevertiblePhase, s.Phase)
+				// EXPLAIN the rollback plan as early as possible.
+				if atomic.LoadUint32(&numCheckedExplainInRollback) > 0 {
+					return nil
+				}
+				atomic.AddUint32(&numCheckedExplainInRollback, 1)
+				fileNameSuffix := fmt.Sprintf(".rollback_%d_of_%d", ord, n)
+				explainedStmt := fmt.Sprintf("rollback at post-commit stage %d of %d", ord, n)
+				const inRollback = true
+				checkExplainDiagrams(t, path, setup, stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, rewrite)
 				return nil
 			}
-			s := p.Stages[stageIdx]
 			if s.Phase == scop.PostCommitPhase && s.Ordinal == ord {
 				atomic.AddUint32(&numInjectedFailures, 1)
 				return errors.Errorf("boom %d", ord)
@@ -157,6 +172,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 			require.NoError(t, err)
 		} else {
 			require.Regexp(t, fmt.Sprintf("boom %d", ord), err)
+			require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
 		}
 	}
 	cumulativeTest(t, dir, testFunc)
@@ -194,7 +210,7 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 	var testPauseCase func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	)
-	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
 		countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		if n == 0 {
@@ -304,7 +320,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 	var testBackupRestoreCase func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	)
-	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
 		postCommit, nonRevertible := countStages(t, setup, stmts)
 		if nonRevertible > 0 {
 			postCommit++

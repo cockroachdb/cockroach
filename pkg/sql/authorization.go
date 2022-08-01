@@ -750,7 +750,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
-	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), newOwner)
+	roleExists, err := RoleExists(ctx, p.ExecCfg().InternalExecutor, p.Txn(), newOwner)
 	if err != nil {
 		return err
 	}

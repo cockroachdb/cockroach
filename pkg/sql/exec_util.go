@@ -1307,6 +1307,9 @@ type ExecutorConfig struct {
 
 	// RangeProber is used in calls to crdb_internal.probe_ranges.
 	RangeProber eval.RangeProber
+
+	// DescIDGenerator generates unique descriptor IDs.
+	DescIDGenerator eval.DescIDGenerator
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1467,6 +1470,11 @@ type ExecutorTestingKnobs struct {
 	// OnRecordTxnFinish, if set, will be called as we record a transaction
 	// finishing.
 	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string)
+
+	// UseTransactionDescIDGenerator is used to force descriptor ID generation
+	// to use a transaction, and, in doing so, more deterministically allocate
+	// descriptor IDs at the cost of decreased parallelism.
+	UseTransactionalDescIDGenerator bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

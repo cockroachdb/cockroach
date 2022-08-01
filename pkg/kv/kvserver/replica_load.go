@@ -26,7 +26,9 @@ type ReplicaLoad struct {
 	readBytes     *replicastats.ReplicaStats
 }
 
-func newReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
+// NewReplicaLoad returns a new ReplicaLoad, which may be used to track the
+// request throughput of a replica.
+func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
 	return &ReplicaLoad{
 		batchRequests: replicastats.NewReplicaStats(clock, getNodeLocality),
 		requests:      replicastats.NewReplicaStats(clock, getNodeLocality),

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -112,12 +111,8 @@ func newUnloadedReplica(
 		r.leaseHistory = newLeaseHistory()
 	}
 	if store.cfg.StorePool != nil {
-		r.leaseholderStats = replicastats.NewReplicaStats(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
-		r.loadStats = newReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
+		r.loadStats = NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 	}
-	// Pass nil for the localityOracle because we intentionally don't track the
-	// origin locality of write load.
-	r.writeStats = replicastats.NewReplicaStats(store.Clock(), nil)
 
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(replicaID, &roachpb.RangeDescriptor{RangeID: desc.RangeID})
