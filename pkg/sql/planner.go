@@ -893,6 +893,7 @@ func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecu
 		descCollection:         p.Descriptors(),
 		jobs:                   p.extendedEvalCtx.Jobs,
 		schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
+		schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
 	}
 	return ie
 }
@@ -1004,4 +1005,5 @@ type extraTxnState struct {
 	descCollection         *descs.Collection
 	jobs                   *jobsCollection
 	schemaChangeJobRecords map[descpb.ID]*jobs.Record
+	schemaChangerState     *SchemaChangerState
 }

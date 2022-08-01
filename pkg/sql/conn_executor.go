@@ -857,7 +857,7 @@ func (s *Server) newConnExecutor(
 	// postSetupFns is to override certain field of a conn executor.
 	// It is set when conn executor is init under an internal executor
 	// with a not-nil txn.
-	postSetupFns []func(ex *connExecutor),
+	postSetupFn func(ex *connExecutor),
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -975,8 +975,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
-	for _, run := range postSetupFns {
-		run(ex)
+	if postSetupFn != nil {
+		postSetupFn(ex)
 	}
 
 	ex.initPlanner(ctx, &ex.planner)

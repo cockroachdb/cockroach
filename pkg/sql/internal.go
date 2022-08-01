@@ -142,6 +142,37 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	}
 }
 
+func (ie *InternalExecutor) runWithEx(
+	ctx context.Context,
+	txn *kv.Txn,
+	w ieResultWriter,
+	sd *sessiondata.SessionData,
+	stmtBuf *StmtBuf,
+	wg *sync.WaitGroup,
+	syncCallback func([]resWithPos),
+	errCallback func(error),
+) error {
+	ex, err := ie.initConnEx(ctx, txn, w, sd, stmtBuf, syncCallback)
+	if err != nil {
+		return err
+	}
+	wg.Add(1)
+	go func() {
+		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			errCallback(err)
+		}
+		w.finish()
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
+		wg.Done()
+	}()
+	return nil
+}
+
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // takes in a StmtBuf into which commands can be pushed and a WaitGroup that
 // will be signaled when connEx.run() returns.
@@ -159,10 +190,8 @@ func (ie *InternalExecutor) initConnEx(
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
-	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
-	errCallback func(error),
-) error {
+) (*connExecutor, error) {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -212,27 +241,13 @@ func (ie *InternalExecutor) initConnEx(
 			applicationStats,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	ex.executorType = executorTypeInternal
+	return ex, nil
 
-	wg.Add(1)
-	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-			errCallback(err)
-		}
-		w.finish()
-		closeMode := normalClose
-		if txn != nil {
-			closeMode = externalTxnClose
-		}
-		ex.close(ctx, closeMode)
-		wg.Done()
-	}()
-	return nil
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -260,24 +275,18 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// If an internal executor is run with a not-nil txn, we may want to
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
-	var postSetupFns []func(ex *connExecutor)
-	if ie.extraTxnState != nil {
-		if ie.extraTxnState.descCollection != nil {
-			postSetupFns = append(postSetupFns, func(ex *connExecutor) {
+	postSetupFn := func(ex *connExecutor) {
+		if ie.extraTxnState != nil {
+			if ie.extraTxnState.descCollection != nil {
 				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 				ex.extraTxnState.skipDescsCollectionRelease = true
-			})
-		}
-		if ie.extraTxnState.schemaChangeJobRecords != nil {
-			postSetupFns = append(postSetupFns, func(ex *connExecutor) {
 				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
 				ex.extraTxnState.skipSchemaChangeRecordRelease = true
-			})
-		}
-		if ie.extraTxnState.jobs != nil {
-			postSetupFns = append(postSetupFns, func(ex *connExecutor) {
-				ex.extraTxnState.jobs = *ie.extraTxnState.jobs
-			})
+				if ie.extraTxnState.jobs != nil {
+					ex.extraTxnState.jobs = *ie.extraTxnState.jobs
+				}
+				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
+			}
 		}
 	}
 
@@ -289,7 +298,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ie.memMetrics,
 		&ie.s.InternalMetrics,
 		applicationStats,
-		postSetupFns,
+		postSetupFn,
 	)
 
 	if txn.Type() == kv.LeafTxn {
@@ -853,7 +862,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	err = ie.runWithEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 	if err != nil {
 		return nil, err
 	}
