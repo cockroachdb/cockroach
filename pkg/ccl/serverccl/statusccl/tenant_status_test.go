@@ -105,6 +105,10 @@ func TestTenantStatusAPI(t *testing.T) {
 	t.Run("tenant_ranges", func(t *testing.T) {
 		testTenantRangesRPC(ctx, t, testHelper)
 	})
+
+	t.Run("tenant_auth_statement", func(t *testing.T) {
+		testTenantAuthOnStatements(ctx, t, testHelper)
+	})
 }
 
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
@@ -1177,6 +1181,21 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper *tenantTestHelp
 				resp1.RangesByLocality[locality].Ranges[0].RangeID < ranges.Ranges[0].RangeID)
 		}
 	})
+}
+
+func testTenantAuthOnStatements(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
+	client := helper.testCluster().tenantHTTPClient(t, 1, false)
+	defer client.Close()
+	err := client.GetJSONChecked("/_status/statements", &serverpb.StatementsResponse{})
+	// Should return an error because the user is not admin and doesn't have any system
+	// privileges.
+	require.Error(t, err)
+
+	// Once user has been granted the required system privilege there should be no error.
+	grantStmt := `GRANT SYSTEM VIEWACTIVITY TO authentic_user_noadmin;`
+	helper.tenantTestCluster.tenantConn(0).Exec(t, grantStmt)
+	err = client.GetJSONChecked("/_status/statements", &serverpb.StatementsResponse{})
+	require.NoError(t, err)
 }
 
 // assertStartKeyInRange compares the pretty printed startKey with the provided

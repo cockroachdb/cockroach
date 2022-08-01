@@ -217,6 +217,10 @@ func (c *httpClient) GetJSON(path string, response protoutil.Message) {
 	require.NoError(c.t, err)
 }
 
+func (c *httpClient) GetJSONChecked(path string, response protoutil.Message) error {
+	return httputil.GetJSON(c.client, c.baseURL+path, response)
+}
+
 func (c *httpClient) PostJSON(path string, request protoutil.Message, response protoutil.Message) {
 	err := c.PostJSONChecked(path, request, response)
 	require.NoError(c.t, err)
