@@ -241,6 +241,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		ca.knobs = *cfKnobs
+		if ca.knobs.WrapEncoder != nil {
+			ca.encoder = ca.knobs.WrapEncoder(ca.encoder)
+		}
 	}
 
 	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
@@ -879,6 +882,12 @@ func newChangeFrontierProcessor(
 	}
 	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed)); err != nil {
 		return nil, err
+	}
+
+	if cfKnobs, ok := cf.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		if cfKnobs.WrapEncoder != nil {
+			cf.encoder = cfKnobs.WrapEncoder(cf.encoder)
+		}
 	}
 
 	return cf, nil

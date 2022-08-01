@@ -28,8 +28,11 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -190,14 +193,17 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) error {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
+				return assertPayloadsBaseErr(t, ctx, f, expected, stripTs, perKeyOrdered)
 			},
 		))
 }
 
+var testsThatAssertedPayloads = make(map[testing.TB]struct{})
+
 func assertPayloadsBaseErr(
-	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	t testing.TB, ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) error {
+	testsThatAssertedPayloads[t] = struct{}{}
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err
@@ -865,6 +871,11 @@ func cdcTestNamedWithSystem(
 		defer cleanupCloudStorage()
 
 		testFn(t, testServer, feedFactory)
+		if !t.Skipped() && !t.Failed() {
+			if _, ok := testsThatAssertedPayloads[t]; !ok {
+				t.Error("This test never called assertPayloads. Add a payload assertion or use cdc_processor_test() instead.")
+			}
+		}
 	})
 }
 
@@ -976,4 +987,67 @@ func waitForJobStatus(
 		}
 		return nil
 	})
+}
+
+type mockSink interface {
+	Sink
+	NextEvent(cdcevent.Row)
+}
+
+// processorTestSink implements a mock Sink interface for
+// tests that don't care about sinks.
+type processorTestSink struct {
+	lastResolved hlc.Timestamp
+	nextEvent    cdcevent.Row
+	emitFn       func(cdcevent.Row) error
+}
+
+func (s *processorTestSink) Dial() error                 { return nil }
+func (s *processorTestSink) Close() error                { return nil }
+func (s *processorTestSink) Flush(context.Context) error { return nil }
+func (s *processorTestSink) EmitResolvedTimestamp(_ context.Context, _ Encoder, resolved hlc.Timestamp) error {
+	s.lastResolved = resolved
+	return nil
+}
+func (s *processorTestSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	defer alloc.Release(ctx)
+	if s.emitFn != nil {
+		return s.emitFn(s.nextEvent)
+	}
+	return nil
+}
+func (s *processorTestSink) NextEvent(r cdcevent.Row) {
+	s.nextEvent = r
+}
+
+var _ Sink = &processorTestSink{}
+
+// processorTestEncoder skips encoding an event and just passes it to
+// a sink in memory, for tests that don't care about
+// encoding.
+type processorTestEncoder struct {
+	sink mockSink
+}
+
+var _ Encoder = &processorTestEncoder{}
+
+func (e *processorTestEncoder) EncodeKey(_ context.Context, r cdcevent.Row) ([]byte, error) {
+	if e.sink != nil {
+		e.sink.NextEvent(r)
+	}
+	return nil, nil
+}
+
+func (e *processorTestEncoder) EncodeValue(_ context.Context, _ eventContext, _, _ cdcevent.Row) ([]byte, error) {
+	return nil, nil
+}
+
+func (e *processorTestEncoder) EncodeResolvedTimestamp(_ context.Context, _ string, _ hlc.Timestamp) ([]byte, error) {
+	return nil, nil
 }
