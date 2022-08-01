@@ -37,6 +37,7 @@ func NewExternalHashAggregator(
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
+	hashTableAllocator *colmem.Allocator,
 	outputUnlimitedAllocator *colmem.Allocator,
 	maxOutputBatchMemSize int64,
 ) (colexecop.Operator, colexecop.Closer) {
@@ -45,7 +46,10 @@ func NewExternalHashAggregator(
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
-		return colexec.NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
+		return colexec.NewHashAggregator(
+			&newAggArgs, nil /* newSpillingQueueArgs */, hashTableAllocator,
+			outputUnlimitedAllocator, maxOutputBatchMemSize,
+		)
 	}
 	spec := newAggArgs.Spec
 	diskBackedFallbackOpConstructor := func(

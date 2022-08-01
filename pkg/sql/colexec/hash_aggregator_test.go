@@ -443,6 +443,7 @@ func TestHashAggregator(t *testing.T) {
 				},
 					nil, /* newSpillingQueueArgs */
 					testAllocator,
+					testAllocator,
 					math.MaxInt64,
 				), nil
 			})
@@ -476,7 +477,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 			for _, agg := range []aggType{
 				{
 					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=false",
 					order: unordered,
@@ -492,7 +493,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 							DiskQueueCfg:       queueCfg,
 							FDSemaphore:        &colexecop.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,
-						}, testAllocator, math.MaxInt64)
+						}, testAllocator, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=true",
 					order: unordered,
@@ -546,7 +547,7 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        &colexecop.TestingSemaphore{},
 			DiskAcc:            testDiskAcc,
-		}, testAllocator, math.MaxInt64)
+		}, testAllocator, testAllocator, math.MaxInt64)
 	}
 	// We choose any_not_null aggregate function because it is the simplest
 	// possible and, thus, its Compute function call will have the least impact
