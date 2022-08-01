@@ -37,6 +37,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/rpc",
