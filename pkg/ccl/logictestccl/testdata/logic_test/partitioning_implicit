@@ -772,7 +772,7 @@ vectorized: true
 │                   └── • scan
 │                         missing stats
 │                         table: t@t_b_key
-│                         spans: FULL SCAN
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │

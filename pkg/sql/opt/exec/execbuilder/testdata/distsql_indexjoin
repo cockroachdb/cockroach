@@ -142,4 +142,4 @@ vectorized: true
         └── • scan
               missing stats
               table: abc@abc_c_b_idx
-              spans: FULL SCAN
+              spans: FULL SCAN (SOFT LIMIT)

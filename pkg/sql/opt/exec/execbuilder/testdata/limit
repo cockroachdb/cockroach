@@ -251,7 +251,7 @@ vectorized: true
               columns: (k, v, w)
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
-              spans: FULL SCAN
+              spans: FULL SCAN (SOFT LIMIT)
 
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
@@ -308,7 +308,7 @@ vectorized: true
                   ordering: +k
                   estimated row count: 1,000 (missing stats)
                   table: t@t_pkey
-                  spans: FULL SCAN
+                  spans: FULL SCAN (SOFT LIMIT)
 
 # Regression test for #47283: scan with both hard limit and soft limit.
 statement ok
@@ -526,7 +526,7 @@ vectorized: true
     └── • scan
           estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
           table: a@a_i_j_idx
-          spans: FULL SCAN
+          spans: FULL SCAN (SOFT LIMIT)
 
 # A limit cannot be pushed into the scan of a virtual table with ORDER BY.
 query T

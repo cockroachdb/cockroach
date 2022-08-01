@@ -950,7 +950,7 @@ vectorized: true
                 └── • scan
                       missing stats
                       table: xyz@xy
-                      spans: FULL SCAN
+                      spans: FULL SCAN (SOFT LIMIT)
 
 # Scalar subquery in filter is supported.
 query T
@@ -1070,7 +1070,7 @@ vectorized: true
                 └── • scan
                       missing stats
                       table: xyz@xyz_pkey
-                      spans: FULL SCAN
+                      spans: FULL SCAN (SOFT LIMIT)
 
 # VARIANCE/STDDEV
 
