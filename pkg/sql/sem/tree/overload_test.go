@@ -19,9 +19,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 type variadicTestCase struct {
@@ -312,6 +314,80 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 						i, d.expectedOverload, d.exprs, fns)
 				}
 			}
+		})
+	}
+}
+
+func TestSortOverloadsByPath(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeSearchPath := func(schemas []string) SearchPath {
+		path := sessiondata.MakeSearchPath(schemas)
+		return &path
+	}
+	testCases := []struct {
+		testName     string
+		overloads    []*PrefixedOverload
+		searchPath   SearchPath
+		expectedOIDs []int
+	}{
+		{
+			testName:     "empty overloads",
+			overloads:    []*PrefixedOverload{},
+			searchPath:   makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOIDs: []int{},
+		},
+		{
+			testName: "overloads from all schemas in path",
+			overloads: []*PrefixedOverload{
+				{Schema: "sc1", Overload: &Overload{Oid: 1}},
+				{Schema: "sc3", Overload: &Overload{Oid: 2}},
+				{Schema: "sc2", Overload: &Overload{Oid: 3}},
+			},
+			searchPath:   makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOIDs: []int{2, 3, 1},
+		},
+		{
+			testName: "overloads from some schemas in path",
+			overloads: []*PrefixedOverload{
+				{Schema: "sc1", Overload: &Overload{Oid: 1}},
+				{Schema: "sc3", Overload: &Overload{Oid: 2}},
+			},
+			searchPath:   makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOIDs: []int{2, 1},
+		},
+		{
+			testName: "implicit pg_catalog in path",
+			overloads: []*PrefixedOverload{
+				{Schema: "sc1", Overload: &Overload{Oid: 1}},
+				{Schema: "sc3", Overload: &Overload{Oid: 2}},
+				{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			},
+			searchPath:   makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOIDs: []int{3, 2, 1},
+		},
+		{
+			testName: "implicit pg_catalog in path",
+			overloads: []*PrefixedOverload{
+				{Schema: "sc1", Overload: &Overload{Oid: 1}},
+				{Schema: "sc3", Overload: &Overload{Oid: 2}},
+				{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			},
+			searchPath:   makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
+			expectedOIDs: []int{2, 1, 3},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			err := sortOverloadsByPath(tc.overloads, tc.searchPath)
+			require.NoError(t, err)
+			oids := make([]int, len(tc.overloads))
+			for i := range tc.overloads {
+				oids[i] = int(tc.overloads[i].Oid)
+			}
+			require.Equal(t, tc.expectedOIDs, oids)
 		})
 	}
 }

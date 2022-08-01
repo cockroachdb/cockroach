@@ -88,11 +88,12 @@ func (ref *ResolvableFunctionReference) Resolve(
 			if err != nil {
 				return nil, err
 			}
-			def, err := GetBuiltinFuncDefinitionOrFail(fn, path)
+			fd, err := GetBuiltinFuncDefinitionOrFail(fn, path)
 			if err != nil {
 				return nil, err
 			}
-			return def, nil
+			ref.FunctionReference = fd
+			return fd, nil
 		}
 		fd, err := resolver.ResolveFunction(ctx, t, path)
 		if err != nil {
@@ -103,6 +104,10 @@ func (ref *ResolvableFunctionReference) Resolve(
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
 	}
+}
+
+type CustomBuiltinFunctionWrapper interface {
+	WrapFunction(name string) (*ResolvedFunctionDefinition, error)
 }
 
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved

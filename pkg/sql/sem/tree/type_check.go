@@ -13,6 +13,7 @@ package tree
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -928,7 +929,7 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
-func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionDefinition) error {
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil
@@ -1015,7 +1016,7 @@ func (sc *SemaContext) checkVolatility(v volatility.V) error {
 
 // CheckIsWindowOrAgg returns an error if the function definition is not a
 // window function or an aggregate.
-func CheckIsWindowOrAgg(def *FunctionDefinition) error {
+func CheckIsWindowOrAgg(def *ResolvedFunctionDefinition) error {
 	cls, err := def.GetClass()
 	if err != nil {
 		return err
@@ -1041,7 +1042,7 @@ func (expr *FuncExpr) TypeCheck(
 		searchPath = semaCtx.SearchPath
 		resolver = semaCtx.FunctionResolver
 	}
-	def, err := expr.Func.Resolve(searchPath, resolver)
+	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,8 +1073,8 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	overloadImpls := make([]overloadImpl, 0, len(def.Definition))
-	for _, o := range def.Definition {
+	overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
+	for _, o := range def.Overloads {
 		overloadImpls = append(overloadImpls, o)
 	}
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, overloadImpls, false, expr.Exprs...)
@@ -1084,7 +1085,7 @@ func (expr *FuncExpr) TypeCheck(
 	var nullableArgFns []overloadImpl
 	var notNullableArgsFn []overloadImpl
 	for _, f := range fns {
-		if f.(*Overload).NullableArgs {
+		if f.(*PrefixedOverload).NullableArgs {
 			nullableArgFns = append(nullableArgFns, f)
 		} else {
 			notNullableArgsFn = append(notNullableArgsFn, f)
@@ -1139,37 +1140,50 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	// Throw a typing error if overload resolution found either no compatible candidates
-	// or if it found an ambiguity.
-	// TODO(nvanbenschoten): now that we can distinguish these, we can improve the
-	//   error message the two report (e.g. "add casts please")
-	if len(fns) != 1 {
-		typeNames := make([]string, 0, len(expr.Exprs))
-		for _, expr := range typedSubExprs {
-			typeNames = append(typeNames, expr.ResolvedType().String())
-		}
-		var desStr string
-		if desired.Family() != types.AnyFamily {
-			desStr = fmt.Sprintf(" (desired <%s>)", desired)
-		}
-		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
-		if len(fns) == 0 {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", sig)
-		}
-		fnsStr := formatCandidates(expr.Func.String(), fns)
-		return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
+	if len(fns) == 0 {
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, typedSubExprs, desired))
 	}
-	overloadImpl := fns[0].(*Overload)
+
+	// Sort overloads by the order of their schema in search path.
+	overloads := make([]*PrefixedOverload, len(fns))
+	for i := range fns {
+		overloads[i] = fns[i].(*PrefixedOverload)
+	}
+	if err := sortOverloadsByPath(overloads, searchPath); err != nil {
+		return nil, err
+	}
+
+	// Throw ambiguity error if there are more than one candidate overloads from
+	// same schema.
+	if len(overloads) > 1 && overloads[0].Schema == overloads[1].Schema {
+		return nil, pgerror.Newf(
+			pgcode.AmbiguousFunction,
+			"ambiguous call: %s, candidates are:\n%s",
+			getFuncSig(expr, typedSubExprs, desired),
+			formatCandidates(expr.Func.String(), fns),
+		)
+	}
+
+	// Just pick the first overload from the search path.
+	overloadImpl := overloads[0].Overload
 	if overloadImpl.Private {
 		return nil, pgerror.Wrapf(errPrivateFunction, pgcode.ReservedName,
 			"%s()", errors.Safe(def.Name))
+	}
+	if resolver != nil && overloadImpl.UDFContainsOnlySignature {
+		overloadImpl, err = resolver.ResolveFunctionByOID(ctx, overloadImpl.Oid)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		if err := CheckIsWindowOrAgg(def); err != nil {
-			return nil, err
+		if overloadImpl.Class != WindowClass && overloadImpl.Class != AggregateClass {
+			return nil, pgerror.Newf(pgcode.WrongObjectType,
+				"OVER specified, but %s() is neither a window function nor an aggregate function",
+				def.Name)
 		}
 		if expr.Type == DistinctFuncType {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "DISTINCT is not implemented for window functions")
@@ -2923,3 +2937,24 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// sortOverloadsByPath sorts overloads by the order of position of their
+// prefixed schema in search path.
+func sortOverloadsByPath(overloads []*PrefixedOverload, searchPath SearchPath) error {
+	if searchPath != nil && searchPath != EmptySearchPath {
+		scOrders := make(map[string]int)
+		order := 0
+		err := searchPath.IterateSearchPath(func(schema string) error {
+			scOrders[schema] = order
+			order++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		sort.Slice(overloads, func(i, j int) bool {
+			return scOrders[overloads[i].Schema] < scOrders[overloads[j].Schema]
+		})
+	}
+	return nil
+}

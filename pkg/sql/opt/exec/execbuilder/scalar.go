@@ -282,6 +282,8 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
+	// TODO(mgartner): Consider modifying this to use a function resolver. Or is a
+	// function definition needed here at all?
 	funcRef := b.wrapFunction(fn.Name)
 	return tree.NewTypedFuncExpr(
 		funcRef,

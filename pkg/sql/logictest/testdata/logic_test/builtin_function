@@ -4,7 +4,7 @@ CREATE TABLE foo (a int)
 statement ok
 INSERT INTO foo (a) VALUES (1)
 
-query error unknown function: foo.bar
+query error pq: schema "foo" does not exist
 SELECT foo.bar()
 
 query error unknown function: defaults

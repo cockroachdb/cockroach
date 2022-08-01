@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -66,6 +67,11 @@ func (rs *CDCFunctionResolver) ResolveFunction(
 		return nil, errors.AssertionFailedf("function %s does not exist", fn.String())
 	}
 	return funcDef, nil
+}
+
+func (rs *CDCFunctionResolver) WrapFunction(name string) (*tree.ResolvedFunctionDefinition, error) {
+	un := tree.MakeUnresolvedName(name)
+	return rs.ResolveFunction(context.Background(), &un, &sessiondata.DefaultSearchPath)
 }
 
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
