@@ -183,6 +183,11 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+// ResetSyntheticDescriptors clear all syntheticDescriptors.
+func (tc *Collection) ResetSyntheticDescriptors() {
+	tc.synthetic.reset()
+}
+
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() bool {

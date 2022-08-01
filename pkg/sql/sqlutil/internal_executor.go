@@ -158,6 +158,13 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// CommitTxn let internal executor's conn executor commit the txn.
+	CommitTxn(ctx context.Context) error
+
+	// CloseExUnderTxn close the internal executor's conn executor. It should only
+	// be used if the internal executor is used with a not nil txn.
+	CloseExUnderTxn(ctx context.Context)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -201,6 +208,17 @@ type InternalRows interface {
 type SessionBoundInternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithoutTxn is to run SQL statements without a txn context.
+// Note that in this mode, each execution with the internal executor runs its
+// own descriptor collection, schema change job collection and transaction state
+// machine.
+func (f SessionBoundInternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil)
+	return run(ctx, ie)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
