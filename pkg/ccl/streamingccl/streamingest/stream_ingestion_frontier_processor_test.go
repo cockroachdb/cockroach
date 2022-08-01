@@ -302,14 +302,13 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			defer func() {
 				require.NoError(t, client.Close(context.Background()))
 			}()
-			interceptable, ok := client.(streamclient.InterceptableStreamClient)
-			require.True(t, ok)
-			defer interceptable.ClearInterceptors()
+
+			client.ClearInterceptors()
 
 			// Record heartbeats in a list and terminate the client once the expected
 			// frontier timestamp has been reached
 			heartbeats := make([]hlc.Timestamp, 0)
-			interceptable.RegisterHeartbeatInterception(func(heartbeatTs hlc.Timestamp) {
+			client.RegisterHeartbeatInterception(func(heartbeatTs hlc.Timestamp) {
 				heartbeats = append(heartbeats, heartbeatTs)
 				if tc.expectedFrontierTimestamp.LessEq(heartbeatTs) {
 					doneCh <- struct{}{}

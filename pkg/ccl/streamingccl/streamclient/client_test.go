@@ -124,8 +124,6 @@ func TestGetFirstActiveClient(t *testing.T) {
 	defer func() {
 		require.NoError(t, client.Close(context.Background()))
 	}()
-	interceptable, ok := client.(InterceptableStreamClient)
-	require.True(t, ok)
 
 	streamAddresses := []string{
 		"randomgen://test0/",
@@ -142,7 +140,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 	}
 
 	// Track dials and error for all but test3 and test4
-	interceptable.RegisterDialInterception(func(streamURL *url.URL) error {
+	client.RegisterDialInterception(func(streamURL *url.URL) error {
 		addr := streamURL.String()
 		addressDialCount[addr]++
 		if addr != streamAddresses[3] && addr != streamAddresses[4] {
@@ -151,7 +149,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 		return nil
 	})
 
-	client, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
 	require.NoError(t, err)
 
 	// Should've dialed the valid schemes up to the 5th one where it should've
@@ -165,7 +163,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 	require.Equal(t, 0, addressDialCount[streamAddresses[6]])
 
 	// The 5th should've succeded as it was a valid scheme and succeeded Dial
-	require.Equal(t, client.(*randomStreamClient).streamURL.String(), streamAddresses[4])
+	require.Equal(t, activeClient.(*RandomStreamClient).streamURL.String(), streamAddresses[4])
 }
 
 // ExampleClientUsage serves as documentation to indicate how a stream
@@ -243,7 +241,7 @@ func ExampleClient() {
 				case streamingccl.CheckpointEvent:
 					ingested.Lock()
 					minTS := hlc.MaxTimestamp
-					for _, rs := range *event.GetResolvedSpans() {
+					for _, rs := range event.GetResolvedSpans() {
 						if rs.Timestamp.Less(minTS) {
 							minTS = rs.Timestamp
 						}

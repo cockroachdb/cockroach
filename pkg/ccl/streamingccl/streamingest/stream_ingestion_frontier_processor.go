@@ -419,7 +419,6 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		}
 
 		progress := md.Progress
-
 		// Keep the recorded highwater empty until some advancement has been made
 		if sf.highWaterAtStart.Less(highWatermark) {
 			progress.Progress = &jobspb.Progress_HighWater{

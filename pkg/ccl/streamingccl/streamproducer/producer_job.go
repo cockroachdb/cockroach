@@ -101,7 +101,6 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
 				return p.releaseProtectedTimestamp(ctx, execCfg)
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
-				fmt.Println("producer try update cancel requested")
 				return j.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 					ju.UpdateStatus(jobs.StatusCancelRequested)
 					return nil
