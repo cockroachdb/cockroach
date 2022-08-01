@@ -456,6 +456,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		BinaryVersion:       roachpb.Version{Major: 22, Minor: 2},
 		DisableUpgrade:      true,
 	},
+	{
+		Name:              "local-udf",
+		NumNodes:          1,
+		SkipDropDatabases: true,
+	},
 }
 
 // ConfigIdx is an index in the above slice.
