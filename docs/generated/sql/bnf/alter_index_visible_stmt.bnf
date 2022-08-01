@@ -1,0 +1,3 @@
+alter_index_visible_stmt ::=
+	'ALTER' 'INDEX' table_index_name alter_index_visible
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_visible
