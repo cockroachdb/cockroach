@@ -46,7 +46,9 @@ func (c *countOp) Next() coldata.Batch {
 	if c.done {
 		return coldata.ZeroBatch
 	}
-	c.internalBatch.ResetInternalBatch()
+	// The internal batch has only a single INT column, so no memory is ever
+	// released on the ResetInternalBatch() call.
+	_ = c.internalBatch.ResetInternalBatch()
 	for {
 		bat := c.Input.Next()
 		length := bat.Length()
