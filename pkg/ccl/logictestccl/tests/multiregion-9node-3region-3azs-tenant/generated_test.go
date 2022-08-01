@@ -115,6 +115,13 @@ func TestCCLLogic_multi_region_show(
 	runCCLLogicTest(t, "multi_region_show")
 }
 
+func TestCCLLogic_multi_region_zone_config_extensions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_zone_config_extensions")
+}
+
 func TestCCLLogic_multi_region_zone_configs(
 	t *testing.T,
 ) {

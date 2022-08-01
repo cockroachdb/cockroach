@@ -65,6 +65,11 @@ func (m *AlterDatabasePlacement) LoggingChannel() logpb.Channel { return logpb.C
 func (m *AlterDatabasePrimaryRegion) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *AlterDatabaseSetZoneConfigExtension) LoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_SCHEMA
+}
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterDatabaseSurvivalGoal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.

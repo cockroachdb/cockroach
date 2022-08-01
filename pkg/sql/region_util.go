@@ -167,6 +167,10 @@ func zoneConfigForMultiRegionDatabase(
 		InheritedLeasePreferences:   false,
 	}
 
+	// TODO(janexing): add validation of zone config extension both for the
+	// database and for each mutable table in database, to prevent them
+	// from violating the multi-region primitive.
+	// https://github.com/cockroachdb/cockroach/issues/85015
 	zc = regionConfig.ApplyZoneConfigExtensionForRegionalIn(zc, regionConfig.PrimaryRegion())
 	return zc, nil
 }
@@ -926,6 +930,11 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	dbZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
 	if err != nil {
 		return err
+	}
+
+	// Finally revalidate everything. Validate only the completeZone config.
+	if err := dbZoneConfig.Validate(); err != nil {
+		return pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
 	}
 	return applyZoneConfigForMultiRegionDatabase(
 		ctx,

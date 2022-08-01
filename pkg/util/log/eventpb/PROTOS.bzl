@@ -7,11 +7,11 @@
 EVENTPB_PROTOS = [
     "events.proto",
     "debug_events.proto",
+    "zone_events.proto",
     "ddl_events.proto",
     "misc_sql_events.proto",
     "privilege_events.proto",
     "role_events.proto",
-    "zone_events.proto",
     "session_events.proto",
     "sql_audit_events.proto",
     "cluster_events.proto",
