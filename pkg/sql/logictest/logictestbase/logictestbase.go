@@ -82,6 +82,12 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
+	// SkipDropDatabases allows a configuration to skip dropping of the database.
+	// This exists to enable development while DROP DATABASE for a feature is
+	// broken.
+	//
+	// TODO(ajwerner,chengxiong-ruan): Remove this before 22.2 is released.
+	SkipDropDatabases bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
