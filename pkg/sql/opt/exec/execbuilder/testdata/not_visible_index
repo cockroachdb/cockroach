@@ -1153,3 +1153,26 @@ DROP TABLE child_update
 
 statement ok
 DROP TABLE parent
+
+############################################################################
+# The following tests check for ALTER INDEX ... VISIBLE | NOT VISIBLE. 
+############################################################################
+subtest alter_index_visibility
+
+statement ok
+CREATE TABLE t (p INT PRIMARY KEY, INDEX idx (p) VISIBLE)
+
+query TTB
+SELECT index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY index_name, seq_in_index
+----
+idx     p  true
+t_pkey  p  true
+
+statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
+ALTER INDEX idx NOT VISIBLE
+
+statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
+ALTER INDEX idx VISIBLE
+
+statement ok
+DROP TABLE t
