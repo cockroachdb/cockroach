@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// parseFns maps a URI scheme to a constructor of instances of that external
-// connection.
-var parseFns = map[string]connectionParserFactory{}
+// parseAndValidateFns maps a URI scheme to a constructor of instances of that
+// external connection.
+var parseAndValidateFns = map[string]connectionParserFactory{}
 
 // constructFns maps a connectionpb.ConnectionProvider to a constructor of
 // instances of that external connection.
@@ -32,13 +32,13 @@ var constructFns = map[connectionpb.ConnectionProvider]connectionDetailsFactory{
 func RegisterConnectionDetailsFromURIFactory(
 	provider connectionpb.ConnectionProvider,
 	providerScheme string,
-	parseFn connectionParserFactory,
+	parseAndValidateFn connectionParserFactory,
 	constructFn connectionDetailsFactory,
 ) {
-	if _, ok := parseFns[providerScheme]; ok {
+	if _, ok := parseAndValidateFns[providerScheme]; ok {
 		panic(fmt.Sprintf("parse function already registered for %s", providerScheme))
 	}
-	parseFns[providerScheme] = parseFn
+	parseAndValidateFns[providerScheme] = parseAndValidateFn
 
 	if _, ok := constructFns[provider]; ok {
 		panic(fmt.Sprintf("construct function already registered for %s", provider.String()))
@@ -54,7 +54,7 @@ func ConnectionDetailsFromURI(ctx context.Context, uri string) (ConnectionDetail
 	}
 
 	// Find the parseFn method for the ExternalConnection provider.
-	parseFn, registered := parseFns[externalConnectionURI.Scheme]
+	parseFn, registered := parseAndValidateFns[externalConnectionURI.Scheme]
 	if !registered {
 		return nil, errors.Newf("no parseFn found for external connection provider %s", externalConnectionURI.Scheme)
 	}

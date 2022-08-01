@@ -20,22 +20,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type kmsConnectionContext struct {
-	kmsEnv cloud.KMSEnv
-}
-
-// ExternalStorageContext implements the ConnectionContext interface.
-func (k *kmsConnectionContext) ExternalStorageContext() cloud.ExternalStorageContext {
-	panic("kmsConnectionContext cannot be used for External Storage initialization")
-}
-
-// KMSEnv implements the ConnectionContext interface.
-func (k *kmsConnectionContext) KMSEnv() cloud.KMSEnv {
-	return k.kmsEnv
-}
-
-var _ ConnectionContext = &kmsConnectionContext{}
-
 func makeExternalConnectionKMS(
 	ctx context.Context, uri string, env cloud.KMSEnv,
 ) (cloud.KMS, error) {
@@ -70,7 +54,7 @@ func makeExternalConnectionKMS(
 	if err != nil {
 		return nil, err
 	}
-	connection, err := connDetails.Dial(ctx, &kmsConnectionContext{kmsEnv: env}, "" /* subdir */)
+	connection, err := connDetails.Dial(ctx, env, "" /* subdir */)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to Dial external connection")
 	}

@@ -17,9 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/errors"
 )
 
-func parseGCSKMSConnectionURI(
+func parseAndValidateGCSKMSConnectionURI(
 	_ context.Context, uri *url.URL,
 ) (connectionpb.ConnectionDetails, error) {
 	if err := validateKMSURI(*uri); err != nil {
@@ -41,10 +42,13 @@ type gcsKMSConnectionDetails struct {
 
 // Dial implements the ConnectionDetails interface.
 func (g *gcsKMSConnectionDetails) Dial(
-	ctx context.Context, connectionCtx externalconn.ConnectionContext, subdir string,
+	ctx context.Context, connectionCtx interface{}, subdir string,
 ) (externalconn.Connection, error) {
-	env := connectionCtx.KMSEnv()
-	return cloud.KMSFromURI(ctx, g.GetGCSKMS().URI, env)
+	kmsEnv, ok := connectionCtx.(cloud.KMSEnv)
+	if !ok {
+		return nil, errors.Newf("GCS KMS dialed with an incompatible context of type %T", connectionCtx)
+	}
+	return cloud.KMSFromURI(ctx, g.GetGCSKMS().URI, kmsEnv)
 }
 
 // ConnectionProto implements the ConnectionDetails interface.
@@ -67,7 +71,7 @@ func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		connectionpb.ConnectionProvider_gs_kms,
 		gcsScheme,
-		parseGCSKMSConnectionURI,
+		parseAndValidateGCSKMSConnectionURI,
 		makeGCSKMSConnectionDetails,
 	)
 }

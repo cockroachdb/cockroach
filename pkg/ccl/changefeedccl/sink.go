@@ -87,6 +87,16 @@ type SinkWithTopics interface {
 	Topics() []string
 }
 
+// SinkContext contains the dependencies passed to sink implementations during
+// creation.
+type SinkContext struct {
+	targets changefeedbase.Targets
+	mb      metricsRecorderBuilder
+
+	// Kafka specific configurations.
+	kafkaJSONConfig changefeedbase.SinkSpecificJSONConfig
+}
+
 func getEventSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,
@@ -189,6 +199,13 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
 				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
+			})
+		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
+			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
+				sinkCtx := SinkContext{targets: AllTargets(feedCfg), mb: metricsBuilder,
+					kafkaJSONConfig: opts.GetKafkaConfigJSON()}
+				return makeExternalConnectionSink(ctx, sinkURL{URL: u}, user, serverCfg.DB,
+					serverCfg.Executor, sinkCtx)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)

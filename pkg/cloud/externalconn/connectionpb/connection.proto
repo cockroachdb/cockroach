@@ -15,12 +15,22 @@ option go_package = "connectionpb";
 import "gogoproto/gogo.proto";
 import "cloud/cloudpb/external_storage.proto";
 
+// ConnectionProvider lists all the supported providers that can be represented
+// by an External Connection.
 enum ConnectionProvider {
   Unknown = 0;
+
+  // ExternalStorage providers.
   nodelocal = 1;
+
+  // KMS providers.
   gs_kms = 2;
+
+  // Sink providers.
+  kafka = 3;
 }
 
+// ConnectionType is the type of the External Connection object.
 enum ConnectionType {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -29,19 +39,34 @@ enum ConnectionType {
   KMS = 2 [(gogoproto.enumvalue_customname) = "TypeKMS"];
 }
 
+// ConnectionsDetails is the byte representation of the resource represented by
+// an External Connection object.
 message ConnectionDetails {
   ConnectionProvider provider = 1;
 
   oneof details {
     NodelocalConnectionDetails nodelocal = 2;
     GCSKMSConnectionDetails gcs_kms = 3 [(gogoproto.customname) = "GCSKMS"];
+    KafkaConnectionDetails kafka = 4;
   }
 }
 
+// NodelocalConnectionDetails encapsulates the information required by an
+// External Connection object to represent/dial a nodelocal URI.
 message NodelocalConnectionDetails {
+  // Cfg is the ExternalStorage configuration that represents a `nodelocal`
+  // connection.
   cloudpb.LocalFileConfig cfg = 1 [(gogoproto.nullable) = false];
 }
 
+// GCSKMSConnectionDetails encapsulates the information required by an External
+// Connection object to represent/dial a google cloud KMS URI.
 message GCSKMSConnectionDetails {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+}
+
+// KafkaConnectionDetails encapsulates the information required by an External
+// Connection object to represent/dial a kafka sink.
+message KafkaConnectionDetails {
   string uri = 1 [(gogoproto.customname) = "URI"];
 }

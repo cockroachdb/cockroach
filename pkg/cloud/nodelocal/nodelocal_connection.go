@@ -30,9 +30,12 @@ type localFileConnectionDetails struct {
 
 // Dial implements the external.ConnectionDetails interface.
 func (l *localFileConnectionDetails) Dial(
-	ctx context.Context, connectionCtx externalconn.ConnectionContext, subdir string,
+	ctx context.Context, connectionCtx interface{}, subdir string,
 ) (externalconn.Connection, error) {
-	args := connectionCtx.ExternalStorageContext()
+	args, ok := connectionCtx.(cloud.ExternalStorageContext)
+	if !ok {
+		return nil, errors.Newf("nodelocal dialed with an incompatible context of type %T", connectionCtx)
+	}
 	cfg := l.GetNodelocal().Cfg
 	cfg.Path = path.Join(cfg.Path, subdir)
 	externalStorageConf := cloudpb.ExternalStorage{
@@ -59,7 +62,7 @@ func (l *localFileConnectionDetails) ConnectionProto() *connectionpb.ConnectionD
 	return &l.ConnectionDetails
 }
 
-func parseLocalFileConnectionURI(
+func parseAndValidateLocalFileConnectionURI(
 	_ context.Context, uri *url.URL,
 ) (connectionpb.ConnectionDetails, error) {
 	connDetails := connectionpb.ConnectionDetails{
@@ -84,7 +87,7 @@ func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		connectionpb.ConnectionProvider_nodelocal,
 		scheme,
-		parseLocalFileConnectionURI,
+		parseAndValidateLocalFileConnectionURI,
 		makeLocalFileConnectionDetails,
 	)
 }

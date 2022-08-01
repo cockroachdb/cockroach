@@ -24,22 +24,6 @@ import (
 
 const scheme = "external"
 
-type storageConnectionContext struct {
-	externalStorageContext cloud.ExternalStorageContext
-}
-
-// ExternalStorageContext implements the ConnectionContext interface.
-func (n *storageConnectionContext) ExternalStorageContext() cloud.ExternalStorageContext {
-	return n.externalStorageContext
-}
-
-// KMSEnv implements the ConnectionContext interface.
-func (n *storageConnectionContext) KMSEnv() cloud.KMSEnv {
-	panic("storageConnectionContext cannot be used for KMS initialization")
-}
-
-var _ ConnectionContext = &storageConnectionContext{}
-
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
 ) (cloudpb.ExternalConnectionConfig, error) {
@@ -97,8 +81,7 @@ func makeExternalConnectionStorage(
 	if err != nil {
 		return nil, err
 	}
-	connection, err := connDetails.Dial(ctx,
-		&storageConnectionContext{externalStorageContext: args}, cfg.Path)
+	connection, err := connDetails.Dial(ctx, args, cfg.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to Dial external connection")
 	}
