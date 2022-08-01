@@ -7,7 +7,6 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 query T noticetrace
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, z)
 ----
-NOTICE: primary key changes are finalized asynchronously; further schema changes on this table may be restricted until the job completes
 
 query IIII rowsort
 SELECT * FROM t@t_pkey
