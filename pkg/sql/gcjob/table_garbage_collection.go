@@ -12,6 +12,7 @@ package gcjob
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -186,37 +188,47 @@ func clearSpanData(
 	return nil
 }
 
-// TODO(msbutler): tune this.
-const DeleteTableDefaultBatchSize = 500000
-
-// DeleteTableData deletes the data in the specified table with a DeleteRange
-// request. If predicates are passed, only keys that match the predicates will
-// get deleted.
-func DeleteTableData(
+// DeleteAllTableData issues a range tombstone over the specified table's data.
+func DeleteAllTableData(
 	ctx context.Context,
-	db *kv.DB,
+	distSender *kvcoord.DistSender,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
-	predicates roachpb.DeleteRangePredicates,
-	batchSize int64,
 ) error {
-	log.Infof(ctx, "Deleting data for table %d", table.GetID())
 	tableKey := codec.TablePrefix(uint32(table.GetID()))
-	endKey := tableKey.PrefixEnd()
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	return deleteAllSpanData(ctx, distSender, &tableSpan)
+}
 
-	var b kv.Batch
-	b.AddRawRequest(&roachpb.DeleteRangeRequest{
+// deleteAllSpanData issues a range tombstones over all data in the specified span.
+func deleteAllSpanData(
+	ctx context.Context, distSender *kvcoord.DistSender, span *roachpb.Span,
+) error {
+	req := &roachpb.DeleteRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key:    tableKey,
-			EndKey: tableKey.PrefixEnd(),
+			Key:    span.Key,
+			EndKey: span.EndKey,
 		},
 		UseRangeTombstone: true,
-		Predicates:        predicates,
-	})
-	b.Header.MaxSpanRequestKeys = batchSize
-	log.VEventf(ctx, 2, "Delete Range %s - %s", tableKey, endKey)
-	if err := db.Run(ctx, &b); err != nil {
-		return errors.Wrapf(err, "Delete range %s - %s", tableKey, endKey)
+	}
+	deleteRangeSpec := fmt.Sprintf("delete range %s - %s", span.Key, span.EndKey)
+	header := roachpb.Header{}
+	log.VEventf(ctx, 2, deleteRangeSpec)
+
+	admissionHeader := roachpb.AdmissionHeader{
+		Priority:                 int32(admissionpb.BulkNormalPri),
+		CreateTime:               timeutil.Now().UnixNano(),
+		Source:                   roachpb.AdmissionHeader_FROM_SQL,
+		NoMemoryReservedAtSource: true,
+	}
+	rawResp, pErr := kv.SendWrappedWithAdmission(ctx, distSender, header, admissionHeader, req)
+	if pErr != nil {
+		return errors.Wrapf(pErr.GoError(), deleteRangeSpec)
+	}
+	if rawResp.(*roachpb.DeleteRangeResponse).ResumeSpan != nil {
+		// Since the request header contains no MaxSpanRequestKeys or TargetBytes,
+		// we do not expect the kvserver to return a resume span.
+		return errors.AssertionFailedf("unexpected resume span: %s", deleteRangeSpec)
 	}
 	return nil
 }
