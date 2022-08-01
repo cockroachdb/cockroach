@@ -210,11 +210,11 @@ as conflict checks and stats updates, similarly to other `Writer` methods.
   Does not affect range keys at other timestamps (except fragmentation),
   nor point keys.
 
-* `ClearAllRangeKeys(start, end roachpb.Key)`: Deletes all range keys (i.e.
-  at all timestamps) between the given key bounds using a Pebble range
-  tombstone. Can remove sections of range keys, or several range keys. Does
-  not affect point keys.
-
+* `ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool)`: Deletes
+  all range keys (i.e. at all timestamps) between the given key bounds using a
+  single Pebble `RANGEKEYDEL` tombstone when `rangeKeys` is true. Can remove
+  sections of range keys, or several range keys. Does not affect point keys.
+  
 * `PutRawMVCCRangeKey(MVCCRangeKey, []byte)`:  Like `PutMVCCRangeKey`, but
   takes an already-encoded `MVCCValue`. Can be used to avoid unnecessary
   decode/encode roundtrips when copying range keys, but should otherwise be
@@ -222,6 +222,9 @@ as conflict checks and stats updates, similarly to other `Writer` methods.
 
 * `PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)`: Writes
   a raw range key directly to Pebble. Only for specialized low-level use.
+
+* `ClearEngineRangeKey(start, end roachpb.Key, suffix []byte)`: Clears a raw
+  range key directly in Pebble. Only for specialized low-level use.
 
 Other `Writer` methods may also affect range keys, e.g. `ClearMVCCRange`, but
 they rely on these primitives internally. See the interface documentation for

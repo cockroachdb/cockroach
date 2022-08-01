@@ -1150,17 +1150,24 @@ func (p *Pebble) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearRawRange implements the Engine interface.
-func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
-	startKey, endKey := EncodeMVCCKey(MVCCKey{Key: start}), EncodeMVCCKey(MVCCKey{Key: end})
-	if err := p.db.DeleteRange(startKey, endKey, pebble.Sync); err != nil {
-		return err
+func (p *Pebble) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	startRaw, endRaw := EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode()
+	if pointKeys {
+		if err := p.db.DeleteRange(startRaw, endRaw, pebble.Sync); err != nil {
+			return err
+		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+	if rangeKeys && p.SupportsRangeKeys() {
+		if err := p.db.RangeKeyDelete(startRaw, endRaw, pebble.Sync); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Engine interface.
-func (p *Pebble) ClearMVCCRange(start, end roachpb.Key) error {
-	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, nil)
+func (p *Pebble) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, nil)
 	return err
 }
 
@@ -1170,12 +1177,12 @@ func (p *Pebble) ClearMVCCVersions(start, end MVCCKey) error {
 }
 
 // ClearMVCCIteratorRange implements the Engine interface.
-func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	// Write all the tombstones in one batch.
 	batch := p.NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
-	if err := batch.ClearMVCCIteratorRange(start, end); err != nil {
+	if err := batch.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys); err != nil {
 		return err
 	}
 	return batch.Commit(true)
@@ -1183,42 +1190,11 @@ func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 
 // ClearMVCCRangeKey implements the Engine interface.
 func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
-	if !p.SupportsRangeKeys() {
-		// These databases cannot contain range keys, so clearing is a noop.
-		return nil
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		pebble.Sync)
-}
-
-// ClearAllRangeKeys implements the Engine interface.
-func (p *Pebble) ClearAllRangeKeys(start, end roachpb.Key) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
-	// Look for any range keys in the span before dropping a range tombstone, and
-	// use the smallest possible span that covers them, to avoid dropping range
-	// tombstones across unnecessary spans. We don't worry about races here,
-	// because this is a non-MVCC operation where the caller must guarantee
-	// appropriate isolation.
-	clearFrom, clearTo, err := pebbleFindRangeKeySpan(p.db,
-		EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
-	if err != nil {
-		return err
-	} else if clearFrom == nil || clearTo == nil {
-		return nil
-	}
-	return p.db.RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
+	return p.ClearEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutMVCCRangeKey implements the Engine interface.
@@ -1236,19 +1212,11 @@ func (p *Pebble) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 
 // PutRawMVCCRangeKey implements the Engine interface.
 func (p *Pebble) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !p.SupportsRangeKeys() {
-		return errors.Errorf("range keys not supported by Pebble database version %s",
-			p.db.FormatMajorVersion())
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value,
-		pebble.Sync)
+	return p.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // Merge implements the Engine interface.
@@ -1313,16 +1281,18 @@ func (p *Pebble) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte)
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
 	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
 	return p.db.RangeKeySet(
-		EngineKey{Key: start}.Encode(),
-		EngineKey{Key: end}.Encode(),
-		suffix,
-		value,
-		pebble.Sync)
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, pebble.Sync)
+}
+
+// ClearEngineRangeKey implements the Engine interface.
+func (p *Pebble) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !p.SupportsRangeKeys() {
+		// These databases cannot contain range keys, so clearing is a noop.
+		return nil
+	}
+	return p.db.RangeKeyUnset(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, pebble.Sync)
 }
 
 // LogData implements the Engine interface.
@@ -2120,11 +2090,11 @@ func (p *pebbleReadOnly) SingleClearEngineKey(key EngineKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 
@@ -2132,7 +2102,9 @@ func (p *pebbleReadOnly) ClearMVCCVersions(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
 	panic("not implemented")
 }
 
@@ -2148,11 +2120,11 @@ func (p *pebbleReadOnly) PutEngineRangeKey(roachpb.Key, roachpb.Key, []byte, []b
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
+func (p *pebbleReadOnly) ClearEngineRangeKey(roachpb.Key, roachpb.Key, []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
 	panic("not implemented")
 }
 
@@ -2334,41 +2306,4 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
-}
-
-// pebbleFindRangeKeySpan returns the minimum span within the given bounds that
-// covers all contained range keys. If there are no range keys within the
-// bounds, this returns nil keys.
-func pebbleFindRangeKeySpan(r pebble.Reader, lower, upper []byte) ([]byte, []byte, error) {
-	iter := r.NewIter(&pebble.IterOptions{
-		KeyTypes:   pebble.IterKeyTypeRangesOnly,
-		LowerBound: lower,
-		UpperBound: upper,
-	})
-	defer func() {
-		// We handle errors during iteration.
-		_ = iter.Close()
-	}()
-
-	// Look for a range key. If none are found, return nil bounds.
-	if !iter.SeekGE(lower) {
-		return nil, nil, iter.Error()
-	}
-	rangeStart, _ := iter.RangeBounds()
-	start := append([]byte{}, rangeStart...)
-
-	// Find the end of the span.
-	if !iter.SeekLT(upper) {
-		if err := iter.Error(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, errors.AssertionFailedf("unexpected missing range key in %s-%s", lower, upper)
-	}
-	_, rangeEnd := iter.RangeBounds()
-	end := append([]byte{}, rangeEnd...)
-
-	if bytes.Compare(start, end) >= 0 {
-		return nil, nil, errors.AssertionFailedf("range key end %s at or before start %s", end, start)
-	}
-	return start, end, nil
 }

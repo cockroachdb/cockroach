@@ -70,14 +70,20 @@ func (idw intentDemuxWriter) PutIntent(
 // ClearMVCCRange has the same behavior as Writer.ClearMVCCRange. buf is used as
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
-func (idw intentDemuxWriter) ClearMVCCRange(start, end roachpb.Key, buf []byte) ([]byte, error) {
-	err := idw.w.ClearRawRange(start, end)
-	if err != nil {
+func (idw intentDemuxWriter) ClearMVCCRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool, buf []byte,
+) ([]byte, error) {
+	if err := idw.w.ClearRawRange(start, end, pointKeys, rangeKeys); err != nil {
 		return buf, err
+	}
+	// The lock table only contains point keys, so only clear it when point keys
+	// are requested, and don't clear range keys in it.
+	if !pointKeys {
+		return buf, nil
 	}
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
-	return buf, idw.w.ClearRawRange(lstart, lend)
+	return buf, idw.w.ClearRawRange(lstart, lend, true /* pointKeys */, false /* rangeKeys */)
 }
 
 // wrappableReader is used to implement a wrapped Reader. A wrapped Reader

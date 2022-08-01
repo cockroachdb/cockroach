@@ -734,7 +734,7 @@ func (c clearRangeOp) run(ctx context.Context) string {
 		// Empty range. No-op.
 		return "no-op due to no non-conflicting key range"
 	}
-	err := c.m.engine.ClearMVCCRange(c.key, c.endKey)
+	err := c.m.engine.ClearMVCCRange(c.key, c.endKey, true, true)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}

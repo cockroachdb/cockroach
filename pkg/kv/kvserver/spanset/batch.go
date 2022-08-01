@@ -560,9 +560,6 @@ func (s spanSetWriter) ClearIntent(
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
-	if !s.spansOnly {
-		panic("cannot do timestamp checking for clearing EngineKey")
-	}
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
@@ -588,18 +585,18 @@ func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearRawRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearRawRange(start, end)
+	return s.w.ClearRawRange(start, end, pointKeys, rangeKeys)
 }
 
-func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCRange(start, end)
+	return s.w.ClearMVCCRange(start, end, pointKeys, rangeKeys)
 }
 
 func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
@@ -609,11 +606,13 @@ func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
 	return s.w.ClearMVCCVersions(start, end)
 }
 
-func (s spanSetWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCIteratorRange(start, end)
+	return s.w.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys)
 }
 
 func (s spanSetWriter) PutMVCCRangeKey(
@@ -642,21 +641,21 @@ func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value [
 	return s.w.PutEngineRangeKey(start, end, suffix, value)
 }
 
+func (s spanSetWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ClearEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ClearEngineRangeKey(start, end, suffix)
+}
+
 func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
 	}
 	return s.w.ClearMVCCRangeKey(rangeKey)
-}
-
-func (s spanSetWriter) ClearAllRangeKeys(start, end roachpb.Key) error {
-	if !s.spansOnly {
-		panic("cannot do timestamp checking for ClearAllRangeKeys")
-	}
-	if err := s.checkAllowedRange(start, end); err != nil {
-		return err
-	}
-	return s.w.ClearAllRangeKeys(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

@@ -127,13 +127,20 @@ func ClearRange(
 	if statsDelta.ContainsEstimates == 0 && statsDelta.Total() < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear",
 			statsDelta.Total(), ClearRangeBytesThreshold)
-		if err = readWriter.ClearMVCCIteratorRange(from, to); err != nil {
+		err = readWriter.ClearMVCCIteratorRange(from, to, true /* pointKeys */, true /* rangeKeys */)
+		if err != nil {
 			return result.Result{}, err
 		}
 		return pd, nil
 	}
 
-	if err := readWriter.ClearMVCCRange(from, to); err != nil {
+	// If we're writing Pebble range tombstones, use ClearRangeWithHeuristic to
+	// avoid writing tombstones across empty spans -- in particular, across the
+	// range key span, since we expect range keys to be rare.
+	const pointKeyThreshold, rangeKeyThreshold = 2, 2
+	if err := storage.ClearRangeWithHeuristic(
+		readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+	); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil

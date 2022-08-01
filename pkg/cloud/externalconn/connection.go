@@ -22,6 +22,16 @@ import (
 // external resource.
 type Connection interface{}
 
+// ConnectionContext contains the dependencies passed to external connection
+// implementation during creation.
+type ConnectionContext interface {
+	// ExternalStorageContext returns the dependencies passed to external storage
+	// implementation during creation.
+	ExternalStorageContext() cloud.ExternalStorageContext
+	// KMSEnv returns the environment in which a KMS is configured and used.
+	KMSEnv() cloud.KMSEnv
+}
+
 // ConnectionDetails is the interface to the external resource represented by an
 // External Connection object.
 type ConnectionDetails interface {
@@ -29,7 +39,7 @@ type ConnectionDetails interface {
 	//
 	// A non-empty subdir results in a `Connection` to the joined path of the
 	// endpoint represented by the external connection and subdir.
-	Dial(ctx context.Context, args cloud.ExternalStorageContext, subdir string) (Connection, error)
+	Dial(ctx context.Context, connectionCtx ConnectionContext, subdir string) (Connection, error)
 	// ConnectionProto prepares the ConnectionDetails for serialization.
 	ConnectionProto() *connectionpb.ConnectionDetails
 	// ConnectionType returns the type of the connection.

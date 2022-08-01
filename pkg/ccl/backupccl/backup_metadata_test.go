@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
@@ -89,7 +90,12 @@ func checkMetadata(
 		t.Fatal(err)
 	}
 
-	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName, nil)
+	srv := tc.Servers[0]
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{},
+		srv.DB(), username.RootUserName(), execCfg.InternalExecutor)
+	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName,
+		nil /* encryption */, &kmsEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +116,7 @@ func checkMetadata(
 	}
 	checkFiles(ctx, t, m, bm)
 	checkTenants(ctx, t, m, bm)
-	checkStats(ctx, t, store, m, bm)
+	checkStats(ctx, t, store, m, bm, &kmsEnv)
 }
 
 func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata) {
@@ -245,8 +251,9 @@ func checkStats(
 	store cloud.ExternalStorage,
 	m *backuppb.BackupManifest,
 	bm *backupinfo.BackupMetadata,
+	kmsEnv cloud.KMSEnv,
 ) {
-	expectedStats, err := backupinfo.GetStatisticsFromBackup(ctx, store, nil, *m)
+	expectedStats, err := backupinfo.GetStatisticsFromBackup(ctx, store, nil, kmsEnv, *m)
 	if err != nil {
 		t.Fatal(err)
 	}

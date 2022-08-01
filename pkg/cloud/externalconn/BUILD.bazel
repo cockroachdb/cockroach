@@ -5,6 +5,7 @@ go_library(
     name = "externalconn",
     srcs = [
         "connection.go",
+        "connection_kms.go",
         "connection_storage.go",
         "impl_registry.go",
         "record.go",

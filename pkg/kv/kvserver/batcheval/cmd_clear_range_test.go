@@ -33,18 +33,14 @@ import (
 
 type wrappedBatch struct {
 	storage.Batch
-	clearIterCount  int
-	clearRangeCount int
+	clearIterCount int
 }
 
-func (wb *wrappedBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (wb *wrappedBatch) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
 	wb.clearIterCount++
-	return wb.Batch.ClearMVCCIteratorRange(start, end)
-}
-
-func (wb *wrappedBatch) ClearMVCCRange(start, end roachpb.Key) error {
-	wb.clearRangeCount++
-	return wb.Batch.ClearMVCCRange(start, end)
+	return wb.Batch.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys)
 }
 
 // TestCmdClearRange verifies that ClearRange clears point and range keys in the
@@ -203,9 +199,8 @@ func TestCmdClearRange(t *testing.T) {
 
 				require.NoError(t, batch.Commit(true /* sync */))
 
-				// Verify that we see the correct counts for ClearMVCCIteratorRange and ClearMVCCRange.
+				// Verify that we see the correct counts for ClearMVCCIteratorRange.
 				require.Equal(t, tc.expClearIter, batch.clearIterCount == 1)
-				require.Equal(t, tc.expClearIter, batch.clearRangeCount == 0)
 
 				// Ensure that the data is gone.
 				iter := eng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -48,11 +47,10 @@ type pebbleBatch struct {
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
 
-	iter              *pebble.Iterator
-	iterUsed          bool // avoids cloning after PinEngineStateForIterators()
-	writeOnly         bool
-	containsRangeKeys bool
-	closed            bool
+	iter      *pebble.Iterator
+	iterUsed  bool // avoids cloning after PinEngineStateForIterators()
+	writeOnly bool
+	closed    bool
 
 	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
@@ -363,18 +361,26 @@ func (p *pebbleBatch) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearRawRange implements the Batch interface.
-func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
-	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], MVCCKey{Key: start})
-	if err := p.batch.DeleteRange(p.buf, EncodeMVCCKey(MVCCKey{Key: end}), nil); err != nil {
-		return err
+func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	p.buf = EngineKey{Key: start}.EncodeToBuf(p.buf[:0])
+	endRaw := EngineKey{Key: end}.Encode()
+	if pointKeys {
+		if err := p.batch.DeleteRange(p.buf, endRaw, pebble.Sync); err != nil {
+			return err
+		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+	if rangeKeys && p.SupportsRangeKeys() {
+		if err := p.batch.RangeKeyDelete(p.buf, endRaw, pebble.Sync); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key) error {
+func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, p.scratch)
+	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, p.scratch)
 	return err
 }
 
@@ -384,78 +390,81 @@ func (p *pebbleBatch) ClearMVCCVersions(start, end MVCCKey) error {
 	return p.batch.DeleteRange(p.buf, EncodeMVCCKey(end), nil)
 }
 
-// ClearIterRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
-	iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		LowerBound: start,
-		UpperBound: end,
-	})
-	defer iter.Close()
-
-	for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
-		if valid, err := iter.Valid(); err != nil {
-			return err
-		} else if !valid {
-			break
+// ClearMVCCIteratorRange implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
+	clearPointKeys := func(start, end roachpb.Key) error {
+		iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
+		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+			if valid, err := iter.Valid(); err != nil {
+				return err
+			} else if !valid {
+				break
+			}
+			// NB: UnsafeRawKey could be a serialized lock table key, and not just an
+			// MVCCKey.
+			if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
+				return err
+			}
 		}
+		return nil
+	}
 
-		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
-		// MVCCKey.
-		if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
+	if pointKeys {
+		if err := clearPointKeys(start, end); err != nil {
 			return err
 		}
 	}
-	return p.ClearAllRangeKeys(start, end)
+
+	clearRangeKeys := func(start, end roachpb.Key) error {
+		iter := p.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   IterKeyTypeRangesOnly,
+			LowerBound: start,
+			UpperBound: end,
+		})
+		defer iter.Close()
+		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+			if valid, err := iter.Valid(); err != nil {
+				return err
+			} else if !valid {
+				break
+			}
+			// TODO(erikgrinaker): We should consider reusing a buffer for the
+			// encoding here, but we don't expect to see many range keys.
+			rangeKeys := iter.RangeKeys()
+			startRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.Key})
+			endRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.EndKey})
+			for _, v := range rangeKeys.Versions {
+				if err := p.batch.RangeKeyUnset(startRaw, endRaw,
+					EncodeMVCCTimestampSuffix(v.Timestamp), nil); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	if rangeKeys {
+		if err := clearRangeKeys(start, end); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRangeKey implements the Engine interface.
 func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.batch.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		nil)
-}
-
-// ClearAllRangeKeys implements the Engine interface.
-func (p *pebbleBatch) ClearAllRangeKeys(start, end roachpb.Key) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
-	// Look for any range keys in the span, and use the smallest possible span
-	// that covers them, to avoid dropping range tombstones across unnecessary
-	// spans. We don't worry about races here, because this is a non-MVCC
-	// operation where the caller must guarantee appropriate isolation.
-	//
-	// If we're using an unindexed batch, then we have to read from the database.
-	// However, if the unindexed batch itself contains range keys then we can't
-	// know where they are, so we have to delete the full span. This seems
-	// unlikely to ever happen.
-	clearFrom, clearTo := EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end)
-	if p.batch.Indexed() || !p.containsRangeKeys {
-		var err error
-		r := pebble.Reader(p.batch)
-		if !p.batch.Indexed() {
-			r = p.db
-		}
-		clearFrom, clearTo, err = pebbleFindRangeKeySpan(r, clearFrom, clearTo)
-		if err != nil {
-			return err
-		} else if clearFrom == nil || clearTo == nil {
-			return nil
-		}
-	}
-	return p.batch.RangeKeyDelete(clearFrom, clearTo, nil)
+	return p.ClearEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutMVCCRangeKey implements the Batch interface.
@@ -473,24 +482,11 @@ func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) er
 
 // PutRawMVCCRangeKey implements the Batch interface.
 func (p *pebbleBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !p.SupportsRangeKeys() {
-		return errors.Errorf("range keys not supported by Pebble database version %s",
-			p.db.FormatMajorVersion())
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	if err := p.batch.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value,
-		nil); err != nil {
-		return err
-	}
-	// Mark the batch as containing range keys. See ClearAllRangeKeys for why.
-	p.containsRangeKeys = true
-	return nil
+	return p.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // PutEngineRangeKey implements the Engine interface.
@@ -499,22 +495,17 @@ func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
 	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
+	return p.batch.RangeKeySet(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, nil)
+}
+
+// ClearEngineRangeKey implements the Engine interface.
+func (p *pebbleBatch) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !p.SupportsRangeKeys() {
+		return nil // noop
 	}
-	if err := p.batch.RangeKeySet(
-		EngineKey{Key: start}.Encode(),
-		EngineKey{Key: end}.Encode(),
-		suffix,
-		value,
-		nil,
-	); err != nil {
-		return err
-	}
-	// Mark the batch as containing range keys. See ClearAllRangeKeys for why.
-	p.containsRangeKeys = true
-	return nil
+	return p.batch.RangeKeyUnset(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, nil)
 }
 
 // Merge implements the Batch interface.

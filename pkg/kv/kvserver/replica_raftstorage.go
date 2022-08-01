@@ -42,6 +42,26 @@ type replicaRaftStorage Replica
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
 
+const (
+	// clearRangeThresholdPointKeys is the threshold (as number of point keys)
+	// beyond which we'll clear range data using a Pebble range tombstone rather
+	// than individual Pebble point tombstones.
+	//
+	// It is expensive for there to be many Pebble range tombstones in the same
+	// sstable because all of the tombstones in an sstable are loaded whenever the
+	// sstable is accessed. So we avoid using range deletion unless there is some
+	// minimum number of keys. The value here was pulled out of thin air. It might
+	// be better to make this dependent on the size of the data being deleted. Or
+	// perhaps we should fix Pebble to handle large numbers of range tombstones in
+	// an sstable better.
+	clearRangeThresholdPointKeys = 64
+
+	// clearRangeThresholdRangeKeys is the threshold (as number of range keys)
+	// beyond which we'll clear range data using a single RANGEKEYDEL across the
+	// span rather than clearing individual range keys.
+	clearRangeThresholdRangeKeys = 8
+)
+
 // All calls to raft.RawNode require that both Replica.raftMu and
 // Replica.mu are held. All of the functions exposed via the
 // raft.Storage interface will in turn be called from RawNode, so none
@@ -727,16 +747,18 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 // clearRangeData clears the data associated with a range descriptor. If
 // rangeIDLocalOnly is true, then only the range-id local keys are deleted.
 // Otherwise, the range-id local keys, range local keys, and user keys are all
-// deleted. If mustClearRange is true, ClearRange will always be used to remove
-// the keys. Otherwise, ClearRangeWithHeuristic will be used, which chooses
-// ClearRange or ClearIterRange depending on how many keys there are in the
-// range.
+// deleted.
+//
+// If mustUseClearRange is true, a Pebble range tombstone will always be used to
+// clear the key spans (unless empty). This is typically used when we need to
+// write additional keys to an SST after this clear, e.g. a replica tombstone,
+// since keys must be written in order.
 func clearRangeData(
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	writer storage.Writer,
 	rangeIDLocalOnly bool,
-	mustClearRange bool,
+	mustUseClearRange bool,
 ) error {
 	var keySpans []roachpb.Span
 	if rangeIDLocalOnly {
@@ -744,17 +766,16 @@ func clearRangeData(
 	} else {
 		keySpans = rditer.MakeAllKeySpans(desc)
 	}
-	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
-	if mustClearRange {
-		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
-			return writer.ClearRawRange(start, end)
-		}
-	} else {
-		clearRangeFn = storage.ClearRangeWithHeuristic
+
+	pointKeyThreshold, rangeKeyThreshold := clearRangeThresholdPointKeys, clearRangeThresholdRangeKeys
+	if mustUseClearRange {
+		pointKeyThreshold, rangeKeyThreshold = 1, 1
 	}
 
 	for _, keySpan := range keySpans {
-		if err := clearRangeFn(reader, writer, keySpan.Key, keySpan.EndKey); err != nil {
+		if err := storage.ClearRangeWithHeuristic(
+			reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold, rangeKeyThreshold,
+		); err != nil {
 			return err
 		}
 	}
@@ -873,10 +894,15 @@ func (r *Replica) applySnapshot(
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
+	//
+	// NB: We do not expect to see range keys in the unreplicated state, so
+	// we don't drop a range tombstone across the range key space.
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err = unreplicatedSST.ClearRawRange(unreplicatedStart, unreplicatedEnd); err != nil {
+	if err = unreplicatedSST.ClearRawRange(
+		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
@@ -1170,6 +1196,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 				&subsumedReplSST,
 				keySpans[i].EndKey,
 				totalKeySpans[i].EndKey,
+				clearRangeThresholdPointKeys,
+				clearRangeThresholdRangeKeys,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err
