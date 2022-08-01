@@ -1621,6 +1621,10 @@ type StreamingTestingKnobs struct {
 	// BeforeClientSubscribe allows observation of parameters about to be passed
 	// to a streaming client
 	BeforeClientSubscribe func(addr string, token string, startTime hlc.Timestamp)
+
+	// BeforeIngestionStart allows blocking the stream ingestion job
+	// before a stream ingestion happens.
+	BeforeIngestionStart func(ctx context.Context) error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
