@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // A Name is an SQL identifier.
@@ -232,7 +233,7 @@ func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedO
 func (u *UnresolvedName) ToFunctionName() (*FunctionName, error) {
 	un, err := u.ToUnresolvedObjectName(NoAnnotation)
 	if err != nil {
-		return nil, err
+		return nil, errors.Newf("invalid function name: %s", u.String())
 	}
 	fn := un.ToFunctionName()
 	return &fn, nil

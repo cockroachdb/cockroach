@@ -46,8 +46,10 @@ const WithMaxStalenessFunctionName = "with_max_staleness"
 
 // IsFollowerReadTimestampFunction determines whether the AS OF SYSTEM TIME
 // clause contains a simple invocation of the follower_read_timestamp function.
-func IsFollowerReadTimestampFunction(asOf tree.AsOfClause, searchPath tree.SearchPath) bool {
-	return resolveFuncType(asOf, searchPath) == funcTypeFollowerRead
+func IsFollowerReadTimestampFunction(
+	ctx context.Context, asOf tree.AsOfClause, searchPath tree.SearchPath,
+) bool {
+	return resolveFuncType(ctx, asOf, searchPath) == funcTypeFollowerRead
 }
 
 type funcType int
@@ -58,7 +60,9 @@ const (
 	funcTypeBoundedStaleness
 )
 
-func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType {
+func resolveFuncType(
+	ctx context.Context, asOf tree.AsOfClause, searchPath tree.SearchPath,
+) funcType {
 	fe, ok := asOf.Expr.(*tree.FuncExpr)
 	if !ok {
 		return funcTypeInvalid
@@ -68,7 +72,7 @@ func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType 
 	// with names matching below are allowed. If a user defined a user-defined
 	// function with the same name, we'll assume references to the function
 	// within an AOST clause refer to the built-in overload.
-	def, err := fe.Func.Resolve(searchPath, nil /* resolver */)
+	def, err := fe.Func.Resolve(ctx, searchPath, nil /* resolver */)
 	if err != nil {
 		return funcTypeInvalid
 	}
@@ -142,7 +146,7 @@ func Eval(
 	// string.
 	var te tree.TypedExpr
 	if asOfFuncExpr, ok := asOf.Expr.(*tree.FuncExpr); ok {
-		switch resolveFuncType(asOf, semaCtx.SearchPath) {
+		switch resolveFuncType(ctx, asOf, semaCtx.SearchPath) {
 		case funcTypeFollowerRead:
 		case funcTypeBoundedStaleness:
 			if !o.allowBoundedStaleness {

@@ -875,19 +875,19 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
-func isAggregate(def *tree.FunctionDefinition) bool {
+func isAggregate(def *tree.ResolvedFunctionDefinition) bool {
 	return isClass(def, tree.AggregateClass)
 }
 
-func isGenerator(def *tree.FunctionDefinition) bool {
+func isGenerator(def *tree.ResolvedFunctionDefinition) bool {
 	return isClass(def, tree.GeneratorClass)
 }
 
-func isSQLFn(def *tree.FunctionDefinition) bool {
+func isSQLFn(def *tree.ResolvedFunctionDefinition) bool {
 	return isClass(def, tree.SQLClass)
 }
 
-func isClass(def *tree.FunctionDefinition, want tree.FunctionClass) bool {
+func isClass(def *tree.ResolvedFunctionDefinition, want tree.FunctionClass) bool {
 	cls, err := def.GetClass()
 	if err != nil {
 		panic(err)

@@ -213,7 +213,7 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 
 // getColName returns the output column name for a projection expression.
 func (b *Builder) getColName(expr tree.SelectExpr) string {
-	s, err := tree.GetRenderColName(b.semaCtx.SearchPath, expr)
+	s, err := tree.GetRenderColName(b.ctx, b.semaCtx.SearchPath, expr, b.semaCtx.FunctionResolver)
 	if err != nil {
 		panic(err)
 	}
