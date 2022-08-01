@@ -1,0 +1,387 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
+
+/* test */
+ALTER TABLE t DROP COLUMN j CASCADE;
+CREATE UNIQUE INDEX idx ON t(k);
+EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); 
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 13 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │     PUBLIC → WRITE_ONLY
+    │   │   │
+    │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+    │   │   │   │ BACKFILL_ONLY → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
+    │   │   │   │     rule: "secondary index columns removed before removing the index"
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
+    │   │   │   │     rule: "secondary index columns removed before removing the index"
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 5}
+    │   │   │         rule: "dependents removed before index"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   ├── • 8 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 104, ColumnID: 2}
+    │   │   │     WRITE_ONLY → PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 104, ColumnID: 4}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+    │   │   │         rule: "ensure columns are in increasing order"
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
+    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │         rule: "primary index swap"
+    │   │   │
+    │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+    │   │   │         rule: "index named right before index becomes public"
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+    │   │         ABSENT → PUBLIC
+    │   │
+    │   └── • 27 Mutation operations
+    │       │
+    │       ├── • MakeColumnPublic
+    │       │     ColumnID: 2
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeColumnPublic
+    │       │     ColumnID: 4
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 1
+    │       │     Name: t_pkey
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 4
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 2
+    │       │     Name: j
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 4
+    │       │     Name: crdb_internal_idx_expr
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 2
+    │       │     Name: t_expr_k_idx
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 3
+    │       │     Name: crdb_internal_index_3_name_placeholder
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 6
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 6
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 6
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeAddedPrimaryIndexPublic
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     IndexID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeAddedSecondaryIndexPublic
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 5
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • LogEvent
+    │       │     Element:
+    │       │       SecondaryIndex:
+    │       │         indexId: 5
+    │       │         isUnique: true
+    │       │         sourceIndexId: 3
+    │       │         tableId: 104
+    │       │         temporaryIndexId: 6
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›)
+    │       │       StatementTag: CREATE INDEX
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         StatementID: 1
+    │       │         SubWorkID: 1
+    │       │     TargetStatus: 1
+    │       │
+    │       ├── • CreateGcJobForIndex
+    │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)
+    │       │       StatementID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending
+    │
+    ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 3 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+    │   │   │   │ DELETE_ONLY → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │   │         rule: "dependents removed before index"
+    │   │   │
+    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+    │   │       │ DELETE_ONLY → ABSENT
+    │   │       │
+    │   │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
+    │   │       │     rule: "dependents removed before index"
+    │   │       │
+    │   │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
+    │   │             rule: "dependents removed before index"
+    │   │
+    │   └── • 7 Mutation operations
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • CreateGcJobForIndex
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • CreateGcJobForIndex
+    │       │     IndexID: 6
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 6
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending
+    │
+    └── • Stage 3 of 3 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+        │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+        │             rule: "dependents removed before index"
+        │
+        └── • 4 Mutation operations
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     IndexID: 3
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

@@ -1,11 +1,11 @@
 setup
-create table t (i int primary key, j int, index (j))
+CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j))
 ----
 ...
 +object {100 101 t} -> 104
 
 test
-alter table t drop column j
+ALTER TABLE t DROP COLUMN j
 ----
 begin transaction #1
 # begin StatementPhase

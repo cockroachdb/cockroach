@@ -140,7 +140,14 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
-				checkExplainDiagrams(t, path, setupStmts, stmts, stmtStates, d.Rewrite)
+				var fileNameSuffix string
+				const inRollback = false
+				for i, stmt := range stmts {
+					if len(stmts) > 1 {
+						fileNameSuffix = fmt.Sprintf(".statement_%d_of_%d", i+1, len(stmts))
+					}
+					checkExplainDiagrams(t, path, setupStmts, stmts[:i], stmt.SQL, fileNameSuffix, stmtStates[i], inRollback, d.Rewrite)
+				}
 				return replaceNonDeterministicOutput(deps.SideEffectLog())
 
 			default:
@@ -164,28 +171,10 @@ func checkExplainDiagrams(
 	t *testing.T,
 	path string,
 	setupStmts, stmts parser.Statements,
-	states []scpb.CurrentState,
-	rewrite bool,
+	explainedStmt, fileNameSuffix string,
+	state scpb.CurrentState,
+	inRollback, rewrite bool,
 ) {
-	makeSharedPrefix := func() []byte {
-		var prefixBuf bytes.Buffer
-		prefixBuf.WriteString("/* setup */\n")
-		for _, stmt := range setupStmts {
-			prefixBuf.WriteString(stmt.SQL)
-			prefixBuf.WriteString(";\n")
-		}
-		prefixBuf.WriteString("\n/* test */\n")
-		return prefixBuf.Bytes()
-	}
-	prefix := makeSharedPrefix()
-	makeStatementPrefix := func(i int) []byte {
-		var stmtBuf bytes.Buffer
-		stmtBuf.Write(prefix)
-		for j := 0; j < i; j++ {
-			_, _ = fmt.Fprintf(&stmtBuf, "%s;\n", stmts[j].SQL)
-		}
-		return stmtBuf.Bytes()
-	}
 	testDataDir := filepath.Dir(filepath.Dir(path))
 	mkdir := func(name string) string {
 		dir := filepath.Join(testDataDir, name)
@@ -195,35 +184,42 @@ func checkExplainDiagrams(
 	explainDir := mkdir(explainDirName)
 	explainVerboseDir := mkdir(explainVerboseDirName)
 	baseName := filepath.Base(path)
-	makeFile := func(dir string, i int, openFunc func(string) (*os.File, error)) *os.File {
-		name := baseName
-		if len(stmts) > 1 {
-			name = fmt.Sprintf("%s.%d", name, i)
-		}
+	makeFile := func(dir string, openFunc func(string) (*os.File, error)) *os.File {
+		name := baseName + fileNameSuffix
 		explainFile, err := openFunc(filepath.Join(dir, name))
 		require.NoError(t, err)
 		return explainFile
 	}
-	writePlan := func(file io.Writer, tag string, i int, fn func() (string, error)) {
-		_, err := file.Write(makeStatementPrefix(i))
+	writePlan := func(file io.Writer, tag string, fn func() (string, error)) {
+		var prefixBuf bytes.Buffer
+		prefixBuf.WriteString("/* setup */\n")
+		for _, stmt := range setupStmts {
+			prefixBuf.WriteString(stmt.SQL)
+			prefixBuf.WriteString(";\n")
+		}
+		prefixBuf.WriteString("\n/* test */\n")
+		for _, stmt := range stmts {
+			_, _ = fmt.Fprintf(&prefixBuf, "%s;\n", stmt.SQL)
+		}
+		_, err := file.Write(prefixBuf.Bytes())
 		require.NoError(t, err)
-		_, err = fmt.Fprintf(file, "EXPLAIN (%s) %s;\n----\n", tag, stmts[i].SQL)
+		_, err = fmt.Fprintf(file, "EXPLAIN (%s) %s;\n----\n", tag, explainedStmt)
 		require.NoError(t, err)
 		out, err := fn()
 		require.NoError(t, err)
 		_, err = io.WriteString(file, out)
 		require.NoError(t, err)
 	}
-	writePlanToFile := func(dir, tag string, i int, fn func() (string, error)) {
-		file := makeFile(dir, i, os.Create)
+	writePlanToFile := func(dir, tag string, fn func() (string, error)) {
+		file := makeFile(dir, os.Create)
 		defer func() { require.NoError(t, file.Close()) }()
-		writePlan(file, tag, i, fn)
+		writePlan(file, tag, fn)
 	}
-	checkPlan := func(dir, tag string, i int, fn func() (string, error)) {
-		file := makeFile(dir, i, os.Open)
+	checkPlan := func(dir, tag string, fn func() (string, error)) {
+		file := makeFile(dir, os.Open)
 		defer func() { require.NoError(t, file.Close()) }()
 		var buf bytes.Buffer
-		writePlan(&buf, tag, i, fn)
+		writePlan(&buf, tag, fn)
 		got, err := io.ReadAll(file)
 		require.NoError(t, err)
 		require.Equal(t, string(got), buf.String(), filepath.Base(dir))
@@ -232,16 +228,18 @@ func checkExplainDiagrams(
 	if rewrite {
 		action = writePlanToFile
 	}
-	for i, stmt := range stmts {
-		pl, err := scplan.MakePlan(states[i], scplan.Params{
-			InRollback:                 false,
-			ExecutionPhase:             scop.StatementPhase,
-			SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
-		})
-		require.NoErrorf(t, err, "%d: %s", i, stmt.SQL)
-		action(explainDir, "ddl", i, pl.ExplainCompact)
-		action(explainVerboseDir, "ddl, verbose", i, pl.ExplainVerbose)
+	params := scplan.Params{
+		ExecutionPhase:             scop.StatementPhase,
+		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	}
+	if inRollback {
+		params.InRollback = true
+		params.ExecutionPhase = scop.PostCommitNonRevertiblePhase
+	}
+	pl, err := scplan.MakePlan(state, params)
+	require.NoErrorf(t, err, "%s: %s", fileNameSuffix, explainedStmt)
+	action(explainDir, "ddl", pl.ExplainCompact)
+	action(explainVerboseDir, "ddl, verbose", pl.ExplainVerbose)
 }
 
 // scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
