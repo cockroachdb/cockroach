@@ -185,3 +185,38 @@ func clearSpanData(
 
 	return nil
 }
+
+// TODO(msbutler): tune this.
+const DeleteTableDefaultBatchSize = 500000
+
+// DeleteTableData deletes the data in the specified table with a DeleteRange
+// request. If predicates are passed, only keys that match the predicates will
+// get deleted.
+func DeleteTableData(
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	predicates roachpb.DeleteRangePredicates,
+	batchSize int64,
+) error {
+	log.Infof(ctx, "Deleting data for table %d", table.GetID())
+	tableKey := codec.TablePrefix(uint32(table.GetID()))
+	endKey := tableKey.PrefixEnd()
+
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tableKey,
+			EndKey: tableKey.PrefixEnd(),
+		},
+		UseRangeTombstone: true,
+		Predicates:        predicates,
+	})
+	b.Header.MaxSpanRequestKeys = batchSize
+	log.VEventf(ctx, 2, "Delete Range %s - %s", tableKey, endKey)
+	if err := db.Run(ctx, &b); err != nil {
+		return errors.Wrapf(err, "Delete range %s - %s", tableKey, endKey)
+	}
+	return nil
+}
