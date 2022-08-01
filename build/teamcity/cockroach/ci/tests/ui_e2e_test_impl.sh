@@ -11,7 +11,7 @@ function build_docker_image() {
 
 function run_tests() {
   SPEC_ARG=""
-  if [ "health" = "${$1:='EMPTY'}" ]; then
+  if [ "health" = "${1:-'EMPTY'}" ]; then
     SPEC_ARG="--spec 'cypress/e2e/health-check/**'"
   fi
 
