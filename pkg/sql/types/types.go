@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -1381,8 +1382,7 @@ func (t *T) UserDefined() bool {
 // IsOIDUserDefinedType returns whether or not o corresponds to a user
 // defined type.
 func IsOIDUserDefinedType(o oid.Oid) bool {
-	// Types with OIDs larger than the predefined max are user defined.
-	return o > oidext.CockroachPredefinedOIDMax
+	return catid.IsOIDUserDefined(o)
 }
 
 var familyNames = map[Family]string{
