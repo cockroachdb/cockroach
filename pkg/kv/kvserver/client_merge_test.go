@@ -3777,7 +3777,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		for _, span := range keySpans {
 			file := &storage.MemFile{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if err := writer.ClearRawRange(span.Key, span.EndKey); err != nil {
+			if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
 				return err
 			}
 			sstFileWriters[string(span.Key)] = sstFileWriter{
@@ -3835,7 +3835,12 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
 			s := rditer.MakeRangeIDLocalKeySpan(rangeID, false /* replicatedOnly */)
-			if err := sst.ClearRawRange(s.Key, s.EndKey); err != nil {
+			// The snapshot code will use ClearRangeWithHeuristic with a threshold of
+			// 1 to clear the range, but this will truncate the range tombstone to the
+			// first key. In this case, the first key is RangeGCThresholdKey, which
+			// doesn't yet exist in the engine, so we write the Pebble range tombstone
+			// manually.
+			if err := sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false); err != nil {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
@@ -3861,7 +3866,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKey(keyEnd),
 		}
 		s := rditer.MakeUserKeySpan(&desc)
-		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, s.Key, s.EndKey); err != nil {
+		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, s.Key, s.EndKey, 64, 8); err != nil {
 			return err
 		}
 		if err = sst.Finish(); err != nil {
@@ -3877,6 +3882,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return err
 			}
 			if !bytes.Equal(actualSST, expectedSSTs[i]) {
+				t.Logf("%d=%s", i, sstNamesSubset[i])
 				mismatchedSstsIdx = append(mismatchedSstsIdx, i)
 			}
 		}

@@ -137,8 +137,16 @@ func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
 			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
+
+			err = w.PutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
+				EncodeMVCCTimestampSuffix(rangeKey.Timestamp), nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+
 			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
+				EncodeMVCCTimestampSuffix(rangeKey.Timestamp)))
+			require.NoError(t, w.ClearRawRange(rangeKey.StartKey, rangeKey.EndKey, false, true))
 		})
 	}
 }

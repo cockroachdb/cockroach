@@ -26,6 +26,14 @@ import (
 
 const gcsScheme = "gs"
 
+// supportedOptions are the query parameters that are accepted by a GCS KMS URI.
+var supportedOptions = []string{
+	AssumeRoleParam,
+	CredentialsParam,
+	cloud.AuthParam,
+	BearerTokenParam,
+}
+
 type gcsKMS struct {
 	kms                 *kms.KeyManagementClient
 	customerMasterKeyID string
@@ -45,6 +53,7 @@ type kmsURIParams struct {
 	bearerToken   string
 }
 
+// resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.Query().Get(AssumeRoleParam))
 	params := kmsURIParams{
@@ -58,6 +67,13 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	return params
 }
 
+func validateKMSURI(uri url.URL) error {
+	if uri.Path == "/" {
+		return errors.Newf("host component of the GCS KMS cannot be empty; must contain the Customer Managed Key")
+	}
+	return cloud.ValidateQueryParameters(uri, supportedOptions)
+}
+
 // MakeGCSKMS is the factory method which returns a configured, ready-to-use
 // GCS KMS object.
 func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
@@ -69,11 +85,16 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, err
 	}
 
+	// Validate the URI parameters.
+	if err := validateKMSURI(*kmsURI); err != nil {
+		return nil, err
+	}
+
 	// Extract the URI parameters required to setup the GCS KMS session.
 	kmsURIParams := resolveKMSURIParams(*kmsURI)
 
 	// Client options to authenticate and start a GCS KMS session.
-	// Currently only accepting json of service account.
+	// Currently, only accepting json of service account.
 	var credentialsOpt []option.ClientOption
 
 	switch kmsURIParams.auth {
@@ -117,7 +138,6 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
-
 	if err != nil {
 		return nil, err
 	}

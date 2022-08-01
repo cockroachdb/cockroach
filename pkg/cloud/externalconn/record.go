@@ -78,6 +78,7 @@ func (e *externalConnectionNotFoundError) Error() string {
 func LoadExternalConnection(
 	ctx context.Context,
 	name string,
+	connectionType connectionpb.ConnectionType,
 	ex sqlutil.InternalExecutor,
 	user username.SQLUsername,
 	txn *kv.Txn,
@@ -97,6 +98,13 @@ func LoadExternalConnection(
 	if err := ec.InitFromDatums(row, cols); err != nil {
 		return nil, err
 	}
+
+	// Validate that the unmarshaled External Connection object is of the desired
+	// type.
+	if connectionType.String() != ec.ConnectionType() {
+		return nil, errors.Newf("expected External Connection object of type %s but '%s' is of type %s",
+			connectionType.String(), name, ec.ConnectionType())
+	}
 	return ec, nil
 }
 
@@ -106,9 +114,14 @@ func (e *ExternalConnection) SetConnectionName(name string) {
 	e.markDirty("connection_name")
 }
 
+// ConnectionType returns the connection_type.
+func (e *ExternalConnection) ConnectionType() string {
+	return e.rec.ConnectionType
+}
+
 // SetConnectionType updates the connection_type.
-func (e *ExternalConnection) SetConnectionType(connectionType string) {
-	e.rec.ConnectionType = connectionType
+func (e *ExternalConnection) SetConnectionType(connectionType connectionpb.ConnectionType) {
+	e.rec.ConnectionType = connectionType.String()
 	e.markDirty("connection_type")
 }
 

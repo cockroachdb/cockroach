@@ -426,3 +426,44 @@ USE multi_region_test_db; SELECT g FROM t74890 ORDER BY g
 3
 4
 5
+
+# Regression test for #85043. Distribute enforcer should not prevent the
+# optimizer from planning auto-commit.
+statement ok
+CREATE DATABASE one_region_test_db PRIMARY REGION "ca-central-1";
+USE one_region_test_db;
+CREATE TABLE t85043 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ts TIMESTAMP
+);
+
+query T
+EXPLAIN UPDATE t85043 SET ts = '2022-08-01 18:07:07' WHERE id = 'ab020c49-ba5e-4800-8000-00000000014e'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t85043
+│ set: ts
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t85043@t85043_pkey
+          spans: [/'ab020c49-ba5e-4800-8000-00000000014e' - /'ab020c49-ba5e-4800-8000-00000000014e']
+          locking strength: for update
+
+# Regression test for #85288. Distribute enforcer should not prevent the
+# optimizer from using bounded staleness.
+statement ok
+CREATE TABLE t85288 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ts TIMESTAMP
+);
+
+statement ok
+select ts FROM t85288 AS OF SYSTEM TIME with_max_staleness('1h') WHERE
+ id = '00000000-0000-4000-8000-000000000000';

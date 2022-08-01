@@ -133,6 +133,18 @@ select
       ├── d:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
       └── e:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
+# Simplify contradictions to false.
+# This can eliminate non-leakproof expressions from filters, allowing further
+# optimizations to apply, like SimplifyZeroCardinalityGroup.
+norm expect=SimplifySelectFilters
+SELECT * FROM a WHERE i > 0 AND i < 0 AND 1/f = 1
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
 # Don't simplify the IS because the IS expression is a projection, not a Select
 # filter.
 norm expect-not=SimplifySelectFilters
@@ -1524,15 +1536,6 @@ DROP INDEX partial_idx
 # --------------------------------------------------
 
 norm expect=SimplifyIsNullCondition
-SELECT k FROM b WHERE k IS NULL AND k > 4
-----
-values
- ├── columns: k:1!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
-
-norm expect=SimplifyIsNullCondition
 SELECT k FROM b WHERE k IS NULL
 ----
 values
@@ -1542,7 +1545,7 @@ values
  └── fd: ()-->(1)
 
 norm expect=SimplifyIsNullCondition
-SELECT k,i FROM b WHERE k IS NULL AND k > 4 AND i < 100 AND i IS NULL
+SELECT k,i FROM b WHERE k IS NULL AND i < 100
 ----
 values
  ├── columns: k:1!null i:2!null

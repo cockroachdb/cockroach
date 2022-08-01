@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -135,16 +134,27 @@ func (fw *SSTWriter) Finish() error {
 	return nil
 }
 
-// ClearRawRange implements the Writer interface.
-func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
-	if err := fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end}); err != nil {
-		return err
+// ClearRawRange implements the Engine interface.
+func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	fw.scratch = EngineKey{Key: start}.EncodeToBuf(fw.scratch[:0])
+	endRaw := EngineKey{Key: end}.Encode()
+	if pointKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+			return err
+		}
 	}
-	return fw.ClearAllRangeKeys(start, end)
+	if rangeKeys && fw.supportsRangeKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.RangeKeyDelete(fw.scratch, endRaw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	panic("not implemented")
 }
 
@@ -168,18 +178,11 @@ func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) err
 
 // PutRawMVCCRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
-	if !fw.supportsRangeKeys {
-		return errors.New("range keys not supported by SST writer")
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey)) + int64(len(value))
-	return fw.fw.RangeKeySet(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
-		value)
+	return fw.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // ClearMVCCRangeKey implements the Writer interface.
@@ -190,37 +193,31 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey))
-	return fw.fw.RangeKeyUnset(
-		EncodeMVCCKeyPrefix(rangeKey.StartKey),
-		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+	return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
-}
-
-// ClearAllRangeKeys implements the Writer interface.
-func (fw *SSTWriter) ClearAllRangeKeys(start roachpb.Key, end roachpb.Key) error {
-	if !fw.supportsRangeKeys {
-		return nil // noop
-	}
-	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
-	if err := rangeKey.Validate(); err != nil {
-		return err
-	}
-	fw.DataSize += int64(len(start)) + int64(len(end))
-	// TODO(erikgrinaker): Consider omitting this if there are no range key in the
-	// SST, to avoid dropping unnecessary range tombstones. However, this may not
-	// be safe, because the caller may want to ingest the SST including the range
-	// tombstone into an engine that does have range keys that should be cleared.
-	return fw.fw.RangeKeyDelete(EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
 }
 
 // PutEngineRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+	if !fw.supportsRangeKeys {
+		return errors.New("range keys not supported by SST writer")
+	}
 	// MVCC values don't account for the timestamp, so we don't account
 	// for the suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
 	return fw.fw.RangeKeySet(
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value)
+}
+
+// ClearEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	// MVCC values don't account for the timestamp, so we don't account for the
+	// suffix here.
+	fw.DataSize += int64(len(start)) + int64(len(end))
+	return fw.fw.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble
@@ -385,7 +382,7 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearMVCCIteratorRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearMVCCIteratorRange(_, _ roachpb.Key, _, _ bool) error {
 	panic("not implemented")
 }
 
