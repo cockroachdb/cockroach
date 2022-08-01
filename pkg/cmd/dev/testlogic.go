@@ -147,6 +147,10 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			testsDir = "//pkg/ccl/sqlitelogictestccl/tests"
 			bigtest = true
 		}
+		// Keep track of the relative path to the root of the tests directory
+		// (i.e. not the subdirectory for the config). We'll need this path
+		// to properly build the writable path for rewrite.
+		baseTestsDir := strings.TrimPrefix(testsDir, "//")
 		if config != "" {
 			testsDir = testsDir + "/" + config
 			exists, err := d.os.IsDir(filepath.Join(workspace, strings.TrimPrefix(testsDir, "//")))
@@ -163,7 +167,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		targets = append(targets, testsDir+"/...")
 
 		if rewrite {
-			dir := filepath.Join(filepath.Dir(strings.TrimPrefix(testsDir, "//")), "testdata")
+			dir := filepath.Join(filepath.Dir(baseTestsDir), "testdata")
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 			if choice == "ccl" {
 				// The ccl logictest target shares the testdata directory with the base
