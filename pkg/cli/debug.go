@@ -672,21 +672,38 @@ Decode and print a hexadecimal-encoded key-value pair.
 
 var debugDecodeProtoName string
 var debugDecodeProtoEmitDefaults bool
+var debugDecodeProtoSingleProto bool
+var debugDecodeProtoBinaryOutput bool
+var debugDecodeProtoOutputFile string
 var debugDecodeProtoCmd = &cobra.Command{
 	Use:   "decode-proto",
 	Short: "decode-proto <proto> --name=<fully qualified proto name>",
 	Long: `
-Read from stdin and attempt to decode any hex or base64 encoded proto fields and
-output them as JSON. All other fields will be outputted unchanged. Output fields
-will be separated by tabs.
+Read from stdin and attempt to decode any hex, base64, or C-escaped encoded
+protos and output them as JSON. If --single is specified, the input is expected
+to consist of a single encoded proto. Otherwise, the input can consist of
+multiple fields, separated by new lines and tabs. Each field is attempted to be
+decoded and, if that's unsuccessful, is echoed as is.
 
 The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
-$ decode-proto < cat debug/system.decsriptor.txt
+$ cat debug/system.descriptor.txt | cockroach debug decode-proto
 id	descriptor	hex_descriptor
 1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
 ...
+
+decode-proto can be used to decode protos as captured by Chrome Dev
+Tools from HTTP network requests ("Copy as cURL"). Chrome captures these as
+UTF8-encoded raw bytes, which are then rendered as C-escaped strings. The UTF8
+encoding breaks the proto encoding, so the curl command doesn't work as Chrome
+presents it. To rectify that, take the string argument passed to "curl --data" and pass it to
+"cockroach decode-proto --single --binary --out=<file>". Then, to replay the HTTP
+request, do something like:
+$ curl -X POST  'http://localhost:8080/ts/query' \
+  -H 'Accept: application/json' \
+  -H 'Content-Type: application/x-protobuf' \
+  --data-binary @<file>
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: runDebugDecodeProto,
@@ -1798,6 +1815,12 @@ func init() {
 		"fully qualified name of the proto to decode")
 	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", false,
 		"encode default values for every field")
+	f.BoolVar(&debugDecodeProtoSingleProto, "single", false,
+		"treat the input as a single field")
+	f.BoolVar(&debugDecodeProtoBinaryOutput, "binary", false,
+		"output the protos as binary instead of JSON. If specified, --out also needs to be specified.")
+	f.StringVar(&debugDecodeProtoOutputFile, "out", "",
+		"path to output file. If not specified, output goes to stdout.")
 
 	f = debugCheckLogConfigCmd.Flags()
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
