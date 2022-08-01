@@ -222,26 +222,19 @@ func getSchemaForCreateTable(
 
 	return schema, nil
 }
+
 func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (bool, error) {
 	if colDef.IsSerial || colDef.GeneratedIdentity.IsGeneratedAsIdentity {
 		return true, nil
 	}
 
 	if funcExpr, ok := colDef.DefaultExpr.Expr.(*tree.FuncExpr); ok {
-		var name string
-
-		switch t := funcExpr.Func.FunctionReference.(type) {
-		case *tree.FunctionDefinition:
-			name = t.Name
-		case *tree.UnresolvedName:
-			fn, err := t.ResolveFunction(&params.SessionData().SearchPath)
-			if err != nil {
-				return false, err
-			}
-			name = fn.Name
+		searchPath := params.p.CurrentSearchPath()
+		fd, err := funcExpr.Func.Resolve(params.ctx, &searchPath, params.p.semaCtx.FunctionResolver)
+		if err != nil {
+			return false, err
 		}
-
-		if name == "nextval" {
+		if fd.Name == "nextval" {
 			return true, nil
 		}
 	}
