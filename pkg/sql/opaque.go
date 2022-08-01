@@ -105,8 +105,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.AlterDatabaseDropSecondaryRegion:
 		return p.AlterDatabaseDropSecondaryRegion(ctx, n)
 	case *tree.AlterDatabaseSetZoneConfigExtension:
-		// TODO (janexing): implement the node method
-		return nil, nil
+		return p.AlterDatabaseSetZoneConfigExtension(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterIndex:
@@ -275,6 +274,7 @@ func init() {
 		&tree.AlterDatabaseAlterSuperRegion{},
 		&tree.AlterDatabaseSecondaryRegion{},
 		&tree.AlterDatabaseDropSecondaryRegion{},
+		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
