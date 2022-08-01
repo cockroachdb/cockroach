@@ -639,7 +639,6 @@ func (q *batchQueue) get(id roachpb.RangeID) (*batch, bool) {
 }
 
 func (q *batchQueue) remove(ba *batch) {
-	delete(q.byRange, ba.rangeID())
 	heap.Remove(q, ba.idx)
 }
 
@@ -678,6 +677,7 @@ func (q *batchQueue) Push(v interface{}) {
 
 func (q *batchQueue) Pop() interface{} {
 	ba := q.batches[len(q.batches)-1]
+	q.batches[len(q.batches)-1] = nil // for GC
 	q.batches = q.batches[:len(q.batches)-1]
 	delete(q.byRange, ba.rangeID())
 	ba.idx = -1
