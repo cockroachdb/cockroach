@@ -697,7 +697,7 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	resolvedSpans := *event.GetResolvedSpans()
+	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
