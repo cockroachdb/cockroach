@@ -13,12 +13,15 @@ package builtins
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // AllBuiltinNames is an array containing all the built-in function
@@ -49,8 +52,10 @@ func init() {
 	initProbeRangesBuiltins()
 
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
+	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
 	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
+		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
 		tree.FunDefs[name] = fDef
 		if !fDef.ShouldDocument() {
 			// Avoid listing help for undocumented functions.
@@ -67,6 +72,28 @@ func init() {
 	sort.Strings(AllBuiltinNames)
 	sort.Strings(AllAggregateBuiltinNames)
 	sort.Strings(AllWindowBuiltinNames)
+}
+
+func addResolvedFuncDef(
+	resolved map[string]*tree.ResolvedFunctionDefinition, def *tree.FunctionDefinition,
+) {
+	parts := strings.Split(def.Name, ".")
+	if len(parts) > 2 || len(parts) == 0 {
+		// This shouldn't happen in theory.
+		panic(errors.AssertionFailedf("invalid builtin function name: %s", def.Name))
+	}
+
+	if len(parts) == 2 {
+		resolved[def.Name] = tree.PrefixBuiltinFunctionDefinition(def, parts[0])
+		return
+	}
+
+	resolvedName := catconstants.PgCatalogName + "." + def.Name
+	resolved[resolvedName] = tree.PrefixBuiltinFunctionDefinition(def, catconstants.PgCatalogName)
+	if def.AvailableOnPublicSchema {
+		resolvedName = catconstants.PublicSchemaName + "." + def.Name
+		resolved[resolvedName] = tree.PrefixBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
+	}
 }
 
 func registerBuiltin(name string, def builtinDefinition) {

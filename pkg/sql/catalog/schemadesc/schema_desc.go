@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -410,6 +413,48 @@ func (desc *immutable) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return desc.GetPrivileges(), nil
+}
+
+// GetPrefixedFuncDefinition implements the SchemaDescriptor interface.
+func (desc *immutable) GetPrefixedFuncDefinition(
+	name string,
+) (*tree.ResolvedFunctionDefinition, bool) {
+	funcDescPb, found := desc.GetFunction(name)
+	if !found {
+		return nil, false
+	}
+	funcDef := &tree.ResolvedFunctionDefinition{
+		Name:            name,
+		Overloads:       make([]*tree.PrefixedOverload, 0, len(funcDescPb.Overloads)),
+		OriginOverloads: make([]*tree.Overload, 0, len(funcDescPb.Overloads)),
+	}
+	for i := range funcDescPb.Overloads {
+		retType := funcDescPb.Overloads[i].ReturnType
+		overload := &tree.Overload{
+			Oid: catid.FuncIDToOID(funcDescPb.Overloads[i].ID),
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				return retType
+			},
+			IsUDF:                    true,
+			UDFContainsOnlySignature: true,
+		}
+		argTypes := make(tree.ArgTypes, 0, len(funcDescPb.Overloads[i].ArgTypes))
+		for _, argType := range funcDescPb.Overloads[i].ArgTypes {
+			argTypes = append(
+				argTypes,
+				struct {
+					Name string
+					Typ  *types.T
+				}{Typ: argType},
+			)
+		}
+		overload.Types = argTypes
+		prefixedOverload := tree.MakePrefixedOverload(desc.GetName(), overload)
+		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
+		funcDef.OriginOverloads = append(funcDef.OriginOverloads, overload)
+	}
+
+	return funcDef, true
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

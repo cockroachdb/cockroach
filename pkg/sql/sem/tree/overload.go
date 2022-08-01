@@ -110,7 +110,7 @@ type Overload struct {
 	AggregateFunc AggregateOverload
 	WindowFunc    WindowOverload
 
-	// Only one of the following six attributes can be set.
+	// Only one of the following 5 attributes and Body can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
 	// take in Datums and return a Datum.
@@ -132,9 +132,6 @@ type Overload struct {
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
 	SQLFn SQLFnOverload
-
-	// Body is the SQL string body of a user-defined function.
-	Body string
 
 	// OnTypeCheck is incremented every time this overload is type checked.
 	OnTypeCheck func()
@@ -175,6 +172,19 @@ type Overload struct {
 
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
+
+	// IsUDF is set to true when this is a user-defined function overload.
+	// Note: Body can be empty string even IsUDF is true.
+	IsUDF bool
+	// UDFContainsOnlySignature is only set to true for Overload signatures cached
+	// in a Schema descriptor, which means that the full UDF descriptor need to be
+	// fetched to get more info, e.g. function Body.
+	UDFContainsOnlySignature bool
+	// Body is the SQL string body of a user-defined function.
+	Body string
+	// ReturnSet is set to true when a user-defined function is defined to return
+	// a set of values.
+	ReturnSet bool
 }
 
 // params implements the overloadImpl interface.
