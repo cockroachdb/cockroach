@@ -50,7 +50,7 @@ type Catalog struct {
 	testSchema Schema
 	counter    int
 	enumTypes  map[string]*types.T
-	udfs       map[string]*tree.FunctionDefinition
+	udfs       map[string]*tree.ResolvedFunctionDefinition
 }
 
 type dataSource interface {
@@ -487,7 +487,7 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 
 	case *tree.ShowCreateFunction:
 		fn := stmt.Name.FunctionReference.(*tree.UnresolvedName)
-		def, err := tc.ResolveFunction(fn, tree.EmptySearchPath)
+		def, err := tc.ResolveFunction(context.Background(), fn, tree.EmptySearchPath)
 		if err != nil {
 			return "", err
 		}

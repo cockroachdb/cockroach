@@ -47,8 +47,16 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
-	scDesc := n.scDesc.NewBuilder().BuildExistingMutable().(*schemadesc.Mutable)
-	udfMutableDesc, err := n.getMutableFuncDesc(params)
+	scDesc, err := params.p.descCollection.GetMutableSchemaByName(
+		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(),
+		tree.SchemaLookupFlags{Required: true, RequireMutable: true},
+	)
+	if err != nil {
+		return err
+	}
+	mutScDesc := scDesc.(*schemadesc.Mutable)
+
+	udfMutableDesc, err := n.getMutableFuncDesc(mutScDesc, params)
 	if err != nil {
 		return err
 	}
@@ -194,7 +202,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	for i, arg := range udfMutableDesc.Args {
 		argTypes[i] = arg.Type
 	}
-	scDesc.AddFunction(
+	mutScDesc.AddFunction(
 		udfMutableDesc.GetName(),
 		descpb.SchemaDescriptor_FunctionOverload{
 			ID:         udfMutableDesc.GetID(),
@@ -203,7 +211,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			ReturnSet:  udfMutableDesc.ReturnType.ReturnSet,
 		},
 	)
-	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
+	if err := params.p.writeSchemaDescChange(params.ctx, mutScDesc, "Create Function"); err != nil {
 		return err
 	}
 
@@ -214,7 +222,9 @@ func (*createFunctionNode) Next(params runParams) (bool, error) { return false, 
 func (*createFunctionNode) Values() tree.Datums                 { return tree.Datums{} }
 func (*createFunctionNode) Close(ctx context.Context)           {}
 
-func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mutable, error) {
+func (n *createFunctionNode) getMutableFuncDesc(
+	scDesc catalog.SchemaDescriptor, params runParams,
+) (*funcdesc.Mutable, error) {
 	if n.cf.Replace {
 		return nil, unimplemented.New("CREATE OR REPLACE FUNCTION", "replacing function")
 	}
@@ -237,7 +247,7 @@ func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mut
 
 	privileges := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
-		n.scDesc.GetDefaultPrivilegeDescriptor(),
+		scDesc.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Functions,
@@ -247,7 +257,7 @@ func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mut
 	newUdfDesc := funcdesc.NewMutableFunctionDescriptor(
 		funcDescID,
 		n.dbDesc.GetID(),
-		n.scDesc.GetID(),
+		scDesc.GetID(),
 		string(n.cf.FuncName.ObjectName),
 		len(n.cf.Args),
 		returnType,
