@@ -12,7 +12,6 @@ package colexecutils
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -190,10 +189,8 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 			//
 			// We want to fit all deselected tuples into a single batch, so we
 			// don't enforce footprint based memory limit on a batch size.
-			const maxBatchMemSize = math.MaxInt64
-			q.diskQueueDeselectionScratch, _ = q.unlimitedAllocator.ResetMaybeReallocate(
-				q.typs, q.diskQueueDeselectionScratch, n, maxBatchMemSize,
-				true, /* desiredCapacitySufficient */
+			q.diskQueueDeselectionScratch, _ = q.unlimitedAllocator.ResetMaybeReallocateNoMemLimit(
+				q.typs, q.diskQueueDeselectionScratch, n,
 			)
 			q.unlimitedAllocator.PerformOperation(q.diskQueueDeselectionScratch.ColVecs(), func() {
 				for i := range q.typs {
@@ -285,18 +282,14 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 		}
 	}
 
+	// No limit on the batch mem size here, however, we will be paying attention
+	// to the memory registered with the unlimited allocator, and we will stop
+	// adding tuples into this batch and spill when needed.
 	// Note: we could have used NewMemBatchWithFixedCapacity here, but we choose
 	// not to in order to indicate that the capacity of the new batches has
 	// dynamic behavior.
-	newBatch, _ := q.unlimitedAllocator.ResetMaybeReallocate(
-		q.typs,
-		nil, /* oldBatch */
-		newBatchCapacity,
-		// No limit on the batch mem size here, however, we will be paying
-		// attention to the memory registered with the unlimited allocator, and
-		// we will stop adding tuples into this batch and spill when needed.
-		math.MaxInt64, /* maxBatchMemSize */
-		true,          /* desiredCapacitySufficient */
+	newBatch, _ := q.unlimitedAllocator.ResetMaybeReallocateNoMemLimit(
+		q.typs, nil /* oldBatch */, newBatchCapacity,
 	)
 	q.unlimitedAllocator.PerformOperation(newBatch.ColVecs(), func() {
 		for i := range q.typs {
