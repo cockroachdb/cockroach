@@ -255,14 +255,14 @@ func createBenchmarkChangefeed(
 	if err != nil {
 		return nil, nil, err
 	}
-	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
+	tickFn := func(ctx context.Context) (jobspb.ResolvedSpan, error) {
 		event, err := buf.Get(ctx)
 		if err != nil {
-			return nil, err
+			return jobspb.ResolvedSpan{}, err
 		}
 		if event.Type() == kvevent.TypeKV {
 			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
-				return nil, err
+				return jobspb.ResolvedSpan{}, err
 			}
 		}
 		return event.Resolved(), nil

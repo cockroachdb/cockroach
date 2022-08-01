@@ -41,6 +41,7 @@ const (
 	streamOutputFlag = "stream-output"
 	testArgsFlag     = "test-args"
 	vModuleFlag      = "vmodule"
+	showDiffFlag     = "show-diff"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -105,6 +106,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
+	testCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
 	return testCmd
 }
 
@@ -128,6 +130,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
+		showDiff      = mustGetFlagBool(cmd, showDiffFlag)
 
 		// These are tests that require access to another directory for
 		// --rewrite. These can either be single directories or
@@ -273,6 +276,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 				}
 			}
 		}
+	}
+	if showDiff {
+		args = append(args, "--test_arg", "-show-diff")
 	}
 	if timeout > 0 && !stress {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))

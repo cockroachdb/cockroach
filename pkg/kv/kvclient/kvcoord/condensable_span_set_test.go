@@ -27,9 +27,9 @@ func TestCondensableSpanSetMergeContiguousSpans(t *testing.T) {
 	s := condensableSpanSet{}
 	s.insert(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")})
 	s.insert(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
-	require.Equal(t, int64(4), s.bytes)
+	require.Equal(t, 4+2*roachpb.SpanOverhead, s.bytes)
 	s.mergeAndSort()
-	require.Equal(t, int64(2), s.bytes)
+	require.Equal(t, 2+roachpb.SpanOverhead, s.bytes)
 }
 
 func TestCondensableSpanSetEstimateSize(t *testing.T) {
@@ -51,32 +51,32 @@ func TestCondensableSpanSetEstimateSize(t *testing.T) {
 			name:           "new spans fit without merging",
 			set:            []roachpb.Span{ab, bc},
 			newSpans:       []roachpb.Span{ab},
-			mergeThreshold: 100,
-			expEstimate:    6,
+			mergeThreshold: 100 + 3*roachpb.SpanOverhead,
+			expEstimate:    6 + 3*roachpb.SpanOverhead,
 		},
 		{
 			// The set gets merged, the new spans don't.
 			name:           "set needs merging",
 			set:            []roachpb.Span{ab, bc},
 			newSpans:       []roachpb.Span{ab},
-			mergeThreshold: 5,
-			expEstimate:    4,
+			mergeThreshold: 5 + 2*roachpb.SpanOverhead,
+			expEstimate:    4 + 2*roachpb.SpanOverhead,
 		},
 		{
 			// The set gets merged, and then it gets merged again with the newSpans.
 			name:           "new spans fit without merging",
 			set:            []roachpb.Span{ab, bc},
 			newSpans:       []roachpb.Span{ab, bc},
-			mergeThreshold: 5,
-			expEstimate:    2,
+			mergeThreshold: 5 + 2*roachpb.SpanOverhead,
+			expEstimate:    2 + roachpb.SpanOverhead,
 		},
 		{
 			// Everything gets merged, but it still doesn't fit.
 			name:           "new spans dont fit",
 			set:            []roachpb.Span{ab, bc},
 			newSpans:       []roachpb.Span{ab, bc, largeSpan},
-			mergeThreshold: 5,
-			expEstimate:    12,
+			mergeThreshold: 5 + 2*roachpb.SpanOverhead,
+			expEstimate:    12 + 2*roachpb.SpanOverhead,
 		},
 	}
 	for _, tc := range tests {
