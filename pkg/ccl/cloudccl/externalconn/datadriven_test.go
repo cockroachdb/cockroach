@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"            // register the sink External Connection implementations
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // register all the concrete External Connection implementations
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
