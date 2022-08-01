@@ -11,8 +11,6 @@
 package colexecutils
 
 import (
-	"math"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -59,10 +57,8 @@ func (p *deselectorOp) Next() coldata.Batch {
 	// deselectorOp should *not* limit the capacities of the returned batches,
 	// so we don't use a memory limit here. It is up to the wrapped operator to
 	// limit the size of batches based on the memory footprint.
-	const maxBatchMemSize = math.MaxInt64
-	p.output, _ = p.unlimitedAllocator.ResetMaybeReallocate(
-		p.inputTypes, p.output, batch.Length(), maxBatchMemSize,
-		true, /* desiredCapacitySufficient */
+	p.output, _ = p.unlimitedAllocator.ResetMaybeReallocateNoMemLimit(
+		p.inputTypes, p.output, batch.Length(),
 	)
 	sel := batch.Selection()
 	p.unlimitedAllocator.PerformOperation(p.output.ColVecs(), func() {

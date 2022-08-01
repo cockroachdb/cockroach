@@ -12,7 +12,6 @@ package colexecwindow
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -248,10 +247,8 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			sel := batch.Selection()
 			// We don't limit the batches based on the memory footprint because
 			// we assume that the input is producing reasonably sized batches.
-			const maxBatchMemSize = math.MaxInt64
-			b.currentBatch, _ = b.allocator.ResetMaybeReallocate(
-				b.outputTypes, b.currentBatch, batch.Length(), maxBatchMemSize,
-				true, /* desiredCapacitySufficient */
+			b.currentBatch, _ = b.allocator.ResetMaybeReallocateNoMemLimit(
+				b.outputTypes, b.currentBatch, batch.Length(),
 			)
 			b.allocator.PerformOperation(b.currentBatch.ColVecs(), func() {
 				for colIdx, vec := range batch.ColVecs() {
