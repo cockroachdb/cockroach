@@ -23,6 +23,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:alter_default_privileges_stmt.bnf",
   "//docs/generated/sql/bnf:alter_index_partition_by.bnf",
   "//docs/generated/sql/bnf:alter_index_stmt.bnf",
+  "//docs/generated/sql/bnf:alter_index_visible_stmt.bnf",
   "//docs/generated/sql/bnf:alter_partition_stmt.bnf",
   "//docs/generated/sql/bnf:alter_primary_key.bnf",
   "//docs/generated/sql/bnf:alter_range_relocate_stmt.bnf",

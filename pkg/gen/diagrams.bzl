@@ -24,6 +24,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:alter_default_privileges.html",
   "//docs/generated/sql/bnf:alter_index.html",
   "//docs/generated/sql/bnf:alter_index_partition_by.html",
+  "//docs/generated/sql/bnf:alter_index_visible.html",
   "//docs/generated/sql/bnf:alter_partition.html",
   "//docs/generated/sql/bnf:alter_primary_key.html",
   "//docs/generated/sql/bnf:alter_range.html",
