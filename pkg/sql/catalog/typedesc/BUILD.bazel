@@ -19,7 +19,6 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/enum",
-        "//pkg/sql/oidext",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",

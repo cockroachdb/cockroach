@@ -13,21 +13,26 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -339,6 +344,132 @@ func (sr *schemaResolver) runWithOptions(flags resolveFlags, fn func()) {
 		sr.typeResolutionDbID = flags.contextDatabaseID
 	}
 	fn()
+}
+
+func (sr *schemaResolver) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	if name.NumParts > 3 || len(name.Parts[0]) == 0 || name.Star {
+		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
+	}
+
+	fn, err := name.ToFunctionName()
+	if err != nil {
+		return nil, err
+	}
+
+	if fn.ExplicitCatalog && fn.Catalog() != sr.CurrentDatabase() {
+		return nil, pgerror.New(pgcode.FeatureNotSupported, "cross-database function references not allowed")
+	}
+
+	// Get builtin functions if there is any match.
+	builtinDef, err := tree.GetBuiltinFuncDefinition(fn, path)
+	if err != nil {
+		return nil, err
+	}
+
+	var udfDef *tree.ResolvedFunctionDefinition
+	if fn.ExplicitSchema && fn.Schema() != catconstants.CRDBInternalSchemaName {
+		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fn.Schema())
+		if err != nil {
+			return nil, err
+		}
+
+		if !found {
+			return nil, pgerror.Newf(pgcode.UndefinedSchema, "schema %q does not exist", fn.Schema())
+		}
+
+		sc := prefix.Schema
+		udfDef, _ = sc.GetResolvedFuncDefinition(fn.Object())
+	} else {
+		if err := path.IterateSearchPath(func(schema string) error {
+			found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return nil
+			}
+			curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
+			if !found {
+				return nil
+			}
+
+			udfDef, err = udfDef.MergeWith(curUdfDef)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	if builtinDef == nil && udfDef == nil {
+		// If nothing found, there is a chance that user typed in a quoted function
+		// name which is not lowercase. So here we try to lowercase the given
+		// function name and find a suggested function name if possible.
+		extraMsg := ""
+		lowerName := tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+		if lowerName != *name {
+			alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
+			if err == nil && alternative != nil {
+				extraMsg = fmt.Sprintf(", but %s() exists", alternative.Name)
+			}
+		}
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()%s", tree.ErrString(name), extraMsg)
+	}
+	if builtinDef == nil {
+		return udfDef, nil
+	}
+	if udfDef == nil {
+		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
+		if props.UnsupportedWithIssue != 0 {
+			// Note: no need to embed the function name in the message; the
+			// caller will add the function name as prefix.
+			const msg = "this function is not yet supported"
+			var unImplErr error
+			if props.UnsupportedWithIssue < 0 {
+				unImplErr = unimplemented.New(builtinDef.Name+"()", msg)
+			} else {
+				unImplErr = unimplemented.NewWithIssueDetail(props.UnsupportedWithIssue, builtinDef.Name, msg)
+			}
+			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
+		}
+		return builtinDef, nil
+	}
+
+	return builtinDef.MergeWith(udfDef)
+}
+
+func (sr *schemaResolver) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (*tree.Overload, error) {
+	if !funcdesc.IsOIDUserDefinedFunc(oid) {
+		name, ok := tree.OidToBuiltinName[oid]
+		if !ok {
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid)
+		}
+		funcDef := tree.FunDefs[name]
+		for _, o := range funcDef.Definition {
+			if o.Oid == oid {
+				return o, nil
+			}
+		}
+	}
+
+	flags := tree.ObjectLookupFlagsWithRequired()
+	flags.AvoidLeased = sr.skipDescriptorCache
+	descID, err := funcdesc.UserDefinedFunctionOIDToID(oid)
+	if err != nil {
+		return nil, err
+	}
+	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID, flags)
+	if err != nil {
+		return nil, err
+	}
+	ret, err := funcDesc.ToOverload()
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -120,11 +119,7 @@ func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable,
 // CockroachPredefinedOIDMax. The function returns an error if the
 // given OID is less than or equals to CockroachPredefinedMax.
 func UserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, error) {
-	if descpb.ID(oid) <= oidext.CockroachPredefinedOIDMax {
-		return 0, errors.Newf("user-defined OID %d should be greater "+
-			"than predefined Max: %d.", oid, oidext.CockroachPredefinedOIDMax)
-	}
-	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax, nil
+	return catid.UserDefinedOIDToID(oid)
 }
 
 // GetUserDefinedTypeDescID gets the type descriptor ID from a user defined type.

@@ -177,6 +177,7 @@ go_test(
         "datum_test.go",
         "expr_test.go",
         "format_test.go",
+        "function_definition_test.go",
         "function_name_test.go",
         "indexed_vars_test.go",
         "interval_test.go",

@@ -13,6 +13,7 @@ package funcdesc_test
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -28,8 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq/oid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateFuncDesc(t *testing.T) {
@@ -460,5 +465,152 @@ func TestValidateFuncDesc(t *testing.T) {
 		} else if expectedErr != err.Error() {
 			t.Errorf("#%d expected err: %s, but found %s", i, expectedErr, err)
 		}
+	}
+}
+
+func TestToOverload(t *testing.T) {
+	testCases := []struct {
+		desc     descpb.FunctionDescriptor
+		expected tree.Overload
+		err      string
+	}{
+		{
+			// Test all fields are properly valued.
+			desc: descpb.FunctionDescriptor{
+				ID:                1,
+				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
+				LeakProof:         true,
+				Volatility:        catpb.Function_IMMUTABLE,
+				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
+				FunctionBody:      "ANY QUERIES",
+			},
+			expected: tree.Overload{
+				Oid: oid.Oid(100001),
+				Types: tree.ArgTypes{
+					{Name: "arg1", Typ: types.Int},
+				},
+				ReturnType: tree.FixedReturnType(types.Int),
+				ReturnSet:  true,
+				Volatility: volatility.Leakproof,
+				Body:       "ANY QUERIES",
+				IsUDF:      true,
+			},
+		},
+		{
+			// Test ReturnSet matters.
+			desc: descpb.FunctionDescriptor{
+				ID:                1,
+				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: false},
+				LeakProof:         true,
+				Volatility:        catpb.Function_IMMUTABLE,
+				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
+				FunctionBody:      "ANY QUERIES",
+			},
+			expected: tree.Overload{
+				Oid: oid.Oid(100001),
+				Types: tree.ArgTypes{
+					{Name: "arg1", Typ: types.Int},
+				},
+				ReturnType: tree.FixedReturnType(types.Int),
+				ReturnSet:  false,
+				Volatility: volatility.Leakproof,
+				Body:       "ANY QUERIES",
+				IsUDF:      true,
+			},
+		},
+		{
+			// Test Volatility matters.
+			desc: descpb.FunctionDescriptor{
+				ID:                1,
+				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
+				LeakProof:         false,
+				Volatility:        catpb.Function_STABLE,
+				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
+				FunctionBody:      "ANY QUERIES",
+			},
+			expected: tree.Overload{
+				Oid: oid.Oid(100001),
+				Types: tree.ArgTypes{
+					{Name: "arg1", Typ: types.Int},
+				},
+				ReturnType: tree.FixedReturnType(types.Int),
+				ReturnSet:  true,
+				Volatility: volatility.Stable,
+				Body:       "ANY QUERIES",
+				IsUDF:      true,
+			},
+		},
+		{
+			// Test NullableArgs matters.
+			desc: descpb.FunctionDescriptor{
+				ID:                1,
+				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
+				LeakProof:         true,
+				Volatility:        catpb.Function_IMMUTABLE,
+				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
+				FunctionBody:      "ANY QUERIES",
+			},
+			expected: tree.Overload{
+				Oid: oid.Oid(100001),
+				Types: tree.ArgTypes{
+					{Name: "arg1", Typ: types.Int},
+				},
+				ReturnType:   tree.FixedReturnType(types.Int),
+				ReturnSet:    true,
+				Volatility:   volatility.Leakproof,
+				Body:         "ANY QUERIES",
+				IsUDF:        true,
+				NullableArgs: true,
+			},
+		},
+		{
+			// Test failure on non-immutable but leakproof function.
+			desc: descpb.FunctionDescriptor{
+				ID:                1,
+				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
+				LeakProof:         true,
+				Volatility:        catpb.Function_STABLE,
+				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
+				FunctionBody:      "ANY QUERIES",
+			},
+			expected: tree.Overload{
+				Oid: oid.Oid(100001),
+				Types: tree.ArgTypes{
+					{Name: "arg1", Typ: types.Int},
+				},
+				ReturnType: tree.FixedReturnType(types.Int),
+				ReturnSet:  true,
+				Volatility: volatility.Leakproof,
+				Body:       "ANY QUERIES",
+				IsUDF:      true,
+			},
+			err: "function 1 is leakproof but not immutable",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			desc := funcdesc.NewBuilder(&tc.desc).BuildImmutable().(catalog.FunctionDescriptor)
+			overload, err := desc.ToOverload()
+			if tc.err == "" {
+				require.NoError(t, err)
+			} else {
+				require.Equal(t, tc.err, err.Error())
+				return
+			}
+
+			returnType := overload.ReturnType([]tree.TypedExpr{})
+			expectedReturnType := tc.expected.ReturnType([]tree.TypedExpr{})
+			require.Equal(t, expectedReturnType, returnType)
+			// Set ReturnType(which is function) to nil for easier equality check.
+			overload.ReturnType = nil
+			tc.expected.ReturnType = nil
+			require.Equal(t, tc.expected, *overload)
+		})
 	}
 }

@@ -10,7 +10,10 @@
 
 package catalog
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // SchemaDescriptor encapsulates the basic
 type SchemaDescriptor interface {
@@ -29,6 +32,15 @@ type SchemaDescriptor interface {
 
 	// GetFunction returns a list of function overloads given a name.
 	GetFunction(name string) (descpb.SchemaDescriptor_Function, bool)
+
+	// GetResolvedFuncDefinition returns a ResolvedFunctionDefinition given a
+	// function name. This is needed by function resolution and expression type
+	// checking during which candidate function overloads are searched for the
+	// best match. Only function signatures are needed during this process. Schema
+	// stores all the signatures of the functions created under it and this method
+	// returns a collection of overloads with the same function name, each
+	// overload is prefixed with the same schema name.
+	GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool)
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema

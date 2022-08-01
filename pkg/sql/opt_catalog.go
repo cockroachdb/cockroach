@@ -329,8 +329,14 @@ func (oc *optCatalog) ResolveType(
 
 // ResolveFunction is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveFunction(
-	name *tree.UnresolvedName, path tree.SearchPath,
-) (*tree.FunctionDefinition, error) {
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
+}
+
+func (oc *optCatalog) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (*tree.Overload, error) {
 	return nil, errors.AssertionFailedf("unimplemented")
 }
 
