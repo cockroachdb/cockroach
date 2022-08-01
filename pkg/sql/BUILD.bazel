@@ -545,6 +545,7 @@ go_test(
         "explain_bundle_test.go",
         "explain_test.go",
         "explain_tree_test.go",
+        "function_resolver_test.go",
         "grant_revoke_test.go",
         "grant_role_test.go",
         "index_mutation_test.go",
