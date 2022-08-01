@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -673,24 +672,13 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		// TODO(mgartner): Support UDFs with more than 1 statement.
 		stmt := udf.Body[len(udf.Body)-1]
 
-		// Create dummy required props.
-		// TODO(mgartner): Optbuilder should save each statement's required
-		// props and we should make a copy of them here.
-		reqProps := &physical.Required{}
-
 		// Copy the expression into a new memo.
 		// TODO(mgartner): Replace argument references with constant values.
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
-		f.CopyAndReplace(stmt, reqProps, replaceFn)
-
-		// We've used dummy required props above with an empty presentation, so
-		// the optimizer will prune all the output columns. To avoid this, we
-		// disable optimizations entirely.
-		// TODO(mgartner): Remove this when we build real required props above.
-		o.DisableOptimizations()
+		f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
 
 		// Optimize the memo.
 		newRightSide, err := o.Optimize()
