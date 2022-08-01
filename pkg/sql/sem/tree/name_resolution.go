@@ -137,14 +137,6 @@ type SearchPath interface {
 	IterateSearchPath(func(schema string) error) error
 }
 
-// CustomFunctionDefinitionResolver is an interface providing custom
-// function definition resolution functionality.
-type CustomFunctionDefinitionResolver interface {
-	// Resolve resolves function with specified name, and returns
-	// non-nil function definition if resolved successfully.
-	Resolve(name string) *FunctionDefinition
-}
-
 // EmptySearchPath is a SearchPath with no members.
 var EmptySearchPath SearchPath = emptySearchPath{}
 
@@ -152,21 +144,6 @@ type emptySearchPath struct{}
 
 func (emptySearchPath) IterateSearchPath(func(string) error) error {
 	return nil
-}
-
-// getFunctionDefinitionResolver returns a function which
-// is used to resolve function definition.
-func getFunctionDefinitionResolver(sp SearchPath) func(name string) *FunctionDefinition {
-	if custom, ok := sp.(CustomFunctionDefinitionResolver); ok {
-		return custom.Resolve
-	}
-	return func(name string) *FunctionDefinition {
-		fn, ok := FunDefs[name]
-		if ok {
-			return fn
-		}
-		return nil
-	}
 }
 
 func newInvColRef(n *UnresolvedName) error {

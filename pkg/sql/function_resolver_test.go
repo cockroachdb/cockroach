@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -245,6 +246,140 @@ CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$
 			}
 			require.Equal(t, tc.expectedBody, bodies)
 			require.Equal(t, tc.expectedSchema, schemas)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestFuncExprTypeCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	// TODO(Chengxiong): add test cases with builtin function when builtin
+	// function OIDs are changed to fixed IDs.
+	tDB.Exec(t, `
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE FUNCTION sc1.f(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION sc1.f(a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE FUNCTION sc2.f(a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$;
+CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT lower('HI') $$;
+`,
+	)
+
+	testCases := []struct {
+		testName         string
+		exprStr          string
+		searchPath       []string
+		expectedFuncOID  int
+		expectedErr      string
+		expectedFuncBody string
+		desiredType      *types.T
+	}{
+		{
+			testName:    "explicit schema but function not found",
+			exprStr:     "sc1.g(1)",
+			searchPath:  []string{"sc2", "sc1"},
+			expectedErr: "unknown function: sc1.g()",
+		},
+		{
+			testName:    "implicit schema but function not found",
+			exprStr:     "g(1)",
+			searchPath:  []string{"sc2", "sc1"},
+			expectedErr: "unknown function: g()",
+		},
+		{
+			testName:         "explicit schema",
+			exprStr:          "sc1.f(1)",
+			searchPath:       []string{"sc2", "sc1"},
+			expectedFuncOID:  100107,
+			expectedFuncBody: "SELECT 2;",
+		},
+		{
+			testName:         "implicit schema",
+			exprStr:          "f(1)",
+			searchPath:       []string{"sc2", "sc1"},
+			expectedFuncOID:  100108,
+			expectedFuncBody: "SELECT 3;",
+		},
+		{
+			testName:         "implicit schema but unique signature",
+			exprStr:          "f(1, 1)",
+			searchPath:       []string{"sc2", "sc1"},
+			expectedFuncOID:  100106,
+			expectedFuncBody: "SELECT 1;",
+		},
+		{
+			testName:         "implicit pg_catalog schema in path",
+			exprStr:          "lower('HI')",
+			searchPath:       []string{"sc1", "sc2"},
+			expectedFuncOID:  825,
+			expectedFuncBody: "",
+			desiredType:      types.String,
+		},
+		{
+			testName:         "explicit pg_catalog schema in path",
+			exprStr:          "lower('HI')",
+			searchPath:       []string{"sc1", "sc2", "pg_catalog"},
+			expectedFuncOID:  100109,
+			expectedFuncBody: "SELECT lower('HI');",
+			desiredType:      types.String,
+		},
+	}
+
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
+
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+		planner, cleanup := sql.NewInternalPlanner(
+			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+		)
+		defer cleanup()
+		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		// Set "defaultdb" as current database.
+		ec.SessionData().Database = "defaultdb"
+
+		funcResolver := planner.(tree.FunctionReferenceResolver)
+		semaCtx := tree.MakeSemaContext()
+		semaCtx.FunctionResolver = funcResolver
+
+		for _, tc := range testCases {
+			t.Run(tc.testName, func(t *testing.T) {
+				expr, err := parser.ParseExpr(tc.exprStr)
+				require.NoError(t, err)
+				path := sessiondata.MakeSearchPath(tc.searchPath)
+				semaCtx.SearchPath = &path
+				desired := types.Int
+				if tc.desiredType != nil {
+					desired = tc.desiredType
+				}
+				typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, desired)
+				if tc.expectedErr != "" {
+					require.Equal(t, tc.expectedErr, err.Error())
+					return
+				}
+				require.NoError(t, err)
+				funcExpr := typeChecked.(*tree.FuncExpr)
+				require.NotNil(t, funcExpr.ResolvedOverload())
+				require.Equal(t, tc.expectedFuncBody, funcExpr.ResolvedOverload().Body)
+				if tc.expectedFuncBody != "" {
+					require.True(t, funcExpr.ResolvedOverload().IsUDF)
+				}
+				require.False(t, funcExpr.ResolvedOverload().UDFContainsOnlySignature)
+				require.Equal(t, tc.expectedFuncOID, int(funcExpr.ResolvedOverload().Oid))
+				require.Equal(t, tc.expectedFuncBody, funcExpr.ResolvedOverload().Body)
+			})
 		}
 		return nil
 	})

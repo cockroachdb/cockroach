@@ -16,6 +16,7 @@
 package seqexpr
 
 import (
+	"context"
 	"go/constant"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -51,11 +52,11 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
-	// TODO(mgartner): Plumb a function resolver here, or determine that the
-	// function should have already been resolved.
+	// TODO(mgartner): Plumb a function resolver and ctx here, or determine that
+	// the function should have already been resolved.
 	// TODO(chengxiong): Since we have funcExpr here, it's possible to narrow down
 	// overloads by using input types.
-	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath, nil /* resolver */)
+	def, err := funcExpr.Func.Resolve(context.Background(), tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return nil, err
 	}
@@ -67,18 +68,18 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	if hasSequenceArguments {
 		found := false
-		for _, overload := range def.Definition {
+		for i := range def.Overloads {
 			// Find the overload that matches funcExpr.
-			if len(funcExpr.Exprs) == overload.Types.Length() {
+			if len(funcExpr.Exprs) == def.Overloads[i].Types.Length() {
 				found = true
-				argTypes, ok := overload.Types.(tree.ArgTypes)
+				argTypes, ok := def.Overloads[i].Types.(tree.ArgTypes)
 				if !ok {
 					panic(pgerror.Newf(
 						pgcode.InvalidFunctionDefinition,
 						"%s has invalid argument types", funcExpr.Func.String(),
 					))
 				}
-				for i := 0; i < overload.Types.Length(); i++ {
+				for i := 0; i < def.Overloads[i].Types.Length(); i++ {
 					// Find the sequence name arg.
 					argName := argTypes[i].Name
 					if argName == builtinconstants.SequenceNameArg {
