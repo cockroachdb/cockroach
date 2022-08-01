@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -311,7 +312,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			break
 		}
 		// If we can retry, set a higher batch timestamp and continue.
-		if !canDoServersideRetry(ctx, pErr, ba, br, g, nil /* deadline */) {
+		if !canDoServersideRetry(ctx, pErr, ba, br, g, hlc.Timestamp{} /* deadline */) {
 			r.store.Metrics().ReadEvaluationServerSideRetryFailure.Inc(1)
 			break
 		} else {

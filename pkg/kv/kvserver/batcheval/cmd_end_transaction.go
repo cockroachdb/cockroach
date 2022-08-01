@@ -445,8 +445,8 @@ func EndTxn(
 // IsEndTxnExceedingDeadline returns true if the transaction's provisional
 // commit timestamp exceeded its deadline. If so, the transaction should not be
 // allowed to commit.
-func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline *hlc.Timestamp) bool {
-	return deadline != nil && !deadline.IsEmpty() && deadline.LessEq(commitTS)
+func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) bool {
+	return !deadline.IsEmpty() && deadline.LessEq(commitTS)
 }
 
 // IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be

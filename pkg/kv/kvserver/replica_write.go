@@ -430,7 +430,7 @@ func (r *Replica) evaluateWriteBatch(
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, g, st, ui, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -606,7 +606,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-	deadline *hlc.Timestamp,
+	deadline hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {

@@ -511,14 +511,14 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 		}), clock, stopper)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	if txn.deadline() != nil {
+	if !txn.deadline().IsEmpty() {
 		t.Errorf("unexpected initial deadline: %s", txn.deadline())
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
 	err := txn.UpdateDeadline(ctx, deadline)
 	require.NoError(t, err, "Deadline update failed")
-	if d := *txn.deadline(); d != deadline {
+	if d := txn.deadline(); d != deadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 
@@ -527,14 +527,14 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
 	err = txn.UpdateDeadline(ctx, futureDeadline)
 	require.NoError(t, err, "Future deadline update failed")
-	if d := *txn.deadline(); d != futureDeadline {
+	if d := txn.deadline(); d != futureDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 
 	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
 	err = txn.UpdateDeadline(ctx, pastDeadline)
 	require.NoError(t, err, "Past deadline update failed")
-	if d := *txn.deadline(); d != pastDeadline {
+	if d := txn.deadline(); d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 }

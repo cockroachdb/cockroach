@@ -1143,10 +1143,10 @@ func TestTransactionDeadline(t *testing.T) {
 
 		if args, ok := ba.GetArg(roachpb.EndTxn); ok {
 			et := args.(*roachpb.EndTxnRequest)
-			if et.Deadline == nil || et.Deadline.IsEmpty() {
+			if et.Deadline.IsEmpty() {
 				return nil
 			}
-			mu.txnDeadline = *et.Deadline
+			mu.txnDeadline = et.Deadline
 		}
 		return nil
 	}
