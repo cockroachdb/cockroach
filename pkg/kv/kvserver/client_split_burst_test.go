@@ -78,7 +78,7 @@ func setupSplitBurstTest(t *testing.T, delay time.Duration) *splitBurstTest {
 			if args.Split == nil || delay == 0 {
 				return 0, nil
 			}
-			if args.Split.RightDesc.GetStickyBit() != magicStickyBit {
+			if args.Split.RightDesc.StickyBit != magicStickyBit {
 				return 0, nil
 			}
 			select {

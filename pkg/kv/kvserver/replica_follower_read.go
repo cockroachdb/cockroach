@@ -73,10 +73,10 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 		return false
 	}
 
-	switch typ := repDesc.GetType(); typ {
+	switch repDesc.Type {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
 	default:
-		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
+		log.Eventf(ctx, "%s replicas cannot serve follower reads", repDesc.Type)
 		return false
 	}
 
