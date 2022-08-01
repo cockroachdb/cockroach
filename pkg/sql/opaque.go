@@ -120,6 +120,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterFunctionDepExtension(ctx, n)
 	case *tree.AlterIndex:
 		return p.AlterIndex(ctx, n)
+	case *tree.AlterIndexVisible:
+		return p.AlterIndexVisible(ctx, n)
 	case *tree.AlterSchema:
 		return p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
@@ -296,6 +298,7 @@ func init() {
 		&tree.AlterFunctionSetSchema{},
 		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
+		&tree.AlterIndexVisible{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
 		&tree.AlterTableLocality{},
