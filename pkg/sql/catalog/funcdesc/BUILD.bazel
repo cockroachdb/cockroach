@@ -19,12 +19,15 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )
 
@@ -45,8 +48,12 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
+        "@com_github_lib_pq//oid",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

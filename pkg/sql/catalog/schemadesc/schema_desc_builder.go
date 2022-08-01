@@ -96,7 +96,7 @@ func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescrip
 		desc = sdb.original
 	}
 	return &immutable{
-		SchemaDescriptor:     *desc,
+		wrapper:              wrapper{SchemaDescriptor: *desc},
 		changes:              sdb.changes,
 		isUncommittedVersion: sdb.isUncommittedVersion,
 	}
@@ -115,11 +115,11 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 	}
 	return &Mutable{
 		immutable: immutable{
-			SchemaDescriptor:     *sdb.maybeModified,
+			wrapper:              wrapper{SchemaDescriptor: *sdb.maybeModified},
 			changes:              sdb.changes,
 			isUncommittedVersion: sdb.isUncommittedVersion,
 		},
-		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
+		ClusterVersion: &immutable{wrapper: wrapper{SchemaDescriptor: *sdb.original}},
 	}
 }
 
@@ -133,8 +133,8 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescrip
 func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
 	return &Mutable{
 		immutable: immutable{
-			SchemaDescriptor: *sdb.original,
-			changes:          sdb.changes,
+			wrapper: wrapper{SchemaDescriptor: *sdb.original},
+			changes: sdb.changes,
 		},
 	}
 }

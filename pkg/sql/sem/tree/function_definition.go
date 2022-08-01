@@ -13,6 +13,9 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -30,6 +33,32 @@ type FunctionDefinition struct {
 
 	// FunctionProperties are the properties common to all overloads.
 	FunctionProperties
+}
+
+// ResolvedFunctionDefinition is similar to FunctionDefinition but with all the
+// overloads prefixed wit schema name.
+type ResolvedFunctionDefinition struct {
+	Name string
+
+	// ExplicitSchema is only set to true when the function is resolved with
+	// explicit schema name in the desired function name. It means that all
+	// overloads are prefixed with the same desired schema name.
+	ExplicitSchema bool
+
+	Overloads []*PrefixedOverload
+}
+
+// PrefixedOverload is a wrapper of Overload prefixed with a schema name.
+// It indicates that the overload is defined with the specified schema.
+type PrefixedOverload struct {
+	Schema string
+	// TODO(Chengxiong): make this into a *Overload
+	*Overload
+}
+
+// MakePrefixedOverload creates a new PrefixedOverload.
+func MakePrefixedOverload(schema string, overload *Overload) *PrefixedOverload {
+	return &PrefixedOverload{Schema: schema, Overload: overload}
 }
 
 // FunctionProperties defines the properties of the built-in
@@ -217,6 +246,68 @@ func (fd *FunctionDefinition) GetHasSequenceArguments() (bool, error) {
 	return getHasSequenceArguments(fd.Name, fd.Definition)
 }
 
+// Format implements the NodeFormatter interface.
+func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
+	ctx.WriteString(fd.Name)
+}
+
+// String implements the Stringer interface.
+func (fd *ResolvedFunctionDefinition) String() string { return AsString(fd) }
+
+// MergeWith is used specifically to merge two UDF definitions with
+// same name but from different schemas. Currently, the FunctionProperties field
+// is not set for UDFs.
+func (fd *ResolvedFunctionDefinition) MergeWith(
+	another *ResolvedFunctionDefinition,
+) (*ResolvedFunctionDefinition, error) {
+	if fd == nil {
+		return another, nil
+	}
+	if another == nil {
+		return fd, nil
+	}
+
+	if fd.Name != another.Name {
+		return nil, errors.Newf("cannot merge function definition of %q with %q", fd.Name, another.Name)
+	}
+
+	return &ResolvedFunctionDefinition{
+		Name:      fd.Name,
+		Overloads: append(fd.Overloads, another.Overloads...),
+	}, nil
+}
+
+// GetClass returns function class by checking each overload's Class and returns
+// the homogeneous Class value if all overloads are the same Class. Ambiguous
+// error is returned if there is any overload with different Class.
+func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
+	return getFuncClass(fd.Name, toOverloads(fd.Overloads))
+}
+
+// GetReturnLabel returns function ReturnLabel by checking each overload and
+// returns a ReturnLabel if all overloads have a ReturnLabel of the same length.
+// Ambiguous error is returned if there is any overload has ReturnLabel of a
+// different length. This is good enough since we don't create UDF with
+// ReturnLabel.
+func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
+	return getFuncReturnLabels(fd.Name, toOverloads(fd.Overloads))
+}
+
+// GetHasSequenceArguments returns function's HasSequenceArguments flag by
+// checking each overload's HasSequenceArguments flag. Ambiguous error is
+// returned if there is any overload has a different flag.
+func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
+	return getHasSequenceArguments(fd.Name, toOverloads(fd.Overloads))
+}
+
+func toOverloads(in []*PrefixedOverload) []*Overload {
+	ret := make([]*Overload, len(in))
+	for i := range in {
+		ret[i] = in[i].Overload
+	}
+	return ret
+}
+
 func getFuncClass(fnName string, fns []*Overload) (FunctionClass, error) {
 	ret := fns[0].Class
 	for _, o := range fns {
@@ -245,4 +336,94 @@ func getHasSequenceArguments(fnName string, fns []*Overload) (bool, error) {
 		}
 	}
 	return ret, nil
+}
+
+// PrefixBuiltinFunctionDefinition prefix all overloads in a function definition
+// with a schema name. Note that this function can only be used for builtin
+// function. Hence, HasUDF is set to false.
+func PrefixBuiltinFunctionDefinition(
+	def *FunctionDefinition, schema string,
+) *ResolvedFunctionDefinition {
+	ret := &ResolvedFunctionDefinition{
+		Name:      def.Name,
+		Overloads: make([]*PrefixedOverload, 0, len(def.Definition)),
+	}
+	for _, o := range def.Definition {
+		ret.Overloads = append(
+			ret.Overloads,
+			&PrefixedOverload{Schema: schema, Overload: o},
+		)
+	}
+	return ret
+}
+
+// GetBuiltinFuncDefinitionOrFail is similar to GetBuiltinFuncDefinition but
+// fail if function is not found.
+func GetBuiltinFuncDefinitionOrFail(
+	fName *FunctionName, searchPath SearchPath,
+) (*ResolvedFunctionDefinition, error) {
+	def, err := GetBuiltinFuncDefinition(fName, searchPath)
+	if err != nil {
+		return nil, err
+	}
+	if def == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s", fName.String())
+	}
+	return def, nil
+}
+
+// GetBuiltinFuncDefinition search for a builtin function given a function name
+// and a search path. If function name is prefixed, only the builtin functions
+// in the specific schema are searched. Otherwise, all schemas on the given
+// searchPath are searched. A nil is returned if no function is found. It's
+// caller's choice to error out if function not found.
+func GetBuiltinFuncDefinition(
+	fName *FunctionName, searchPath SearchPath,
+) (*ResolvedFunctionDefinition, error) {
+	if fName.ExplicitSchema {
+		// We only look at builtin functions with "AvailableOnPublicSchema == true"
+		// when public schema is specified.
+		if fName.Schema() == catconstants.PublicSchemaName {
+			d := FunDefs[fName.Object()]
+			if d != nil && d.AvailableOnPublicSchema {
+				return PrefixBuiltinFunctionDefinition(d, fName.Schema()), nil
+			}
+			return nil, nil
+		}
+
+		fullName := fName.Object()
+		// If it's specified schema is not "pg_catalog", prefix the function name with
+		// the schema name. For example, for functions in "crdb_internal" schema,
+		// "crdb_internal" schema name need to be specified to resolve functions.
+		if fName.Schema() != catconstants.PgCatalogName {
+			fullName = fName.Schema() + "." + fullName
+		}
+
+		if d := FunDefs[fullName]; d != nil {
+			return PrefixBuiltinFunctionDefinition(d, fName.Schema()), nil
+		}
+
+		return nil, nil
+	}
+
+	def := FunDefs[fName.Object()]
+	if def != nil {
+		// If function is found with only the function name, then it's a
+		// "pg_catalog" builtin.
+		return PrefixBuiltinFunctionDefinition(def, catconstants.PgCatalogName), nil
+	}
+
+	var resolvedDef *ResolvedFunctionDefinition
+	if err := searchPath.IterateSearchPath(func(schema string) error {
+		fullName := schema + "." + fName.Object()
+		if def = FunDefs[fullName]; def != nil {
+			resolvedDef = PrefixBuiltinFunctionDefinition(def, schema)
+			return iterutil.StopIteration()
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return resolvedDef, nil
 }

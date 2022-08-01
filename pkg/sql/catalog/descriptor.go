@@ -860,6 +860,10 @@ type FunctionDescriptor interface {
 
 	// GetDependedOnBy returns a list of back-references of this function.
 	GetDependedOnBy() []descpb.FunctionDescriptor_Reference
+
+	// ToOverload converts the function descriptor to tree.Overload object which
+	// can be used for execution.
+	ToOverload() (ret *tree.Overload, err error)
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

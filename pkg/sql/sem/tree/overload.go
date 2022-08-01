@@ -175,6 +175,17 @@ type Overload struct {
 
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
+
+	// IsUDF is set to true when this is a user-defined function overload.
+	// Note: Body can be empty string even IsUDF is true.
+	IsUDF bool
+	// UDFContainsOnlySignature is only set to true for Overload signatures cached
+	// in a Schema descriptor, which means that the full UDF descriptor need to be
+	// fetched to get more info, e.g. function Body.
+	UDFContainsOnlySignature bool
+	// ReturnSet is set to true when a user-defined function is defined to return
+	// a set of values.
+	ReturnSet bool
 }
 
 // params implements the overloadImpl interface.
