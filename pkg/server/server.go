@@ -716,7 +716,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor, st: st}
+	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor, st: st, makePlanner: nil}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
 
 	// These callbacks help us avoid a dependency on gossip in httpServer.
