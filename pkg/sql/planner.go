@@ -293,7 +293,7 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-// TODO(yuzefovich): make this redact.RedactableString.
+	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,

@@ -13,15 +13,14 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobrecords"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -44,9 +43,9 @@ type CollectionFactory struct {
 // with associated extra txn state information.
 type InternalExecutorFactoryWithTxn func(
 	ctx context.Context,
-	sessionData *sessiondata.SessionData,
+	sv *settings.Values,
+	txn *kv.Txn,
 	descCol *Collection,
-	schemaChangeJobRecords map[descpb.ID]jobrecords.JobRecords,
 ) sqlutil.InternalExecutor
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto

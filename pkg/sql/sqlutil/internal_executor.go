@@ -170,12 +170,11 @@ type InternalExecutor interface {
 		descs []catalog.Descriptor, run func() error,
 	) error
 
-	// SetSessionData binds the session variables that will be used by queries
-	// performed through this executor from now on. This creates a new session stack.
-	// It is recommended to use SetSessionDataStack.
-	//
-	// SetSessionData cannot be called concurrently with query execution.
-	SetSessionData(sessionData *sessiondata.SessionData)
+	// CommitTxn is to commit the txn bound to the internal executor.
+	CommitTxn(ctx context.Context, txn *kv.Txn) error
+
+	// ReleaseSchemaChangeJobRecords is to release the schema change job records.
+	ReleaseSchemaChangeJobRecords()
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

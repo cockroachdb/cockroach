@@ -879,6 +879,14 @@ type wrappedInternalExecutor struct {
 	}
 }
 
+func (ie *wrappedInternalExecutor) CommitTxn(ctx context.Context, txn *kv.Txn) error {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) ReleaseSchemaChangeJobRecords() {
+	panic("unimplemented")
+}
+
 func (ie *wrappedInternalExecutor) QueryBufferedExWithCols(
 	ctx context.Context,
 	opName string,

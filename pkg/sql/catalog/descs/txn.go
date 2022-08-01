@@ -16,16 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobrecords"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -168,24 +164,11 @@ func (cf *CollectionFactory) TxnWithExecutor(
 			modifiedDescriptors = nil
 			deletedDescs = catalog.DescriptorIDSet{}
 			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-			schemaChangeJobRecords := make(map[descpb.ID]jobrecords.JobRecords)
 			defer func() {
 				descsCol.ReleaseAll(ctx)
-				for k := range schemaChangeJobRecords {
-					delete(schemaChangeJobRecords, k)
-				}
 			}()
 
-			// By default, initialize a sessionData that would be the same as what
-			// would be created if root logged in.
-			// The sessionData's user can be overriden when calling the query
-			// functions of internal executor.
-			// TODO(janexing): since we can be running queries with a higher privilege
-			// than the actual user, a security boundary should be added to the error
-			// handling of internal executor.
-			sd := sessiondatautil.NewFakeSessionData(&cf.settings.SV)
-			sd.UserProto = username.RootUserName().EncodeProto()
-			ie := cf.ieFactoryWithTxn(ctx, sd, descsCol, schemaChangeJobRecords)
+			ie := cf.ieFactoryWithTxn(ctx, &cf.settings.SV, txn, descsCol)
 			if err := f(ctx, txn, descsCol, ie); err != nil {
 				return err
 			}
