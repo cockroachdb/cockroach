@@ -57,6 +57,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
+	skip.UnderRace(t, "TODO(ssd) test times outs under race")
 
 	params, _ := tests.CreateTestServerParams()
 

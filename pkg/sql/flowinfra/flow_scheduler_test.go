@@ -133,6 +133,8 @@ func TestFlowScheduler(t *testing.T) {
 	)
 	defer stopper.Stop(ctx)
 
+	// Enable the queueing mechanism of the flow scheduler.
+	flowSchedulerQueueingEnabled.Override(ctx, &settings.SV, true)
 	scheduler := NewFlowScheduler(log.MakeTestingAmbientCtxWithNewTracer(), stopper, settings)
 	scheduler.Init(&metrics)
 	scheduler.Start()

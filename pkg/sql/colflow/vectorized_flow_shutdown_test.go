@@ -230,7 +230,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(testAllocator, synchronizerInputs, &wg)
+				syncMemAccount := testMemMonitor.MakeBoundAccount()
+				defer syncMemAccount.Close(ctx)
+				// Note that here - for the purposes of the test - it doesn't
+				// matter which context we use since it'll only be used by the
+				// memory accounting system.
+				syncAllocator := colmem.NewAllocator(ctx, &syncMemAccount, testColumnFactory)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncAllocator, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 

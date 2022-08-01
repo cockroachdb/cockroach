@@ -58,7 +58,8 @@ func CreateSystemTableInTxn(
 		if got.Value.IsPresent() {
 			return descpb.InvalidID, false, nil
 		}
-		id, err := descidgen.GenerateUniqueDescID(ctx, db, codec)
+		id, err := descidgen.NewTransactionalGenerator(codec, txn).
+			GenerateUniqueDescID(ctx)
 		if err != nil {
 			return descpb.InvalidID, false, err
 		}

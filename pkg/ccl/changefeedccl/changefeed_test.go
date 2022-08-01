@@ -3436,6 +3436,7 @@ func TestChangefeedJobRetryOnNoInboundStream(t *testing.T) {
 	// force fast "no inbound stream" error
 	var oldMaxRunningFlows int
 	var oldTimeout string
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
 	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&oldMaxRunningFlows)
 	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&oldTimeout)
 	serverutils.SetClusterSetting(t, cluster, "sql.distsql.max_running_flows", 0)

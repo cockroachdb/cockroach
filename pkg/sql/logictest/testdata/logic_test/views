@@ -1313,3 +1313,24 @@ DROP MATERIALIZED VIEW mv1
 
 statement ok
 DROP MATERIALIZED VIEW mv2
+
+statement ok
+CREATE VIEW view_with_null AS SELECT 1 AS a, null AS c
+
+query TTBTTTB
+SHOW COLUMNS FROM view_with_null
+----
+a  INT8    true  NULL  ·  {}  false
+c  STRING  true  NULL  ·  {}  false
+
+
+statement ok
+CREATE MATERIALIZED VIEW materialized_view_with_null AS SELECT a, NULL AS b, b AS c FROM test_view
+
+query TTBTTTB
+SHOW COLUMNS FROM materialized_view_with_null
+----
+a      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
+b      STRING  true   NULL            ·  {materialized_view_with_null_pkey}  false
+c      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {materialized_view_with_null_pkey}  true

@@ -1,0 +1,153 @@
+/* setup */
+CREATE TYPE e AS ENUM('a', 'b', 'c');
+CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
+
+/* test */
+CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
+EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
+----
+• Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›); 
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 6 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │     MERGE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 8 Mutation operations
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     Kind: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 2 elements transitioning toward ABSENT
+        │   │
+        │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   │     rule: "secondary index columns removed before removing the index"
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+        │   │   │     rule: "secondary index columns removed before removing the index"
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: idx1, IndexID: 2}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+        │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │       │     rule: "dependents removed before index"
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+        │             rule: "dependents removed before index"
+        │
+        └── • 7 Mutation operations
+            │
+            ├── • LogEvent
+            │     Element:
+            │       SecondaryIndex:
+            │         indexId: 2
+            │         sourceIndexId: 1
+            │         tableId: 106
+            │         temporaryIndexId: 3
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+            │       StatementTag: CREATE INDEX
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TargetStatus: 1
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')
+            │     TableID: 106
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 2
+            │     TableID: 106
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 3
+            │     TableID: 106
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 106
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed
