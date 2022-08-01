@@ -926,6 +926,11 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 		}
 		return b.canAutoCommit(proj.Input)
 
+	case opt.DistributeOp:
+		// Distribute is currently a no-op, so check whether the input can
+		// auto-commit.
+		return b.canAutoCommit(rel.(*memo.DistributeExpr).Input)
+
 	default:
 		return false
 	}
