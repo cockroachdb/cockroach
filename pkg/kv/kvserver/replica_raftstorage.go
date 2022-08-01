@@ -821,7 +821,7 @@ func (r *Replica) applySnapshot(
 			if isInitialSnap {
 				r.store.metrics.RangeSnapshotsAppliedForInitialUpreplication.Inc(1)
 			} else {
-				switch typ := desc.GetType(); typ {
+				switch desc.Type {
 				// NB: A replica of type LEARNER can receive a non-initial snapshot (via
 				// the snapshot queue) if we end up truncating the raft log before it
 				// gets promoted to a voter. We count such snapshot applications as
@@ -833,7 +833,7 @@ func (r *Replica) applySnapshot(
 				case roachpb.NON_VOTER:
 					r.store.metrics.RangeSnapshotsAppliedByNonVoters.Inc(1)
 				default:
-					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", typ)
+					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", desc.Type)
 				}
 			}
 		}

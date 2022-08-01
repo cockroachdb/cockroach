@@ -95,25 +95,24 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 func TestValidateReplicationChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	learnerType := roachpb.LEARNER
 	twoVotersAndALearner := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 3, StoreID: 3},
-			{NodeID: 4, StoreID: 4, Type: &learnerType},
+			{NodeID: 4, StoreID: 4, Type: roachpb.LEARNER},
 		},
 	}
 	twoReplicasOnOneNode := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
-			{NodeID: 1, StoreID: 3, Type: &learnerType},
+			{NodeID: 1, StoreID: 3, Type: roachpb.LEARNER},
 		},
 	}
 	oneVoterAndOneNonVoter := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
-			{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeNonVoter()},
+			{NodeID: 2, StoreID: 2, Type: roachpb.NON_VOTER},
 		},
 	}
 	oneReplica := &roachpb.RangeDescriptor{

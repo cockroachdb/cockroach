@@ -105,10 +105,10 @@ type descriptorViewWrapper struct {
 // for the purpose of yaml representation and to avoid leaking test
 // specific code into production.
 type replicaDescriptorView struct {
-	NodeID      roachpb.NodeID       `yaml:"NodeID"`
-	StoreID     roachpb.StoreID      `yaml:"StoreID"`
-	ReplicaID   roachpb.ReplicaID    `yaml:"ReplicaID"`
-	ReplicaType *roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
+	NodeID      roachpb.NodeID      `yaml:"NodeID"`
+	StoreID     roachpb.StoreID     `yaml:"StoreID"`
+	ReplicaID   roachpb.ReplicaID   `yaml:"ReplicaID"`
+	ReplicaType roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
 }
 
 func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
@@ -273,7 +273,6 @@ func buildReplicaDescriptorFromTestData(
 		InternalReplicas: replicas,
 		NextReplicaID:    maxReplicaID + 1,
 		Generation:       replica.Generation,
-		StickyBit:        nil,
 	}
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),

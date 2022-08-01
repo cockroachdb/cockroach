@@ -273,7 +273,6 @@ func createIntentOnRangeDescriptor(
 func TestJsonSerialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rt := roachpb.VOTER_INCOMING
 	nr := loqrecoverypb.NodeReplicaInfo{
 		Replicas: []loqrecoverypb.ReplicaInfo{
 			{
@@ -288,7 +287,7 @@ func TestJsonSerialization(t *testing.T) {
 							NodeID:    1,
 							StoreID:   2,
 							ReplicaID: 3,
-							Type:      &rt,
+							Type:      roachpb.VOTER_INCOMING,
 						},
 					},
 					NextReplicaID: 4,

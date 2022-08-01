@@ -110,7 +110,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	}
 	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
-	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
+	if typ := repDesc.Type; typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return false, nil
 		}

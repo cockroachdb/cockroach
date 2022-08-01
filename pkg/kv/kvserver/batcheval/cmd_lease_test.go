@@ -122,8 +122,8 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	ctx := context.Background()
 	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2
 	replicas := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner(), ReplicaID: 2},
+		{NodeID: 1, StoreID: voterStoreID, Type: roachpb.VOTER_FULL, ReplicaID: 1},
+		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.LEARNER, ReplicaID: 2},
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
@@ -183,8 +183,8 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			defer batch.Close()
 
 			replicas := []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-				{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+				{NodeID: 1, StoreID: 1, Type: roachpb.VOTER_FULL, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, Type: roachpb.VOTER_FULL, ReplicaID: 2},
 			}
 			desc := roachpb.RangeDescriptor{}
 			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
@@ -301,7 +301,7 @@ func TestCheckCanReceiveLease(t *testing.T) {
 		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
 			repDesc := roachpb.ReplicaDescriptor{
 				ReplicaID: 1,
-				Type:      &tc.leaseholderType,
+				Type:      tc.leaseholderType,
 			}
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
@@ -309,7 +309,7 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			if tc.anotherReplicaType != none {
 				anotherDesc := roachpb.ReplicaDescriptor{
 					ReplicaID: 2,
-					Type:      &tc.anotherReplicaType,
+					Type:      tc.anotherReplicaType,
 				}
 				rngDesc.InternalReplicas = append(rngDesc.InternalReplicas, anotherDesc)
 			}

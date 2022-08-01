@@ -18,48 +18,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
-// nullable proto field.
-func ReplicaTypeVoterFull() *ReplicaType {
-	t := VOTER_FULL
-	return &t
-}
-
-// ReplicaTypeVoterIncoming returns a VOTER_INCOMING pointer suitable
-// for use in a nullable proto field.
-func ReplicaTypeVoterIncoming() *ReplicaType {
-	t := VOTER_INCOMING
-	return &t
-}
-
-// ReplicaTypeVoterOutgoing returns a VOTER_OUTGOING pointer suitable
-// for use in a nullable proto field.
-func ReplicaTypeVoterOutgoing() *ReplicaType {
-	t := VOTER_OUTGOING
-	return &t
-}
-
-// ReplicaTypeVoterDemotingLearner returns a VOTER_DEMOTING_LEARNER pointer
-// suitable for use in a nullable proto field.
-func ReplicaTypeVoterDemotingLearner() *ReplicaType {
-	t := VOTER_DEMOTING_LEARNER
-	return &t
-}
-
-// ReplicaTypeLearner returns a LEARNER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeLearner() *ReplicaType {
-	t := LEARNER
-	return &t
-}
-
-// ReplicaTypeNonVoter returns a NON_VOTER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeNonVoter() *ReplicaType {
-	t := NON_VOTER
-	return &t
-}
-
 // ReplicaSet is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
 type ReplicaSet struct {
@@ -97,7 +55,7 @@ func (d ReplicaSet) Descriptors() []ReplicaDescriptor {
 }
 
 func predVoterFull(rDesc ReplicaDescriptor) bool {
-	switch rDesc.GetType() {
+	switch rDesc.Type {
 	case VOTER_FULL:
 		return true
 	default:
@@ -106,7 +64,7 @@ func predVoterFull(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
-	switch rDesc.GetType() {
+	switch rDesc.Type {
 	case VOTER_FULL, VOTER_INCOMING:
 		return true
 	default:
@@ -115,7 +73,7 @@ func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterIncoming(rDesc ReplicaDescriptor) bool {
-	switch rDesc.GetType() {
+	switch rDesc.Type {
 	case VOTER_INCOMING:
 		return true
 	default:
@@ -124,11 +82,11 @@ func predVoterIncoming(rDesc ReplicaDescriptor) bool {
 }
 
 func predLearner(rDesc ReplicaDescriptor) bool {
-	return rDesc.GetType() == LEARNER
+	return rDesc.Type == LEARNER
 }
 
 func predNonVoter(rDesc ReplicaDescriptor) bool {
-	return rDesc.GetType() == NON_VOTER
+	return rDesc.Type == NON_VOTER
 }
 
 func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
@@ -360,13 +318,13 @@ func (d *ReplicaSet) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescr
 // an atomic replication change.
 func (d ReplicaSet) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
-		switch rDesc.GetType() {
+		switch rDesc.Type {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER,
 			VOTER_DEMOTING_NON_VOTER:
 			return true
 		case VOTER_FULL, LEARNER, NON_VOTER:
 		default:
-			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
+			panic(fmt.Sprintf("unknown replica type %d", rDesc.Type))
 		}
 	}
 	return false
@@ -381,8 +339,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 	// category.
 	for _, rep := range d.wrapped {
 		id := uint64(rep.ReplicaID)
-		typ := rep.GetType()
-		switch typ {
+		switch rep.Type {
 		case VOTER_FULL:
 			cs.Voters = append(cs.Voters, id)
 			if joint {
@@ -400,7 +357,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 		case NON_VOTER:
 			cs.Learners = append(cs.Learners, id)
 		default:
-			panic(fmt.Sprintf("unknown ReplicaType %d", typ))
+			panic(fmt.Sprintf("unknown ReplicaType %d", rep.Type))
 		}
 	}
 	return cs
