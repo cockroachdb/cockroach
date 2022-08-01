@@ -75,25 +75,28 @@ func (ref *ResolvableFunctionReference) Resolve(
 			// defined within virtual schema and don't belong to any database catalog.
 			return nil, errors.AssertionFailedf("invalid builtin function name: %q", t.Name)
 		}
-		schema := catconstants.PgCatalogName
-		if len(parts) == 2 {
-			schema = parts[0]
+		fullName := t.Name
+		if len(parts) == 1 {
+			fullName = catconstants.PgCatalogName + "." + t.Name
 		}
-		fd := PrefixBuiltinFunctionDefinition(t, schema)
+		fd := ResolvedBuiltinFuncDefs[fullName]
 		ref.FunctionReference = fd
 		return fd, nil
 	case *UnresolvedName:
 		if resolver == nil {
+			// If a resolver is not provided, just try to fetch a builtin function.
 			fn, err := t.ToFunctionName()
 			if err != nil {
 				return nil, err
 			}
-			def, err := GetBuiltinFuncDefinitionOrFail(fn, path)
+			fd, err := GetBuiltinFuncDefinitionOrFail(fn, path)
 			if err != nil {
 				return nil, err
 			}
-			return def, nil
+			ref.FunctionReference = fd
+			return fd, nil
 		}
+		// Use the resolver if it is provided.
 		fd, err := resolver.ResolveFunction(ctx, t, path)
 		if err != nil {
 			return nil, err
@@ -103,6 +106,23 @@ func (ref *ResolvableFunctionReference) Resolve(
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
 	}
+}
+
+// CustomBuiltinFunctionWrapper in an interface providing custom WrapFunction
+// functionality. This is hack only being used by CDC to inject CDC custom
+// builtin functions. It's not recommended to implement this interface for more
+// purpose and this interface could be deleted.
+//
+// TODO(Chengxiong): consider getting rid of this hack entirely and use function
+// resolver instead. Previously, CDC utilized search path as a interface hack to
+// do the same thing. This interface makes the concept not relevant to search
+// path anymore and also makes the purpose more specific on "Builtin" functions.
+// However, it's ideal to get rid of this hack and use function resolver
+// instead. One issue need to be addressed is that "WrapFunction" always look at
+// builtin functions. So, the FunctionReferenceResolver interface might need to
+// be extended to have a specific path for builtin functions.
+type CustomBuiltinFunctionWrapper interface {
+	WrapFunction(name string) (*ResolvedFunctionDefinition, error)
 }
 
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved

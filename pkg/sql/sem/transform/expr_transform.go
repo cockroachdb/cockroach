@@ -11,6 +11,8 @@
 package transform
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,13 +51,14 @@ func (t *ExprTransformContext) NormalizeExpr(
 // should collect scalar properties (see tree.ScalarProperties) and
 // then the collected properties should be tested directly.
 func (t *ExprTransformContext) AggregateInExpr(
-	expr tree.Expr, searchPath sessiondata.SearchPath,
+	ctx context.Context, expr tree.Expr, searchPath sessiondata.SearchPath,
 ) bool {
 	if expr == nil {
 		return false
 	}
 
 	t.isAggregateVisitor = isAggregateVisitor{
+		ctx:        ctx,
 		searchPath: searchPath,
 	}
 	tree.WalkExprConst(&t.isAggregateVisitor, expr)

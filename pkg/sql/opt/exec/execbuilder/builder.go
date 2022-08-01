@@ -145,7 +145,7 @@ type Builder struct {
 
 	// wrapFunctionOverride overrides default implementation to return resolvable
 	// function reference for function with specified function name.
-	// The default can be overridden by calling SetSearchPath method to provide
+	// The default can be overridden by calling SetBuiltinFuncWrapper method to provide
 	// custom search path implementation.
 	wrapFunctionOverride func(fnName string) tree.ResolvableFunctionReference
 }
@@ -213,13 +213,16 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
-// SetSearchPath configures this builder to use specified search path.
-func (b *Builder) SetSearchPath(sp tree.SearchPath) {
+// SetBuiltinFuncWrapper configures this builder to use specified function resolver.
+func (b *Builder) SetBuiltinFuncWrapper(resolver tree.FunctionReferenceResolver) {
 	// TODO(mgartner): The customFnResolver and wrapFunctionOverride could
 	// probably be replaced by a custom implementation of tree.FunctionResolver.
-	if customFnResolver, ok := sp.(tree.CustomFunctionDefinitionResolver); ok {
+	if customFnResolver, ok := resolver.(tree.CustomBuiltinFunctionWrapper); ok {
 		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
-			fd := customFnResolver.Resolve(fnName)
+			fd, err := customFnResolver.WrapFunction(fnName)
+			if err != nil {
+				panic(err)
+			}
 			if fd == nil {
 				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
 			}
