@@ -50,7 +50,7 @@ type Event interface {
 
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
-	GetResolvedSpans() *[]jobspb.ResolvedSpan
+	GetResolvedSpans() []jobspb.ResolvedSpan
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -81,7 +81,7 @@ func (kve kvEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (kve kvEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+func (kve kvEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -111,7 +111,7 @@ func (sste sstableEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (sste sstableEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -143,7 +143,7 @@ func (dre delRangeEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (dre delRangeEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
+func (dre delRangeEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return nil
 }
 
@@ -178,8 +178,8 @@ func (ce checkpointEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (ce checkpointEvent) GetResolvedSpans() *[]jobspb.ResolvedSpan {
-	return &ce.resolvedSpans
+func (ce checkpointEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return ce.resolvedSpans
 }
 
 // MakeKVEvent creates an Event from a KV.
