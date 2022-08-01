@@ -568,18 +568,14 @@ func (p *planner) AlterPrimaryKey(
 
 	// Send a notice to users about how this job is asynchronous.
 	// TODO(knz): Mention the job ID in the client notice.
-	noticeStr := "primary key changes are finalized asynchronously"
 	if alterPrimaryKeyLocalitySwap != nil {
-		noticeStr = "LOCALITY changes will be finalized asynchronously"
+		p.BufferClientNotice(
+			ctx,
+			pgnotice.Newf(
+				"LOCALITY changes will be finalized asynchronously; "+
+					"further schema changes on this table may be restricted until the job completes"),
+		)
 	}
-	p.BufferClientNotice(
-		ctx,
-		pgnotice.Newf(
-			"%s; further schema changes on this table may be restricted "+
-				"until the job completes",
-			noticeStr,
-		),
-	)
 
 	return nil
 }
