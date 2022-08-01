@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
@@ -162,56 +163,46 @@ func TestMVCCHistories(t *testing.T) {
 		reportDataEntries := func(buf *redact.StringBuilder) error {
 			var hasData bool
 
-			iter := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				KeyTypes:   IterKeyTypeRangesOnly,
-				LowerBound: span.Key,
-				UpperBound: span.EndKey,
-			})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: span.Key})
-			for {
-				if ok, err := iter.Valid(); err != nil {
-					return err
-				} else if !ok {
-					break
-				}
-				hasData = true
-				rangeKeys := iter.RangeKeys()
-				buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
-				for i, version := range rangeKeys.Versions {
-					val, err := DecodeMVCCValue(version.Value)
-					if err != nil {
-						t.Fatal(err)
+			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, IterKeyTypeRangesOnly,
+				func(_ MVCCKeyValue, rangeKeys MVCCRangeKeyStack) error {
+					hasData = true
+					buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
+					for i, version := range rangeKeys.Versions {
+						val, err := DecodeMVCCValue(version.Value)
+						require.NoError(t, err)
+						if i > 0 {
+							buf.Printf(" ")
+						}
+						buf.Printf("%s=%s", version.Timestamp, val)
 					}
-					if i > 0 {
-						buf.Printf(" ")
-					}
-					buf.Printf("%s=%s", version.Timestamp, val)
-				}
-				buf.Printf("]\n")
-				iter.Next()
+					buf.Printf("]\n")
+					return nil
+				})
+			if err != nil {
+				return err
 			}
 
-			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
-				hasData = true
-				if r.Key.Timestamp.IsEmpty() {
-					// Meta is at timestamp zero.
-					meta := enginepb.MVCCMetadata{}
-					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-						buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+				func(r MVCCKeyValue, _ MVCCRangeKeyStack) error {
+					hasData = true
+					if r.Key.Timestamp.IsEmpty() {
+						// Meta is at timestamp zero.
+						meta := enginepb.MVCCMetadata{}
+						if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+							buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+						} else {
+							buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
+						}
 					} else {
-						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
+						val, err := DecodeMVCCValue(r.Value)
+						if err != nil {
+							buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+						} else {
+							buf.Printf("data: %v -> %s\n", r.Key, val)
+						}
 					}
-				} else {
-					val, err := DecodeMVCCValue(r.Value)
-					if err != nil {
-						buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
-					} else {
-						buf.Printf("data: %v -> %s\n", r.Key, val)
-					}
-				}
-				return nil
-			})
+					return nil
+				})
 			if !hasData {
 				buf.SafeString("<no data>\n")
 			}

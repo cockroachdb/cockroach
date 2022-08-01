@@ -1036,16 +1036,19 @@ func (p *Pebble) MVCCGetProto(
 
 // MVCCIterate implements the Engine interface.
 func (p *Pebble) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, f)
+		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, f)
+	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
@@ -1944,7 +1947,10 @@ func (p *pebbleReadOnly) MVCCGetProto(
 }
 
 func (p *pebbleReadOnly) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -1952,11 +1958,11 @@ func (p *pebbleReadOnly) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, f)
+		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, f)
+	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
@@ -2221,16 +2227,19 @@ func (p *pebbleSnapshot) MVCCGetProto(
 
 // MVCCIterate implements the Reader interface.
 func (p *pebbleSnapshot) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, f)
+		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, f)
+	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Reader interface.

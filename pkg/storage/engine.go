@@ -529,14 +529,18 @@ type Reader interface {
 	//
 	// Deprecated: use MVCCIterator.ValueProto instead.
 	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
-	// function f on each key value pair. If f returns an error or if the scan
-	// itself encounters an error, the iteration will stop and return the error.
-	// If the first result of f is true, the iteration stops and returns a nil
-	// error. Note that this method is not expected take into account the
-	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
-	// in the iteration.
-	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
+	// MVCCIterate scans from the start key to the end key (exclusive), invoking
+	// the function f on each key value pair. The inputs are copies, and safe to
+	// retain beyond the function call. It supports interleaved iteration over
+	// point and/or range keys, providing any overlapping range keys for each
+	// point key if requested. If f returns an error or if the scan itself
+	// encounters an error, the iteration will stop and return the error.
+	//
+	// Note that this method is not expected take into account the timestamp of
+	// the end key; all MVCCKeys at end.Key are considered excluded in the
+	// iteration.
+	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
+		f func(MVCCKeyValue, MVCCRangeKeyStack) error) error
 	// NewMVCCIterator returns a new instance of an MVCCIterator over this engine.
 	// The caller must invoke Close() on it when done to free resources.
 	//
@@ -1115,13 +1119,14 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 // declaration of intentInterleavingIter for details.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
-		if max != 0 && int64(len(kvs)) >= max {
-			return iterutil.StopIteration()
-		}
-		kvs = append(kvs, kv)
-		return nil
-	})
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+		func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
+			if max != 0 && int64(len(kvs)) >= max {
+				return iterutil.StopIteration()
+			}
+			kvs = append(kvs, kv)
+			return nil
+		})
 	return kvs, err
 }
 
@@ -1377,7 +1382,11 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 
 // Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
-	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	reader Reader,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if reader.Closed() {
 		return errors.New("cannot call MVCCIterate on a closed batch")
@@ -1386,18 +1395,30 @@ func iterateOnReader(
 		return nil
 	}
 
-	it := reader.NewMVCCIterator(iterKind, IterOptions{UpperBound: end})
+	it := reader.NewMVCCIterator(iterKind, IterOptions{
+		KeyTypes:   keyTypes,
+		LowerBound: start,
+		UpperBound: end,
+	})
 	defer it.Close()
 
-	it.SeekGE(MakeMVCCMetadataKey(start))
-	for ; ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
+	var rangeKeys MVCCRangeKeyStack // cached during iteration
+	for it.SeekGE(MakeMVCCMetadataKey(start)); ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
 			return err
 		} else if !ok {
 			break
 		}
-		if err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+
+		var kv MVCCKeyValue
+		if hasPoint, _ := it.HasPointAndRange(); hasPoint {
+			kv = MVCCKeyValue{Key: it.Key(), Value: it.Value()}
+		}
+		if !it.RangeBounds().Key.Equal(rangeKeys.Bounds.Key) {
+			rangeKeys = it.RangeKeys().Clone()
+		}
+
+		if err := f(kv, rangeKeys); err != nil {
 			return iterutil.Map(err)
 		}
 	}
