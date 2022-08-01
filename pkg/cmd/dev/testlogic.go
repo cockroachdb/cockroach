@@ -59,6 +59,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	testLogicCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
 
 	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
@@ -85,6 +86,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		stress        = mustGetFlagBool(cmd, stressFlag)
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
+		showDiff      = mustGetFlagBool(cmd, showDiffFlag)
 	)
 	if rewrite {
 		ignoreCache = true
@@ -209,6 +211,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
 		args = append(args, "--test_arg", "-rewrite")
+	}
+	if showDiff {
+		args = append(args, "--test_arg", "-show-diff")
 	}
 	if timeout > 0 && !stress {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
