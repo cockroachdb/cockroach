@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -128,6 +129,26 @@ type instrumentationHelper struct {
 	// indexRecommendations is a string slice containing index recommendations for
 	// the planned statement. This is only set for EXPLAIN statements.
 	indexRecommendations []string
+
+	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
+	// estimated by the optimizer.
+	maxFullScanRows float64
+
+	// totalScanRows is the total number of rows read by all scans in the query,
+	// as estimated by the optimizer.
+	totalScanRows float64
+
+	// outputRows is the number of rows output by the query, as estimated by the
+	// optimizer.
+	outputRows float64
+
+	// statsAvailable is true if table statistics were available to the optimizer
+	// when planning the query.
+	statsAvailable bool
+
+	// nanosSinceStatsCollected is the maximum number of nanoseconds that have
+	// passed since stats were collected on any table scanned by this query.
+	nanosSinceStatsCollected time.Duration
 }
 
 // outputMode indicates how the statement output needs to be populated (for

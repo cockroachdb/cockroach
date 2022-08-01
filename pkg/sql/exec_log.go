@@ -157,8 +157,9 @@ func (p *planner) maybeLogStatement(
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
 	stmtFingerprintID roachpb.StmtFingerprintID,
+	queryStats *topLevelQueryStats,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -170,6 +171,7 @@ func (p *planner) maybeLogStatementInternal(
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
 	stmtFingerprintID roachpb.StmtFingerprintID,
+	queryStats *topLevelQueryStats,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -388,16 +390,24 @@ func (p *planner) maybeLogStatementInternal(
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
-				CommonSQLExecDetails:   execDetails,
-				SkippedQueries:         skippedQueries,
-				CostEstimate:           p.curPlan.instrumentation.costEstimate,
-				Distribution:           p.curPlan.instrumentation.distribution.String(),
-				PlanGist:               p.curPlan.instrumentation.planGist.String(),
-				SessionID:              p.extendedEvalCtx.SessionID.String(),
-				Database:               p.CurrentDatabase(),
-				StatementID:            p.stmt.QueryID.String(),
-				TransactionID:          p.txn.ID().String(),
-				StatementFingerprintID: uint64(stmtFingerprintID),
+				CommonSQLExecDetails:     execDetails,
+				SkippedQueries:           skippedQueries,
+				CostEstimate:             p.curPlan.instrumentation.costEstimate,
+				Distribution:             p.curPlan.instrumentation.distribution.String(),
+				PlanGist:                 p.curPlan.instrumentation.planGist.String(),
+				SessionID:                p.extendedEvalCtx.SessionID.String(),
+				Database:                 p.CurrentDatabase(),
+				StatementID:              p.stmt.QueryID.String(),
+				TransactionID:            p.txn.ID().String(),
+				StatementFingerprintID:   uint64(stmtFingerprintID),
+				MaxFullScanRowsEstimate:  p.curPlan.instrumentation.maxFullScanRows,
+				TotalScanRowsEstimate:    p.curPlan.instrumentation.totalScanRows,
+				OutputRowsEstimate:       p.curPlan.instrumentation.outputRows,
+				StatsAvailable:           p.curPlan.instrumentation.statsAvailable,
+				NanosSinceStatsCollected: int64(p.curPlan.instrumentation.nanosSinceStatsCollected),
+				BytesRead:                queryStats.bytesRead,
+				RowsRead:                 queryStats.rowsRead,
+				RowsWritten:              queryStats.rowsWritten,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {
