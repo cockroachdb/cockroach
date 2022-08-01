@@ -88,11 +88,12 @@ func (ref *ResolvableFunctionReference) Resolve(
 			if err != nil {
 				return nil, err
 			}
-			def, err := GetBuiltinFuncDefinitionOrFail(fn, path)
+			fd, err := GetBuiltinFuncDefinitionOrFail(fn, path)
 			if err != nil {
 				return nil, err
 			}
-			return def, nil
+			ref.FunctionReference = fd
+			return fd, nil
 		}
 		fd, err := resolver.ResolveFunction(ctx, t, path)
 		if err != nil {
@@ -103,6 +104,23 @@ func (ref *ResolvableFunctionReference) Resolve(
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
 	}
+}
+
+// CustomBuiltinFunctionWrapper in an interface providing custom WrapFunction
+// functionality. This is hack only being used by CDC to inject CDC custom
+// builtin functions. It's not recommended to implement this interface for more
+// purpose and this interface could be deleted.
+//
+// TODO(Chengxiong): consider getting rid of this hack entirely and use function
+// resolver instead. Previously, CDC utilized search path as a interface hack to
+// do the same thing. This interface makes the concept not relevant to search
+// path anymore and also makes the purpose more specific on "Builtin" functions.
+// However, it's ideal to get rid of this hack and use function resolver
+// instead. One issue need to be addressed is that "WrapFunction" always look at
+// builtin functions. So, the FunctionReferenceResolver interface might need to
+// be extended to have a specific path for builtin functions.
+type CustomBuiltinFunctionWrapper interface {
+	WrapFunction(name string) (*ResolvedFunctionDefinition, error)
 }
 
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved

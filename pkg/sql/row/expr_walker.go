@@ -739,7 +739,7 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 		// we can use it as it is.
 		return expr
 	}
-	resolvedFnName := fn.Func.FunctionReference.(*tree.FunctionDefinition).Name
+	resolvedFnName := fn.Func.FunctionReference.(*tree.ResolvedFunctionDefinition).Name
 	custom, isSafe := supportedImportFuncOverrides[resolvedFnName]
 	if !isSafe {
 		v.err = errors.Newf(`function %s unsupported by IMPORT INTO`, resolvedFnName)

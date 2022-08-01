@@ -11,6 +11,8 @@
 package transform
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -20,6 +22,9 @@ type isAggregateVisitor struct {
 	Aggregated bool
 	// searchPath is used to search for unqualified function names.
 	searchPath sessiondata.SearchPath
+	// funcResolver is used to resolve functions definitions.
+	funcResolver tree.FunctionReferenceResolver
+	ctx          context.Context
 }
 
 var _ tree.Visitor = &isAggregateVisitor{}
@@ -33,9 +38,7 @@ func (v *isAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
-		// TODO(mgartner): Plumb a function resolver here, or determine that the
-		// function should have already been resolved.
-		fd, err := t.Func.Resolve(&v.searchPath, nil /* resolver */)
+		fd, err := t.Func.Resolve(v.ctx, &v.searchPath, v.funcResolver)
 		if err != nil {
 			return false, expr
 		}
