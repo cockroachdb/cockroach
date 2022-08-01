@@ -30,6 +30,7 @@ message ConnectionDetails {
   oneof details {
     NodelocalConnectionDetails nodelocal = 1;
     GCSKMSConnectionDetails gcs_kms = 2 [(gogoproto.customname) = "GCSKMS"];
+    KafkaConnectionDetails kafka = 3;
   }
 }
 
@@ -42,5 +43,11 @@ message NodelocalConnectionDetails {
 // GCSKMSConnectionDetails encapsulates the information required by an External
 // Connection object to represent a GCS KMS connection.
 message GCSKMSConnectionDetails {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+}
+
+// KafkaConnectionDetails encapsulates the information required by an External
+// Connection object to represent/dial a kafka sink.
+message KafkaConnectionDetails {
   string uri = 1 [(gogoproto.customname) = "URI"];
 }

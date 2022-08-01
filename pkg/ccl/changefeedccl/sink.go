@@ -190,6 +190,11 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
 				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
 			})
+		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
+			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
+				return makeExternalConnectionSink(ctx, sinkURL{URL: u}, user, serverCfg.DB,
+					serverCfg.Executor, serverCfg, feedCfg, timestampOracle, jobID, m)
+			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
 		default:
