@@ -31,6 +31,7 @@ FILES = [
     "alter_func_dep_extension_stmt",
     "alter_index_partition_by",
     "alter_index_stmt",
+    "alter_index_visible_stmt",
     "alter_partition_stmt",
     "alter_primary_key",
     "alter_range_relocate_stmt",
