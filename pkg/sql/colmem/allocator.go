@@ -254,6 +254,18 @@ func (a *Allocator) ResetMaybeReallocate(
 	return newBatch, reallocated
 }
 
+// ResetMaybeReallocateNoMemLimit is the same as ResetMaybeReallocate when
+// MaxInt64 is used as the maxBatchMemSize argument and the desired capacity is
+// sufficient. This should be used by the callers that know exactly the capacity
+// they need and have no control over that number. It is guaranteed that the
+// returned batch has the capacity of at least requiredCapacity (clamped to
+// [1, coldata.BatchSize()] range).
+func (a *Allocator) ResetMaybeReallocateNoMemLimit(
+	typs []*types.T, oldBatch coldata.Batch, requiredCapacity int,
+) (newBatch coldata.Batch, reallocated bool) {
+	return a.ResetMaybeReallocate(typs, oldBatch, requiredCapacity, math.MaxInt64, true /* desiredCapacitySufficient */)
+}
+
 // NewMemColumn returns a new coldata.Vec of the desired capacity.
 // NOTE: consider whether you should be using MaybeAppendColumn,
 // NewMemBatchWith*, or ResetMaybeReallocate methods.
