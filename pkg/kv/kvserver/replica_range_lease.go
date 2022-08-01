@@ -914,7 +914,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			r.store.metrics.LeaseTransferErrorCount.Inc(1)
 			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 				"need a snapshot: %s", nextLeaseHolder, snapStatus)
-			err := newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
+			err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
 			return nil, nil, err
 		}
 
@@ -1060,10 +1060,10 @@ func newNotLeaseHolderErrorWithSpeculativeLease(
 	return newNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
-// newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
+// NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
 // indicating that a lease transfer failed because the current leaseholder could
 // not prove that the lease transfer target did not need a Raft snapshot.
-func newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 	target roachpb.ReplicaDescriptor, snapStatus raftutil.ReplicaNeedsSnapshotStatus,
 ) error {
 	err := errors.Errorf("refusing to transfer lease to %d because target may need a Raft snapshot: %s",

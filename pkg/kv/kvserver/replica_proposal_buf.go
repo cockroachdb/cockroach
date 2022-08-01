@@ -1251,7 +1251,7 @@ func (rp *replicaProposer) rejectProposalWithLeaseTransferRejectedLocked(
 	rp.store.metrics.LeaseTransferErrorCount.Inc(1)
 	log.VEventf(ctx, 2, "not proposing lease transfer because the target %s may "+
 		"need a snapshot: %s", lease.Replica, reason)
-	err := newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(lease.Replica, reason)
+	err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(lease.Replica, reason)
 	rp.rejectProposalWithErrLocked(ctx, prop, roachpb.NewError(err))
 }
 
