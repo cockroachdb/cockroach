@@ -1884,13 +1884,6 @@ func TestTenantLogic_typing(
 	runLogicTest(t, "typing")
 }
 
-func TestTenantLogic_udf(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf")
-}
-
 func TestTenantLogic_union(
 	t *testing.T,
 ) {
