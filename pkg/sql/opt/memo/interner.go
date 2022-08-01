@@ -653,9 +653,10 @@ func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
-func (h *hasher) HashRelListExpr(val []RelExpr) {
+func (h *hasher) HashRelListExpr(val RelListExpr) {
 	for i := range val {
-		h.HashRelExpr(val[i])
+		h.HashRelExpr(val[i].RelExpr)
+		h.HashPhysProps(val[i].PhysProps)
 	}
 }
 
@@ -1064,12 +1065,13 @@ func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
 }
 
-func (h *hasher) IsRelListExprEqual(l, r []RelExpr) bool {
+func (h *hasher) IsRelListExprEqual(l, r RelListExpr) bool {
 	if len(l) != len(r) {
 		return false
 	}
 	for i := range l {
-		if l[i] != r[i] {
+		if !h.IsRelExprEqual(l[i].RelExpr, r[i].RelExpr) ||
+			!h.IsPhysPropsEqual(l[i].PhysProps, r[i].PhysProps) {
 			return false
 		}
 	}

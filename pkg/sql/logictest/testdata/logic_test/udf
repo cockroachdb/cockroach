@@ -308,3 +308,13 @@ SELECT * FROM ab WHERE b = one() + 1
 ----
 a  b
 2  2
+
+statement ok
+CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
+  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+$$
+
+query I
+SELECT max_in_values()
+----
+3
