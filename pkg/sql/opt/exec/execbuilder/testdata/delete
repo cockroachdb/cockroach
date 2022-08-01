@@ -86,7 +86,7 @@ vectorized: true
         └── • scan
               missing stats
               table: unindexed@unindexed_pkey
-              spans: FULL SCAN
+              spans: FULL SCAN (SOFT LIMIT)
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query T
@@ -108,7 +108,7 @@ vectorized: true
         └── • scan
               missing stats
               table: unindexed@unindexed_pkey
-              spans: FULL SCAN
+              spans: FULL SCAN (SOFT LIMIT)
 
 # Check fast DELETE.
 query T

@@ -140,4 +140,4 @@ vectorized: true
           ordering: +v
           estimated row count: 1,000 (missing stats)
           table: t@v
-          spans: FULL SCAN
+          spans: FULL SCAN (SOFT LIMIT)
