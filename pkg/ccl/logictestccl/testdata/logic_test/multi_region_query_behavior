@@ -455,3 +455,15 @@ vectorized: true
           table: t85043@t85043_pkey
           spans: [/'ab020c49-ba5e-4800-8000-00000000014e' - /'ab020c49-ba5e-4800-8000-00000000014e']
           locking strength: for update
+
+# Regression test for #85288. Distribute enforcer should not prevent the
+# optimizer from using bounded staleness.
+statement ok
+CREATE TABLE t85288 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ts TIMESTAMP
+);
+
+statement ok
+select ts FROM t85288 AS OF SYSTEM TIME with_max_staleness('1h') WHERE
+ id = '00000000-0000-4000-8000-000000000000';
