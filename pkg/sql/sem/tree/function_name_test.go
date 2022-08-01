@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -32,15 +33,13 @@ func TestResolveFunction(t *testing.T) {
 	}()
 
 	testCases := []struct {
-		in, out          string
-		err              string
-		customSearchPath tree.SearchPath
+		in, out string
+		err     string
 	}{
 		{in: `count`, out: `count`},
 		{in: `pg_catalog.pg_typeof`, out: `pg_typeof`},
 
 		{in: `foo`, err: `unknown function: foo`},
-		{in: `foo`, out: `count`, customSearchPath: &customResolver{SearchPath: searchPath}},
 		{in: `""`, err: `invalid function name: ""`},
 	}
 
@@ -55,10 +54,7 @@ func TestResolveFunction(t *testing.T) {
 		}
 		q := f.Func
 		sp := searchPath
-		if tc.customSearchPath != nil {
-			sp = tc.customSearchPath
-		}
-		_, err = q.Resolve(sp, nil /* resolver */)
+		_, err = q.Resolve(context.Background(), sp, nil /* resolver */)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
@@ -72,22 +68,4 @@ func TestResolveFunction(t *testing.T) {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
 	}
-}
-
-type customResolver struct {
-	tree.SearchPath
-}
-
-var _ tree.CustomFunctionDefinitionResolver = (*customResolver)(nil)
-
-// Resolve implements tree.CustomFunctionDefinitionResolver
-func (r customResolver) Resolve(name string) *tree.FunctionDefinition {
-	if name == "foo" {
-		name = "count"
-	}
-	fn, found := tree.FunDefs[name]
-	if found {
-		return fn
-	}
-	return nil
 }

@@ -1214,3 +1214,16 @@ func formatCandidates(prefix string, candidates []overloadImpl) string {
 	}
 	return buf.String()
 }
+
+// TODO(chengxiong): unify this method with Overload.Signature method if possible.
+func getFuncSig(expr *FuncExpr, typedInputExprs []TypedExpr, desiredType *types.T) string {
+	typeNames := make([]string, 0, len(expr.Exprs))
+	for _, expr := range typedInputExprs {
+		typeNames = append(typeNames, expr.ResolvedType().String())
+	}
+	var desStr string
+	if desiredType.Family() != types.AnyFamily {
+		desStr = fmt.Sprintf(" (desired <%s>)", desiredType)
+	}
+	return fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
+}
