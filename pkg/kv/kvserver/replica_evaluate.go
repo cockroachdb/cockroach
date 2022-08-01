@@ -557,13 +557,13 @@ func canDoServersideRetry(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	g *concurrency.Guard,
-	deadline *hlc.Timestamp,
+	deadline hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
 			return false
 		}
-		if deadline != nil {
+		if !deadline.IsEmpty() {
 			log.Fatal(ctx, "deadline passed for transactional request")
 		}
 		if etArg, ok := ba.GetArg(roachpb.EndTxn); ok {

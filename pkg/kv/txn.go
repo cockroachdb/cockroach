@@ -83,9 +83,9 @@ type Txn struct {
 		// retries).
 		sender TxnSender
 
-		// The txn has to be committed by this deadline. A nil value indicates no
+		// The txn has to be committed by this deadline. A zero value indicates no
 		// deadline.
-		deadline *hlc.Timestamp
+		deadline hlc.Timestamp
 	}
 
 	// admissionHeader is used for admission control for work done in this
@@ -772,8 +772,7 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 			"txn has would have no chance to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
 			deadline, readTimestamp, txn.mu.deadline)
 	}
-	txn.mu.deadline = new(hlc.Timestamp)
-	*txn.mu.deadline = deadline
+	txn.mu.deadline = deadline
 	return nil
 }
 
@@ -812,8 +811,7 @@ func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
 			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
 	}
 
-	return txn.mu.deadline != nil &&
-		!txn.mu.deadline.IsEmpty() &&
+	return !txn.mu.deadline.IsEmpty() &&
 		// Avoid trying to get get the txn mutex again by directly
 		// invoking ProvisionalCommitTimestamp versus calling
 		// ProvisionalCommitTimestampLocked on the Txn.
@@ -826,7 +824,7 @@ func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
 
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
-	txn.mu.deadline = nil
+	txn.mu.deadline = hlc.Timestamp{}
 }
 
 // Rollback sends an EndTxnRequest with Commit=false.
@@ -850,7 +848,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		et := endTxnReq(false, nil /* deadline */)
+		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
 		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
@@ -876,7 +874,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		et := endTxnReq(false, nil /* deadline */)
+		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
 		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
@@ -918,7 +916,7 @@ type endTxnReqAlloc struct {
 	unionArr [1]roachpb.RequestUnion
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp) *endTxnReqAlloc {
+func endTxnReq(commit bool, deadline hlc.Timestamp) *endTxnReqAlloc {
 	alloc := new(endTxnReqAlloc)
 	alloc.req.Commit = commit
 	alloc.req.Deadline = deadline
@@ -1246,18 +1244,18 @@ func (txn *Txn) applyDeadlineToBoundedStaleness(
 	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
 ) error {
 	d := txn.deadline()
-	if d == nil {
+	if d.IsEmpty() {
 		return nil
 	}
 	if d.LessEq(bs.MinTimestampBound) {
 		return errors.WithContextTags(errors.AssertionFailedf(
 			"transaction deadline %s equal to or below min_timestamp_bound %s",
-			*d, bs.MinTimestampBound), ctx)
+			d, bs.MinTimestampBound), ctx)
 	}
 	if bs.MaxTimestampBound.IsEmpty() {
-		bs.MaxTimestampBound = *d
+		bs.MaxTimestampBound = d
 	} else {
-		bs.MaxTimestampBound.Backward(*d)
+		bs.MaxTimestampBound.Backward(d)
 	}
 	return nil
 }
@@ -1525,7 +1523,7 @@ func (txn *Txn) TestingCloneTxn() *roachpb.Transaction {
 	return txn.mu.sender.TestingCloneTxn()
 }
 
-func (txn *Txn) deadline() *hlc.Timestamp {
+func (txn *Txn) deadline() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.deadline
