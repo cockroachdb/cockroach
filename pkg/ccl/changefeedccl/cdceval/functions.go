@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -55,7 +56,7 @@ var supportedVolatileBuiltinFunctions = makeStringSet(
 
 // CDC Specific functions.
 // TODO(yevgeniy): Finalize function naming: e.g. cdc.is_delete() vs cdc_is_delete()
-var cdcFunctions = map[string]*tree.FunctionDefinition{
+var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	"cdc_is_delete": makeCDCBuiltIn(
 		"cdc_is_delete",
 		tree.Overload{
@@ -112,14 +113,18 @@ var cdcFnProps = &tree.FunctionProperties{
 	Category: "CDC builtin",
 }
 
-func makeCDCBuiltIn(fnName string, overloads ...tree.Overload) *tree.FunctionDefinition {
-	return tree.NewFunctionDefinition(fnName, cdcFnProps, overloads)
+func makeCDCBuiltIn(fnName string, overloads ...tree.Overload) *tree.ResolvedFunctionDefinition {
+	def := tree.NewFunctionDefinition(fnName, cdcFnProps, overloads)
+	// The schema name is actually not important since CDC doesn't use any user
+	// defined functions. And, we're sure that we always return the first
+	// function definition found.
+	return tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
 }
 
 func cdcTimestampBuiltin(
 	fnName string, doc string, tsFn func(rowEvalCtx *rowEvalContext) hlc.Timestamp,
-) *tree.FunctionDefinition {
-	return tree.NewFunctionDefinition(
+) *tree.ResolvedFunctionDefinition {
+	def := tree.NewFunctionDefinition(
 		fnName,
 		cdcFnProps,
 		[]tree.Overload{
@@ -135,6 +140,10 @@ func cdcTimestampBuiltin(
 			},
 		},
 	)
+	// The schema name is actually not important since CDC doesn't use any user
+	// defined functions. And, we're sure that we always return the first
+	// function definition found.
+	return tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
 }
 
 func prevRowAsJSON(evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
