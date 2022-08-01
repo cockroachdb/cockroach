@@ -227,3 +227,13 @@ func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedO
 		idx,
 	)
 }
+
+// ToFunctionName converts an UnresolvedName to a FunctionName.
+func (u *UnresolvedName) ToFunctionName() (*FunctionName, error) {
+	un, err := u.ToUnresolvedObjectName(NoAnnotation)
+	if err != nil {
+		return nil, err
+	}
+	fn := un.ToFunctionName()
+	return &fn, nil
+}

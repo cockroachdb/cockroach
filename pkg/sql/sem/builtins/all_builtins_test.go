@@ -14,6 +14,7 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -162,4 +163,81 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 			)
 		}
 	})
+}
+
+func TestAddResolvedFuncDef(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		def      *tree.FunctionDefinition
+		resolved map[string]*tree.ResolvedFunctionDefinition
+	}{
+		{
+			def: &tree.FunctionDefinition{Name: "crdb_internal.fun", Definition: []*tree.Overload{{}, {}}},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"crdb_internal.fun": {
+					Name: "crdb_internal.fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "crdb_internal",
+							Overload: &tree.Overload{},
+						},
+						{
+							Schema:   "crdb_internal",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+		{
+			def: &tree.FunctionDefinition{Name: "fun", Definition: []*tree.Overload{{}}},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"pg_catalog.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "pg_catalog",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+		{
+			def: &tree.FunctionDefinition{
+				Name:               "fun",
+				Definition:         []*tree.Overload{{}},
+				FunctionProperties: tree.FunctionProperties{AvailableOnPublicSchema: true},
+			},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"pg_catalog.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "pg_catalog",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+				"public.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "public",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			resolved := make(map[string]*tree.ResolvedFunctionDefinition)
+			addResolvedFuncDef(resolved, tc.def)
+			require.Equal(t, tc.resolved, resolved)
+		})
+	}
 }

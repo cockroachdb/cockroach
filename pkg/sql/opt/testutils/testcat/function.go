@@ -20,16 +20,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 var _ tree.FunctionReferenceResolver = (*Catalog)(nil)
 
 // ResolveFunction part of the tree.FunctionReferenceResolver interface.
 func (tc *Catalog) ResolveFunction(
-	name *tree.UnresolvedName, path tree.SearchPath,
-) (*tree.FunctionDefinition, error) {
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	fn, err := name.ToFunctionName()
+	if err != nil {
+		return nil, err
+	}
+
 	// Attempt to resolve to a built-in function first.
-	if def, err := name.ResolveFunction(path); err == nil {
+	def, err := tree.GetBuiltinFuncDefinition(fn, path)
+	if err != nil {
+		return nil, err
+	}
+	if def != nil {
 		return def, nil
 	}
 	// Otherwise, try to resolve to a user-defined function.
@@ -37,6 +48,11 @@ func (tc *Catalog) ResolveFunction(
 		return def, nil
 	}
 	return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s", name)
+}
+
+// ResolveFunctionByOID part of the tree.FunctionReferenceResolver interface.
+func (tc *Catalog) ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (*tree.Overload, error) {
+	return nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
 }
 
 // CreateFunction handles the CREATE FUNCTION statement.
@@ -73,21 +89,24 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 	body, v, nullableArgs := collectFuncOptions(c.Options)
 
 	if tc.udfs == nil {
-		tc.udfs = make(map[string]*tree.FunctionDefinition)
+		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
-	tc.udfs[name] = tree.NewFunctionDefinition(
-		name,
-		&tree.FunctionProperties{
-			// TODO(mgartner): Consider setting Class and CompositeInsensitive.
-		},
-		[]tree.Overload{{
-			Types:        argTypes,
-			ReturnType:   tree.FixedReturnType(retType),
-			Body:         body,
-			Volatility:   v,
-			NullableArgs: nullableArgs,
-		}},
-	)
+
+	overload := &tree.Overload{
+		Types:        argTypes,
+		ReturnType:   tree.FixedReturnType(retType),
+		Body:         body,
+		Volatility:   v,
+		NullableArgs: nullableArgs,
+	}
+	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
+	def := &tree.ResolvedFunctionDefinition{
+		Name: name,
+		// TODO(mgartner): Consider setting Class and CompositeInsensitive fo
+		// overloads.
+		Overloads: []tree.QualifiedOverload{prefixedOverload},
+	}
+	tc.udfs[name] = def
 }
 
 func collectFuncOptions(o tree.FunctionOptions) (body string, v volatility.V, nullableArgs bool) {
@@ -146,11 +165,11 @@ func collectFuncOptions(o tree.FunctionOptions) (body string, v volatility.V, nu
 
 // formatFunction nicely formats a function definition creating in the opt test
 // catalog using a treeprinter for debugging and testing.
-func formatFunction(fn *tree.FunctionDefinition) string {
-	if len(fn.Definition) != 1 {
+func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
+	if len(fn.Overloads) != 1 {
 		panic(fmt.Errorf("functions with multiple overloads not supported"))
 	}
-	o := fn.Definition[0]
+	o := fn.Overloads[0]
 	tp := treeprinter.New()
 	nullStr := ""
 	if !o.NullableArgs {
