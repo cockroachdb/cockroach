@@ -456,6 +456,16 @@ var LogicTestConfigs = []TestClusterConfig{
 		BinaryVersion:       roachpb.Version{Major: 22, Minor: 2},
 		DisableUpgrade:      true,
 	},
+	{
+		Name:     "local-udf",
+		NumNodes: 1,
+		// local is the configuration where we run all tests which have bad
+		// interactions with the default test tenant.
+		DisableDefaultTestTenant: true,
+		// Set SkipDropDatabases to true for now to enable development on UDFs.
+		// TODO(ajwerner,chengxiong-ruan): Remove this before the 22.2 release.
+		SkipDropDatabases: true,
+	},
 }
 
 // ConfigIdx is an index in the above slice.
