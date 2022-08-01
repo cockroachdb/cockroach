@@ -212,6 +212,7 @@ const (
 	showValues
 	showIntents
 	showTxns
+	showRangeKeys
 )
 
 // String implements the pflag.Value interface.
@@ -223,6 +224,8 @@ func (f *keyTypeFilter) String() string {
 		return "intents"
 	case showTxns:
 		return "txns"
+	case showRangeKeys:
+		return "rangekeys"
 	}
 	return "all"
 }
@@ -237,6 +240,8 @@ func (f *keyTypeFilter) Set(v string) error {
 		*f = showValues
 	case "intents":
 		*f = showIntents
+	case "rangekeys":
+		*f = showRangeKeys
 	case "txns":
 		*f = showTxns
 	default:

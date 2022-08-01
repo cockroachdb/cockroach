@@ -188,13 +188,20 @@ func OpenEngine(
 	return db, nil
 }
 
-func printKey(kv storage.MVCCKeyValue) (bool, error) {
+func printKey(kv storage.MVCCKeyValue) {
 	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
 	}
 	fmt.Printf("\n")
-	return false, nil
+}
+
+func printRangeKey(rkv storage.MVCCRangeKeyValue) {
+	fmt.Printf("%s %s: ", rkv.RangeKey.Timestamp, rkv.RangeKey.Bounds())
+	if debugCtx.sizes {
+		fmt.Printf(" %d %d", len(rkv.RangeKey.StartKey)+len(rkv.RangeKey.EndKey), len(rkv.Value))
+	}
+	fmt.Printf("\n")
 }
 
 func transactionPredicate(kv storage.MVCCKeyValue) bool {
@@ -220,30 +227,41 @@ func intentPredicate(kv storage.MVCCKeyValue) bool {
 }
 
 var keyTypeParams = map[keyTypeFilter]struct {
-	predicate      func(kv storage.MVCCKeyValue) bool
-	minKey, maxKey storage.MVCCKey
+	predicate         func(kv storage.MVCCKeyValue) bool
+	rangeKeyPredicate func(rkv storage.MVCCRangeKeyValue) bool
+	minKey, maxKey    storage.MVCCKey
 }{
 	showAll: {
-		predicate: func(kv storage.MVCCKeyValue) bool { return true },
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKeyMax,
+		predicate:         func(kv storage.MVCCKeyValue) bool { return true },
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 	showTxns: {
-		predicate: transactionPredicate,
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKey{Key: keys.LocalMax},
+		predicate:         transactionPredicate,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return false },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKey{Key: keys.LocalMax},
 	},
 	showValues: {
 		predicate: func(kv storage.MVCCKeyValue) bool {
 			return kv.Key.IsValue()
 		},
-		minKey: storage.NilKey,
-		maxKey: storage.MVCCKeyMax,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 	showIntents: {
-		predicate: intentPredicate,
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKeyMax,
+		predicate:         intentPredicate,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return false },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
+	},
+	showRangeKeys: {
+		predicate:         func(storage.MVCCKeyValue) bool { return false },
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 }
 
@@ -287,11 +305,10 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
+	rangeKeyPrinter := printRangeKey
 	if debugCtx.values {
-		printer = func(kv storage.MVCCKeyValue) (bool, error) {
-			kvserver.PrintMVCCKeyValue(kv)
-			return false, nil
-		}
+		printer = kvserver.PrintMVCCKeyValue
+		rangeKeyPrinter = kvserver.PrintMVCCRangeKeyValue
 	}
 
 	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
@@ -303,21 +320,32 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	iterFunc := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-		if !keyTypeOptions.predicate(kv) {
-			return nil
+	var lastRangeKey roachpb.Key
+	iterFunc := func(kv storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
+		// MVCC range keys.
+		if !rangeKeys.IsEmpty() && !rangeKeys.Bounds.Key.Equal(lastRangeKey) {
+			lastRangeKey = rangeKeys.Bounds.Key.Clone()
+			for _, v := range rangeKeys.Versions {
+				rkv := rangeKeys.AsRangeKeyValue(v)
+				if keyTypeOptions.rangeKeyPredicate(rkv) {
+					rangeKeyPrinter(rangeKeys.AsRangeKeyValue(v))
+					results++
+					if results == debugCtx.maxResults {
+						return iterutil.StopIteration()
+					}
+				}
+			}
 		}
-		done, err := printer(kv)
-		if err != nil {
-			return err
+
+		// MVCC point keys.
+		if len(kv.Key.Key) > 0 && keyTypeOptions.predicate(kv) {
+			printer(kv)
+			results++
+			if results == debugCtx.maxResults {
+				return iterutil.StopIteration()
+			}
 		}
-		if done {
-			return iterutil.StopIteration()
-		}
-		results++
-		if results == debugCtx.maxResults {
-			return iterutil.StopIteration()
-		}
+
 		return nil
 	}
 	endKey := debugCtx.endKey.Key
@@ -330,12 +358,12 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		endKey = keys.LocalMax
 	}
 	if err := db.MVCCIterate(debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, iterFunc); err != nil {
+		storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
 		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			storage.IterKeyTypePointsOnly, iterFunc); err != nil {
+			storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 			return err
 		}
 	}

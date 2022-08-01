@@ -1100,9 +1100,9 @@ Base64-encoded Descriptor to use as the table when decoding KVs.`,
 	FilterKeys = FlagInfo{
 		Name: "type",
 		Description: `
-Only show certain types of keys: values, intents, txns. If omitted all keys
-types are shown. Showing transactions will also implicitly limit key range
-to local keys if keys are not specified explicitly.`,
+Only show certain types of keys: values, intents, txns, or rangekeys. If
+omitted, all key types are shown. txns will also implicitly limit the key range
+to local keys, unless specified`,
 	}
 
 	DrainWait = FlagInfo{
