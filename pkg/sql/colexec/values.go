@@ -92,7 +92,7 @@ func (v *valuesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	v.batch.ResetInternalBatch()
+	v.allocator.ResetBatch(v.batch)
 
 	// Decode rows up to the capacity of the batch.
 	nRows := 0

@@ -366,7 +366,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 	for idx, sel := range selections {
 		partitionIdx := op.partitionIdxOffset + idx
 		if len(sel) > 0 {
-			scratchBatch.ResetInternalBatch()
+			op.unlimitedAllocator.ResetBatch(scratchBatch)
 			// The partitioner expects the batches without a selection vector,
 			// so we need to copy the tuples according to the selection vector
 			// into a scratch batch.
