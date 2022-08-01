@@ -32,7 +32,9 @@ var errMarkCanRetryReplicationChangeWithUpdatedDesc = errors.New("should retry w
 // assumed to have been emitted by the KV layer during a replication change
 // operation) is likely to succeed when retried with an updated descriptor.
 func IsRetriableReplicationChangeError(err error) bool {
-	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) || isSnapshotError(err)
+	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) ||
+		IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+		isSnapshotError(err)
 }
 
 const (
