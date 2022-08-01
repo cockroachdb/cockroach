@@ -13,6 +13,7 @@ SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 0  locations
 0  protected_ts_meta
 0  protected_ts_records
+0  public
 0  role_members
 0  role_options
 0  scheduled_jobs

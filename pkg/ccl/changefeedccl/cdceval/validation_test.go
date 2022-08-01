@@ -349,7 +349,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			}
 			normalized, _, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, false)
 			require.NoError(t, err)
-			actual, err := SelectClauseRequiresPrev(*execCtx.SemaCtx(), normalized)
+			actual, err := SelectClauseRequiresPrev(context.Background(), *execCtx.SemaCtx(), normalized)
 			require.NoError(t, err)
 			require.Equal(t, tc.expect, actual)
 		})

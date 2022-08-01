@@ -353,12 +353,13 @@ func normalizeSelectClause(
 
 type checkForPrevVisitor struct {
 	semaCtx   tree.SemaContext
+	ctx       context.Context
 	foundPrev bool
 }
 
 // VisitPre implements the Visitor interface.
 func (v *checkForPrevVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
-	if exprRequiresPreviousValue(v.semaCtx, expr) {
+	if exprRequiresPreviousValue(v.ctx, v.semaCtx, expr) {
 		v.foundPrev = true
 		// no need to keep recursing
 		return false, expr
@@ -373,9 +374,9 @@ func (v *checkForPrevVisitor) VisitPost(e tree.Expr) tree.Expr {
 
 // exprRequiresPreviousValue returns true if the top-level expression
 // is a function call that cdc implements using the diff from a rangefeed.
-func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
+func exprRequiresPreviousValue(ctx context.Context, semaCtx tree.SemaContext, e tree.Expr) bool {
 	if f, ok := e.(*tree.FuncExpr); ok {
-		funcDef, err := f.Func.Resolve(context.Background(), semaCtx.SearchPath, semaCtx.FunctionResolver)
+		funcDef, err := f.Func.Resolve(ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
 			return false
 		}
@@ -386,8 +387,10 @@ func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
 
 // SelectClauseRequiresPrev checks whether a changefeed expression will need a row's previous values
 // to be fetched in order to evaluate it.
-func SelectClauseRequiresPrev(semaCtx tree.SemaContext, sc NormalizedSelectClause) (bool, error) {
-	c := checkForPrevVisitor{semaCtx: semaCtx}
+func SelectClauseRequiresPrev(
+	ctx context.Context, semaCtx tree.SemaContext, sc NormalizedSelectClause,
+) (bool, error) {
+	c := checkForPrevVisitor{semaCtx: semaCtx, ctx: ctx}
 	_, err := tree.SimpleStmtVisit(sc.Clause(), func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		recurse, newExpr = c.VisitPre(expr)
 		return recurse, newExpr, nil

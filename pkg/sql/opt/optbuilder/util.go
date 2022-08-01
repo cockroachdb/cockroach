@@ -254,7 +254,7 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 	}
 
 	if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
-		if funcExpr.Func.FunctionReference.(*tree.FunctionDefinition).Name == "unnest" {
+		if funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition).Name == "unnest" {
 			// Special case for unnest functions: we should create a default column in
 			// the case when there is one input argument, since this implies there
 			// will be one output column. This is necessary because the type of the

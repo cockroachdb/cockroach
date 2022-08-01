@@ -385,7 +385,7 @@ func createChangefeedJobRecord(
 		if err != nil {
 			return nil, err
 		}
-		needDiff, err := cdceval.SelectClauseRequiresPrev(*p.SemaCtx(), normalized)
+		needDiff, err := cdceval.SelectClauseRequiresPrev(ctx, *p.SemaCtx(), normalized)
 		if err != nil {
 			return nil, err
 		}

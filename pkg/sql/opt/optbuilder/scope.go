@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -1018,7 +1019,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// TODO(mgartner): At this point the the function has not been type checked
 		// and resolved to one overload yet. Consider refactoring this so that it
 		// can handle overloads with the same name.
-		def, err := t.Func.Resolve(semaCtx.SearchPath, semaCtx.FunctionResolver)
+		def, err := t.Func.Resolve(s.builder.ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
 			panic(err)
 		}
@@ -1095,7 +1096,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // the FROM clause to a lateral cross join between the input and a Zip of all
 // the srfs in the s.srfs slice. See Builder.buildProjectSet in srfs.go for
 // more details.
-func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf {
+func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) *srf {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -1133,27 +1134,30 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 
 // isOrderedSetAggregate returns if the input function definition is an
 // ordered-set aggregate, and the overridden function definition if so.
-func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefinition, bool) {
+func isOrderedSetAggregate(
+	def *tree.ResolvedFunctionDefinition,
+) (*tree.ResolvedFunctionDefinition, bool) {
 	// The impl functions are private because they should never be run directly.
 	// Thus, they need to be marked as non-private before using them.
 
 	// FunctionProperties exist in function definitions and their overloads, so we
 	// unset all private fields here.
-	unsetPrivate := func(def *tree.FunctionDefinition) {
-		def.Private = true
-		for i := range def.Definition {
-			newOverload := *def.Definition[i]
+	unsetPrivate := func(def *tree.ResolvedFunctionDefinition) {
+		for i := range def.Overloads {
+			newOverload := def.Overloads[i]
 			newOverload.Private = false
-			def.Definition[i] = &newOverload
+			def.Overloads[i] = newOverload
 		}
 	}
-	switch def {
-	case tree.FunDefs["percentile_disc"]:
-		newDef := *tree.FunDefs["percentile_disc_impl"]
+	switch def.Name {
+	case "percentile_disc":
+		builtinDef := tree.ResolvedBuiltinFuncDefs[catconstants.PgCatalogName+"."+"percentile_disc_impl"]
+		newDef := *builtinDef
 		unsetPrivate(&newDef)
 		return &newDef, true
-	case tree.FunDefs["percentile_cont"]:
-		newDef := *tree.FunDefs["percentile_cont_impl"]
+	case "percentile_cont":
+		builtinDef := tree.ResolvedBuiltinFuncDefs[catconstants.PgCatalogName+"."+"percentile_cont_impl"]
+		newDef := *builtinDef
 		unsetPrivate(&newDef)
 		return &newDef, true
 	}
@@ -1171,7 +1175,7 @@ func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefiniti
 // the variables referenced by the aggregate (or the current scope if the
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
-func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) tree.Expr {
 	f, def = s.replaceCount(f, def)
 
 	// We need to save and restore the previous value of the field in
@@ -1279,7 +1283,7 @@ func (s *scope) constructWindowDef(def tree.WindowDef) tree.WindowDef {
 	}
 }
 
-func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
+func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) tree.Expr {
 	f, def = s.replaceCount(f, def)
 
 	if err := tree.CheckIsWindowOrAgg(def); err != nil {
@@ -1381,7 +1385,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 // replaceSQLFn replaces a tree.SQLClass function with a sqlFnInfo struct. See
 // comments above tree.SQLClass and sqlFnInfo for details.
-func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
+func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) tree.Expr {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -1481,8 +1485,8 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 
 // replaceCount replaces count(*) with count_rows().
 func (s *scope) replaceCount(
-	f *tree.FuncExpr, def *tree.FunctionDefinition,
-) (*tree.FuncExpr, *tree.FunctionDefinition) {
+	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition,
+) (*tree.FuncExpr, *tree.ResolvedFunctionDefinition) {
 	if len(f.Exprs) != 1 {
 		return f, def
 	}
@@ -1513,7 +1517,7 @@ func (s *scope) replaceCount(
 				// TODO(mgartner): What happens if a user defines a UDF named
 				// "count"? We might need to resolve the function first, not
 				// just rely on string equality to "count" above.
-				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath, nil /* resolver */)
+				newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)
 				if err != nil {
 					panic(err)
 				}
@@ -1542,7 +1546,7 @@ func (s *scope) replaceCount(
 			// TODO(mgartner): What happens if a user defines a UDF named
 			// "count"? We might need to resolve the function first, not just
 			// rely on string equality to "count" above.
-			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath, nil /* resolver */)
+			newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)
 			if err != nil {
 				panic(err)
 			}
