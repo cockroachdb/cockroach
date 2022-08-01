@@ -365,6 +365,17 @@ func (*AlterIndex) StatementTag() string { return "ALTER INDEX" }
 func (*AlterIndex) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterIndexVisible) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterIndexVisible) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterIndexVisible) StatementTag() string { return "ALTER INDEX" }
+
+func (*AlterIndexVisible) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1940,6 +1951,7 @@ func (n *AlterBackup) String() string                         { return AsString(
 func (n *AlterBackupSchedule) String() string                 { return AsString(n) }
 func (n *AlterBackupScheduleCmds) String() string             { return AsString(n) }
 func (n *AlterIndex) String() string                          { return AsString(n) }
+func (n *AlterIndexVisible) String() string                   { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string                  { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string              { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string             { return AsString(n) }
