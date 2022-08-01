@@ -68,7 +68,7 @@ func makeExternalConnectionStorage(
 	var ec ExternalConnection
 	if err := args.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		ec, err = LoadExternalConnection(ctx, cfg.Name, connectionpb.TypeStorage, args.InternalExecutor,
+		ec, err = LoadExternalConnection(ctx, cfg.Name, args.InternalExecutor,
 			username.MakeSQLUsernameFromPreNormalizedString(cfg.User), txn)
 		return err
 	}); err != nil {
