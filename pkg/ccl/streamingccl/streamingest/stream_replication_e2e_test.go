@@ -189,6 +189,7 @@ func createTenantStreamingClusters(
 			DistSQL: &execinfra.TestingKnobs{
 				StreamingTestingKnobs: args.testingKnobs,
 			},
+			Streaming: args.testingKnobs,
 		},
 	}
 
@@ -318,6 +319,11 @@ func streamIngestionStats(
 	return stats
 }
 
+func runningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
+	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
+	return p.RunningStatus
+}
+
 func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -352,9 +358,14 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	// <-time.NewTimer(2 * time.Second).C
 	// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
 	// require.Error(t, err)
+	require.Equal(t, "running the SQL flow for the stream ingestion job",
+		runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	c.cutover(producerJobID, ingestionJobID, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	require.Equal(t, "stream ingestion finished successfully",
+		runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {
@@ -410,7 +421,9 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	})...)
 
 	jobutils.WaitForJobToFail(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	// The ingestion job will stop retrying as this is a permanent job error.
 	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	require.Regexp(t, "ingestion job failed .* but is being paused", runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	// Make dest cluster to ingest KV events faster.
 	c.srcSysSQL.ExecMultiple(t, configureClusterSettings(map[string]string{
@@ -482,16 +495,26 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime)
 }
 
-func TestTenantStreamingPauseOnError(t *testing.T) {
+func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
+	ingestionTimes := 0
 	args := defaultTenantStreamingClustersArgs
-	args.testingKnobs = &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) error {
-		return <-ingestErrCh
-	}}
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		RunAfterReceivingEvent: func(ctx context.Context) error {
+			return <-ingestErrCh
+		},
+		BeforeIngestionStart: func(ctx context.Context) error {
+			ingestionTimes++
+			if ingestionTimes == 2 {
+				return jobs.MarkAsPermanentJobError(errors.New("test error"))
+			}
+			return nil
+		},
+	}
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
@@ -502,6 +525,9 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	producerJobID, ingestionJobID := c.startStreamReplication()
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Ingestion is retried once after having an ingestion error.
+	require.Equal(t, 2, ingestionTimes)
 
 	// Check we didn't make any progress.
 	require.Nil(t, streamIngestionStats(t, c.destSysSQL, ingestionJobID).ReplicationLagInfo)
@@ -521,6 +547,11 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
+
+	// TODO(casper): the below statement doesn't pass due to a bug
+	// where stream ingestion flow keeps being canceled after the job
+	// is resumed from pause.
+	// require.Equal(t, 3, ingestionTimes)
 
 	// Confirm this new run resumed from the empty checkpoint.
 	require.True(t,
@@ -751,7 +782,8 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 
 	// Once srcCluster.Server(0) is shut down queries must be ran against a different server
 	alternateSrcSysSQL := sqlutils.MakeSQLRunner(c.srcCluster.ServerConn(1))
-	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1), base.TestTenantArgs{TenantID: c.args.srcTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1),
+		base.TestTenantArgs{TenantID: c.args.srcTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
 	defer alternateSrcTenantConn.Close()
 	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
 

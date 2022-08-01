@@ -165,13 +165,28 @@ func waitUntilProducerActive(
 		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
 	}
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
-			"and in status %s", ingestionJobID, status.StreamStatus)
+		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
+			"as the producer job is not active and in status %s", ingestionJobID, status.StreamStatus))
 	}
 	return nil
 }
 
+func updateRunningStatus(ctx context.Context, ingestionJob *jobs.Job, status string) {
+	if err := ingestionJob.RunningStatus(ctx, nil,
+		func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(status), nil
+		}); err != nil {
+		log.Warningf(ctx, "error when updating job running status: %s", err)
+	}
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
+	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
+		if err := knobs.BeforeIngestionStart(ctx); err != nil {
+			return err
+		}
+	}
+
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
@@ -182,19 +197,20 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		startTime = *h
 	}
 
-	// If there is an existing stream ID, reconnect to it.
-	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
 	client, err := connectToActiveClient(ctx, ingestionJob)
 	if err != nil {
 		return err
 	}
 	ingestWithClient := func() error {
+		streamID := streaming.StreamID(details.StreamID)
+		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("connecting to the producer job %d", streamID))
 		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
 			return err
 		}
 
 		log.Infof(ctx, "producer job %d is active, creating a stream replication plan", streamID)
+		updateRunningStatus(ctx, ingestionJob, "planning a stream replication topology")
 		topology, err := client.Plan(ctx, streamID)
 		if err != nil {
 			return err
@@ -236,10 +252,12 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		// Plan and run the DistSQL flow.
-		log.Infof(ctx, "starting to plan and run DistSQL flow for stream ingestion job %d",
+		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
+		updateRunningStatus(ctx, ingestionJob, "running the SQL flow for the stream ingestion job")
 		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJob.ID(), planCtx, dsp,
 			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
+			fmt.Println("ctx after running ingestion flow: ", ctx)
 			return err
 		}
 
@@ -250,17 +268,20 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		log.Infof(ctx,
 			"starting to revert to the specified cutover timestamp for stream ingestion job %d",
 			ingestionJob.ID())
+		updateRunningStatus(ctx, ingestionJob, "starting to cut over to the given timestamp")
 		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob.ID()); err != nil {
 			return err
 		}
 
 		log.Infof(ctx, "activating destination tenant %d", details.NewTenantID)
+		updateRunningStatus(ctx, ingestionJob, "activating destination tenant")
 		// Activate the tenant as it is now in a usable state.
 		if err = activateTenant(ctx, execCtx, details.NewTenantID); err != nil {
 			return err
 		}
 
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
+		updateRunningStatus(ctx, ingestionJob, "completing the producer job in the source cluster")
 		// Completes the producer job in the source cluster on best effort.
 		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
 			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
@@ -270,13 +291,47 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
 }
 
+func ingestWithRetries(
+	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 3 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+		MaxRetries:     5,
+	}
+
+	var err error
+	retryCount := 0
+	for r := retry.Start(ro); r.Next(); {
+		status := "start stream ingestion"
+		if retryCount != 0 {
+			status = fmt.Sprintf("retrying stream ingestion in the %d round with previous error: %s", retryCount, err)
+		}
+		updateRunningStatus(ctx, ingestionJob, status)
+		err = ingest(ctx, execCtx, ingestionJob)
+		if err == nil {
+			break
+		}
+		if jobs.IsPermanentJobError(err) {
+			updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("encountered permanent job error: %s", err))
+			break
+		}
+		retryCount++
+	}
+	status := "stream ingestion finished successfully"
+	if err != nil {
+		status = fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err)
+	}
+	updateRunningStatus(ctx, ingestionJob, status)
+	return err
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	// Start ingesting KVs from the replication stream.
-	// TODO(casper): retry stream ingestion with exponential
-	// backoff and finally pause on error.
-	err := ingest(resumeCtx, jobExecCtx, s.job)
+	err := ingestWithRetries(resumeCtx, jobExecCtx, s.job)
 	if err != nil {
 		const errorFmt = "ingestion job failed (%v) but is being paused"
 		errorMessage := fmt.Sprintf(errorFmt, err)
@@ -381,9 +436,7 @@ func (s *streamIngestionResumer) cancelProducerJob(
 		streamID, s.job.ID())
 	if err = client.Complete(ctx, streamID, false /* successfulIngestion */); err != nil {
 		log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
-		fmt.Println("canceled failure", err)
 	}
-	fmt.Println("cancel sent")
 	if err = client.Close(ctx); err != nil {
 		log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
 	}
