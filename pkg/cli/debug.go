@@ -303,7 +303,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	iterFunc := func(kv storage.MVCCKeyValue) error {
+	iterFunc := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 		if !keyTypeOptions.predicate(kv) {
 			return nil
 		}
@@ -329,13 +329,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		splitScan = true
 		endKey = keys.LocalMax
 	}
-	if err := db.MVCCIterate(
-		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+	if err := db.MVCCIterate(debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
 		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			iterFunc); err != nil {
+			storage.IterKeyTypePointsOnly, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -490,7 +490,7 @@ func loadRangeDescriptor(
 	db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv storage.MVCCKeyValue) error {
+	handleKV := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 		if kv.Key.Timestamp.IsEmpty() {
 			// We only want values, not MVCCMetadata.
 			return nil
@@ -520,7 +520,8 @@ func loadRangeDescriptor(
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, handleKV); err != nil {
+	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -542,13 +543,14 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
-		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+				return nil
+			}
+			kvserver.PrintMVCCKeyValue(kv)
 			return nil
-		}
-		kvserver.PrintMVCCKeyValue(kv)
-		return nil
-	})
+		})
 }
 
 var decodeKeyOptions struct {
@@ -694,10 +696,11 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(end))))
 
 	// NB: raft log does not have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv storage.MVCCKeyValue) error {
-		kvserver.PrintMVCCKeyValue(kv)
-		return nil
-	})
+	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			kvserver.PrintMVCCKeyValue(kv)
+			return nil
+		})
 }
 
 var debugGCCmd = &cobra.Command{
