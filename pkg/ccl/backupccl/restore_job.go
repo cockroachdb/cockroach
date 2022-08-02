@@ -913,11 +913,9 @@ func createImportingDescriptors(
 
 			// Allocate no schedule to the row-level TTL.
 			// This will be re-written when the descriptor is published.
-			if details.DescriptorCoverage != tree.AllDescriptors {
-				for _, table := range mutableTables {
-					if table.HasRowLevelTTL() {
-						table.RowLevelTTL.ScheduleID = 0
-					}
+			for _, table := range mutableTables {
+				if table.HasRowLevelTTL() {
+					table.RowLevelTTL.ScheduleID = 0
 				}
 			}
 
@@ -1779,15 +1777,10 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
-	//
-	// If we're restoring all the descriptors, it means we're also restoring the
-	// jobs.
-	if details.DescriptorCoverage != tree.AllDescriptors {
-		if err := scbackup.CreateDeclarativeSchemaChangeJobs(
-			ctx, r.execCfg.JobRegistry, txn, all,
-		); err != nil {
-			return err
-		}
+	if err := scbackup.CreateDeclarativeSchemaChangeJobs(
+		ctx, r.execCfg.JobRegistry, txn, all,
+	); err != nil {
+		return err
 	}
 
 	// Write the new TableDescriptors and flip state over to public so they can be
@@ -1820,7 +1813,7 @@ func (r *restoreResumer) publishDescriptors(
 			return err
 		}
 		// Assign a TTL schedule before publishing.
-		if details.DescriptorCoverage != tree.AllDescriptors && mutTable.HasRowLevelTTL() {
+		if mutTable.HasRowLevelTTL() {
 			j, err := sql.CreateRowLevelTTLScheduledJob(
 				ctx,
 				execCfg,
@@ -2492,7 +2485,7 @@ func (r *restoreResumer) restoreSystemTables(
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
-					systemTable.stagingTableName); err != nil {
+					systemTable.stagingTableName, details.DescriptorRewrites); err != nil {
 					return err
 				}
 

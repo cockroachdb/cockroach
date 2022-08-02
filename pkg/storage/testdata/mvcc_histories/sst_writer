@@ -43,19 +43,22 @@ sst_put_rangekey k=f end=c ts=1
 <no data>
 error: (*withstack.withStack:) invalid range key {f-c}/1.000000000,0: start key "f" is at or after end key "c"
 
-# Writing the same key multiple times. Iteration sees the first written key.
+# Writing the same key multiple times (in different SSTs). Iteration sees the
+# first written key.
 run ok
 sst_put k=a ts=1 v=a1
-sst_put k=a ts=1 v=again
 sst_put_rangekey k=a end=c ts=3 localTs=2
 sst_put_rangekey k=a end=c ts=3 localTs=1
+sst_finish
+sst_put k=a ts=1 v=again
 ----
 >> at end:
 <no data>
 >> sst-0:
 set: "a"/1.000000000,0 -> /BYTES/a1
-set: "a"/1.000000000,0 -> /BYTES/again
 rangekeyset: {a-c}/3.000000000,0 -> {localTs=2.000000000,0}/<empty>
+>> sst-1:
+set: "a"/1.000000000,0 -> /BYTES/again
 
 run ok
 sst_iter_new
@@ -64,7 +67,7 @@ iter_scan
 ----
 iter_seek_ge: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 iter_scan: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "a"/1.000000000,0=/BYTES/a1 {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "a"/1.000000000,0=/BYTES/again {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 iter_scan: .
 
 # Writing abutting range keys. Iteration defragments them, unless the value
