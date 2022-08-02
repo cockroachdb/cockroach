@@ -25,7 +25,7 @@ CREATE TABLE xy (
 # This test ensures that a memo cycle does not cause a stack overflow. Instead,
 # the cycle is detected and the optimizer throws an internal error. The cycle is
 # created by the test-only exploration rule MemoCycleTestRelRule.
-expropt disable=MemoCycleTestRelRuleFilter
+expropt disable=MemoCycleTestRelRuleFilter skip-race
 (MemoCycleTestRel
     (Scan [ (Table "ab") (Cols "a,b") ])
     [ (Eq (Var "b") (Const 1 "int")) ]
@@ -44,7 +44,7 @@ memo (not optimized, ~3KB, required=[], cycle=[G1->G1])
  ├── G5: (variable b)
  └── G6: (const 1)
 
-expropt disable=MemoCycleTestRelRuleFilter
+expropt disable=MemoCycleTestRelRuleFilter skip-race
 (LeftJoin
     (Scan [ (Table "ab") (Cols "a,b") ])
     (LeftJoin
@@ -82,7 +82,7 @@ memo (not optimized, ~15KB, required=[], cycle=[G1->G3->G5->G5])
  └── G11: (const 1)
 
 # Ensure that a cycle through a filter can be detected.
-expropt disable=MemoCycleTestRelRule
+expropt disable=MemoCycleTestRelRule skip-race
 (MemoCycleTestRel
     (Scan [ (Table "uv") (Cols "u,v") ])
     [ (Eq (Var "v") (Const 1 "int")) ]
