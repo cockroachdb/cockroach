@@ -290,6 +290,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   statements: [
     {
       aggregatedFingerprintID: "1253500548539870016",
+      aggregatedTransactionFingerprintID: "1253500548539870016",
       label:
         "SELECT IFNULL(a, b) FROM (SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a, (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b)",
       summary: "SELECT IFNULL(a, b) FROM (SELECT)",
@@ -302,6 +303,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "1985666523427702831",
+      aggregatedTransactionFingerprintID: "1985666523427702831",
       label: "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
@@ -313,6 +315,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13649565517143827225",
+      aggregatedTransactionFingerprintID: "13649565517143827229",
       label:
         "SELECT IFNULL(a, b) FROM (SELECT (SELECT id FROM users WHERE (city = $1) AND (id > $2) ORDER BY id LIMIT _) AS a, (SELECT id FROM users WHERE city = $1 ORDER BY id LIMIT _) AS b)",
       summary: "SELECT IFNULL(a, b) FROM (SELECT)",
@@ -325,6 +328,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "1533636712988872414",
+      aggregatedTransactionFingerprintID: "1533636712988872419",
       label:
         "UPSERT INTO vehicle_location_histories VALUES ($1, $2, now(), $3, $4)",
       summary: "UPSERT INTO vehicle_location_histories",
@@ -337,6 +341,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "2461578209191418170",
+      aggregatedTransactionFingerprintID: "2461578209191418179",
       label: "INSERT INTO user_promo_codes VALUES ($1, $2, $3, now(), _)",
       summary: "INSERT INTO user_promo_codes",
       aggregatedTs,
@@ -348,6 +353,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "4705782015019656142",
+      aggregatedTransactionFingerprintID: "4705782015019656149",
       label: "SELECT city, id FROM vehicles WHERE city = $1",
       summary: "SELECT city, id FROM vehicles",
       aggregatedTs,
@@ -359,6 +365,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "2298970482983227199",
+      aggregatedTransactionFingerprintID: "2298970482983227199",
       label:
         "INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, _, now(), _, $6)",
       summary: "INSERT INTO rides",
@@ -371,6 +378,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "4716433305747424413",
+      aggregatedTransactionFingerprintID: "4716433305747424419",
       label: "SELECT IFNULL(a, b) FROM (SELECT  AS a, AS b)",
       summary: "SELECT IFNULL(a, b) FROM (SELECT)",
       aggregatedTs,
@@ -382,6 +390,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "367828504526856403",
+      aggregatedTransactionFingerprintID: "367828504526856409",
       label:
         "UPDATE rides SET end_address = $3, end_time = now() WHERE (city = $1) AND (id = $2)",
       summary: "UPDATE rides SET end_address = $... WHERE (city = $1) AND...",
@@ -394,6 +403,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "14972494059652918390",
+      aggregatedTransactionFingerprintID: "14972494059652918399",
       label: "INSERT INTO users VALUES ($1, $2, __more3__)",
       summary: "INSERT INTO users",
       aggregatedTs,
@@ -405,6 +415,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "15897033026745880862",
+      aggregatedTransactionFingerprintID: "15897033026745880869",
       label:
         "SELECT count(*) FROM user_promo_codes WHERE ((city = $1) AND (user_id = $2)) AND (code = $3)",
       summary: "SELECT count(*) FROM user_promo_codes",
@@ -417,6 +428,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "49958554803360403681",
+      aggregatedTransactionFingerprintID: "49958554803360403689",
       label: "INSERT INTO promo_codes VALUES ($1, $2, __more3__)",
       summary: "INSERT INTO promo_codes",
       aggregatedTs,
@@ -428,6 +440,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "9233296116064220812",
+      aggregatedTransactionFingerprintID: "9233296116064220819",
       label: "ALTER TABLE users SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE users SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -439,6 +452,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "6117473345491440803",
+      aggregatedTransactionFingerprintID: "6117473345491440809",
       label:
         "ALTER TABLE rides ADD FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)",
       summary:
@@ -452,6 +466,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "1301242584620444873",
+      aggregatedTransactionFingerprintID: "1301242584620444879",
       label: "SHOW database",
       summary: "SHOW database",
       aggregatedTs,
@@ -464,6 +479,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "11195381626529102926",
+      aggregatedTransactionFingerprintID: "11195381626529102929",
       label:
         "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
       summary:
@@ -477,6 +493,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "18127289707013477303",
+      aggregatedTransactionFingerprintID: "18127289707013477309",
       label: "ALTER TABLE users SPLIT AT VALUES (_, _)",
       summary: "ALTER TABLE users SPLIT AT VALUES (_, _)",
       aggregatedTs,
@@ -488,6 +505,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "2499764450427976233",
+      aggregatedTransactionFingerprintID: "2499764450427976239",
       label: "ALTER TABLE vehicles SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE vehicles SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -499,6 +517,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "818321793552651414",
+      aggregatedTransactionFingerprintID: "818321793552651419",
       label:
         "ALTER TABLE vehicle_location_histories ADD FOREIGN KEY (city, ride_id) REFERENCES rides (city, id)",
       summary:
@@ -512,6 +531,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13217779306501326587",
+      aggregatedTransactionFingerprintID: "13217779306501326587",
       label:
         'CREATE TABLE IF NOT EXISTS user_promo_codes (city VARCHAR NOT NULL, user_id UUID NOT NULL, code VARCHAR NOT NULL, "timestamp" TIMESTAMP NULL, usage_count INT8 NULL, PRIMARY KEY (city ASC, user_id ASC, code ASC))',
       summary:
@@ -525,6 +545,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "6325213731862855938",
+      aggregatedTransactionFingerprintID: "6325213731862855939",
       label: "INSERT INTO users VALUES ($1, $2, __more3__), (__more40__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
@@ -536,6 +557,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "17372586739449521577",
+      aggregatedTransactionFingerprintID: "17372586739449521579",
       label: "ALTER TABLE rides SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE rides SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -547,6 +569,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "17098541896015126122",
+      aggregatedTransactionFingerprintID: "17098541896015126129",
       label: 'SET CLUSTER SETTING "cluster.organization" = $1',
       summary: 'SET CLUSTER SETTING "cluster.organization" = $1',
       aggregatedTs,
@@ -558,6 +581,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13350023170184726428",
+      aggregatedTransactionFingerprintID: "13350023170184726429",
       label:
         "ALTER TABLE vehicles ADD FOREIGN KEY (city, owner_id) REFERENCES users (city, id)",
       summary:
@@ -571,6 +595,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "2695725667586429780",
+      aggregatedTransactionFingerprintID: "2695725667586429789",
       label:
         "CREATE TABLE IF NOT EXISTS rides (id UUID NOT NULL, city VARCHAR NOT NULL, vehicle_city VARCHAR NULL, rider_id UUID NULL, vehicle_id UUID NULL, start_address VARCHAR NULL, end_address VARCHAR NULL, start_time TIMESTAMP NULL, end_time TIMESTAMP NULL, revenue DECIMAL(10,2) NULL, PRIMARY KEY (city ASC, id ASC), INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC), INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC), CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city))",
       summary:
@@ -584,6 +609,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "6754865160812330169",
+      aggregatedTransactionFingerprintID: "6754865160812330199",
       label:
         "CREATE TABLE IF NOT EXISTS vehicles (id UUID NOT NULL, city VARCHAR NOT NULL, type VARCHAR NULL, owner_id UUID NULL, creation_time TIMESTAMP NULL, status VARCHAR NULL, current_location VARCHAR NULL, ext JSONB NULL, PRIMARY KEY (city ASC, id ASC), INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC))",
       summary:
@@ -597,6 +623,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "6810471486115018510",
+      aggregatedTransactionFingerprintID: "6810471486115018519",
       label: "INSERT INTO rides VALUES ($1, $2, __more8__), (__more400__)",
       summary: "INSERT INTO rides",
       aggregatedTs,
@@ -608,6 +635,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13265908854908549668",
+      aggregatedTransactionFingerprintID: "13265908854908549669",
       label: "ALTER TABLE vehicles SPLIT AT VALUES (_, _)",
       summary: "ALTER TABLE vehicles SPLIT AT VALUES (_, _)",
       aggregatedTs,
@@ -619,6 +647,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "18377382163116490400",
+      aggregatedTransactionFingerprintID: "18377382163116490409",
       label: "SET sql_safe_updates = _",
       summary: "SET sql_safe_updates = _",
       aggregatedTs,
@@ -630,6 +659,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "8695470234690735168",
+      aggregatedTransactionFingerprintID: "8695470234690735169",
       label:
         "CREATE TABLE IF NOT EXISTS users (id UUID NOT NULL, city VARCHAR NOT NULL, name VARCHAR NULL, address VARCHAR NULL, credit_card VARCHAR NULL, PRIMARY KEY (city ASC, id ASC))",
       summary:
@@ -643,6 +673,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "9261848985398568228",
+      aggregatedTransactionFingerprintID: "9261848985398568229",
       label:
         'CREATE TABLE IF NOT EXISTS vehicle_location_histories (city VARCHAR NOT NULL, ride_id UUID NOT NULL, "timestamp" TIMESTAMP NOT NULL, lat FLOAT8 NULL, long FLOAT8 NULL, PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC))',
       summary:
@@ -656,6 +687,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "4176684928840388768",
+      aggregatedTransactionFingerprintID: "4176684928840388769",
       label: "SELECT * FROM crdb_internal.node_build_info",
       summary: "SELECT * FROM crdb_internal.node_build_info",
       aggregatedTs,
@@ -667,6 +699,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "15868120298061590648",
+      aggregatedTransactionFingerprintID: "15868120298061590649",
       label: "CREATE DATABASE movr",
       summary: "CREATE DATABASE movr",
       implicitTxn: true,
@@ -679,6 +712,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13070583869906258880",
+      aggregatedTransactionFingerprintID: "13070583869906258889",
       label:
         "SELECT count(*) > _ FROM [SHOW ALL CLUSTER SETTINGS] AS _ (v) WHERE v = _",
       summary: "SELECT count(*) > _ FROM [SHOW ALL CLUSTER SETTINGS] AS...",
@@ -691,6 +725,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "641287435601027145",
+      aggregatedTransactionFingerprintID: "641287435601027149",
       label: 'SET CLUSTER SETTING "enterprise.license" = $1',
       summary: 'SET CLUSTER SETTING "enterprise.license" = $1',
       aggregatedTs,
@@ -702,6 +737,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "16743225271705059729",
+      aggregatedTransactionFingerprintID: "1985666523427702899",
       label:
         "ALTER TABLE rides ADD FOREIGN KEY (city, rider_id) REFERENCES users (city, id)",
       summary:
@@ -715,6 +751,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "6075815909800602827",
+      aggregatedTransactionFingerprintID: "6075815909800602829",
       label:
         "ALTER TABLE user_promo_codes ADD FOREIGN KEY (city, user_id) REFERENCES users (city, id)",
       summary:
@@ -728,6 +765,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "5158086166870396309",
+      aggregatedTransactionFingerprintID: "5158086166870396399",
       label:
         "INSERT INTO promo_codes VALUES ($1, $2, __more3__), (__more900__)",
       summary: "INSERT INTO promo_codes",
@@ -740,6 +778,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "13494397675172244644",
+      aggregatedTransactionFingerprintID: "13494397675172244649",
       label: "ALTER TABLE rides SPLIT AT VALUES (_, _)",
       summary: "ALTER TABLE rides SPLIT AT VALUES (_, _)",
       aggregatedTs,
@@ -751,6 +790,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "101921598584277094",
+      aggregatedTransactionFingerprintID: "101921598584277099",
       label: "SELECT value FROM crdb_internal.node_build_info WHERE field = _",
       summary: "SELECT value FROM crdb_internal.node_build_info",
       aggregatedTs,
@@ -762,6 +802,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "7880339715822034020",
+      aggregatedTransactionFingerprintID: "7880339715822034029",
       label:
         "INSERT INTO vehicle_location_histories VALUES ($1, $2, __more3__), (__more900__)",
       summary: "INSERT INTO vehicle_location_histories",
@@ -774,6 +815,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     },
     {
       aggregatedFingerprintID: "16819876564846676829",
+      aggregatedTransactionFingerprintID: "16819876564846676899",
       label: "INSERT INTO vehicles VALUES ($1, $2, __more6__), (__more10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,

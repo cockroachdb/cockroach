@@ -58,6 +58,8 @@ export const statisticsColumnLabels = {
   transactions: "Transactions",
   workloadPct: "% of All Runtime",
   lastExecTimestamp: "Last Execution Time (UTC)",
+  transactionFingerPrintId: "Transaction Fingerprint ID",
+  statementFingerPrintId: "Statement Fingerprint ID",
 };
 
 export const contentModifiers = {
@@ -213,6 +215,28 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={"The application that ran the session."}
       >
         {getLabel("applicationName")}
+      </Tooltip>
+    );
+  },
+  transactionFingerPrintId: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The transaction finger print id."}
+      >
+        {getLabel("transactionFingerPrintId")}
+      </Tooltip>
+    );
+  },
+  statementFingerPrintId: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The statement finger print id."}
+      >
+        {getLabel("statementFingerPrintId")}
       </Tooltip>
     );
   },
