@@ -1,0 +1,42 @@
+services:
+  crdb:
+    image: cockroachdb/cockroach-ci:latest
+    command: start-single-node --http-port=8080
+    hostname: crdbhost
+    networks:
+      - db
+    expose:
+      - "8080"
+    healthcheck:
+      test: curl --fail --head http://localhost:8080 || exit 1
+      interval: 1s
+      timeout: 30s
+      retries: 10
+    environment:
+      COCKROACH_USER: cypress
+      COCKROACH_PASSWORD: tests
+    volumes:
+      - shared:/shared:rw
+
+  cypress:
+    image: cypress/browsers:node16.14.2-slim-chrome100-ff99-edge
+    working_dir: /e2e
+    command: /bin/sh -c 'yarn install --force && yarn cy:run'
+    environment:
+      IS_DOCKER: "1"
+    depends_on:
+      crdb:
+        condition: service_healthy
+    networks:
+      - db
+    volumes:
+      - shared:/shared:ro
+      - ./:/e2e
+      - ./artifacts:/artifacts
+
+networks:
+  db:
+
+volumes:
+  cypress:
+  shared:

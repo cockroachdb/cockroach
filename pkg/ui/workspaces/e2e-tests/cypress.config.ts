@@ -11,7 +11,8 @@
 import { defineConfig } from "cypress";
 import { readFileSync } from "fs";
 
-const DOCKER_OVERRIDES: Partial<Cypress.UserConfigOptions> = {
+const DOCKER_OVERRIDES: Partial<Cypress.UserConfigOptions["e2e"]> = {
+  baseUrl: "https://crdbhost:8080",
   downloadsFolder: "/artifacts/cypress/downloads",
   screenshotsFolder: "/artifacts/cypress/screenshots",
   videosFolder: "/artifacts/cypress/videos",
@@ -21,6 +22,12 @@ export default defineConfig({
   e2e: {
     baseUrl: "http://localhost:8080",
     setupNodeEvents(on, config) {
+      if (process.env.IS_DOCKER) {
+        config.env.username = "cypress";
+        config.env.password = "tests";
+        return config;
+      }
+
       // Implement custom node event listeners here
       const connUrlFile = process.env.CONN_URL_FILE;
       if (!connUrlFile) {
@@ -34,6 +41,7 @@ export default defineConfig({
         const connUrl = new URL(connUrlStr);
         config.env.username = connUrl.username;
         config.env.password = connUrl.password;
+        console.log("connUrl = ", connUrl);
         return config;
       } catch (err) {
         console.error(
