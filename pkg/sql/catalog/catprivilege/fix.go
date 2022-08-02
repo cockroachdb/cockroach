@@ -11,9 +11,6 @@
 package catprivilege
 
 import (
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -88,15 +85,6 @@ func MaybeFixPrivileges(
 	if systemPrivs != nil {
 		// System databases and tables have custom maximum allowed privileges.
 		allowedPrivilegesBits = systemPrivs.ToBitField()
-	} else if parentID == keys.SystemDatabaseID && strings.Contains(objectName, RestoreCopySystemTablePrefix) {
-		// Cluster restores move certain system tables to a higher ID to prevent
-		// conflicts with non-system descriptors that are going to be restored. The
-		// newly created tables in the system database must be given ReadWrite
-		// privileges to satisfy descriptor validation.
-		//
-		// TODO(adityamaru,dt): Remove once we fix the handling of dynamic system
-		// table IDs during restore.
-		allowedPrivilegesBits = privilege.ReadWriteData.ToBitField()
 	}
 
 	changed := false
