@@ -1854,7 +1854,7 @@ func (r *restoreResumer) publishDescriptors(
 		typ := all.LookupDescriptorEntry(details.TypeDescs[i].GetID()).(catalog.TypeDescriptor)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.GetDeclarativeSchemaChangerState() == nil &&
-			typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
+			typ.HasPendingSchemaChanges() {
 			if err := createTypeChangeJobFromDesc(
 				ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ,
 			); err != nil {
