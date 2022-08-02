@@ -41,11 +41,12 @@ type externalConnectionRecord struct {
 	ConnectionDetails connectionpb.ConnectionDetails `col:"connection_details"`
 }
 
-// ExternalConnection is a representation of an External Connection.
+// MutableExternalConnection is a mutable representation of an External
+// Connection object.
 //
 // This struct can marshal/unmarshal changes made to the underlying
 // system.external_connections table.
-type ExternalConnection struct {
+type MutableExternalConnection struct {
 	// The "record" for this external connection.  Do not access this field
 	// directly (except in tests); Use Get/Set methods on ExternalConnection
 	// instead.
@@ -55,11 +56,22 @@ type ExternalConnection struct {
 	dirty map[string]struct{}
 }
 
-// NewExternalConnection creates and initializes an ExternalConnection.
-func NewExternalConnection() *ExternalConnection {
-	return &ExternalConnection{
+var _ ExternalConnection = &MutableExternalConnection{}
+
+// NewMutableExternalConnection creates and initializes a mutable
+// ExternalConnection.
+func NewMutableExternalConnection() *MutableExternalConnection {
+	return &MutableExternalConnection{
 		dirty: make(map[string]struct{}),
 	}
+}
+
+// NewExternalConnection create and initializes a read-only ExternalConnection.
+func NewExternalConnection(connDetails connectionpb.ConnectionDetails) ExternalConnection {
+	ec := NewMutableExternalConnection()
+	ec.SetConnectionType(connDetails.Type())
+	ec.SetConnectionDetails(connDetails)
+	return ec
 }
 
 // externalConnectionNotFoundError is returned from load when the external
@@ -74,7 +86,8 @@ func (e *externalConnectionNotFoundError) Error() string {
 }
 
 // LoadExternalConnection loads an external connection record from the
-// `system.external_connections` table.
+// `system.external_connections` table and returns the read-only interface for
+// interacting with it.
 func LoadExternalConnection(
 	ctx context.Context,
 	name string,
@@ -82,7 +95,7 @@ func LoadExternalConnection(
 	ex sqlutil.InternalExecutor,
 	user username.SQLUsername,
 	txn *kv.Txn,
-) (*ExternalConnection, error) {
+) (ExternalConnection, error) {
 	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
 		sessiondata.InternalExecutorOverride{User: user},
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
@@ -94,14 +107,14 @@ func LoadExternalConnection(
 		return nil, &externalConnectionNotFoundError{connectionName: name}
 	}
 
-	ec := NewExternalConnection()
+	ec := NewMutableExternalConnection()
 	if err := ec.InitFromDatums(row, cols); err != nil {
 		return nil, err
 	}
 
 	// Validate that the unmarshaled External Connection object is of the desired
 	// type.
-	if connectionType.String() != ec.ConnectionType() {
+	if connectionType.String() != ec.ConnectionType().String() {
 		return nil, errors.Newf("expected External Connection object of type %s but '%s' is of type %s",
 			connectionType.String(), name, ec.ConnectionType())
 	}
@@ -109,29 +122,29 @@ func LoadExternalConnection(
 }
 
 // SetConnectionName updates the connection name.
-func (e *ExternalConnection) SetConnectionName(name string) {
+func (e *MutableExternalConnection) SetConnectionName(name string) {
 	e.rec.ConnectionName = name
 	e.markDirty("connection_name")
 }
 
 // ConnectionType returns the connection_type.
-func (e *ExternalConnection) ConnectionType() string {
-	return e.rec.ConnectionType
+func (e *MutableExternalConnection) ConnectionType() connectionpb.ConnectionType {
+	return e.rec.ConnectionDetails.Type()
 }
 
 // SetConnectionType updates the connection_type.
-func (e *ExternalConnection) SetConnectionType(connectionType connectionpb.ConnectionType) {
+func (e *MutableExternalConnection) SetConnectionType(connectionType connectionpb.ConnectionType) {
 	e.rec.ConnectionType = connectionType.String()
 	e.markDirty("connection_type")
 }
 
-// ConnectionDetails returns the connection_details.
-func (e *ExternalConnection) ConnectionDetails() *connectionpb.ConnectionDetails {
+// ConnectionProto returns the connection_details.
+func (e *MutableExternalConnection) ConnectionProto() *connectionpb.ConnectionDetails {
 	return &e.rec.ConnectionDetails
 }
 
 // SetConnectionDetails updates the connection_details.
-func (e *ExternalConnection) SetConnectionDetails(details connectionpb.ConnectionDetails) {
+func (e *MutableExternalConnection) SetConnectionDetails(details connectionpb.ConnectionDetails) {
 	e.rec.ConnectionDetails = details
 	e.markDirty("connection_details")
 }
@@ -155,7 +168,7 @@ func datumToNative(datum tree.Datum) (interface{}, error) {
 }
 
 // InitFromDatums initializes the receiver based on datums and column names.
-func (e *ExternalConnection) InitFromDatums(
+func (e *MutableExternalConnection) InitFromDatums(
 	datums []tree.Datum, cols []colinfo.ResultColumn,
 ) error {
 	if len(datums) != len(cols) {
@@ -233,7 +246,7 @@ func generatePlaceholders(n int) string {
 // Only the values initialized in the receiver are persisted in the system
 // table. If an error is returned, it is callers responsibility to handle it
 // (e.g. rollback transaction).
-func (e *ExternalConnection) Create(
+func (e *MutableExternalConnection) Create(
 	ctx context.Context, ex sqlutil.InternalExecutor, user username.SQLUsername, txn *kv.Txn,
 ) error {
 	cols, qargs, err := e.marshalChanges()
@@ -275,7 +288,7 @@ func (e *ExternalConnection) Create(
 
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.
-func (e *ExternalConnection) marshalChanges() ([]string, []interface{}, error) {
+func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, error) {
 	var cols []string
 	var qargs []interface{}
 
@@ -306,7 +319,7 @@ func (e *ExternalConnection) marshalChanges() ([]string, []interface{}, error) {
 }
 
 // markDirty marks specified columns as dirty.
-func (e *ExternalConnection) markDirty(cols ...string) {
+func (e *MutableExternalConnection) markDirty(cols ...string) {
 	for _, col := range cols {
 		e.dirty[col] = struct{}{}
 	}

@@ -9,7 +9,18 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo/bar';
 
 inspect-system-table
 ----
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
+foo STORAGE {"nodelocal": {"uri": "nodelocal://1/foo/bar"}}
+
+# Reject invalid nodelocal URIs.
+exec-sql
+CREATE EXTERNAL CONNECTION "missing-node-id" AS 'nodelocal:///foo';
+----
+pq: failed to construct External Connection details: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID (use 'self' to specify each node should access its own local filesystem): nodelocal:///foo
+
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-nodeid-nodelocal" AS 'nodelocal://a/foo';
+----
+pq: failed to construct External Connection details: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID: nodelocal://a/foo
 
 # Try to create another External Connection with the same name.
 exec-sql
@@ -24,8 +35,8 @@ CREATE EXTERNAL CONNECTION bar123 AS 'nodelocal://1/baz';
 
 inspect-system-table
 ----
-bar123 STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/baz"}}, "provider": "nodelocal"}
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
+bar123 STORAGE {"nodelocal": {"uri": "nodelocal://1/baz"}}
+foo STORAGE {"nodelocal": {"uri": "nodelocal://1/foo/bar"}}
 
 # Drop an External Connection that does not exist.
 exec-sql
@@ -38,7 +49,7 @@ DROP EXTERNAL CONNECTION bar123;
 
 inspect-system-table
 ----
-foo STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo/bar"}}, "provider": "nodelocal"}
+foo STORAGE {"nodelocal": {"uri": "nodelocal://1/foo/bar"}}
 
 exec-sql
 DROP EXTERNAL CONNECTION foo;
@@ -70,7 +81,7 @@ CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
 
 inspect-system-table
 ----
-privileged STORAGE {"nodelocal": {"cfg": {"nodeId": 1, "path": "/foo"}}, "provider": "nodelocal"}
+privileged STORAGE {"nodelocal": {"uri": "nodelocal://1/foo"}}
 
 exec-sql
 DROP EXTERNAL CONNECTION privileged;
@@ -95,7 +106,7 @@ CREATE EXTERNAL CONNECTION "foo-kms" AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=baz
 
 inspect-system-table
 ----
-foo-kms KMS {"gcsKms": {"uri": "gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}, "provider": "gs_kms"}
+foo-kms KMS {"gcsKms": {"uri": "gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kms";
