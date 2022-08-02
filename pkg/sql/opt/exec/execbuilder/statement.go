@@ -79,12 +79,7 @@ func (b *Builder) buildCreateFunction(cf *memo.CreateFunctionExpr) (execPlan, er
 	schema := md.Schema(cf.Schema)
 	root, err := b.factory.ConstructCreateFunction(
 		schema,
-		cf.FunctionName,
-		cf.Replace,
-		cf.Args,
-		cf.ReturnType,
-		cf.Options,
-		cf.Body,
+		cf.Syntax,
 		cf.Deps,
 		cf.TypeDeps,
 	)
