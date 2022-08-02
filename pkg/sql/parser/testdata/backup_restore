@@ -519,6 +519,14 @@ RESTORE DATABASE foo FROM '_' WITH new_db_name = '_' -- literals removed
 RESTORE DATABASE _ FROM 'bar' WITH new_db_name = 'baz' -- identifiers removed
 
 parse
+RESTORE DATABASE foo FROM 'bar' WITH schema_only
+----
+RESTORE DATABASE foo FROM 'bar' WITH schema_only
+RESTORE DATABASE foo FROM ('bar') WITH schema_only -- fully parenthesized
+RESTORE DATABASE foo FROM '_' WITH schema_only -- literals removed
+RESTORE DATABASE _ FROM 'bar' WITH schema_only -- identifiers removed
+
+parse
 RESTORE DATABASE foo FROM 'bar' IN LATEST WITH incremental_location = 'baz'
 ----
 RESTORE DATABASE foo FROM 'bar' IN 'latest' WITH incremental_location = 'baz' -- normalized!
