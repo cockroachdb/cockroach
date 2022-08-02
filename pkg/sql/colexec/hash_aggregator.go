@@ -140,12 +140,7 @@ type hashAggregator struct {
 	// populating the output.
 	curOutputBucketIdx int
 
-	maxOutputBatchMemSize int64
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
-	output      coldata.Batch
+	output coldata.Batch
 
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
@@ -210,19 +205,18 @@ func NewHashAggregator(
 		colexecerror.InternalError(err)
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:          colexecop.NewOneInputNode(args.Input),
-		hashTableAllocator:    args.Allocator,
-		spec:                  args.Spec,
-		state:                 hashAggregatorBuffering,
-		inputTypes:            args.InputTypes,
-		outputTypes:           args.OutputTypes,
-		inputArgsConverter:    inputArgsConverter,
-		toClose:               toClose,
-		maxOutputBatchMemSize: maxOutputBatchMemSize,
-		aggFnsAlloc:           aggFnsAlloc,
-		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
+		OneInputNode:       colexecop.NewOneInputNode(args.Input),
+		hashTableAllocator: args.Allocator,
+		spec:               args.Spec,
+		state:              hashAggregatorBuffering,
+		inputTypes:         args.InputTypes,
+		outputTypes:        args.OutputTypes,
+		inputArgsConverter: inputArgsConverter,
+		toClose:            toClose,
+		aggFnsAlloc:        aggFnsAlloc,
+		hashAlloc:          aggBucketAlloc{allocator: args.Allocator},
 	}
-	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes)
+	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, maxOutputBatchMemSize, args.OutputTypes)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)

@@ -576,7 +576,16 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 // NOTE: it works under the assumption that only a single coldata.Batch is being
 // used.
 type SetAccountingHelper struct {
-	Allocator *Allocator
+	allocator *Allocator
+
+	// curCapacity is the capacity of the last batch returned by
+	// ResetMaybeReallocate.
+	curCapacity int
+	// maxCapacity if non-zero indicates the target capacity of the batch. It is
+	// set once the batch exceeds the memory limit.
+	maxCapacity int
+	// memoryLimit determines the maximum memory footprint of the batch.
+	memoryLimit int64
 
 	// allFixedLength indicates that we're working with the type schema of only
 	// fixed-length elements.
@@ -617,9 +626,11 @@ type SetAccountingHelper struct {
 	varLenDatumVecs []coldata.DatumVec
 }
 
-// Init initializes the helper.
-func (h *SetAccountingHelper) Init(allocator *Allocator, typs []*types.T) {
-	h.Allocator = allocator
+// Init initializes the helper. The allocator must **not** be shared with any
+// other component.
+func (h *SetAccountingHelper) Init(allocator *Allocator, memoryLimit int64, typs []*types.T) {
+	h.allocator = allocator
+	h.memoryLimit = memoryLimit
 
 	for vecIdx, typ := range typs {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
@@ -650,15 +661,12 @@ func (h *SetAccountingHelper) getBytesLikeTotalSize() int64 {
 // Allocator.ResetMaybeReallocate (and thus has the same contract) with an
 // additional logic for memory tracking purposes.
 func (h *SetAccountingHelper) ResetMaybeReallocate(
-	typs []*types.T,
-	oldBatch coldata.Batch,
-	minCapacity int,
-	maxBatchMemSize int64,
-	desiredCapacitySufficient bool,
+	typs []*types.T, oldBatch coldata.Batch, minCapacity int, desiredCapacitySufficient bool,
 ) (newBatch coldata.Batch, reallocated bool) {
-	newBatch, reallocated = h.Allocator.ResetMaybeReallocate(
-		typs, oldBatch, minCapacity, maxBatchMemSize, desiredCapacitySufficient,
+	newBatch, reallocated = h.allocator.ResetMaybeReallocate(
+		typs, oldBatch, minCapacity, h.memoryLimit, desiredCapacitySufficient,
 	)
+	h.curCapacity = newBatch.Capacity()
 	if reallocated && !h.allFixedLength {
 		// Allocator.ResetMaybeReallocate has released the precise memory
 		// footprint of the old batch and has accounted for the estimated
@@ -708,17 +716,22 @@ func (h *SetAccountingHelper) ResetMaybeReallocate(
 
 // AccountForSet updates the Allocator according to the new variable length
 // values in the row rowIdx in the batch that was returned by the last call to
-// ResetMaybeReallocate.
-func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
+// ResetMaybeReallocate. It returns a boolean indicating whether the batch is
+// done (i.e. no more rows should be set on it before it is reset).
+func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
+	// The batch is done if we've just set the last row that the batch has the
+	// capacity for.
+	batchDone = h.curCapacity == rowIdx+1
 	if h.allFixedLength {
 		// All vectors are of fixed-length and are already correctly accounted
-		// for.
-		return
+		// for. We also utilize the whole capacity since setting extra rows
+		// incurs no additional memory usage.
+		return batchDone
 	}
 
 	if len(h.bytesLikeVectors) > 0 {
 		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
-		h.Allocator.adjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
+		h.allocator.adjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
 		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
 	}
 
@@ -728,7 +741,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 			d := decimalVec.Get(rowIdx)
 			newDecimalSizes += int64(d.Size())
 		}
-		h.Allocator.adjustMemoryUsageAfterAllocation(newDecimalSizes - h.decimalSizes[rowIdx])
+		h.allocator.adjustMemoryUsageAfterAllocation(newDecimalSizes - h.decimalSizes[rowIdx])
 		h.decimalSizes[rowIdx] = newDecimalSizes
 	}
 
@@ -740,8 +753,26 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 			// was already included in EstimateBatchSizeBytes.
 			newVarLengthDatumSize += int64(datumSize)
 		}
-		h.Allocator.adjustMemoryUsageAfterAllocation(newVarLengthDatumSize)
+		h.allocator.adjustMemoryUsageAfterAllocation(newVarLengthDatumSize)
 	}
+
+	if h.maxCapacity == 0 && h.allocator.Used() >= h.memoryLimit {
+		// This is the first time we exceeded the memory limit, so we memorize
+		// the capacity.
+		h.maxCapacity = rowIdx + 1
+	}
+	if h.maxCapacity > 0 && h.maxCapacity == rowIdx+1 {
+		// The batch is also done if we've exceeded the memory limit, and we've
+		// just set the last row according to the memorized capacity.
+		batchDone = true
+	}
+	return batchDone
+}
+
+// TestingUpdateMemoryLimit sets the new memory limit. It should only be used in
+// tests.
+func (h *SetAccountingHelper) TestingUpdateMemoryLimit(memoryLimit int64) {
+	h.memoryLimit = memoryLimit
 }
 
 // Release releases all of the resources so that they can be garbage collected.
