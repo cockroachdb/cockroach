@@ -1,0 +1,18 @@
+examine-backup backups/invalidDependOn_21.1 21.1
+----
+debug doctor examine backup backups/invalidDependOn_21.1 /Users/faizanq/go/src/github.com/cockroachdb/cockroach/pkg/ccl/cliccl/testdata/doctor 21.1
+Examining 16 descriptors and 16 namespace entries...
+  ParentID  50, ParentSchemaID 29: relation "t1" (52): invalid depended-on-by relation back reference: referenced descriptor ID 54: referenced descriptor not found
+ERROR: validation failed
+
+examine-backup backups/valid-22.2
+----
+debug doctor examine backup backups/valid-22.2 /Users/faizanq/go/src/github.com/cockroachdb/cockroach/pkg/ccl/cliccl/testdata/doctor
+Examining 19 descriptors and 19 namespace entries...
+No problems found!
+
+examine-backup backups/valid-22.2-with-job
+----
+debug doctor examine backup backups/valid-22.2-with-job /Users/faizanq/go/src/github.com/cockroachdb/cockroach/pkg/ccl/cliccl/testdata/doctor
+Examining 19 descriptors and 19 namespace entries...
+No problems found!

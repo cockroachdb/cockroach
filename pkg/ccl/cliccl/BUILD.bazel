@@ -8,6 +8,7 @@ go_library(
         "debug.go",
         "debug_backup.go",
         "demo.go",
+        "doctor.go",
         "start.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cliccl",
@@ -44,6 +45,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/doctor",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/catconstants",
@@ -70,8 +72,10 @@ go_test(
     size = "medium",
     srcs = [
         "debug_backup_test.go",
+        "doctor_backup_test.go",
         "main_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":cliccl"],
     deps = [
         "//pkg/base",
@@ -88,6 +92,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )

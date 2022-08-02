@@ -56,7 +56,7 @@ debug.zip.
 }
 
 var doctorExamineCmd = &cobra.Command{
-	Use:   "examine [cluster|zipdir]",
+	Use:   "examine [cluster|zipdir|backup]",
 	Short: "examine system tables for inconsistencies",
 	Long: `
 Run the doctor tool to examine the system table contents and perform validation
@@ -66,7 +66,7 @@ debug.zip.
 }
 
 var doctorRecreateCmd = &cobra.Command{
-	Use:   "recreate [cluster|zipdir]",
+	Use:   "recreate [cluster|zipdir|backup]",
 	Short: "prints SQL that tries to recreate system table state",
 	Long: `
 Run the doctor tool to examine system tables and generate SQL statements that,
@@ -80,8 +80,27 @@ type doctorFn = func(
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
+	validateJobs bool,
 	out io.Writer,
 ) (err error)
+
+// DoctorFromBackupCommandFn callback to get descriptors from a backup
+// image.
+type DoctorFromBackupCommandFn func(backupURI string,
+	externalIODir string) (descTable doctor.DescriptorTable,
+	namespaceTable doctor.NamespaceTable,
+	jobsTable doctor.JobsTable,
+	retErr error)
+
+// DoctorFromBackupCommand on CCL builds allows us to read descriptor information
+// from a backup image.
+var DoctorFromBackupCommand DoctorFromBackupCommandFn = func(backupURI string,
+	externalIODir string) (descTable doctor.DescriptorTable,
+	namespaceTable doctor.NamespaceTable,
+	jobsTable doctor.JobsTable,
+	retErr error) {
+	return nil, nil, nil, errors.AssertionFailedf("not implemented in non-CCL builds.")
+}
 
 func makeZipDirCommand(fn doctorFn) *cobra.Command {
 	return &cobra.Command{
@@ -105,7 +124,7 @@ that may not exist on downlevel versions.
 			if err != nil {
 				return err
 			}
-			return fn(version, descs, ns, jobs, os.Stdout)
+			return fn(version, descs, ns, jobs, true /*validateJobs*/, os.Stdout)
 		},
 	}
 }
@@ -129,7 +148,36 @@ Run the doctor tool system data from a live cluster specified by --url.
 				if err != nil {
 					return err
 				}
-				return fn(nil, descs, ns, jobs, os.Stdout)
+				return fn(nil, descs, ns, jobs, true /*validateJobs*/, os.Stdout)
+			}),
+	}
+}
+
+func makeBackupCommand(fn doctorFn) *cobra.Command {
+	return &cobra.Command{
+		Use:   "backup <backup URI> <externalIOPath> [version]",
+		Short: "run doctor tool on a backup",
+		Long: `
+Run the doctor tool on a backup manifest, for remote files the external IO path
+will be ignored.
+`,
+		Args: cobra.RangeArgs(2, 3),
+		RunE: clierrorplus.MaybeDecorateError(
+			func(cmd *cobra.Command, args []string) (resErr error) {
+				externalIOPath := args[1]
+				var version *clusterversion.ClusterVersion
+				if len(args) >= 3 {
+					if len(args) == 2 {
+						version = &clusterversion.ClusterVersion{
+							Version: roachpb.MustParseVersion(args[1]),
+						}
+					}
+				}
+				descs, ns, jobs, err := DoctorFromBackupCommand(args[0], externalIOPath)
+				if err != nil {
+					return err
+				}
+				return fn(version, descs, ns, jobs, false /*validateJobs*/, os.Stdout)
 			}),
 	}
 }
@@ -142,16 +190,19 @@ func deprecateCommand(cmd *cobra.Command) *cobra.Command {
 
 var doctorExamineClusterCmd = makeClusterCommand(runDoctorExamine)
 var doctorExamineZipDirCmd = makeZipDirCommand(runDoctorExamine)
+var doctorExamineBackupCmd = makeBackupCommand(runDoctorExamine)
 var doctorExamineFallbackClusterCmd = deprecateCommand(makeClusterCommand(runDoctorExamine))
 var doctorExamineFallbackZipDirCmd = deprecateCommand(makeZipDirCommand(runDoctorExamine))
 var doctorRecreateClusterCmd = makeClusterCommand(runDoctorRecreate)
 var doctorRecreateZipDirCmd = makeZipDirCommand(runDoctorRecreate)
+var doctorRecreateBackupCmd = makeBackupCommand(runDoctorRecreate)
 
 func runDoctorRecreate(
 	_ *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
+	validateJobs bool,
 	out io.Writer,
 ) (err error) {
 	return doctor.DumpSQL(out, descTable, namespaceTable)
@@ -162,6 +213,7 @@ func runDoctorExamine(
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
+	validateJobs bool,
 	out io.Writer,
 ) (err error) {
 	if version == nil {
@@ -176,6 +228,7 @@ func runDoctorExamine(
 		descTable,
 		namespaceTable,
 		jobsTable,
+		validateJobs,
 		debugCtx.verbose,
 		out)
 	if err != nil {
@@ -347,6 +400,7 @@ func fromZipDir(
 	jobsTable doctor.JobsTable,
 	retErr error,
 ) {
+	//backupinfo.LoadSQLDescsFromBackupsAtTime()
 	// To make parsing user functions code happy.
 	_ = builtins.AllBuiltinNames
 
