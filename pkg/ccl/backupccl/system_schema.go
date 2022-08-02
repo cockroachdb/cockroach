@@ -224,7 +224,37 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.ScheduledJobsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		shouldIncludeInClusterBackup: optInToClusterBackup, // Desc IDs in some rows.
+		// Some rows, specifically those which are schedules for row-ttl, have IDs
+		// baked into their values, making the restored rows invalid. Rewriting them
+		// would be tricky since the ID is in a binary proto field, but we already
+		// have code to synthesize new schedules from the table being restored that
+		// runs during descriptor creation. We can leverage these by leaving the
+		// synthesized schedule rows in the real schedule table when we otherwise
+		// clean it out, and skipping TTL rows when we copy from the restored
+		// schedule table.
+		customRestoreFunc: func(ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, _, tempTableName string) error {
+			execType := tree.ScheduledRowLevelTTLExecutor.InternalName()
+
+			const deleteQuery = "DELETE FROM system.scheduled_jobs WHERE executor_type <> $1"
+			if _, err := execCfg.InternalExecutor.Exec(
+				ctx, "restore-scheduled_jobs-delete", txn, deleteQuery, execType,
+			); err != nil {
+				return errors.Wrapf(err, "deleting existing scheduled_jobs")
+			}
+
+			restoreQuery := fmt.Sprintf(
+				"INSERT INTO system.scheduled_jobs (SELECT * FROM %s WHERE executor_type <> $1);",
+				tempTableName,
+			)
+
+			if _, err := execCfg.InternalExecutor.Exec(
+				ctx, "restore-scheduled_jobs-insert", txn, restoreQuery, execType,
+			); err != nil {
+				return err
+			}
+			return nil
+		},
 	},
 	systemschema.TableStatisticsTable.GetName(): {
 		// Table statistics are backed up in the backup descriptor for now.
