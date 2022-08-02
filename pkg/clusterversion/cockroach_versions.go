@@ -186,10 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// BackupDoesNotOverwriteLatestAndCheckpoint is the version where we
-	// stop overwriting the LATEST and checkpoint files during backup execution.
-	// Instead, it writes new files alongside the old in reserved subdirectories.
-	BackupDoesNotOverwriteLatestAndCheckpoint
 	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
 	// can be used to construct schema change plan node.
 	EnableDeclarativeSchemaChanger
@@ -349,10 +345,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
 	{
 		Key:     EnableDeclarativeSchemaChanger,
