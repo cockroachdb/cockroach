@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -685,8 +684,7 @@ func TestDataDriven(t *testing.T) {
 					}
 					mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
 					mut.ID = id
-					mut.Name = fmt.Sprintf("%s_%d",
-						catprivilege.RestoreCopySystemTablePrefix, id)
+					mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
 					tKey := catalogkeys.EncodeNameKey(codec, mut)
 					b := txn.NewBatch()
 					b.CPut(tKey, mut.GetID(), nil)
