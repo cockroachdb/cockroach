@@ -13,6 +13,7 @@ package externalconn
 import (
 	"context"
 	"net/url"
+	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -23,22 +24,6 @@ import (
 )
 
 const scheme = "external"
-
-type storageConnectionContext struct {
-	externalStorageContext cloud.ExternalStorageContext
-}
-
-// ExternalStorageContext implements the ConnectionContext interface.
-func (n *storageConnectionContext) ExternalStorageContext() cloud.ExternalStorageContext {
-	return n.externalStorageContext
-}
-
-// KMSEnv implements the ConnectionContext interface.
-func (n *storageConnectionContext) KMSEnv() cloud.KMSEnv {
-	panic("storageConnectionContext cannot be used for KMS initialization")
-}
-
-var _ ConnectionContext = &storageConnectionContext{}
 
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
@@ -80,7 +65,7 @@ func makeExternalConnectionStorage(
 	// the external connection object we are about to retrieve.
 
 	// Retrieve the external connection object from the system table.
-	var ec *ExternalConnection
+	var ec ExternalConnection
 	if err := args.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		ec, err = LoadExternalConnection(ctx, cfg.Name, connectionpb.TypeStorage, args.InternalExecutor,
@@ -92,24 +77,21 @@ func makeExternalConnectionStorage(
 
 	// Construct an ExternalStorage handle for the underlying resource represented
 	// by the external connection object.
-	details := ec.ConnectionDetails()
-	connDetails, err := MakeConnectionDetails(ctx, *details)
-	if err != nil {
-		return nil, err
+	switch d := ec.ConnectionProto().Details.(type) {
+	case *connectionpb.ConnectionDetails_Nodelocal:
+		// Append the subdirectory that was passed in with the `external` URI to the
+		// underlying `nodelocal` URI.
+		uri, err := url.Parse(d.Nodelocal.URI)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse `nodelocal` URI")
+		}
+		uri.Path = path.Join(uri.Path, cfg.Path)
+		return cloud.ExternalStorageFromURI(ctx, uri.String(), args.IOConf, args.Settings,
+			args.BlobClientFactory, username.MakeSQLUsernameFromPreNormalizedString(cfg.User),
+			args.InternalExecutor, args.DB, args.Limiters, args.Options...)
+	default:
+		return nil, errors.Newf("cannot connect to %T; unsupported resource for an ExternalStorage connection", d)
 	}
-	connection, err := connDetails.Dial(ctx,
-		&storageConnectionContext{externalStorageContext: args}, cfg.Path)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to Dial external connection")
-	}
-
-	var es cloud.ExternalStorage
-	var ok bool
-	if es, ok = connection.(cloud.ExternalStorage); !ok {
-		return nil, errors.AssertionFailedf("cannot convert Connection to cloud.ExternalStorage")
-	}
-
-	return es, nil
 }
 
 func init() {
