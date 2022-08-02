@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
-	// during joint configuration, including to VOTER_INCOMING replicas.
-	EnableLeaseHolderRemoval
 	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
 	// for raft log truncation, by allowing each replica to treat a truncation
 	// proposal as an upper bound on what should be truncated.
@@ -359,10 +356,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     EnableLeaseHolderRemoval,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
 	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)

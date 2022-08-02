@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -3282,10 +3281,8 @@ func (r *Replica) relocateOne(
 		}
 		// Determines whether we can remove the leaseholder without first
 		// transferring the lease away.
-		lhRemovalAllowed = len(args.votersToAdd) > 0 &&
-			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
 		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || len(args.votersToAdd) > 0
 		if args.targetType == allocatorimpl.VoterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
