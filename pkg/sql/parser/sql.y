@@ -807,6 +807,12 @@ func (u *sqlSymUnion) stmts() tree.Statements {
 func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
     return u.val.(*tree.RoutineBody)
 }
+func (u *sqlSymUnion) functionObj() tree.FuncObj {
+    return u.val.(tree.FuncObj)
+}
+func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
+    return u.val.(tree.FuncObjs)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1105,6 +1111,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> drop_type_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
+%type <tree.Statement> drop_func_stmt
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -1534,7 +1541,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 // User defined function relevant components.
 %type <bool> opt_or_replace opt_return_set
 %type <str> param_name func_as
-%type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list
+%type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list func_args func_args_list
 %type <tree.FuncArg> func_arg_with_default func_arg
 %type <tree.ResolvableTypeReference> func_return_type func_arg_type
 %type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list
@@ -1544,6 +1551,8 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
+%type <tree.FuncObj> function_with_argtypes
+%type <tree.FuncObjs> function_with_argtypes_list
 
 %type <*tree.LabelSpec> label_spec
 
@@ -4178,6 +4187,68 @@ opt_routine_body:
     $$.val = (*tree.RoutineBody)(nil)
   }
 
+drop_func_stmt:
+  DROP FUNCTION function_with_argtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      Functions: $3.functionObjs(),
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+  | DROP FUNCTION IF EXISTS function_with_argtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      IfExists: true,
+      Functions: $5.functionObjs(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+
+function_with_argtypes_list:
+  function_with_argtypes
+  {
+    $$.val = tree.FuncObjs{$1.functionObj()}
+  }
+  | function_with_argtypes_list ',' function_with_argtypes
+  {
+    $$.val = append($1.functionObjs(), $3.functionObj())
+  }
+
+function_with_argtypes:
+  db_object_name func_args
+  {
+    $$.val = tree.FuncObj{
+      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      Args: $2.functionArgs(),
+    }
+  }
+  | db_object_name
+  {
+    $$.val = tree.FuncObj{
+      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+    }
+  }
+
+func_args:
+  '(' func_args_list ')'
+  {
+    $$.val = $2.functionArgs()
+  }
+  | '(' ')'
+  {
+    $$.val = tree.FuncArgs{}
+  }
+
+func_args_list:
+  func_arg
+  {
+    $$.val = tree.FuncArgs{$1.functionArg()}
+  }
+  | func_args_list ',' func_arg
+  {
+    $$.val = append($1.functionArgs(), $3.functionArg())
+  }
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
@@ -4487,6 +4558,7 @@ drop_ddl_stmt:
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
+| drop_func_stmt
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL

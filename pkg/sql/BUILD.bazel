@@ -87,6 +87,7 @@ go_library(
         "drop_cascade.go",
         "drop_database.go",
         "drop_external_connection.go",
+        "drop_function.go",
         "drop_index.go",
         "drop_owned_by.go",
         "drop_role.go",
