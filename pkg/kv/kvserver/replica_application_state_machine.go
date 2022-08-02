@@ -779,15 +779,8 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 
 	if res.State != nil && res.State.TruncatedState != nil {
 		var err error
-		// Typically one should not be checking the cluster version below raft,
-		// since it can cause state machine divergence. However, this check is
-		// only for deciding how to truncate the raft log, which is not part of
-		// the state machine. Also, we will eventually eliminate this check by
-		// only supporting loosely coupled truncation.
-		looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
-		// In addition to cluster version and cluster settings, we also apply
-		// immediately if RaftExpectedFirstIndex is not populated (see comment in
-		// that proto).
+		// Apply immediately if RaftExpectedFirstIndex is not populated
+		// (see comment in that proto).
 		//
 		// In the release following LooselyCoupledRaftLogTruncation, we will
 		// retire the strongly coupled path. It is possible that some replica
@@ -796,7 +789,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// it, the loosely coupled code will mark the log size as untrusted and
 		// will recompute the size. This has no correctness impact, so we are not
 		// going to bother with a long-running migration.
-		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
+		apply := res.RaftExpectedFirstIndex == 0
 		if apply {
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
 				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
@@ -814,21 +807,6 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			res.State.TruncatedState = nil
 			res.RaftLogDelta = 0
 			res.RaftExpectedFirstIndex = 0
-			if !looselyCoupledTruncation {
-				// TODO(ajwerner): consider moving this code.
-				// We received a truncation that doesn't apply to us, so we know that
-				// there's a leaseholder out there with a log that has earlier entries
-				// than ours. That leader also guided our log size computations by
-				// giving us RaftLogDeltas for past truncations, and this was likely
-				// off. Mark our Raft log size is not trustworthy so that, assuming
-				// we step up as leader at some point in the future, we recompute
-				// our numbers.
-				// TODO(sumeer): this code will be deleted when there is no
-				// !looselyCoupledTruncation code path.
-				b.r.mu.Lock()
-				b.r.mu.raftLogSizeTrusted = false
-				b.r.mu.Unlock()
-			}
 		}
 	}
 

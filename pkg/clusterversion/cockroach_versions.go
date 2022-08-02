@@ -186,10 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
-	// for raft log truncation, by allowing each replica to treat a truncation
-	// proposal as an upper bound on what should be truncated.
-	LooselyCoupledRaftLogTruncation
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
@@ -356,13 +352,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
-	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
-	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
-	{
-		Key:     LooselyCoupledRaftLogTruncation,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
 	},
 	{
 		Key:     ChangefeedIdleness,
