@@ -352,10 +352,10 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "")},
 			expect:     kvs{pointKV("a", 3, ""), pointKV("a", 2, "a2")},
 		},
-		"DisallowConflicts errors on SST range tombstones": { // for now
+		"DisallowConflicts does not error on SST range tombstones": {
 			noConflict: true,
 			sst:        kvs{rangeKV("a", "d", 3, "")},
-			expectErr:  `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
+			expect:     kvs{rangeKV("a", "d", 3, "")},
 		},
 		"DisallowConflicts allows new SST inline values": { // unfortunately, for performance
 			noConflict:    true,
@@ -444,9 +444,9 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing errors on SST range tombstones": { // for now
-			noShadow:  true,
-			sst:       kvs{rangeKV("a", "d", 3, "")},
-			expectErr: `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
+			noShadow: true,
+			sst:      kvs{rangeKV("a", "d", 3, "")},
+			expect:   kvs{rangeKV("a", "d", 3, "")},
 		},
 		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
 			noShadow:      true,
@@ -571,10 +571,10 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           kvs{pointKV("a", 3, "")},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
-		"DisallowShadowingBelow errors on SST range tombstones": { // for now
+		"DisallowShadowingBelow allows SST range tombstones": {
 			noShadowBelow: 3,
 			sst:           kvs{rangeKV("a", "d", 3, "")},
-			expectErr:     `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
+			expect:        kvs{rangeKV("a", "d", 3, "")},
 		},
 		"DisallowShadowingBelow allows new SST inline values": { // unfortunately, for performance
 			noShadowBelow: 5,
@@ -736,6 +736,84 @@ func TestEvalAddSSTable(t *testing.T) {
 			data:          kvs{pointKV("a", 8, "")},
 			sst:           kvs{pointKV("a", 7, "a8")},
 			expectErr:     &roachpb.WriteTooOldError{},
+		},
+		// MVCC Range tombstone cases.
+		"DisallowConflicts allows sst range keys": {
+			noConflict:     true,
+			expectStatsEst: true,
+			data:           kvs{pointKV("a", 6, "d")},
+			sst:            kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8")},
+			expect:         kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d")},
+		},
+		"DisallowConflicts disallows sst range keys below engine point key": {
+			noConflict: true,
+			data:       kvs{pointKV("a", 6, "d")},
+			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 5, "")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts disallows sst point keys below engine range key": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "b", 8, ""), pointKV("a", 6, "b6")},
+			sst:        kvs{pointKV("a", 7, "a8")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts disallows sst range keys below engine range key": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "b", 8, ""), pointKV("a", 6, "d")},
+			sst:        kvs{pointKV("a", 9, "a8"), rangeKV("a", "b", 7, "")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts allows sst range keys above engine range keys": {
+			noConflict:     true,
+			expectStatsEst: true,
+			data:           kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
+			sst:            kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 8, "")},
+			expect:         kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d")},
+		},
+		"DisallowShadowing disallows sst range keys shadowing live keys": {
+			noShadow:  true,
+			data:      kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
+			sst:       kvs{rangeKV("a", "b", 8, "")},
+			expectErr: "ingested range key collides with an existing one",
+		},
+		"DisallowShadowing allows shadowing of keys deleted by engine range tombstones": {
+			noShadow: true,
+			data:     kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
+			sst:      kvs{pointKV("a", 8, "a8")},
+			expect:   kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+		},
+		"DisallowShadowing allows idempotent range tombstones": {
+			noShadow:       true,
+			expectStatsEst: true,
+			data:           kvs{rangeKV("a", "b", 7, "")},
+			sst:            kvs{rangeKV("a", "b", 7, "")},
+			expect:         kvs{rangeKV("a", "b", 7, "")},
+		},
+		"DisallowShadowingBelow disallows sst range keys shadowing live keys": {
+			noShadowBelow: 3,
+			data:          kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
+			sst:           kvs{rangeKV("a", "b", 8, "")},
+			expectErr:     "ingested range key collides with an existing one",
+		},
+		"DisallowShadowingBelow allows shadowing of keys deleted by engine range tombstones": {
+			noShadowBelow: 3,
+			data:          kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
+			sst:           kvs{pointKV("a", 8, "a8")},
+			expect:        kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+		},
+		"DisallowShadowingBelow allows idempotent range tombstones": {
+			noShadowBelow:  3,
+			expectStatsEst: true,
+			data:           kvs{rangeKV("a", "b", 7, "")},
+			sst:            kvs{rangeKV("a", "b", 7, "")},
+			expect:         kvs{rangeKV("a", "b", 7, "")},
+		},
+		"DisallowConflict with allowed shadowing disallows idempotent range tombstones": {
+			noConflict:     true,
+			expectStatsEst: true,
+			data:           kvs{rangeKV("a", "b", 7, "")},
+			sst:            kvs{rangeKV("a", "b", 7, "")},
+			expectErr:      "ingested range key collides with an existing one",
 		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {

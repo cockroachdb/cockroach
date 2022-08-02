@@ -160,7 +160,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		offset := d.run.partialIndexDelValsOffset
 		partialIndexDelVals := sourceVals[offset : offset+n]
 
-		err := pm.Init(tree.Datums{}, partialIndexDelVals, d.run.td.tableDesc())
+		err := pm.Init(nil /*partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {
 			return err
 		}

@@ -263,12 +263,6 @@ func makeInputConverter(
 	}
 
 	if singleTable != nil {
-		if idx := catalog.FindDeletableNonPrimaryIndex(singleTable, func(idx catalog.Index) bool {
-			return idx.IsPartial()
-		}); idx != nil {
-			return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
-		}
-
 		// If we're using a format like CSV where data columns are not "named", and
 		// therefore cannot be mapped to schema columns, then require the user to
 		// use IMPORT INTO.
