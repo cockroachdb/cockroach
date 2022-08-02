@@ -35,18 +35,20 @@ For "headed" test development, in which the Cypress UI and a browser are
 visible, run `dev ui e2e --headed` and choose a test file in the Cypress UI.
 
 ## Running Tests in TeamCity
-For CI purposes, these tests are also run in TeamCity via Docker. Debugging that
-container is slightly more complicated, and is out-of-scope for this README. See
-[Dockerfile](./Dockerfile) for more details and examples.
+For CI purposes, these tests are also run in TeamCity via Docker's [Compose
+V2](https://docs.docker.com/compose) by combining the [CockroachDB Docker
+image](https://github.com/cockroachdb/cockroach/tree/master/build/deploy) from a
+[previous build
+step](https://teamcity.cockroachdb.com/buildConfiguration/Cockroach_ScratchProjectPutTcExperimentsInHere_JaneDockerImage)
+with an [upstream Cypress docker
+image](https://hub.docker.com/r/cypress/browsers). Testing this configuration
+requires a bit of manual file movement and is out of scope for this document.
 
 ## Cluster Management in Tests
 Regardless of how tests are launched, each test suite spins up a single-node
-cluster using the [MovR
-dataset](https://www.cockroachlabs.com/docs/stable/movr.html) that listens only
-on localhost. The test scripts waits for the HTTP server to be listening on port
-8080 before invoking `cypress`. Since the credentials for demo clusters change
-for each invocation, the path to a file containing a connection URL is passed to
-Cypress to allow testing of both authenticated and unauthenticated flows.
+cluster with an empty 'movr' database  that listens only on localhost. The test
+scripts waits for the HTTP server to be listening on port 8080 before invoking
+`cypress`, and tears down the cluster when `cypress` exits.
 
 ## Health Checks vs All Tests
 Each CockroachDB pull request results in only the tests in

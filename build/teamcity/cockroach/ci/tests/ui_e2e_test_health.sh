@@ -9,15 +9,11 @@ source "$build/teamcity/cockroach/ci/tests/ui_e2e_test_impl.sh"
 
 tc_prepare
 
-tc_start_block "Build Docker image"
-build_docker_image
-tc_end_block "Build Docker image"
-
-# TeamCity doesn't restore permissions for files retrieved from artifact
-# dependencies, so ensure the cockroach binary is executable before running it
-# in a Docker container.
-chmod a+x upstream_artifacts/cockroach
+tc_start_block "Load cockroachdb/cockroach-ci image"
+load_cockroach_docker_image
+tc_end_block "Load cockroachdb/cockroach-ci image"
 
 tc_start_block "Run Cypress health checks"
+cd $root/pkg/ui/workspaces/e2e-tests
 run_tests health
 tc_end_block "Run Cypress health checks"
