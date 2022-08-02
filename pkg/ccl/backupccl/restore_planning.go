@@ -138,30 +138,6 @@ func maybeFilterMissingViews(
 	return filteredTablesByID, nil
 }
 
-func synthesizePGTempSchema(
-	ctx context.Context, p sql.PlanHookState, schemaName string, dbID descpb.ID,
-) (descpb.ID, error) {
-	var synthesizedSchemaID descpb.ID
-	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		var err error
-		schemaID, err := col.Direct().LookupSchemaID(ctx, txn, dbID, schemaName)
-		if err != nil {
-			return err
-		}
-		if schemaID != descpb.InvalidID {
-			return errors.Newf("attempted to synthesize temp schema during RESTORE but found"+
-				" another schema already using the same schema key %s", schemaName)
-		}
-		synthesizedSchemaID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return err
-		}
-		return p.CreateSchemaNamespaceEntry(ctx, catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, schemaName), synthesizedSchemaID)
-	})
-
-	return synthesizedSchemaID, err
-}
-
 // bumpDescIDSequenceKey sets the clusters' `DescIDSequenceID` to the next valid
 // sequence value that is greater than the IDs of all the passed in descriptors.
 func bumpDescIDSequenceKey(
@@ -542,51 +518,6 @@ func allocateDescriptorRewrites(
 				descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 					ParentID:       tempSysDBID,
 					ParentSchemaID: keys.PublicSchemaIDForBackup,
-				}
-			}
-		}
-
-		// When restoring a temporary object, the parent schema which the descriptor
-		// is originally pointing to is never part of the BACKUP. This is because
-		// the "pg_temp" schema in which temporary objects are created is not
-		// represented as a descriptor and thus is not picked up during a full
-		// cluster BACKUP.
-		// To overcome this orphaned schema pointer problem, when restoring a
-		// temporary object we create a "fake" pg_temp schema in temp table's db and
-		// add it to the namespace table.
-		// We then remap the temporary object descriptors to point to this schema.
-		// This allows us to piggy back on the temporary
-		// reconciliation job which looks for "pg_temp" schemas linked to temporary
-		// sessions and properly cleans up the temporary objects in it.
-		haveSynthesizedTempSchema := make(map[descpb.ID]bool)
-		var synthesizedTempSchemaCount int
-		for _, table := range tablesByID {
-			if table.IsTemporary() {
-				if _, ok := haveSynthesizedTempSchema[table.GetParentSchemaID()]; !ok {
-					var synthesizedSchemaID descpb.ID
-					var err error
-					// NB: TemporarySchemaNameForRestorePrefix is a special value that has
-					// been chosen to trick the reconciliation job into performing our
-					// cleanup for us. The reconciliation job strips the "pg_temp" prefix
-					// and parses the remainder of the string into a session ID. It then
-					// checks the session ID against its active sessions, and performs
-					// cleanup on the inactive ones.
-					// We reserve the high bit to be 0 so as to never collide with an
-					// actual session ID as normally the high bit is the hlc.Timestamp at
-					// which the cluster was started.
-					schemaName := sql.TemporarySchemaNameForRestorePrefix +
-						strconv.Itoa(synthesizedTempSchemaCount)
-					synthesizedSchemaID, err = synthesizePGTempSchema(ctx, p, schemaName, table.GetParentID())
-					if err != nil {
-						return nil, err
-					}
-					// Write a schema descriptor rewrite so that we can remap all
-					// temporary table descs which were under the original session
-					// specific pg_temp schema to point to this synthesized schema when we
-					// are performing the table rewrites.
-					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.DescriptorRewrite{ID: synthesizedSchemaID}
-					haveSynthesizedTempSchema[table.GetParentSchemaID()] = true
-					synthesizedTempSchemaCount++
 				}
 			}
 		}
