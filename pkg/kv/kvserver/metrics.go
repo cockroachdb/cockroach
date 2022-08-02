@@ -162,6 +162,18 @@ var (
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRangeKeyBytes = metric.Metadata{
+		Name:        "rangekeybytes",
+		Help:        "Number of bytes taken up by range keys (e.g. MVCC range tombstones)",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeValBytes = metric.Metadata{
+		Name:        "rangevalbytes",
+		Help:        "Number of bytes taken up by range key values (e.g. MVCC range tombstones)",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaTotalBytes = metric.Metadata{
 		Name:        "totalbytes",
 		Help:        "Total number of bytes taken up by keys and values including non-live data",
@@ -189,6 +201,18 @@ var (
 	metaValCount = metric.Metadata{
 		Name:        "valcount",
 		Help:        "Count of all values",
+		Measurement: "MVCC Values",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeKeyCount = metric.Metadata{
+		Name:        "rangekeycount",
+		Help:        "Count of all range keys (e.g. MVCC range tombstones)",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeValCount = metric.Metadata{
+		Name:        "rangevalcount",
+		Help:        "Count of all range key values (e.g. MVCC range tombstones)",
 		Measurement: "MVCC Values",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1831,11 +1855,15 @@ type TenantsStorageMetrics struct {
 	LiveBytes      *aggmetric.AggGauge
 	KeyBytes       *aggmetric.AggGauge
 	ValBytes       *aggmetric.AggGauge
+	RangeKeyBytes  *aggmetric.AggGauge
+	RangeValBytes  *aggmetric.AggGauge
 	TotalBytes     *aggmetric.AggGauge
 	IntentBytes    *aggmetric.AggGauge
 	LiveCount      *aggmetric.AggGauge
 	KeyCount       *aggmetric.AggGauge
 	ValCount       *aggmetric.AggGauge
+	RangeKeyCount  *aggmetric.AggGauge
+	RangeValCount  *aggmetric.AggGauge
 	IntentCount    *aggmetric.AggGauge
 	IntentAge      *aggmetric.AggGauge
 	GcBytesAge     *aggmetric.AggGauge
@@ -1900,11 +1928,15 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.LiveBytes = sm.LiveBytes.AddChild(tenantIDStr)
 			m.KeyBytes = sm.KeyBytes.AddChild(tenantIDStr)
 			m.ValBytes = sm.ValBytes.AddChild(tenantIDStr)
+			m.RangeKeyBytes = sm.RangeKeyBytes.AddChild(tenantIDStr)
+			m.RangeValBytes = sm.RangeValBytes.AddChild(tenantIDStr)
 			m.TotalBytes = sm.TotalBytes.AddChild(tenantIDStr)
 			m.IntentBytes = sm.IntentBytes.AddChild(tenantIDStr)
 			m.LiveCount = sm.LiveCount.AddChild(tenantIDStr)
 			m.KeyCount = sm.KeyCount.AddChild(tenantIDStr)
 			m.ValCount = sm.ValCount.AddChild(tenantIDStr)
+			m.RangeKeyCount = sm.RangeKeyCount.AddChild(tenantIDStr)
+			m.RangeValCount = sm.RangeValCount.AddChild(tenantIDStr)
 			m.IntentCount = sm.IntentCount.AddChild(tenantIDStr)
 			m.IntentAge = sm.IntentAge.AddChild(tenantIDStr)
 			m.GcBytesAge = sm.GcBytesAge.AddChild(tenantIDStr)
@@ -1946,11 +1978,15 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 	m.LiveBytes.Destroy()
 	m.KeyBytes.Destroy()
 	m.ValBytes.Destroy()
+	m.RangeKeyBytes.Destroy()
+	m.RangeValBytes.Destroy()
 	m.TotalBytes.Destroy()
 	m.IntentBytes.Destroy()
 	m.LiveCount.Destroy()
 	m.KeyCount.Destroy()
 	m.ValCount.Destroy()
+	m.RangeKeyCount.Destroy()
+	m.RangeValCount.Destroy()
 	m.IntentCount.Destroy()
 	m.IntentAge.Destroy()
 	m.GcBytesAge.Destroy()
@@ -1983,11 +2019,15 @@ type tenantStorageMetrics struct {
 	LiveBytes      *aggmetric.Gauge
 	KeyBytes       *aggmetric.Gauge
 	ValBytes       *aggmetric.Gauge
+	RangeKeyBytes  *aggmetric.Gauge
+	RangeValBytes  *aggmetric.Gauge
 	TotalBytes     *aggmetric.Gauge
 	IntentBytes    *aggmetric.Gauge
 	LiveCount      *aggmetric.Gauge
 	KeyCount       *aggmetric.Gauge
 	ValCount       *aggmetric.Gauge
+	RangeKeyCount  *aggmetric.Gauge
+	RangeValCount  *aggmetric.Gauge
 	IntentCount    *aggmetric.Gauge
 	IntentAge      *aggmetric.Gauge
 	GcBytesAge     *aggmetric.Gauge
@@ -2002,11 +2042,15 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 		LiveBytes:      b.Gauge(metaLiveBytes),
 		KeyBytes:       b.Gauge(metaKeyBytes),
 		ValBytes:       b.Gauge(metaValBytes),
+		RangeKeyBytes:  b.Gauge(metaRangeKeyBytes),
+		RangeValBytes:  b.Gauge(metaRangeValBytes),
 		TotalBytes:     b.Gauge(metaTotalBytes),
 		IntentBytes:    b.Gauge(metaIntentBytes),
 		LiveCount:      b.Gauge(metaLiveCount),
 		KeyCount:       b.Gauge(metaKeyCount),
 		ValCount:       b.Gauge(metaValCount),
+		RangeKeyCount:  b.Gauge(metaRangeKeyCount),
+		RangeValCount:  b.Gauge(metaRangeValCount),
 		IntentCount:    b.Gauge(metaIntentCount),
 		IntentAge:      b.Gauge(metaIntentAge),
 		GcBytesAge:     b.Gauge(metaGcBytesAge),
@@ -2312,11 +2356,15 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 	tm.LiveBytes.Inc(delta.LiveBytes)
 	tm.KeyBytes.Inc(delta.KeyBytes)
 	tm.ValBytes.Inc(delta.ValBytes)
+	tm.RangeKeyBytes.Inc(delta.RangeKeyBytes)
+	tm.RangeValBytes.Inc(delta.RangeValBytes)
 	tm.TotalBytes.Inc(delta.Total())
 	tm.IntentBytes.Inc(delta.IntentBytes)
 	tm.LiveCount.Inc(delta.LiveCount)
 	tm.KeyCount.Inc(delta.KeyCount)
 	tm.ValCount.Inc(delta.ValCount)
+	tm.RangeKeyCount.Inc(delta.RangeKeyCount)
+	tm.RangeValCount.Inc(delta.RangeValCount)
 	tm.IntentCount.Inc(delta.IntentCount)
 	tm.IntentAge.Inc(delta.IntentAge)
 	tm.GcBytesAge.Inc(delta.GCBytesAge)

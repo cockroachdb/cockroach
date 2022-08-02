@@ -73,6 +73,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 
 	require.NoError(t, db.Put(ctx, codec.TablePrefix(41), "bazbax"))
 	require.NoError(t, db.Put(ctx, splitKey, "foobar"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, splitKey.Next(), splitKey.Next().Next()))
 
 	// We want it to be the case that the MVCC stats for the individual ranges
 	// of our tenant line up with the metrics for the tenant.
@@ -102,18 +103,22 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		sc := bufio.NewScanner(&in)
 		re := regexp.MustCompile(`^(\w+)\{.*,tenant_id="` + tenantID.String() + `"\} (\d+)`)
 		metricsToVal := map[string]int64{
-			"gcbytesage":  aggregateStats.GCBytesAge,
-			"intentage":   aggregateStats.IntentAge,
-			"livebytes":   aggregateStats.LiveBytes,
-			"livecount":   aggregateStats.LiveCount,
-			"keybytes":    aggregateStats.KeyBytes,
-			"keycount":    aggregateStats.KeyCount,
-			"valbytes":    aggregateStats.ValBytes,
-			"valcount":    aggregateStats.ValCount,
-			"intentbytes": aggregateStats.IntentBytes,
-			"intentcount": aggregateStats.IntentCount,
-			"sysbytes":    aggregateStats.SysBytes,
-			"syscount":    aggregateStats.SysCount,
+			"gcbytesage":    aggregateStats.GCBytesAge,
+			"intentage":     aggregateStats.IntentAge,
+			"livebytes":     aggregateStats.LiveBytes,
+			"livecount":     aggregateStats.LiveCount,
+			"keybytes":      aggregateStats.KeyBytes,
+			"keycount":      aggregateStats.KeyCount,
+			"valbytes":      aggregateStats.ValBytes,
+			"valcount":      aggregateStats.ValCount,
+			"rangekeybytes": aggregateStats.RangeKeyBytes,
+			"rangekeycount": aggregateStats.RangeKeyCount,
+			"rangevalbytes": aggregateStats.RangeValBytes,
+			"rangevalcount": aggregateStats.RangeValCount,
+			"intentbytes":   aggregateStats.IntentBytes,
+			"intentcount":   aggregateStats.IntentCount,
+			"sysbytes":      aggregateStats.SysBytes,
+			"syscount":      aggregateStats.SysCount,
 		}
 		for sc.Scan() {
 			matches := re.FindAllStringSubmatch(sc.Text(), 1)
