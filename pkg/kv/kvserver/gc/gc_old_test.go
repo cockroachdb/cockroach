@@ -60,7 +60,7 @@ func runGCOld(
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Default().Nanoseconds(), 0)
 
 	gc := makeGarbageCollector(now, gcTTL)
 

@@ -172,7 +172,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return r
 	}
 
-	thresh := kvserverbase.TxnCleanupThreshold.Nanoseconds()
+	thresh := kvserverbase.TxnCleanupThreshold.Default().Nanoseconds()
 	// Make sure this test doesn't run out of padding time if we significantly
 	// reduce TxnCleanupThreshold in the future for whatever reason.
 	require.Greater(t, thresh, int64(time.Minute))

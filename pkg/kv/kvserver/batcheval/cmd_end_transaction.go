@@ -1011,6 +1011,7 @@ func splitTriggerHelper(
 	// Initialize the RHS range's AbortSpan by copying the LHS's.
 	if err := rec.AbortSpan().CopyTo(
 		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
+		kvserverbase.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
@@ -1158,6 +1159,7 @@ func mergeTrigger(
 
 	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
 		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
+		kvserverbase.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return result.Result{}, err
 	}

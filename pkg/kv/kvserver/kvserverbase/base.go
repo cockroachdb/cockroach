@@ -41,7 +41,13 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 //
 // TODO(tschottdorf): need to enforce at all times that this is much
 // larger than the heartbeat interval used by the coordinator.
-const TxnCleanupThreshold = time.Hour
+var TxnCleanupThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.txn_cleanup_threshold",
+	"the threshold after which a transaction is considered abandoned and "+
+		"fit for removal, as measured by the maximum of its last heartbeat and timestamp",
+	time.Hour,
+)
 
 // CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string

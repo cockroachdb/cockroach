@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -222,6 +221,10 @@ type RunOptions struct {
 	MaxTxnsPerIntentCleanupBatch int64
 	// IntentCleanupBatchTimeout is the timeout for processing a batch of intents. 0 to disable.
 	IntentCleanupBatchTimeout time.Duration
+	// TxnCleanupThreshold is the threshold after which a transaction is
+	// considered abandoned and fit for removal, as measured by the maximum of
+	// its last heartbeat and timestamp.
+	TxnCleanupThreshold time.Duration
 }
 
 // CleanupIntentsFunc synchronously resolves the supplied intents
@@ -253,7 +256,7 @@ func Run(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-options.TxnCleanupThreshold.Nanoseconds(), 0)
 	if err := gcer.SetGCThreshold(ctx, Threshold{
 		Key: newThreshold,
 		Txn: txnExp,
