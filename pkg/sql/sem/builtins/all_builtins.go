@@ -35,6 +35,9 @@ var AllAggregateBuiltinNames []string
 var AllWindowBuiltinNames []string
 
 func init() {
+	// Note: changing the order of these init functions will cause changes to OIDs
+	// of builtin functions. In general, it won't cause internal problems other
+	// than causing failures in tests which make assumption of OIDs.
 	initRegularBuiltins()
 	initAggregateBuiltins()
 	initWindowBuiltins()
@@ -132,8 +135,5 @@ func collectOverloads(
 			r = append(r, f(t))
 		}
 	}
-	return builtinDefinition{
-		props:     props,
-		overloads: r,
-	}
+	return makeBuiltin(props, r...)
 }

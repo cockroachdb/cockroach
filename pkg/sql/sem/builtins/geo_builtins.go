@@ -7242,7 +7242,10 @@ func initGeoBuiltins() {
 		if _, ok := geoBuiltins[alias.builtinName]; !ok {
 			panic("expected builtin definition for alias: " + alias.builtinName)
 		}
-		geoBuiltins[alias.alias] = geoBuiltins[alias.builtinName]
+
+		newOverloads := make([]tree.Overload, len(geoBuiltins[alias.builtinName].overloads))
+		copy(newOverloads, geoBuiltins[alias.builtinName].overloads)
+		geoBuiltins[alias.alias] = makeBuiltin(geoBuiltins[alias.builtinName].props, newOverloads...)
 	}
 
 	// Indexed functions have an alternative version with an underscore prepended
@@ -7468,8 +7471,7 @@ This variant will cast all geometry_str arguments into Geometry types.
 		newOverloads = append(newOverloads, newOverload)
 	}
 
-	def.overloads = newOverloads
-	return def
+	return makeBuiltin(def.props, newOverloads...)
 }
 
 // stAsGeoJSONFromTuple returns a *tree.DString representing JSON output

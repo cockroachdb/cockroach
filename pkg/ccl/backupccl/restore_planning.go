@@ -1770,7 +1770,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, tenants, err := selectTargets(
+	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
 		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
 	)
 	if err != nil {
@@ -1895,6 +1895,11 @@ func doRestorePlan(
 		}
 	}
 
+	var asOfInterval int64
+	if !endTime.IsEmpty() {
+		asOfInterval = endTime.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
+	}
+
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
@@ -1994,22 +1999,34 @@ func doRestorePlan(
 		revalidateIndexes[i].TableID = descriptorRewrites[revalidateIndexes[i].TableID].ID
 	}
 
-	// Collect telemetry.
-	collectTelemetry := func() {
-		telemetry.Count("restore.total.started")
-		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
-			telemetry.Count("restore.full-cluster")
-		}
-		if restoreStmt.Subdir == nil {
-			telemetry.Count("restore.deprecated-subdir-syntax")
-		} else {
-			telemetry.Count("restore.collection")
-		}
-	}
-
 	encodedTables := make([]*descpb.TableDescriptor, len(tables))
 	for i, table := range tables {
 		encodedTables[i] = table.TableDesc()
+	}
+
+	restoreDetails := jobspb.RestoreDetails{
+		EndTime:            endTime,
+		DescriptorRewrites: descriptorRewrites,
+		URIs:               defaultURIs,
+		BackupLocalityInfo: localityInfo,
+		TableDescs:         encodedTables,
+		Tenants:            tenants,
+		OverrideDB:         intoDB,
+		DescriptorCoverage: restoreStmt.DescriptorCoverage,
+		Encryption:         encryption,
+		RevalidateIndexes:  revalidateIndexes,
+		DatabaseModifiers:  databaseModifiers,
+		DebugPauseOn:       debugPauseOn,
+
+		// A RESTORE SYSTEM USERS planned on a 22.1 node will use the
+		// RestoreSystemUsers field in the job details to identify this flavour of
+		// RESTORE. We must continue to check this field for mixed-version
+		// compatability.
+		//
+		// TODO(msbutler): Delete in 23.1
+		RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
+		PreRewriteTenantId: oldTenantID,
+		Validation:         jobspb.RestoreValidation_DefaultRestore,
 	}
 
 	jr := jobs.Record{
@@ -2021,30 +2038,7 @@ func doRestorePlan(
 			}
 			return sqlDescIDs
 		}(),
-		Details: jobspb.RestoreDetails{
-			EndTime:            endTime,
-			DescriptorRewrites: descriptorRewrites,
-			URIs:               defaultURIs,
-			BackupLocalityInfo: localityInfo,
-			TableDescs:         encodedTables,
-			Tenants:            tenants,
-			OverrideDB:         intoDB,
-			DescriptorCoverage: restoreStmt.DescriptorCoverage,
-			Encryption:         encryption,
-			RevalidateIndexes:  revalidateIndexes,
-			DatabaseModifiers:  databaseModifiers,
-			DebugPauseOn:       debugPauseOn,
-
-			// A RESTORE SYSTEM USERS planned on a 22.1 node will use the
-			// RestoreSystemUsers field in the job details to identify this flavour of
-			// RESTORE. We must continue to check this field for mixed-version
-			// compatability.
-			//
-			// TODO(msbutler): Delete in 23.1
-			RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
-			PreRewriteTenantId: oldTenantID,
-			Validation:         jobspb.RestoreValidation_DefaultRestore,
-		},
+		Details:  restoreDetails,
 		Progress: jobspb.RestoreProgress{},
 	}
 
@@ -2058,7 +2052,8 @@ func doRestorePlan(
 			return err
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-		collectTelemetry()
+		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
+			descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn)
 		return nil
 	}
 
@@ -2091,7 +2086,8 @@ func doRestorePlan(
 	}(); err != nil {
 		return err
 	}
-	collectTelemetry()
+	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
+		descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}
@@ -2099,6 +2095,33 @@ func doRestorePlan(
 		return err
 	}
 	return sj.ReportExecutionResults(ctx, resultsCh)
+}
+
+func collectRestoreTelemetry(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	details jobspb.RestoreDetails,
+	intoDB string,
+	newDBName string,
+	subdir string,
+	restoreStmt *tree.Restore,
+	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
+	restoreDBs []catalog.DatabaseDescriptor,
+	asOfInterval int64,
+	debugPauseOn string,
+) {
+	telemetry.Count("restore.total.started")
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		telemetry.Count("restore.full-cluster")
+	}
+	if restoreStmt.Subdir == nil {
+		telemetry.Count("restore.deprecated-subdir-syntax")
+	} else {
+		telemetry.Count("restore.collection")
+	}
+
+	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, asOfInterval, restoreStmt.Options,
+		descsByTablePattern, restoreDBs, debugPauseOn)
 }
 
 func filteredUserCreatedDescriptors(
