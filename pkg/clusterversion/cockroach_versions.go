@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// ChangefeedIdleness is the version where changefeed aggregators forward
-	// idleness-related information alnog with resolved spans to the frontier
-	ChangefeedIdleness
 	// BackupDoesNotOverwriteLatestAndCheckpoint is the version where we
 	// stop overwriting the LATEST and checkpoint files during backup execution.
 	// Instead, it writes new files alongside the old in reserved subdirectories.
@@ -352,10 +349,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     ChangefeedIdleness,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
 	},
 	{
 		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,

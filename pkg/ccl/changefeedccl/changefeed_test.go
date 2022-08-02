@@ -38,7 +38,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -250,62 +249,6 @@ func TestChangefeedBasics(t *testing.T) {
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.
-}
-
-func TestChangefeedIdleness(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		changefeedbase.IdleTimeout.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 3*time.Second)
-
-		// Idleness functionality is version gated
-		knobs := s.TestingKnobs.Server.(*server.TestingKnobs)
-		knobs.BinaryVersionOverride = clusterversion.ByKey(clusterversion.ChangefeedIdleness)
-
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
-		waitForIdleCount := func(numIdle int64) {
-			testutils.SucceedsSoon(t, func() error {
-				if currentlyIdle.Value() != numIdle {
-					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
-				}
-				return nil
-			})
-		}
-
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
-		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'") // higher resolved frequency for faster test
-		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'")
-		defer closeFeed(t, cf1)
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
-		waitForIdleCount(0)
-		waitForIdleCount(2) // Both should eventually be considered idle
-
-		jobFeed := cf2.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, jobFeed.Pause())
-		waitForIdleCount(1) // Paused jobs aren't considered idle
-
-		require.NoError(t, jobFeed.Resume())
-		waitForIdleCount(2) // Resumed job should eventually become idle
-
-		closeFeed(t, cf2)
-		waitForIdleCount(1) // The cancelled changefeed isn't considered idle
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-		waitForIdleCount(0)
-		waitForIdleCount(1)
-
-		assertPayloads(t, cf1, []string{
-			`foo: [0]->{"after": {"a": 0}}`,
-			`foo: [1]->{"after": {"a": 1}}`,
-		})
-	}, feedTestEnterpriseSinks)
 }
 
 // TestChangefeedSendError validates that SendErrors do not fail the changefeed
