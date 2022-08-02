@@ -5220,16 +5220,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_lib_pq_auth_kerberos",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/lib/pq/auth/kerberos",
-        sha256 = "26113d1ad535ca1b52b9f093025ea658c6d3f14b617386a0c38115bfaceffdd4",
-        strip_prefix = "github.com/lib/pq/auth/kerberos@v0.0.0-20200720160335-984a6aa1ca46",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/auth/kerberos/com_github_lib_pq_auth_kerberos-v0.0.0-20200720160335-984a6aa1ca46.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_lightstep_lightstep_tracer_common_golang_gogo",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lightstep/lightstep-tracer-common/golang/gogo",

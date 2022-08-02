@@ -722,6 +722,7 @@ func TestLint(t *testing.T) {
 			`\btime\.(Now|Since|Unix|LoadLocation)\(`,
 			"--",
 			"*.go",
+			":!acceptance/compose/gss/psql/gss_test.go",
 			":!**/embedded.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
