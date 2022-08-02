@@ -276,7 +276,7 @@ changed_go_pkgs() {
   # Find changed packages, minus those that have been removed entirely. Note
   # that the three-dot notation means we are diffing against the merge-base of
   # the two branches, not against the tip of the upstream branch.
-  git diff --name-only "$upstream_branch..." -- "pkg/**/*.go" ":!*/testdata/*" \
+  git diff --name-only "$upstream_branch..." -- "pkg/**/*.go" ":!*/testdata/*" ":!pkg/acceptance/compose/gss/psql/**" \
     | xargs -rn1 dirname \
     | sort -u \
     | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }

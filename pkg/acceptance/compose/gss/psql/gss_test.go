@@ -24,8 +24,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
+	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/lib/pq/auth/kerberos"
@@ -209,9 +210,9 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	start := timeutil.Now()
+	start := now()
 	for i := 0; i < 1000; i++ {
-		fmt.Println(i, timeutil.Since(start))
+		fmt.Println(i, time.Since(start))
 		out, err := exec.Command("psql", "-c", "SELECT 1", "-U", user).CombinedOutput()
 		if IsError(err, "GSS authentication requires an enterprise license") {
 			t.Log(string(out))
@@ -232,4 +233,21 @@ func IsError(err error, re string) bool {
 		return false
 	}
 	return matched
+}
+
+// This is copied from pkg/util/timeutil.
+// "A little copying is better than a little dependency".
+// See pkg/util/timeutil/time.go for an explanation of the hacky
+// implementation here.
+type timeLayout struct {
+	wall uint64
+	ext  int64
+	loc  *time.Location
+}
+
+func now() time.Time {
+	t := time.Now()
+	x := (*timeLayout)(unsafe.Pointer(&t))
+	x.loc = nil // nil means UTC
+	return t
 }
