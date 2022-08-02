@@ -2,9 +2,7 @@
 FROM golang:1.17 AS builder
 WORKDIR /workspace
 COPY . .
-# go 1.16 requires go.mod to be present unless GO111MODULE is set to off
-RUN GO111MODULE=off go get -d -t -tags gss_compose
-RUN GO111MODULE=off go test -v -c -tags gss_compose -o gss.test
+RUN go test -v -c -tags gss_compose -o gss.test
 
 # Copy the test binary to an image with psql and krb installed.
 FROM postgres:11
