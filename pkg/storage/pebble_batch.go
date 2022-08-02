@@ -181,16 +181,19 @@ func (p *pebbleBatch) MVCCGetProto(
 
 // MVCCIterate implements the Batch interface.
 func (p *pebbleBatch) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, f)
+		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, f)
+	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Batch interface.

@@ -177,7 +177,8 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { _, _ = ro.MVCCGet(a) },
 				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
 				func() {
-					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(MVCCKeyValue) error { return iterutil.StopIteration() })
+					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
+						func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
 				},
 				func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
@@ -879,7 +880,7 @@ func TestUnindexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 			testCases := []func(){
 				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
-				func() { _ = batch.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, nil) },
+				func() { _ = batch.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil) },
 				func() { _ = batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
 			for i, f := range testCases {
