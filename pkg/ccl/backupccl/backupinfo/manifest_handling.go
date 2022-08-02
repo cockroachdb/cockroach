@@ -81,7 +81,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	true,
+	false,
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check

@@ -776,7 +776,8 @@ func TestDropDatabaseRevisionHistory(t *testing.T) {
 	const numAccounts = 1
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-
+	// kv.bulkio.rite_metadata_sst.enabled set to false due to https://github.com/cockroachdb/cockroach/issues/85564
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false`)
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE same_name_db;`)
 	sqlDB.Exec(t, `DROP DATABASE same_name_db;`)
@@ -807,6 +808,8 @@ func TestClusterRevisionHistory(t *testing.T) {
 	const numAccounts = 1
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+	// kv.bulkio.rite_metadata_sst.enabled set to false due to https://github.com/cockroachdb/cockroach/issues/85564q
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false`)
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
 	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[0])
