@@ -327,6 +327,18 @@ message AlterIndex {
   uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID", (gogoproto.jsontag) = ",omitempty"];
 }
 
+// AlterIndex is recorded when an index visibility is altered.
+message AlterIndexVisible {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the table containing the affected index.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the affected index.
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Set true if index is not visible.
+  bool not_visible = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 
 // CreateView is recorded when a view is created.
 message CreateView {
