@@ -598,6 +598,7 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_func_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -1753,6 +1754,10 @@ drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
 
+drop_func_stmt ::=
+	'DROP' 'FUNCTION' function_with_argtypes_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_argtypes_list opt_drop_behavior
+
 explain_option_name ::=
 	non_reserved_word
 
@@ -2418,6 +2423,9 @@ table_index_name_list ::=
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
 
+function_with_argtypes_list ::=
+	( function_with_argtypes ) ( ( ',' function_with_argtypes ) )*
+
 non_reserved_word ::=
 	'identifier'
 	| unreserved_keyword
@@ -2941,6 +2949,10 @@ only_signed_fconst ::=
 	'+' 'FCONST'
 	| '-' 'FCONST'
 
+function_with_argtypes ::=
+	db_object_name func_args
+	| db_object_name
+
 scrub_option ::=
 	'INDEX' 'ALL'
 	| 'INDEX' '(' name_list ')'
@@ -3342,6 +3354,10 @@ opt_nulls_order ::=
 	| 'NULLS' 'LAST'
 	| 
 
+func_args ::=
+	'(' func_args_list ')'
+	| '(' ')'
+
 group_by_list ::=
 	( group_by_item ) ( ( ',' group_by_item ) )*
 
@@ -3603,6 +3619,9 @@ common_func_opt_item ::=
 	| 'VOLATILE'
 	| 'LEAKPROOF'
 	| 'NOT' 'LEAKPROOF'
+
+func_args_list ::=
+	( func_arg ) ( ( ',' func_arg ) )*
 
 group_by_item ::=
 	a_expr

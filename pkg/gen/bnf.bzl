@@ -104,6 +104,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:drop_database.bnf",
   "//docs/generated/sql/bnf:drop_ddl_stmt.bnf",
   "//docs/generated/sql/bnf:drop_external_connection_stmt.bnf",
+  "//docs/generated/sql/bnf:drop_func_stmt.bnf",
   "//docs/generated/sql/bnf:drop_index.bnf",
   "//docs/generated/sql/bnf:drop_owned_by_stmt.bnf",
   "//docs/generated/sql/bnf:drop_role_stmt.bnf",

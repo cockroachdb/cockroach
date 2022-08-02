@@ -389,6 +389,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&distinctNode{}):                            "distinct",
 	reflect.TypeOf(&dropDatabaseNode{}):                        "drop database",
 	reflect.TypeOf(&dropExternalConnectionNode{}):              "drop external connection",
+	reflect.TypeOf(&dropFunctionNode{}):                        "drop function",
 	reflect.TypeOf(&dropIndexNode{}):                           "drop index",
 	reflect.TypeOf(&dropSequenceNode{}):                        "drop sequence",
 	reflect.TypeOf(&dropSchemaNode{}):                          "drop schema",
