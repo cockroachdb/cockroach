@@ -132,7 +132,6 @@ crdb_internal
 information_schema
 pg_catalog
 pg_extension
-pg_temp_0_0
 public
 
 
@@ -146,14 +145,12 @@ pg_catalog
 pg_extension
 public
 
-# On full cluster restore we restore temp tables to its original database.
+# On full cluster restore we do not restore temp tables
 query-sql
 USE d1;
 SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
-temp_seq
-temp_table
 
 # Nudge and wait for the temp cleanup job to run.
 nudge-and-wait-for-temp-cleanup
