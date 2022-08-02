@@ -2,16 +2,18 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "hydratedtables",
+    name = "hydrateddesc",
     srcs = ["hydratedcache.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/sem/tree",
@@ -26,16 +28,16 @@ go_library(
 )
 
 go_test(
-    name = "hydratedtables_test",
-    size = "small",
+    name = "hydrateddesc_test",
     srcs = ["hydratedcache_test.go"],
-    embed = [":hydratedtables"],
+    embed = [":hydrateddesc"],
     deps = [
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",

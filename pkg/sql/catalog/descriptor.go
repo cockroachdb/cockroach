@@ -224,6 +224,17 @@ type Descriptor interface {
 	SkipNamespace() bool
 }
 
+// HydratableDescriptor represent a Descriptor which needs user-define type
+// hydration if it contains any UDT.
+type HydratableDescriptor interface {
+	Descriptor
+
+	// ContainsUserDefinedTypes returns whether or not this descriptor uses any
+	// user defined types. For example, a table column table can use user defined
+	// type and a function can use user defined type as an argument type.
+	ContainsUserDefinedTypes() bool
+}
+
 // DatabaseDescriptor encapsulates the concept of a database.
 type DatabaseDescriptor interface {
 	Descriptor
@@ -260,7 +271,7 @@ type DatabaseDescriptor interface {
 
 // TableDescriptor is an interface around the table descriptor types.
 type TableDescriptor interface {
-	Descriptor
+	HydratableDescriptor
 
 	// TableDesc returns the backing protobuf for this database.
 	TableDesc() *descpb.TableDescriptor
@@ -540,9 +551,6 @@ type TableDescriptor interface {
 	// if one or more column ids was missing. Note - this allocates! It's not for
 	// hot path code.
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
-	// ContainsUserDefinedTypes returns whether or not this table descriptor has
-	// any columns of user defined types.
-	ContainsUserDefinedTypes() bool
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
@@ -832,7 +840,7 @@ type DefaultPrivilegeDescriptor interface {
 
 // FunctionDescriptor is an interface around the function descriptor types.
 type FunctionDescriptor interface {
-	Descriptor
+	HydratableDescriptor
 
 	// GetReturnType returns the function's return type.
 	GetReturnType() descpb.FunctionDescriptor_ReturnType
@@ -860,6 +868,9 @@ type FunctionDescriptor interface {
 
 	// GetDependedOnBy returns a list of back-references of this function.
 	GetDependedOnBy() []descpb.FunctionDescriptor_Reference
+
+	// FuncDesc returns the function's underlying protobuf descriptor.
+	FuncDesc() *descpb.FunctionDescriptor
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

@@ -188,7 +188,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 		switch a.state {
 		case orderedAggregatorAggregating:
 			if a.scratch.shouldResetInternalBatch {
-				a.scratch.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch)
 				a.scratch.shouldResetInternalBatch = false
 			}
 			if a.scratch.resumeIdx >= coldata.BatchSize() {
@@ -314,7 +314,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				if a.unsafeBatch == nil {
 					a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
 				} else {
-					a.unsafeBatch.ResetInternalBatch()
+					a.allocator.ResetBatch(a.unsafeBatch)
 				}
 				a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
@@ -340,7 +340,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				// the source and the destination would be the same, and
 				// resetting it would lead to the loss of data.
 				newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize()
-				a.scratch.tempBuffer.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch.tempBuffer)
 				a.allocator.PerformOperation(a.scratch.tempBuffer.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.tempBuffer.ColVec(i).Copy(
@@ -352,7 +352,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 						)
 					}
 				})
-				a.scratch.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch)
 				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.ColVec(i).Copy(
