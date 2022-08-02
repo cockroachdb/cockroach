@@ -290,25 +290,25 @@ BuildScan is called in the following functions.
   - disable invisible index
 2. `func (b *Builder) buildDeleteCascadeMutationInput`: called by `onDeleteSetBuilder` and `onDeleteCascadeBuilder` in `fk_cascade.go` for ON DELETE CASCADE, ON DELETE SET DEFAULT, ON DELETE SET NULL
   - disable invisible index
-3. `func (b *Builder) buildUpdateCascadeMutationInput`: called by `planCascade` in `fk_cascade.go` for ON UPDATE CASCADE, SET DEFAULT, SET NULL
+3. `func (b *Builder) buildUpdateCascadeMutationInput`: called by `onUpdateCascadeBuilder` in `fk_cascade.go` for ON UPDATE CASCADE, SET DEFAULT, SET NULL
   - disable invisible index
 4. `func (mb *mutationBuilder) buildInputForDelete`: called by `buildInputForDelete` in `mutation_builder.go` which builds a memo group for DeleteOp
   - enable invisible index
 5. `func (mb *mutationBuilder) buildInputForUpdate`: called by `buildInputForUpdate` in `mutation_builder.go` which builds a memo group for UpdateOp
   - enable invisible index
-6. `func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter`: called by `buildInsertForNothing` in `mutation_builder_arbiter.go` for INSERT ON CONFLICT DO NOTHING
+6. `func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter`: called by `buildInputForDoNothing` in `mutation_builder_arbiter.go` for INSERT ON CONFLICT DO NOTHING
   - disable invisible index
-7. `func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter`: called by `buildInputForUpsert` in `mutation_builder_arbiter.go` for INSERT, UPSERT ON CONFLICT, DO UPDATE SET
+7. `func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter`: called by `buildInputForUpsert` in `mutation_builder_arbiter.go` for UPSERT, INSERT..ON CONFLICT..DO UPDATE
   - disable invisible index
-8. `func (h *arbiterPredicateHelper) tableScope`: ultimately called by `findArbiters` in `mutation_builder_arbiter.go` for INSERT ON CONFLICT DO NOTHING, UPSERT, INSERT ON CONFLICT DO UPDATE SET
+8. `func (h *arbiterPredicateHelper) tableScope`: eventually called by `findArbiters` in `mutation_builder_arbiter.go` for INSERT ON CONFLICT DO NOTHING, UPSERT, INSERT ON CONFLICT DO UPDATE SET
   - disable invisible index
-9. `func (h *fkCheckHelper) buildOtherTableScan`: called by `buildFKChecksAndCascadeForDelete`, `buildFKChecksForUpdate`, `buildFKChecksForUpsert`, `buildFKChecksForInsert` in `mutation_builder_fk.go`
+9. `func (h *fkCheckHelper) buildOtherTableScan`: called by `buildDeletionCheck`, `buildInsertionCheck` in `mutation_builder_fk.go`
   - disable invisible index
-10. `func (h *uniqueCheckHelper) buildTableScan`: called by `buildUniqueChecksForInsert`, `buildUniqueChecksForUpdate`, `buildUniqueChecksForUpsert` in ``mutation_builder_unique.go``
+10. `func (h *uniqueCheckHelper) buildTableScan`: called by `buildUniqueChecksForInsert`, `buildUniqueChecksForUpdate`, `buildUniqueChecksForUpsert` in `mutation_builder_unique.go` to enforce UNIQUE WITHOUT INDEX constraints
   - disable invisible index
-11. `func (b *Builder) buildDataSource`: called by `buildJoin`, `buildInputForUpdate`, `buildSelectClause` in `select.go`
+11. `func (b *Builder) buildDataSource`: called by `buildJoin`, `buildFromWithLateral`, `buildFromTablesRightDeep` (called by buildInputForUpdate, buildSelectClause) in `select.go`
   - enable invisible index
-12. `func (b *Builder) buildScanFromTableRef`: called by `buildDataSource` in `select.go`
+12. `func (b *Builder) buildScanFromTableRef`: called by `buildDataSource` in `select.go` which adds support for numeric references in queries
   - enable invisible index
 
 ## 2. Test Cases
