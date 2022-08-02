@@ -1767,15 +1767,10 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
-	//
-	// If we're restoring all the descriptors, it means we're also restoring the
-	// jobs.
-	if details.DescriptorCoverage != tree.AllDescriptors {
-		if err := scbackup.CreateDeclarativeSchemaChangeJobs(
-			ctx, r.execCfg.JobRegistry, txn, all,
-		); err != nil {
-			return err
-		}
+	if err := scbackup.CreateDeclarativeSchemaChangeJobs(
+		ctx, r.execCfg.JobRegistry, txn, all,
+	); err != nil {
+		return err
 	}
 
 	// Write the new TableDescriptors and flip state over to public so they can be
