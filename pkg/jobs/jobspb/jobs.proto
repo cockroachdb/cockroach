@@ -378,13 +378,12 @@ message RestoreDetails {
   // it is only valid to set this if len(tenants) == 1.
   roachpb.TenantID pre_rewrite_tenant_id = 23;
 
-  // RestoreValidation determines whether to skip certain parts of the restore
-  // job if its only purpose is to validate the user's restore command.
-  RestoreValidation validation = 24;
-}
+  reserved 24;
 
-enum RestoreValidation {
-  DefaultRestore = 0;
+  // SchemaOnly determines whether to only restore the schema in the backup.
+  bool schema_only = 25;
+
+  // NEXT ID: 26.
 }
 
 
