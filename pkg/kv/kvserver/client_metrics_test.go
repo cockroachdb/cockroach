@@ -109,10 +109,14 @@ func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int
 		checkGauge(t, idString, m.LiveBytes, realStats.LiveBytes)
 		checkGauge(t, idString, m.KeyBytes, realStats.KeyBytes)
 		checkGauge(t, idString, m.ValBytes, realStats.ValBytes)
+		checkGauge(t, idString, m.RangeKeyBytes, realStats.RangeKeyBytes)
+		checkGauge(t, idString, m.RangeValBytes, realStats.RangeValBytes)
 		checkGauge(t, idString, m.IntentBytes, realStats.IntentBytes)
 		checkGauge(t, idString, m.LiveCount, realStats.LiveCount)
 		checkGauge(t, idString, m.KeyCount, realStats.KeyCount)
 		checkGauge(t, idString, m.ValCount, realStats.ValCount)
+		checkGauge(t, idString, m.RangeKeyCount, realStats.RangeKeyCount)
+		checkGauge(t, idString, m.RangeValCount, realStats.RangeValCount)
 		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
 		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
 		checkGauge(t, idString, m.SysCount, realStats.SysCount)
@@ -316,10 +320,14 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStats(t, tc, 1)
 
 	// Add some data to the "right" range.
-	dataKey := key.Next()
-	if _, err := tc.GetFirstStoreFromServer(t, 0).DB().Inc(ctx, dataKey, 5); err != nil {
-		t.Fatal(err)
-	}
+	rangeKeyStart, rangeKeyEnd := key, key.Next()
+	err := tc.GetFirstStoreFromServer(t, 0).DB().DelRangeUsingTombstone(ctx, rangeKeyStart, rangeKeyEnd)
+	require.NoError(t, err)
+
+	dataKey := rangeKeyEnd.Next()
+	_, err = tc.GetFirstStoreFromServer(t, 0).DB().Inc(ctx, dataKey, 5)
+	require.NoError(t, err)
+
 	tc.WaitForValues(t, dataKey, []int64{5, 5, 5})
 
 	// Verify all stats on stores after addition.
