@@ -165,16 +165,27 @@ export function filterBySearchQuery(
   search: string,
 ): boolean {
   const matchString = statement.label.toLowerCase();
+  const matchFingerPrintId = Long.fromString(
+    statement.aggregatedFingerprintID,
+    true,
+  ).toString(16);
+
   // If search term is wrapped by quotes, do the exact search term.
   if (search.startsWith('"') && search.endsWith('"')) {
     search = search.substring(1, search.length - 1);
-    return matchString.includes(search);
+    if (matchString.includes(search)) {
+      return true;
+    }
+
+    return matchFingerPrintId.includes(search);
   }
 
   return search
     .toLowerCase()
     .split(" ")
-    .every(val => matchString.includes(val));
+    .every(
+      val => matchString.includes(val) || matchFingerPrintId.includes(val),
+    );
 }
 
 export class StatementsPage extends React.Component<

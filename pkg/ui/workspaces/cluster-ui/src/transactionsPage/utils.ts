@@ -125,19 +125,29 @@ export const searchTransactionsData = (
     searchTerms = [search.substring(1, search.length - 1)];
   }
 
+  if (!search) {
+    return transactions;
+  }
+
   return transactions.filter((t: Transaction) =>
-    search
-      ? searchTerms.every(val =>
-          collectStatementsText(
-            getStatementsByFingerprintId(
-              t.stats_data.statement_fingerprint_ids,
-              statements,
-            ),
-          )
-            .toLowerCase()
-            .includes(val.toLowerCase()),
+    searchTerms.every(val => {
+      if (
+        collectStatementsText(
+          getStatementsByFingerprintId(
+            t.stats_data.statement_fingerprint_ids,
+            statements,
+          ),
         )
-      : true,
+          .toLowerCase()
+          .includes(val.toLowerCase())
+      ) {
+        return true;
+      }
+
+      return t.stats_data.transaction_fingerprint_id
+        ?.toString(16)
+        ?.includes(val);
+    }),
   );
 };
 
