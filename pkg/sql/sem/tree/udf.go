@@ -306,3 +306,52 @@ type FuncReturnType struct {
 	Type  ResolvableTypeReference
 	IsSet bool
 }
+
+// DropFunction represents a DROP FUNCTION statement.
+type DropFunction struct {
+	IfExists     bool
+	Functions    FuncObjs
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP FUNCTION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Functions)
+	if node.DropBehavior != DropDefault {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
+	}
+}
+
+// FuncObjs is a slice of FuncObj.
+type FuncObjs []FuncObj
+
+// Format implements the NodeFormatter interface.
+func (node FuncObjs) Format(ctx *FmtCtx) {
+	for i, f := range node {
+		if i > 0 {
+			ctx.WriteString(" ,")
+		}
+		ctx.FormatNode(f)
+	}
+}
+
+// FuncObj represents a function object DROP FUNCTION tries to drop.
+type FuncObj struct {
+	FuncName FunctionName
+	Args     FuncArgs
+}
+
+// Format implements the NodeFormatter interface.
+func (node FuncObj) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&node.FuncName)
+	if node.Args != nil {
+		ctx.WriteString("(")
+		ctx.FormatNode(node.Args)
+		ctx.WriteString(")")
+	}
+}

@@ -441,7 +441,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP EXTENSION IF EXISTS a`, 74777, `drop extension if exists`, ``},
 		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
 		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``},
-		{`DROP FUNCTION a`, 17511, `drop `, ``},
 		{`DROP LANGUAGE a`, 17511, `drop language a`, ``},
 		{`DROP OPERATOR a`, 0, `drop operator`, ``},
 		{`DROP PUBLICATION a`, 0, `drop publication`, ``},

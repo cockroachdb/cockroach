@@ -251,3 +251,6 @@ WHERE id = $max_desc_id;
         "volatility": "IMMUTABLE"
     }
 }
+
+statement error pq: unimplemented: drop function not supported.*
+DROP FUNCTION f
