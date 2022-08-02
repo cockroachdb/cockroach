@@ -152,11 +152,6 @@ func GetConfiguredPasswordHashMethod(
 	ctx context.Context, sv *settings.Values,
 ) (method password.HashMethod) {
 	method = password.HashMethod(PasswordHashMethod.Get(sv))
-	if method == password.HashSCRAMSHA256 && !hasClusterVersion(ctx, sv, clusterversion.SCRAMAuthentication) {
-		// Not all nodes are upgraded to understand SCRAM yet. Force
-		// Bcrypt for now, otherwise previous-version nodes will get confused.
-		method = password.HashBCrypt
-	}
 	return method
 }
 

@@ -183,8 +183,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore // TODO(celia) - GetConfReader
-	// SCRAM authentication is available.
-	SCRAMAuthentication
 	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
 	// that correspond to range descriptor changes resulting from recovery
 	// procedures.
@@ -396,10 +394,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     SCRAMAuthentication,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
 	},
 	{
 		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
