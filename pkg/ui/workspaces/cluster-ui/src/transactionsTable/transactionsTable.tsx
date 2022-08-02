@@ -230,6 +230,15 @@ export function makeTransactionsColumns(
       sort: (item: TransactionInfo) =>
         item.stats_data.statement_fingerprint_ids.length,
     },
+    {
+      name: "transactionFingerPrintId",
+      title: statisticsTableTitles.transactionFingerPrintId(statType),
+      cell: (item: TransactionInfo) =>
+        item.stats_data?.transaction_fingerprint_id.toString(16),
+      sort: (item: TransactionInfo) =>
+        item.stats_data?.transaction_fingerprint_id.toString(16),
+      showByDefault: false,
+    },
   ].filter(c => !(isTenant && c.hideIfTenant));
 }
 

@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+import Long from "long";
 
 import {
   FixLong,
@@ -191,6 +192,15 @@ function makeCommonColumns(
         TimestampToMoment(stmt.stats.last_exec_timestamp).format(DATE_FORMAT),
       sort: (stmt: AggregateStatistics) =>
         TimestampToNumber(stmt.stats.last_exec_timestamp),
+      showByDefault: false,
+    },
+    {
+      name: "statementFingerPrintId",
+      title: statisticsTableTitles.statementFingerPrintId(statType),
+      cell: (stmt: AggregateStatistics) =>
+        Long.fromString(stmt.aggregatedFingerprintID, true).toString(16),
+      sort: (stmt: AggregateStatistics) =>
+        Long.fromString(stmt.aggregatedFingerprintID, true).toString(16),
       showByDefault: false,
     },
   ];
