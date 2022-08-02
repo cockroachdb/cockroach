@@ -39,7 +39,9 @@ type Allocator struct {
 	factory coldata.ColumnFactory
 }
 
-func selVectorSize(capacity int) int64 {
+// SelVectorSize returns the memory usage of the selection vector of the given
+// capacity.
+func SelVectorSize(capacity int) int64 {
 	return int64(capacity) * memsize.Int
 }
 
@@ -78,7 +80,7 @@ func GetBatchMemSize(b coldata.Batch) int64 {
 	// below.
 	usesSel := b.Selection() != nil
 	b.SetSelection(true)
-	memUsage := selVectorSize(cap(b.Selection())) + getVecsMemoryFootprint(b.ColVecs())
+	memUsage := SelVectorSize(cap(b.Selection())) + getVecsMemoryFootprint(b.ColVecs())
 	b.SetSelection(usesSel)
 	return memUsage
 }
@@ -96,7 +98,7 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	b.SetSelection(usesSel)
 	proportionalBatchMemSize := int64(0)
 	if selCapacity > 0 {
-		proportionalBatchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
+		proportionalBatchMemSize = SelVectorSize(selCapacity) * length / int64(selCapacity)
 	}
 	for _, vec := range b.ColVecs() {
 		switch vec.CanonicalTypeFamily() {
@@ -125,7 +127,7 @@ func NewAllocator(
 // Note: consider whether you want the dynamic batch size behavior (in which
 // case you should be using ResetMaybeReallocate).
 func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) coldata.Batch {
-	estimatedMemoryUsage := selVectorSize(capacity) + EstimateBatchSizeBytes(typs, capacity)
+	estimatedMemoryUsage := SelVectorSize(capacity) + EstimateBatchSizeBytes(typs, capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -143,7 +145,7 @@ func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
 // allocates memory for the selection vector but does *not* allocate any memory
 // for the column vectors - those will have to be added separately.
 func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Batch {
-	estimatedMemoryUsage := selVectorSize(capacity)
+	estimatedMemoryUsage := SelVectorSize(capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -167,18 +169,25 @@ func (a *Allocator) ResetBatch(batch coldata.Batch) {
 // capacity of old batch is at least minDesiredCapacity, then the old batch is
 // reused.
 //
+// oldBatchReachedMemSize is true IFF we calculated the memory footprint of the
+// non-nil old batch and it reached maxBatchMemSize. The calculation only occurs
+// if desiredCapacitySufficient is false or the old batch has the capacity less
+// that minDesiredCapacity. If oldBatchReachedMemSize is true, then the old
+// batch is reused (the converse is not necessarily true).
+//
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
 // Note: the method assumes that minDesiredCapacity is at least 0 and will clamp
 // minDesiredCapacity to be between 1 and coldata.BatchSize() inclusive.
+// TODO(yuzefovich): unexport this method.
 func (a *Allocator) ResetMaybeReallocate(
 	typs []*types.T,
 	oldBatch coldata.Batch,
 	minDesiredCapacity int,
 	maxBatchMemSize int64,
 	desiredCapacitySufficient bool,
-) (newBatch coldata.Batch, reallocated bool) {
+) (newBatch coldata.Batch, reallocated bool, oldBatchReachedMemSize bool) {
 	if minDesiredCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
 	} else if minDesiredCapacity == 0 {
@@ -203,7 +212,8 @@ func (a *Allocator) ResetMaybeReallocate(
 			// Check if the old batch already reached the maximum memory size,
 			// and use it if so.
 			oldBatchMemSize = GetBatchMemSize(oldBatch)
-			useOldBatch = oldBatchMemSize >= maxBatchMemSize
+			oldBatchReachedMemSize = oldBatchMemSize >= maxBatchMemSize
+			useOldBatch = oldBatchReachedMemSize
 		}
 		if useOldBatch {
 			reallocated = false
@@ -221,7 +231,7 @@ func (a *Allocator) ResetMaybeReallocate(
 			newBatch = a.NewMemBatchWithFixedCapacity(typs, newCapacity)
 		}
 	}
-	return newBatch, reallocated
+	return newBatch, reallocated, oldBatchReachedMemSize
 }
 
 // ResetMaybeReallocateNoMemLimit is the same as ResetMaybeReallocate when
@@ -233,7 +243,8 @@ func (a *Allocator) ResetMaybeReallocate(
 func (a *Allocator) ResetMaybeReallocateNoMemLimit(
 	typs []*types.T, oldBatch coldata.Batch, requiredCapacity int,
 ) (newBatch coldata.Batch, reallocated bool) {
-	return a.ResetMaybeReallocate(typs, oldBatch, requiredCapacity, math.MaxInt64, true /* desiredCapacitySufficient */)
+	newBatch, reallocated, _ = a.ResetMaybeReallocate(typs, oldBatch, requiredCapacity, math.MaxInt64, true /* desiredCapacitySufficient */)
+	return newBatch, reallocated
 }
 
 // NewMemColumn returns a new coldata.Vec of the desired capacity.
@@ -436,10 +447,6 @@ func sizeOfDecimals(decimals coldata.Decimals, startIdx int) int64 {
 	return size
 }
 
-// SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
-// coldata.BatchSize() length.
-var SizeOfBatchSizeSelVector = int64(coldata.BatchSize()) * memsize.Int
-
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.
 // WARNING: This only is correct for fixed width types, and returns an
@@ -526,6 +533,133 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 	return size
 }
 
+// AccountingHelper is a helper that provides a reasonable heuristic for
+// reallocating batches with ResetMaybeReallocate() function.
+//
+// The heuristic is as follows:
+// - the first time a batch exceeds the memory limit, its capacity is memorized,
+//   and from now on that capacity will determine the upper bound on the
+//   capacities of the batches allocated through the helper;
+// - if at any point in time a batch exceeds the memory limit by at least a
+//   factor of two, then that batch is discarded, and the capacity will never
+//   exceed half of the capacity of the discarded batch;
+// - if the memory limit is not reached, then the behavior of the dynamic growth
+//   of the capacity provided by Allocator.ResetMaybeReallocate is still
+//   applicable (i.e. the capacities will grow exponentially until
+//   coldata.BatchSize()).
+//
+// NOTE: it works under the assumption that only a single coldata.Batch is being
+// used.
+type AccountingHelper struct {
+	allocator *Allocator
+	// memoryLimit determines the maximum memory footprint of the batch.
+	memoryLimit int64
+	// maxCapacity if non-zero indicates the target capacity of the batch. It is
+	// set once the batch exceeds the memory limit. It will be reduced even
+	// further if the batch significantly exceeds the memory limit.
+	// TODO(yuzefovich): consider growing the maxCapacity after the number of
+	// "successes" (a batch of maxCapacity not reaching the memory limit)
+	// reaches some threshold.
+	maxCapacity int
+}
+
+// discardBatch returns true if the batch with the given memory footprint has
+// exceeded the limit by too much and should be discarded.
+func (h *AccountingHelper) discardBatch(batchMemSize int64) bool {
+	// We use the division instead of multiplication to avoid issues with the
+	// overflow.
+	return batchMemSize/2 >= h.memoryLimit
+}
+
+// Init initializes the helper. The allocator can be shared with other
+// components.
+func (h *AccountingHelper) Init(allocator *Allocator, memoryLimit int64) {
+	h.allocator = allocator
+	if memoryLimit == 1 {
+		// The memory limit of 1 most likely indicates that we are in a "force
+		// disk spilling" scenario, but the helper should ignore that, so we
+		// override it to the default value of the distsql_workmem variable.
+		memoryLimit = 64 << 20 /* 64 MiB */
+	}
+	h.memoryLimit = memoryLimit
+}
+
+// ResetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
+// state (meaning it is ready to be used) and to have the capacity of at least
+// 1.
+//
+// The method will grow the allocated capacity of the batch exponentially
+// (possibly incurring a reallocation), until the batch reaches
+// coldata.BatchSize() in capacity or the target memory limit (specified in
+// Init()) in the memory footprint. If the limit is exceeded by at least a
+// factor of two, then the old batch is discarded, and the new batch will be
+// allocated of at most half of the capacity (the capacity will never increase
+// from that point).
+//
+// - tuplesToBeSet, if positive, indicates the total number of tuples that are
+// yet to be set, use 0 if unknown.
+//
+// NOTE: if the reallocation occurs, then the memory under the old batch is
+// released, so it is expected that the caller will lose the references to the
+// old batch.
+func (h *AccountingHelper) ResetMaybeReallocate(
+	typs []*types.T, oldBatch coldata.Batch, tuplesToBeSet int,
+) (newBatch coldata.Batch, reallocated bool) {
+	if oldBatch != nil {
+		// First, do a quick check whether the allocator as a whole has exceeded
+		// the limit by too much. (The allocator here is allowed to be shared
+		// with other components, thus, we cannot ask it directly for the batch
+		// mem size, yet the allocator can provide a useful upper bound.)
+		if batchMemSizeUpperBound := h.allocator.Used(); h.discardBatch(batchMemSizeUpperBound) {
+			// Now check whether the precise footprint of the batch is too much.
+			if batchMemSize := GetBatchMemSize(oldBatch); h.discardBatch(batchMemSize) {
+				// The old batch has exceeded the memory limit by too much, so
+				// we release it and will allocate a new one that is at most
+				// half of the capacity.
+				newMaxCapacity := (oldBatch.Capacity() + 1) / 2 // round up
+				if h.maxCapacity == 0 || newMaxCapacity < h.maxCapacity {
+					h.maxCapacity = newMaxCapacity
+				}
+				h.allocator.ReleaseMemory(batchMemSize)
+				oldBatch = nil
+			}
+		}
+	}
+	// Protect from the misuse.
+	if tuplesToBeSet < 0 {
+		tuplesToBeSet = 0
+	}
+	// By default, assume that the number of tuples to be set is sufficient and
+	// ask for it. If that number is unknown, we'll rely on the
+	// Allocator.ResetMaybeReallocate method to provide the dynamically-growing
+	// batches.
+	minDesiredCapacity := tuplesToBeSet
+	desiredCapacitySufficient := tuplesToBeSet > 0
+	if h.maxCapacity > 0 && (h.maxCapacity < tuplesToBeSet || tuplesToBeSet == 0) {
+		// If we have already exceeded the max capacity, and
+		// - that capacity is lower then the number of tuples to be set, or
+		// - the number of tuples to be set is unknown,
+		// then we'll use that max capacity and tell the allocator to not try
+		// allocating larger batch.
+		minDesiredCapacity = h.maxCapacity
+		desiredCapacitySufficient = true
+	}
+	var oldBatchReachedMemSize bool
+	newBatch, reallocated, oldBatchReachedMemSize = h.allocator.ResetMaybeReallocate(
+		typs, oldBatch, minDesiredCapacity, h.memoryLimit, desiredCapacitySufficient,
+	)
+	if oldBatchReachedMemSize && h.maxCapacity == 0 {
+		// The old batch has just reached the memory size for the first time, so
+		// we memorize the maximum capacity. Note that this is not strictly
+		// necessary to do (since Allocator.ResetMaybeReallocate would never
+		// allocate a new batch from now on), but it makes things more clear and
+		// allows us to avoid computing the memory size of the batch on each
+		// call.
+		h.maxCapacity = oldBatch.Capacity()
+	}
+	return newBatch, reallocated
+}
+
 // SetAccountingHelper is a utility struct that should be used by callers that
 // only perform "set" operations on the coldata.Batch (i.e. neither copies nor
 // appends). It encapsulates the logic for performing the memory accounting for
@@ -533,16 +667,11 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 // NOTE: it works under the assumption that only a single coldata.Batch is being
 // used.
 type SetAccountingHelper struct {
-	allocator *Allocator
+	helper AccountingHelper
 
 	// curCapacity is the capacity of the last batch returned by
 	// ResetMaybeReallocate.
 	curCapacity int
-	// maxCapacity if non-zero indicates the target capacity of the batch. It is
-	// set once the batch exceeds the memory limit.
-	maxCapacity int
-	// memoryLimit determines the maximum memory footprint of the batch.
-	memoryLimit int64
 
 	// allFixedLength indicates that we're working with the type schema of only
 	// fixed-length elements.
@@ -586,8 +715,7 @@ type SetAccountingHelper struct {
 // Init initializes the helper. The allocator must **not** be shared with any
 // other component.
 func (h *SetAccountingHelper) Init(allocator *Allocator, memoryLimit int64, typs []*types.T) {
-	h.allocator = allocator
-	h.memoryLimit = memoryLimit
+	h.helper.Init(allocator, memoryLimit)
 
 	for vecIdx, typ := range typs {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
@@ -615,14 +743,14 @@ func (h *SetAccountingHelper) getBytesLikeTotalSize() int64 {
 }
 
 // ResetMaybeReallocate is a light wrapper on top of
-// Allocator.ResetMaybeReallocate (and thus has the same contract) with an
-// additional logic for memory tracking purposes.
+// AccountingHelper.ResetMaybeReallocate (and thus has the same contract) with
+// an additional logic for memory tracking purposes.
+// - tuplesToBeSet, if positive, indicates the total number of tuples that are
+// yet to be set, use 0 if unknown.
 func (h *SetAccountingHelper) ResetMaybeReallocate(
-	typs []*types.T, oldBatch coldata.Batch, minCapacity int, desiredCapacitySufficient bool,
+	typs []*types.T, oldBatch coldata.Batch, tuplesToBeSet int,
 ) (newBatch coldata.Batch, reallocated bool) {
-	newBatch, reallocated = h.allocator.ResetMaybeReallocate(
-		typs, oldBatch, minCapacity, h.memoryLimit, desiredCapacitySufficient,
-	)
+	newBatch, reallocated = h.helper.ResetMaybeReallocate(typs, oldBatch, tuplesToBeSet)
 	h.curCapacity = newBatch.Capacity()
 	if reallocated && !h.allFixedLength {
 		// Allocator.ResetMaybeReallocate has released the precise memory
@@ -688,7 +816,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 
 	if len(h.bytesLikeVectors) > 0 {
 		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
-		h.allocator.AdjustMemoryUsage(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
+		h.helper.allocator.AdjustMemoryUsage(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
 		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
 	}
 
@@ -698,7 +826,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 			d := decimalVec.Get(rowIdx)
 			newDecimalSizes += int64(d.Size())
 		}
-		h.allocator.AdjustMemoryUsage(newDecimalSizes - h.decimalSizes[rowIdx])
+		h.helper.allocator.AdjustMemoryUsage(newDecimalSizes - h.decimalSizes[rowIdx])
 		h.decimalSizes[rowIdx] = newDecimalSizes
 	}
 
@@ -710,17 +838,23 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 			// was already included in EstimateBatchSizeBytes.
 			newVarLengthDatumSize += int64(datumSize)
 		}
-		h.allocator.AdjustMemoryUsage(newVarLengthDatumSize)
+		h.helper.allocator.AdjustMemoryUsage(newVarLengthDatumSize)
 	}
 
-	if h.maxCapacity == 0 && h.allocator.Used() >= h.memoryLimit {
-		// This is the first time we exceeded the memory limit, so we memorize
-		// the capacity.
-		h.maxCapacity = rowIdx + 1
+	// The allocator is not shared with any other components, so we can just use
+	// it directly to get the memory footprint of the batch.
+	batchMemSize := h.helper.allocator.Used()
+	if (h.helper.maxCapacity == 0 && batchMemSize >= h.helper.memoryLimit) || h.helper.discardBatch(batchMemSize) {
+		// This is either
+		// - the first time we exceeded the memory limit, or
+		// - the batch has just significantly exceeded the memory limit, so
+		// we update the memorized capacity. If it's the latter, then on the
+		// following call to ResetMaybeReallocate, the batch will be discarded.
+		h.helper.maxCapacity = rowIdx + 1
 	}
-	if h.maxCapacity > 0 && h.maxCapacity == rowIdx+1 {
-		// The batch is also done if we've exceeded the memory limit, and we've
-		// just set the last row according to the memorized capacity.
+	if h.helper.maxCapacity > 0 && h.helper.maxCapacity == rowIdx+1 {
+		// The batch is done if we've exceeded the memory limit, and we've just
+		// set the last row according to the memorized capacity.
 		batchDone = true
 	}
 	return batchDone
@@ -729,7 +863,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 // TestingUpdateMemoryLimit sets the new memory limit. It should only be used in
 // tests.
 func (h *SetAccountingHelper) TestingUpdateMemoryLimit(memoryLimit int64) {
-	h.memoryLimit = memoryLimit
+	h.helper.memoryLimit = memoryLimit
 }
 
 // Release releases all of the resources so that they can be garbage collected.
