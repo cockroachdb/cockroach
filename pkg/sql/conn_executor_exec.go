@@ -1450,6 +1450,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
 		planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
+	// Skip the diagram generation since on this "main" query path we can get it
+	// via the statement bundle.
+	planCtx.skipDistSQLDiagramGeneration = true
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
 	} else if planner.instrumentation.ShouldSaveFlows() {
@@ -1486,6 +1489,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		defer subqueryResultMemAcc.Close(ctx)
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
+			// Skip the diagram generation since on this "main" query path we
+			// can get it via the statement bundle.
+			true, /* skipDistSQLDiagramGeneration */
 		) {
 			return *recv.stats, recv.commErr
 		}

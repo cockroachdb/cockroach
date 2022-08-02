@@ -730,6 +730,12 @@ type PlanningCtx struct {
 	// mode.
 	planDepth int
 
+	// If set, the DistSQL diagram is **not** generated and not added to the
+	// trace (when the tracing is enabled). We generally want to include it, but
+	// on the main query path the overhead becomes too large while we also have
+	// other ways to get the diagram.
+	skipDistSQLDiagramGeneration bool
+
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
 	saveFlows func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error

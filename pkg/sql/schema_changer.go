@@ -347,6 +347,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
 					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
 					localPlanner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
+					false, /* skipDistSQLDiagramGeneration */
 				) {
 					if planAndRunErr = rw.Err(); planAndRunErr != nil {
 						return
