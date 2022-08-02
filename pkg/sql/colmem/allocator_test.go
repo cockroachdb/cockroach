@@ -288,7 +288,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	}
 
 	var helper colmem.SetAccountingHelper
-	helper.Init(testAllocator, typs)
+	helper.Init(testAllocator, math.MaxInt64, typs)
 
 	numIterations := rng.Intn(10) + 1
 	numRows := rng.Intn(coldata.BatchSize()) + 1
@@ -306,7 +306,8 @@ func TestSetAccountingHelper(t *testing.T) {
 			// new batch with larger capacity might be allocated.
 			maxBatchMemSize = largeMemSize
 		}
-		batch, _ = helper.ResetMaybeReallocate(typs, batch, numRows, maxBatchMemSize, false /* desiredCapacitySufficient */)
+		helper.TestingUpdateMemoryLimit(maxBatchMemSize)
+		batch, _ = helper.ResetMaybeReallocate(typs, batch, numRows, false /* desiredCapacitySufficient */)
 
 		for rowIdx := 0; rowIdx < batch.Capacity(); rowIdx++ {
 			for vecIdx, typ := range typs {
@@ -322,7 +323,10 @@ func TestSetAccountingHelper(t *testing.T) {
 					coldata.SetValueAt(batch.ColVec(vecIdx), converter(datum), rowIdx)
 				}
 			}
-			helper.AccountForSet(rowIdx)
+			// The purpose of this test is ensuring that memory accounting is
+			// up-to-date, so we ignore the recommendation of the helper whether
+			// the batch is done.
+			_ = helper.AccountForSet(rowIdx)
 		}
 
 		// At this point, we have set all rows in the batch and performed the
