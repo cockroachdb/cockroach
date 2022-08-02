@@ -16,14 +16,14 @@ CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 ----
 create-function
  ├── CREATE FUNCTION f() RETURNS INT8 LANGUAGE SQL AS $$SELECT 1;$$
- └── dependencies
+ └── no dependencies
 
 build
 CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 ----
 create-function
  ├── CREATE FUNCTION f(IN a workday) RETURNS INT8 LANGUAGE SQL AS $$SELECT 1;$$
- └── dependencies
+ └── no dependencies
 
 build
 CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
