@@ -15,7 +15,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1138,11 +1137,6 @@ func SendEmptySnapshot(
 	// parameter, since if this node's view of the version is stale we could
 	// regress to a state before the migration. Instead, we return an error if
 	// the cluster version is old.
-	writeAppliedIndexTerm := st.Version.IsActive(ctx, clusterversion.AddRaftAppliedIndexTermMigration)
-	if !writeAppliedIndexTerm {
-		return errors.Errorf("cluster version is too old %s",
-			st.Version.ActiveVersionOrEmpty(ctx))
-	}
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -1151,7 +1145,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
-		writeAppliedIndexTerm,
+		true, // writeAppliedIndexTerm, true for >=22.1
 	)
 	if err != nil {
 		return err

@@ -76,16 +76,6 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		removeGrantMigration,
 	),
-	upgrade.NewSystemUpgrade(
-		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
-		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
-		raftAppliedIndexTermMigration,
-	),
-	upgrade.NewSystemUpgrade(
-		"purge all replicas not populating RangeAppliedState.RaftAppliedIndexTerm",
-		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
-		postRaftAppliedIndexTermMigration,
-	),
 	upgrade.NewTenantUpgrade(
 		"add the system.span_count table",
 		toCV(clusterversion.SpanCountTable),
