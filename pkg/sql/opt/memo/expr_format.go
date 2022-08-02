@@ -651,49 +651,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatCol(col.Alias, col.ID, opt.ColSet{} /* notNullCols */)
 		}
 		tp.Child(f.Buffer.String())
+		f.formatDependencies(tp, t.Deps)
 
-		n := tp.Child("dependencies")
-		for _, dep := range t.Deps {
-			f.Buffer.Reset()
-			name := dep.DataSource.Name()
-			f.Buffer.WriteString(name.String())
-			if dep.SpecificIndex {
-				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
-			}
-			colNames, isTable := dep.GetColumnNames()
-			if len(colNames) > 0 {
-				fmt.Fprintf(f.Buffer, " [columns:")
-				for _, colName := range colNames {
-					fmt.Fprintf(f.Buffer, " %s", colName)
-				}
-				fmt.Fprintf(f.Buffer, "]")
-			} else if isTable {
-				fmt.Fprintf(f.Buffer, " [no columns]")
-			}
-			n.Child(f.Buffer.String())
-		}
 	case *CreateFunctionExpr:
 		tp.Child(t.Syntax.String())
-		n := tp.Child("dependencies")
-		for _, dep := range t.Deps {
-			f.Buffer.Reset()
-			name := dep.DataSource.Name()
-			f.Buffer.WriteString(name.String())
-			if dep.SpecificIndex {
-				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
-			}
-			colNames, isTable := dep.GetColumnNames()
-			if len(colNames) > 0 {
-				fmt.Fprintf(f.Buffer, " [columns:")
-				for _, colName := range colNames {
-					fmt.Fprintf(f.Buffer, " %s", colName)
-				}
-				fmt.Fprintf(f.Buffer, "]")
-			} else if isTable {
-				fmt.Fprintf(f.Buffer, " [no columns]")
-			}
-			n.Child(f.Buffer.String())
-		}
+		f.formatDependencies(tp, t.Deps)
 
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())
@@ -1481,6 +1443,30 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 		panic(errors.AssertionFailedf("unexpected wait policy"))
 	}
 	tp.Childf("%slocking: %s%s", labelPrefix, strength, wait)
+}
+
+// formatDependencies adds a new treeprinter child for schema dependencies.
+func (f *ExprFmtCtx) formatDependencies(tp treeprinter.Node, deps opt.SchemaDeps) {
+	n := tp.Child("dependencies")
+	for _, dep := range deps {
+		f.Buffer.Reset()
+		name := dep.DataSource.Name()
+		f.Buffer.WriteString(name.String())
+		if dep.SpecificIndex {
+			fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
+		}
+		colNames, isTable := dep.GetColumnNames()
+		if len(colNames) > 0 {
+			fmt.Fprintf(f.Buffer, " [columns:")
+			for _, colName := range colNames {
+				fmt.Fprintf(f.Buffer, " %s", colName)
+			}
+			fmt.Fprintf(f.Buffer, "]")
+		} else if isTable {
+			fmt.Fprintf(f.Buffer, " [no columns]")
+		}
+		n.Child(f.Buffer.String())
+	}
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
