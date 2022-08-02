@@ -2646,6 +2646,7 @@ var boundedStalenessAllowList = map[opt.Operator]struct{}{
 	opt.GroupByOp:          {},
 	opt.ScalarGroupByOp:    {},
 	opt.DistinctOnOp:       {},
+	opt.DistributeOp:       {},
 	opt.EnsureDistinctOnOp: {},
 	opt.LimitOp:            {},
 	opt.OffsetOp:           {},
