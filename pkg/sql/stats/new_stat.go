@@ -13,8 +13,10 @@ package stats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -113,7 +115,13 @@ func InsertNewStat(
 // send the updates for mixed-version clusters during upgrade.
 //
 // TODO(radu): remove this in 22.1.
-func GossipTableStatAdded(g *gossip.Gossip, tableID descpb.ID) error {
+func GossipTableStatAdded(
+	ctx context.Context, g *gossip.Gossip, st *cluster.Settings, tableID descpb.ID,
+) error {
+	if st.Version.IsActive(ctx, clusterversion.V21_2) {
+		// Not needed in v21.2. See 8905b9b.
+		return nil
+	}
 	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
 	// around forever (we would need the stat cache to evict old entries
 	// automatically though).
