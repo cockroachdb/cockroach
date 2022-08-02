@@ -51,6 +51,10 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 	case ExternalStorageProvider_nodelocal:
 		// The node's local filesystem is obviously accessed implicitly as the node.
 		return false
+	case ExternalStorageProvider_external:
+		// External Connections have a `USAGE` privilege that determines if a user
+		// has the appropriate privileges to use the underlying resource.
+		return true
 	default:
 		return false
 	}

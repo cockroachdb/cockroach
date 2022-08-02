@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -62,6 +63,12 @@ func (p *planner) makeExternalConnectionEval(
 func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.SystemExternalConnectionsTable) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to create an External Connection",
+			clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
+	}
+
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
 		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(

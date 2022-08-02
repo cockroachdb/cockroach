@@ -44,6 +44,9 @@ const (
 	OnAllSequencesInSchema = "on_all_sequences_in_schemas"
 	// OnSystem is used when a GRANT/REVOKE is happening on system.
 	OnSystem = "on_system"
+	// OnExternalConnection is used when a GRANT/REVOKE is happening on an
+	// external connection object.
+	OnExternalConnection = "on_external_connection"
 
 	iamRoles = "iam.roles"
 )

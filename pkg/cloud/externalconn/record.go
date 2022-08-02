@@ -89,15 +89,13 @@ func (e *externalConnectionNotFoundError) Error() string {
 // `system.external_connections` table and returns the read-only interface for
 // interacting with it.
 func LoadExternalConnection(
-	ctx context.Context,
-	name string,
-	connectionType connectionpb.ConnectionType,
-	ex sqlutil.InternalExecutor,
-	user username.SQLUsername,
-	txn *kv.Txn,
+	ctx context.Context, name string, ex sqlutil.InternalExecutor, txn *kv.Txn,
 ) (ExternalConnection, error) {
+	// Loading an External Connection is only allowed for users with the `USAGE`
+	// privilege. We run the query as `node` since the user might not have
+	// `SELECT` on the system table.
 	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: user},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
 	if err != nil {
@@ -110,13 +108,6 @@ func LoadExternalConnection(
 	ec := NewMutableExternalConnection()
 	if err := ec.InitFromDatums(row, cols); err != nil {
 		return nil, err
-	}
-
-	// Validate that the unmarshaled External Connection object is of the desired
-	// type.
-	if connectionType.String() != ec.ConnectionType().String() {
-		return nil, errors.Newf("expected External Connection object of type %s but '%s' is of type %s",
-			connectionType.String(), name, ec.ConnectionType())
 	}
 	return ec, nil
 }

@@ -46,6 +46,11 @@ var registry = []*Metadata{
 		regex:  regexp.MustCompile(`(/vtable/((?P<SchemaName>.*))/((?P<TableName>.*)))$`),
 		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
 	},
+	{
+		prefix: "/externalconn",
+		regex:  regexp.MustCompile(`(/externalconn/((?P<ConnectionName>.*)))$`),
+		val:    reflect.TypeOf((*ExternalConnectionPrivilege)(nil)),
+	},
 }
 
 func findMetadata(val string) *Metadata {
@@ -100,6 +105,8 @@ func unmarshal(val reflect.Value, f reflect.StructField) (reflect.Value, error) 
 	case "TableName":
 		return val, nil
 	case "SchemaName":
+		return val, nil
+	case "ConnectionName":
 		return val, nil
 	default:
 		panic(errors.AssertionFailedf("unhandled type %v", f.Type))

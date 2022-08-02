@@ -40,8 +40,7 @@ func makeExternalConnectionKMS(
 	var ec ExternalConnection
 	if err := env.DBHandle().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		ec, err = LoadExternalConnection(ctx, externalConnectionName, connectionpb.TypeKMS,
-			env.InternalExecutor(), env.User(), txn)
+		ec, err = LoadExternalConnection(ctx, externalConnectionName, env.InternalExecutor(), txn)
 		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "failed to load external connection object")
