@@ -77,7 +77,7 @@ func (p *planner) createExternalConnection(
 		return err
 	}
 
-	ex := externalconn.NewExternalConnection()
+	ex := externalconn.NewMutableExternalConnection()
 	name, err := eval.externalConnectionName()
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection name")
@@ -95,12 +95,12 @@ func (p *planner) createExternalConnection(
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection endpoint")
 	}
-	connDetails, err := externalconn.ConnectionDetailsFromURI(params.ctx, as)
+	exConn, err := externalconn.ExternalConnectionFromURI(params.ctx, as)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
 	}
-	ex.SetConnectionDetails(*connDetails.ConnectionProto())
-	ex.SetConnectionType(connDetails.ConnectionType())
+	ex.SetConnectionDetails(*exConn.ConnectionProto())
+	ex.SetConnectionType(exConn.ConnectionType())
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.

@@ -113,6 +113,9 @@ func (u *consumeURL) consumeParam(p string) string {
 }
 
 func (u *consumeURL) remainingQueryParams() (res []string) {
+	if u.q == nil {
+		u.q = u.Query()
+	}
 	for p := range u.q {
 		res = append(res, p)
 	}

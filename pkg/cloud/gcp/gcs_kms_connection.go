@@ -14,60 +14,29 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
 
-func parseGCSKMSConnectionURI(
+func parseAndValidateGCSKMSConnectionURI(
 	_ context.Context, uri *url.URL,
-) (connectionpb.ConnectionDetails, error) {
+) (externalconn.ExternalConnection, error) {
 	if err := validateKMSURI(*uri); err != nil {
-		return connectionpb.ConnectionDetails{}, err
+		return nil, err
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_gs_kms,
 		Details: &connectionpb.ConnectionDetails_GCSKMS{
 			GCSKMS: &connectionpb.GCSKMSConnectionDetails{URI: uri.String()},
 		},
 	}
-	return connDetails, nil
-}
 
-type gcsKMSConnectionDetails struct {
-	connectionpb.ConnectionDetails
-}
-
-// Dial implements the ConnectionDetails interface.
-func (g *gcsKMSConnectionDetails) Dial(
-	ctx context.Context, connectionCtx externalconn.ConnectionContext, subdir string,
-) (externalconn.Connection, error) {
-	env := connectionCtx.KMSEnv()
-	return cloud.KMSFromURI(ctx, g.GetGCSKMS().URI, env)
-}
-
-// ConnectionProto implements the ConnectionDetails interface.
-func (g *gcsKMSConnectionDetails) ConnectionProto() *connectionpb.ConnectionDetails {
-	return &g.ConnectionDetails
-}
-
-// ConnectionType implements the ConnectionDetails interface.
-func (g *gcsKMSConnectionDetails) ConnectionType() connectionpb.ConnectionType {
-	return g.ConnectionDetails.Type()
-}
-
-func makeGCSKMSConnectionDetails(
-	_ context.Context, details connectionpb.ConnectionDetails,
-) externalconn.ConnectionDetails {
-	return &gcsKMSConnectionDetails{ConnectionDetails: details}
+	return externalconn.NewExternalConnection(connDetails), nil
 }
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
-		connectionpb.ConnectionProvider_gs_kms,
 		gcsScheme,
-		parseGCSKMSConnectionURI,
-		makeGCSKMSConnectionDetails,
+		parseAndValidateGCSKMSConnectionURI,
 	)
 }

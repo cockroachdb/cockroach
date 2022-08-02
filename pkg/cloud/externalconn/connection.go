@@ -14,46 +14,24 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
 
-// Connection is a marker interface for objects that support interaction with an
-// external resource.
-type Connection interface{}
-
-// ConnectionContext contains the dependencies passed to external connection
-// implementation during creation.
-type ConnectionContext interface {
-	// ExternalStorageContext returns the dependencies passed to external storage
-	// implementation during creation.
-	ExternalStorageContext() cloud.ExternalStorageContext
-	// KMSEnv returns the environment in which a KMS is configured and used.
-	KMSEnv() cloud.KMSEnv
-}
-
-// ConnectionDetails is the interface to the external resource represented by an
-// External Connection object.
-type ConnectionDetails interface {
-	// Dial establishes a connection to the external resource.
-	//
-	// A non-empty subdir results in a `Connection` to the joined path of the
-	// endpoint represented by the external connection and subdir.
-	Dial(ctx context.Context, connectionCtx ConnectionContext, subdir string) (Connection, error)
-	// ConnectionProto prepares the ConnectionDetails for serialization.
-	ConnectionProto() *connectionpb.ConnectionDetails
+// ExternalConnection is the interface to the external resource represented by
+// an External Connection object. This interface should expose read-only
+// methods that are required to interact with the External Connection object.
+type ExternalConnection interface {
 	// ConnectionType returns the type of the connection.
 	ConnectionType() connectionpb.ConnectionType
+	// ConnectionProto returns an in-memory representation of the
+	// ConnectionDetails that describe the underlying resource. These details
+	// should not be persisted directly, refer to
+	// `externalconn.NewMutableExternalConnection` for mutating an External
+	// Connection object.
+	ConnectionProto() *connectionpb.ConnectionDetails
 }
 
 // connectionParserFactory is the factory method that takes in an endpoint URI
-// for an external resource, and returns the ConnectionDetails proto
-// representation of that URI.
-type connectionParserFactory func(ctx context.Context,
-	uri *url.URL) (connectionpb.ConnectionDetails, error)
-
-// connectionDetailsFactory is the factory method that returns a
-// ConnectionDetails interface to interact with the underlying External
-// Connection object.
-type connectionDetailsFactory func(ctx context.Context,
-	details connectionpb.ConnectionDetails) ConnectionDetails
+// for an external resource, and returns the ExternalConnection representation
+// of that URI.
+type connectionParserFactory func(ctx context.Context, uri *url.URL) (ExternalConnection, error)
