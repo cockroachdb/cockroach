@@ -1680,6 +1680,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 		if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {
 			log.Warningf(cf.Ctx, "error managing protected timestamp record: %v", err)
+			return err
 		}
 
 		if updateRunStatus {
