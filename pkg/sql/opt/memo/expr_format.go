@@ -1447,6 +1447,10 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 
 // formatDependencies adds a new treeprinter child for schema dependencies.
 func (f *ExprFmtCtx) formatDependencies(tp treeprinter.Node, deps opt.SchemaDeps) {
+	if len(deps) == 0 {
+		tp.Child("no dependencies")
+		return
+	}
 	n := tp.Child("dependencies")
 	for _, dep := range deps {
 		f.Buffer.Reset()
