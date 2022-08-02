@@ -110,7 +110,9 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
 		r := makeGCQueueScoreImpl(
 			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
-			true /* canAdvanceGCThreshold */)
+			true,      /* canAdvanceGCThreshold */
+			time.Hour, /* txnCleanupThreshold */
+		)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -132,7 +134,9 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, 60*time.Second, hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
+		}, 60*time.Second, hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			time.Hour, /* txnCleanupThreshold */
+		)
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
@@ -148,7 +152,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	ms.SysBytes += largeAbortSpanBytesThreshold
 	ms.SysCount++
 
-	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
+	expiration := gc.TxnCleanupThreshold.Default().Nanoseconds() + 1
 
 	// GC triggered if abort span should all be gc'able and it's large.
 	{
@@ -157,6 +161,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
 			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -172,6 +177,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
 			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -183,6 +189,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			hlc.Timestamp{WallTime: expiration},
 			ms, 10000*time.Second,
 			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
+			time.Hour, /* txnCleanupThreshold */
 		)
 		require.False(t, r.ShouldQueue)
 		require.Zero(t, r.FinalScore)
@@ -222,7 +229,9 @@ func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 			}
 
 			r := makeGCQueueScoreImpl(
-				ctx, seed, now, ms, gcTTL, tc.lastGC, true /* canAdvanceGCThreshold */)
+				ctx, seed, now, ms, gcTTL, tc.lastGC, true, /* canAdvanceGCThreshold */
+				time.Hour, /* txnCleanupThreshold */
+			)
 			require.Equal(t, tc.expectGC, r.ShouldQueue)
 		})
 	}
@@ -342,7 +351,9 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
-		hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
+		hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+		time.Hour, /* txnCleanupThreshold */
+	)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
@@ -469,6 +480,7 @@ func TestGCQueueProcess(t *testing.T) {
 	tc.Start(t, stopper)
 
 	const intentAgeThreshold = 2 * time.Hour
+	const txnCleanupThreshold = time.Hour
 
 	tc.manualClock.Increment(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
@@ -607,7 +619,10 @@ func TestGCQueueProcess(t *testing.T) {
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, conf.TTL())
-		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{IntentAgeThreshold: intentAgeThreshold},
+		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{
+			IntentAgeThreshold:  intentAgeThreshold,
+			TxnCleanupThreshold: txnCleanupThreshold,
+		},
 			conf.TTL(), gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -698,7 +713,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
-	gcExpiration := testTime - kvserverbase.TxnCleanupThreshold.Nanoseconds()
+	gcExpiration := testTime - gc.TxnCleanupThreshold.Default().Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus

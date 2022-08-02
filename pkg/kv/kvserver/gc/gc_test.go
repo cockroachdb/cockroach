@@ -136,13 +136,19 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{
+		IntentAgeThreshold:  intentLongThreshold,
+		TxnCleanupThreshold: txnCleanupThreshold,
+	}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{
+		IntentAgeThreshold:  intentShortThreshold,
+		TxnCleanupThreshold: txnCleanupThreshold,
+	}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
@@ -189,7 +195,10 @@ func TestIntentCleanupBatching(t *testing.T) {
 	// Base GCer will cleanup all intents in one go and its result is used as a baseline
 	// to compare batched runs for checking completeness.
 	baseGCer := makeFakeGCer()
-	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, gcTTL, &baseGCer, baseGCer.resolveIntents,
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{
+		IntentAgeThreshold:  intentAgeThreshold,
+		TxnCleanupThreshold: txnCleanupThreshold,
+	}, gcTTL, &baseGCer, baseGCer.resolveIntents,
 		baseGCer.resolveIntentsAsync)
 	if err != nil {
 		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
@@ -199,7 +208,11 @@ func TestIntentCleanupBatching(t *testing.T) {
 	var batchSize int64 = 7
 	fakeGCer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize}, gcTTL,
+		RunOptions{
+			IntentAgeThreshold:              intentAgeThreshold,
+			MaxIntentsPerIntentCleanupBatch: batchSize,
+			TxnCleanupThreshold:             txnCleanupThreshold,
+		}, gcTTL,
 		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0
