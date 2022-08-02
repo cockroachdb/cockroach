@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "backupccl",
@@ -11,6 +12,7 @@ go_library(
         "backup_processor.go",
         "backup_processor_planning.go",
         "backup_span_coverage.go",
+        "backup_telemetry.go",
         "create_scheduled_backup.go",
         "file_sst_sink.go",
         "key_rewriter.go",
@@ -27,6 +29,7 @@ go_library(
         "split_and_scatter_processor.go",
         "system_schema.go",
         "targets.go",
+        ":gen-targetscope-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl",
     visibility = ["//visibility:public"],
@@ -131,6 +134,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
         "@com_github_kr_pretty//:pretty",
         "@com_github_robfig_cron_v3//:cron",
@@ -258,6 +262,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/limit",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
@@ -276,6 +281,7 @@ go_test(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
         "@com_github_jackc_pgx_v4//:pgx",
@@ -286,6 +292,13 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-targetscope-stringer",
+    src = "backup_telemetry.go",
+    additional_args = ["-linecomment"],
+    typ = "targetScope",
 )
 
 get_x_data(name = "get_x_data")

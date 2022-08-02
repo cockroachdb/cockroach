@@ -4930,7 +4930,7 @@ func (d fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
 
-func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
 	if d.FailOrCancel != nil {
 		return d.FailOrCancel(ctx)
 	}

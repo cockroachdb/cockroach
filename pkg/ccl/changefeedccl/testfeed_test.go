@@ -220,9 +220,11 @@ func (r *reportErrorResumer) Resume(ctx context.Context, execCtx interface{}) er
 }
 
 // OnFailOrCancel implements jobs.Resumer
-func (r *reportErrorResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *reportErrorResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	defer r.jobFailed()
-	return r.wrapped.OnFailOrCancel(ctx, execCtx)
+	return r.wrapped.OnFailOrCancel(ctx, execCtx, jobErr)
 }
 
 // OnPauseRequest implements PauseRequester interface.

@@ -149,8 +149,8 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates the cube root (∛) of `val`.", volatility.Immutable),
 	),
 
-	"ceil":    ceilImpl,
-	"ceiling": ceilImpl,
+	"ceil":    ceilImpl(),
+	"ceiling": ceilImpl(),
 
 	"cos": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
@@ -367,8 +367,8 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pow":   powImpls,
-	"power": powImpls,
+	"pow":   powImpls(),
+	"power": powImpls(),
 
 	"radians": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
@@ -587,51 +587,55 @@ var mathBuiltins = map[string]builtinDefinition{
 	),
 }
 
-var ceilImpl = makeBuiltin(defProps(),
-	floatOverload1(func(x float64) (tree.Datum, error) {
-		return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
-	}, "Calculates the smallest integer not smaller than `val`.", volatility.Immutable),
-	decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-		dd := &tree.DDecimal{}
-		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
-		if dd.IsZero() {
-			dd.Negative = false
-		}
-		return dd, err
-	}, "Calculates the smallest integer not smaller than `val`.", volatility.Immutable),
-	tree.Overload{
-		Types:      tree.ArgTypes{{"val", types.Int}},
-		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
+func ceilImpl() builtinDefinition {
+	return makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
+		}, "Calculates the smallest integer not smaller than `val`.", volatility.Immutable),
+		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
+			if dd.IsZero() {
+				dd.Negative = false
+			}
+			return dd, err
+		}, "Calculates the smallest integer not smaller than `val`.", volatility.Immutable),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
+			},
+			Info:       "Calculates the smallest integer not smaller than `val`.",
+			Volatility: volatility.Immutable,
 		},
-		Info:       "Calculates the smallest integer not smaller than `val`.",
-		Volatility: volatility.Immutable,
-	},
-)
+	)
+}
 
-var powImpls = makeBuiltin(defProps(),
-	floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
-		return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
-	}, "Calculates `x`^`y`.", volatility.Immutable),
-	decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
-		dd := &tree.DDecimal{}
-		_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
-		return dd, err
-	}, "Calculates `x`^`y`.", volatility.Immutable),
-	tree.Overload{
-		Types: tree.ArgTypes{
-			{"x", types.Int},
-			{"y", types.Int},
+func powImpls() builtinDefinition {
+	return makeBuiltin(defProps(),
+		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
+		}, "Calculates `x`^`y`.", volatility.Immutable),
+		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
+			return dd, err
+		}, "Calculates `x`^`y`.", volatility.Immutable),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"x", types.Int},
+				{"y", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
+			},
+			Info:       "Calculates `x`^`y`.",
+			Volatility: volatility.Immutable,
 		},
-		ReturnType: tree.FixedReturnType(types.Int),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			return eval.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
-		},
-		Info:       "Calculates `x`^`y`.",
-		Volatility: volatility.Immutable,
-	},
-)
+	)
+}
 
 func decimalLogFn(
 	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,

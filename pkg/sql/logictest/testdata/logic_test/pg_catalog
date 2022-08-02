@@ -4630,7 +4630,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-780513238  array_in  array_in
+2004  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed
@@ -4640,8 +4640,19 @@ SELECT count(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
 0
 
 ## Ensure no two builtins have the same oid.
-query I
-SELECT c FROM (SELECT oid, count(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
+query TI
+WITH r AS (
+  SELECT oid, c FROM (SELECT oid, count(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
+)
+SELECT proname, l.oid::int AS id
+FROM pg_catalog.pg_proc l
+JOIN r on l.oid = r.oid
+ORDER BY id
+----
+
+## Ensure no builtin has zero oid.
+query T
+SELECT proname FROM pg_catalog.pg_proc WHERE oid = 0
 ----
 
 ## Ensure that unnest works with oid wrapper arrays

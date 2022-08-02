@@ -51,7 +51,7 @@ type TestingKnobs struct {
 
 	// OverrideAsOfClause is a function which has a chance of modifying
 	// tree.AsOfClause.
-	OverrideAsOfClause func(clause *tree.AsOfClause)
+	OverrideAsOfClause func(clause *tree.AsOfClause, stmtTimestamp time.Time)
 
 	// BeforeUpdate is called in the update transaction after the update function
 	// has run. If an error is returned, it will be propagated and the update will
