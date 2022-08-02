@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -347,17 +349,31 @@ func checkPrivilegesForBackup(
 	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
-	// Check that none of the destinations require an admin role.
+
+	// Check destination specific privileges.
 	for _, uri := range to {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
 			return err
 		}
+
+		// Check if the destination requires the user to be an admin.
 		if !conf.AccessIsWithExplicitAuth() {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to BACKUP to the specified %s URI",
 				conf.Provider.String())
+		}
+
+		// If the backup is running to an External Connection, check that the user
+		// has adequate privileges.
+		if conf.Provider == cloudpb.ExternalStorageProvider_external {
+			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: conf.ExternalConnectionConfig.Name,
+			}
+			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+				return err
+			}
 		}
 	}
 

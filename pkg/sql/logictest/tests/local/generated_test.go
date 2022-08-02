@@ -730,6 +730,13 @@ func TestLogic_expression_index(
 	runLogicTest(t, "expression_index")
 }
 
+func TestLogic_external_connection_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "external_connection_privileges")
+}
+
 func TestLogic_family(
 	t *testing.T,
 ) {
@@ -2149,6 +2156,13 @@ func TestLogic_virtual_columns(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "virtual_columns")
+}
+
+func TestLogic_virtual_table_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "virtual_table_privileges")
 }
 
 func TestLogic_void(
