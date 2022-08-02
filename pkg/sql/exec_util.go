@@ -1891,8 +1891,9 @@ type queryMeta struct {
 	// Current phase of execution of query.
 	phase queryPhase
 
-	// Cancellation function for the context associated with this query's transaction.
-	ctxCancel context.CancelFunc
+	// Cancellation function for the context associated with this query's
+	// statement.
+	cancelQuery context.CancelFunc
 
 	// If set, this query will not be reported as part of SHOW QUERIES. This is
 	// set based on the statement implementing tree.HiddenFromShowQueries.
@@ -1901,10 +1902,10 @@ type queryMeta struct {
 	progressAtomic uint64
 }
 
-// cancel cancels the query associated with this queryMeta, by closing the associated
-// txn context.
+// cancel cancels the query associated with this queryMeta, by closing the
+// associated stmt context.
 func (q *queryMeta) cancel() {
-	q.ctxCancel()
+	q.cancelQuery()
 }
 
 // getStatement returns a cleaned version of the query associated
