@@ -156,6 +156,8 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
+	// TODO - remove pre-22.1 cluster versions
+
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
@@ -168,11 +170,8 @@ const (
 	// Pebble version that provides block property collectors that can be used
 	// for fine-grained time bound iteration. See
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
+	// TODO - pkg/storage
 	PebbleFormatBlockPropertyCollector
-	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
-	// This version must be active before any ProbeRequest is issued on the
-	// cluster.
-	ProbeRequest
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
@@ -341,9 +340,14 @@ const (
 	// *************************************************
 )
 
-// TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
-// previously referenced a < 21.2 version until that check/gate can be removed.
-const TODOPreV21_2 = V21_2
+const (
+	// TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
+	// previously referenced a < 21.2 version until that check/gate can be removed.
+	TODOPreV21_2 = V21_2
+	// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
+	// previously referenced a < 22.1 version until that check/gate can be removed.
+	TODOPreV22_1 = V22_1
+)
 
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
@@ -377,10 +381,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatBlockPropertyCollector,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
-	},
-	{
-		Key:     ProbeRequest,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
 	},
 	{
 		Key:     PublicSchemasWithDescriptors,
