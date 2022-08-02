@@ -100,7 +100,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		commit         bool
 		noLockSpans    bool
 		inFlightWrites []roachpb.SequencedWrite
-		deadline       *hlc.Timestamp
+		deadline       hlc.Timestamp
 		// Expected result.
 		expError string
 		expTxn   *roachpb.TransactionRecord
@@ -917,7 +917,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Sanity check request args.
 			if !c.commit {
 				require.Nil(t, c.inFlightWrites)
-				require.Nil(t, c.deadline)
+				require.Zero(t, c.deadline)
 			}
 
 			// Issue an EndTxn request.

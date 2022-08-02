@@ -707,7 +707,7 @@ message EndTxnRequest {
   // If EndTxn(Commit=true) finds that the txn's timestamp has been pushed above
   // this deadline, an error will be returned and the client is supposed to
   // rollback the txn.
-  util.hlc.Timestamp deadline = 3;
+  util.hlc.Timestamp deadline = 3 [(gogoproto.nullable) = false];
   // commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
