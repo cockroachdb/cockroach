@@ -532,6 +532,7 @@ func newMergeJoinBase(
 		},
 		diskAcc: diskAcc,
 	}
+	base.helper.Init(unlimitedAllocator, memoryLimit)
 	base.left.distincterInput = &colexecop.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
@@ -549,6 +550,7 @@ type mergeJoinBase struct {
 	colexecop.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
+	helper             colmem.AccountingHelper
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
