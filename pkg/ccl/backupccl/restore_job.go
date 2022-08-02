@@ -908,11 +908,9 @@ func createImportingDescriptors(
 
 			// Allocate no schedule to the row-level TTL.
 			// This will be re-written when the descriptor is published.
-			if details.DescriptorCoverage != tree.AllDescriptors {
-				for _, table := range mutableTables {
-					if table.HasRowLevelTTL() {
-						table.RowLevelTTL.ScheduleID = 0
-					}
+			for _, table := range mutableTables {
+				if table.HasRowLevelTTL() {
+					table.RowLevelTTL.ScheduleID = 0
 				}
 			}
 
@@ -1810,7 +1808,7 @@ func (r *restoreResumer) publishDescriptors(
 			return err
 		}
 		// Assign a TTL schedule before publishing.
-		if details.DescriptorCoverage != tree.AllDescriptors && mutTable.HasRowLevelTTL() {
+		if mutTable.HasRowLevelTTL() {
 			j, err := sql.CreateRowLevelTTLScheduledJob(
 				ctx,
 				execCfg,
