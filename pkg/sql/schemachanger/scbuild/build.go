@@ -37,6 +37,7 @@ import (
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
+	log.Infof(ctx, "Xiang: building %v with new schema changer\n", n.String())
 	start := timeutil.Now()
 	defer func() {
 		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {

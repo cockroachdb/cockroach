@@ -6658,6 +6658,13 @@ SELECT job_id FROM crdb_internal.jobs
 		require.Len(t, m, 0)
 	})
 
+	xiangRows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage")
+	log.Infof(ctx, "Xiang: querying crdb_internal.feature_usage table\n")
+	log.Infof(ctx, "Xiang: feature_col        count_col")
+	for _, row := range xiangRows {
+		log.Infof(ctx, "Xiang: %v        %v\n", row[0], row[1])
+	}
+
 	// Validate the job cancellation metrics.
 	rows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
 	if len(rows) != 1 ||

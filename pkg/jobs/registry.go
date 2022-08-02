@@ -1300,6 +1300,7 @@ func (r *Registry) stepThroughStateMachine(
 				jobErr,
 			)
 		}
+		log.Infof(ctx, "Xiang: job %v: incrementing a CANCELED telemetry for type %v\n", job.ID(), jobType)
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
 		r.removeFromWaitingSets(job.ID())
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)

@@ -91,6 +91,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, err
 	}
+	log.Infof(ctx, "Xiang: new schema changer used for %v\n", stmt.String())
 	return &schemaChangePlanNode{
 		stmt:         stmt,
 		sql:          p.stmt.SQL,
