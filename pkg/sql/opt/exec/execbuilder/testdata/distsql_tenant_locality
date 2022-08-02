@@ -1,0 +1,100 @@
+# LogicTest: 3node-tenant-multiregion
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
+
+# Create a table on the secondary tenant.
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+# Split the ranges in the table.
+statement ok
+ALTER TABLE t SPLIT AT SELECT generate_series(1, 6)
+
+# Relocate ranges in the admin tenant so that
+# - [1-2) and [2-3) are on node 2
+# - [3-4) and [4-5) are on node 3
+# - [5-6) and [6-7) are on node 1.
+user host-cluster-root
+
+statement ok
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1';
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2';
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%3';
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%4';
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%5';
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%6';
+
+# Check range lease holders in the admin tenant.
+query TI rowsort,retry
+SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%Table%/1/%'
+----
+/Tenant/10/Table/106/1/1  2
+/Tenant/10/Table/106/1/2  2
+/Tenant/10/Table/106/1/3  3
+/Tenant/10/Table/106/1/4  3
+/Tenant/10/Table/106/1/5  1
+/Tenant/10/Table/106/1/6  1
+
+user root
+
+# Populate the range cache.
+statement ok
+SELECT * FROM t
+
+# Check sql instance locality in the secondary tenant.
+query IT
+SELECT id, locality FROM system.sql_instances
+----
+1  {"Tiers": "region=test"}
+2  {"Tiers": "region=test1"}
+3  {"Tiers": "region=test2"}
+
+# Ensure that we plan TableReaders in the regions according to the leaseholder
+# of each range, namely we want
+# - TableReader on SQL Instance 2 to scan Span /106/1/1/0
+# - TableReader on SQL Instance 3 to scan Span /106/1/3/0
+# - TableReader on SQL Instance 1 to scan Span /106/1/5/0.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k IN (1, 3, 5)
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - /1] [/3 - /3] [/5 - /5]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkU9Lw0AQxe9-imVOVkaSTayHnJQaMVDbmhQUJEjMDqU0zcbdjSgl312yOdSWKrEe58-b9-PNBvRbAQGET7PxdTRhpzdRMk8exgOWhONwNGdn7Dae3jPDHu_COGQr1i5xZD6y4QAQSilokq1JQ_AMHBA8QPAhRaiUzElrqdrRxi5G4gMCF2FZVrVp2ylCLhVBsAGzNAVBAPPstaCYMkHKaW8JMtmysOfNlXmpVvQJCCNZ1OtSB2yF7B0QkiprK4e7lw53ho4LaYMga7M10iZbEAS8wR9gtgx1KZUgRWLHP20O4E7kuawcf2_xsLW3Y8375-AemQPvnYPXH4YfCeMf9ZQDMDHpSpaaemXutk8jsaDuw1rWKqeZkrm16cqp1dmGIG26Ke-KqLQjC_hdzH8VX-yI3X2x9x9n_0_itDn5CgAA__-lhT3K
+
+# Ensure that a single scan that touches multiple ranges is represented by a
+# single span after physical planning. We expect to only have a single
+# TableReader on node 3.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k >= 3 AND k < 5
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/3 - /4]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkNFK80AUhO__p1jmqv3Zkk1DvVgQLG3EQE1rUlDQIDE5lNI0G7MbUULeXZKItoLVu8yc803mbA39nEHCvVstpp7PBnMvXIc3iyEL3YU7W7P_7DJYXjPDbq_cwGWDHXuohHDonDlDNvXnn07CJkNw5ColP96ThryHDQ4HEUdRqoS0VmVr192Sl75CCo5tXlSmtSOORJUEWcNsTUaQ8NVIFVabkpKJt1m31nCoynxB2sQbghw3_CDYPh28jp8yCihOqbTEUTzMhXksdvQGjpnKqn2uJdtx9gKOsIhbZdnizLItZ_TxMcFPneyjTr8cG5AuVK7pT9eKJuKgdEP9g2pVlQmtSpV0v-nlsuM6IyVt-um4F17ej9qCh7B9Ehbf4Kj59x4AAP__gJu1Iw==
+
+# Ensure that a query with a LIMIT is planned on the instance that is the
+# "leaseholder" of the first range touched by the scan. We expect to only have a
+# single TableReader on node 2.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k >= 1 LIMIT 10
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - ]
+  limit: 10
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUF9LvEAUff99iuE8_YpZnDHoYSAoNiPB_ZMKBSVhellkXcecMQrxu4f60G7Q1tucc-85c87tYF5LKHgP6-DKX7L_134UR3fBCYu8wJvH7JTdhKsFs-z-1gs9tmVPrRBndMEkC_yFHzMpwFHpnJbpjgzUIyQ4XCQcdaMzMkY3A92NS37-DiU4iqpu7UAnHJluCKqDLWxJUFjqma6dwSUnmxbluNZz6NZ-iYxNNwTl9nzPWB43jtOXkkJKc2occWAPe2mf6y19gGOuy3ZXGcW2nL2BI6rTATlSnDvSkbPx4YIjKHaFHfr_FE4ehPuldUim1pWhP9UWfcJB-YamyxrdNhmtG52N30xwNepGIidjp6k7Ab-aRkPAfbE8KhbfxEn_7zMAAP__RR61bw==
