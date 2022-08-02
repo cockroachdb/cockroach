@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,9 +35,9 @@ type Simulator struct {
 	pacers map[state.StoreID]ReplicaPacer
 
 	// Store replicate queues.
-	rqs map[state.StoreID]RangeQueue
+	rqs map[state.StoreID]queue.RangeQueue
 	// Store split queues.
-	sqs map[state.StoreID]RangeQueue
+	sqs map[state.StoreID]queue.RangeQueue
 
 	state    state.State
 	changer  state.Changer
@@ -57,17 +58,17 @@ func NewSimulator(
 	metrics *MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
-	rqs := make(map[state.StoreID]RangeQueue)
-	sqs := make(map[state.StoreID]RangeQueue)
+	rqs := make(map[state.StoreID]queue.RangeQueue)
+	sqs := make(map[state.StoreID]queue.RangeQueue)
 	for storeID := range initialState.Stores() {
-		rqs[storeID] = NewReplicateQueue(
+		rqs[storeID] = queue.NewReplicateQueue(
 			storeID,
 			changer,
 			settings.ReplicaChangeDelayFn(),
 			initialState.MakeAllocator(storeID),
 			start,
 		)
-		sqs[storeID] = NewSplitQueue(
+		sqs[storeID] = queue.NewSplitQueue(
 			storeID,
 			changer,
 			settings.RangeSplitDelayFn(),

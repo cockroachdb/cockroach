@@ -214,6 +214,8 @@ type Replica interface {
 	Range() RangeID
 	// HoldsLease returns whether this replica holds the lease for the range.
 	HoldsLease() bool
+	// String returns a string representing the state of the replica.
+	String() string
 }
 
 // ManualSimClock implements the WallClock interface in the hlc pkg. This clock

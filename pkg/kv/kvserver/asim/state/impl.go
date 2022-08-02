@@ -917,3 +917,10 @@ func (r *replica) Range() RangeID {
 func (r *replica) HoldsLease() bool {
 	return r.holdsLease
 }
+
+// String returns a string representing the state of the replica.
+func (r *replica) String() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("r%d,s%d/%d", r.rangeID, r.storeID, r.replicaID))
+	return builder.String()
+}
