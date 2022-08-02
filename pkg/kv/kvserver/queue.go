@@ -94,9 +94,7 @@ func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queue
 				minSnapshotRate = snapshotRate
 			}
 		}
-		stats := repl.GetMVCCStats()
-		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
-		estimatedDuration := time.Duration(totalBytes/minSnapshotRate) * time.Second
+		estimatedDuration := time.Duration(repl.GetMVCCStats().Total()/minSnapshotRate) * time.Second
 		timeout := estimatedDuration * permittedRangeScanSlowdown
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
