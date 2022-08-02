@@ -1291,6 +1291,8 @@ CREATE VIEW crdb_internal.ranges (
     crdb_internal.lease_holder(start_key) AS lease_holder,
     (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
     + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
       AS range_size
   FROM
     crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (
@@ -1332,6 +1334,8 @@ CREATE VIEW crdb_internal.ranges (
     crdb_internal.lease_holder(start_key) AS lease_holder,
     (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
     + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
       AS range_size
   FROM
     crdb_internal.ranges_no_leases  {}  {}
