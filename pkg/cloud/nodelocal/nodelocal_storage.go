@@ -34,10 +34,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
-	localCfg := cloudpb.LocalFileConfig{}
+func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
-		return localCfg, errors.Errorf(
+		return errors.Newf(
 			"host component of nodelocal URI must be a node ID ("+
 				"use 'self' to specify each node should access its own local filesystem): %s",
 			uri.String(),
@@ -46,6 +45,20 @@ func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
 		uri.Host = "0"
 	}
 
+	_, err := strconv.Atoi(uri.Host)
+	if err != nil {
+		return errors.Newf("host component of nodelocal URI must be a node ID: %s", uri.String())
+	}
+
+	// TODO(adityamaru): We should be restricting the URI params that nodelocal
+	// accepts but there are several tests that use `nodelocal` to test URI params
+	// for other ExternalStorage providers. Fix those and then invoke
+	// `cloud.ValidateQueryParams` with the allow-list of parameters.
+	return nil
+}
+
+func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
+	localCfg := cloudpb.LocalFileConfig{}
 	nodeID, err := strconv.Atoi(uri.Host)
 	if err != nil {
 		return localCfg, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
@@ -56,10 +69,15 @@ func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
 	return localCfg, nil
 }
 
-func makeLocalFileExternalStorageConf(
+func parseLocalFileURI(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
 	conf := cloudpb.ExternalStorage{}
+
+	if err := validateLocalFileURI(uri); err != nil {
+		return conf, errors.Wrap(err, "invalid `nodelocal` URI")
+	}
+
 	conf.Provider = cloudpb.ExternalStorageProvider_nodelocal
 	var err error
 	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
@@ -215,5 +233,5 @@ func (*localFileStorage) Close() error {
 func init() {
 	const scheme = "nodelocal"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
-		makeLocalFileExternalStorageConf, makeLocalFileStorage, cloud.RedactedParams(), scheme)
+		parseLocalFileURI, makeLocalFileStorage, cloud.RedactedParams(), scheme)
 }
