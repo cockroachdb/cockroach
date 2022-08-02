@@ -757,6 +757,13 @@ func TestTenantLogic_expression_index(
 	runLogicTest(t, "expression_index")
 }
 
+func TestTenantLogic_external_connection_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "external_connection_privileges")
+}
+
 func TestTenantLogic_family(
 	t *testing.T,
 ) {
