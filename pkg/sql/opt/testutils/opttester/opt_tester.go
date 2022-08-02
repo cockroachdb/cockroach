@@ -260,6 +260,10 @@ type Flags struct {
 	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
 	// It defaults to true in New.
 	UseMultiColStats bool
+
+	// SkipRace indicates that a test should be skipped if the race detector is
+	// enabled.
+	SkipRace bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -504,14 +508,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     - inject-stats: the file path is relative to the test file.
 //
 //  - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
-//  indicates the number of joins at which the optimizer should stop attempting
-//  to reorder.
+//    indicates the number of joins at which the optimizer should stop
+//    attempting to reorder.
 //
-//  - prefer-lookup-joins-for-fks sets SessionData.PreferLookupJoinsForFKs to
-//  true, causing foreign key operations to prefer lookup joins.
+//  - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
+//    true, causing foreign key operations to prefer lookup joins.
 //
-//  - null-ordered-last sets SessionData.NullOrderedLast to true, which orders
-//  NULL values last in ascending order.
+//  - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
+//    NULL values last in ascending order.
 //
 //  - cascade-levels: used to limit the depth of recursive cascades for
 //    build-cascades.
@@ -533,10 +537,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - memo-cycles: used with memo to search the memo for cycles and output a
 //    path with a cycle if one is found.
 //
-//  - use-multi-col-stats sets the value for
-//  SessionData.OptimizerUseMultiColStats which indicates whether or not
-//  multi-column statistics are used for cardinality estimation in the
-//  optimizer. This option requires a single boolean argument.
+//  - use-multi-col-stats: sets the value for
+//    SessionData.OptimizerUseMultiColStats which indicates whether or not
+//    multi-column statistics are used for cardinality estimation in the
+//    optimizer. This option requires a single boolean argument.
+//
+//  - skip-race: skips the test if the race detector is enabled.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -546,6 +552,12 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 	}
 	ot.Flags.Verbose = datadriven.Verbose()
+
+	// Skip the test if the skip-race flag was provided and the race detector is
+	// enabled.
+	if ot.Flags.SkipRace && util.RaceEnabled {
+		return d.Expected
+	}
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
@@ -1122,6 +1134,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "memo-cycles":
 		f.MemoFormat = xform.FmtCycle
+
+	case "skip-race":
+		f.SkipRace = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
