@@ -186,11 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// MVCCIndexBackfiller supports MVCC-compliant index
-	// backfillers via a new BACKFILLING index state, delete
-	// preserving temporary indexes, and a post-backfill merging
-	// processing.
-	MVCCIndexBackfiller
 	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
 	// during joint configuration, including to VOTER_INCOMING replicas.
 	EnableLeaseHolderRemoval
@@ -364,10 +359,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     MVCCIndexBackfiller,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
 	{
 		Key:     EnableLeaseHolderRemoval,
