@@ -186,16 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
-	// format version for block property collectors.
-	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
-	// in a two-phase migration. The first cluster version acts as a gate for
-	// updating the format major version on all stores, while the second cluster
-	// version is used as a feature gate. A node in a cluster that sees the second
-	// version is guaranteed to have seen the first version, and therefore has an
-	// engine running at the required format major version, as do all other nodes
-	// in the cluster.
-	EnablePebbleFormatVersionBlockProperties
 	// MVCCIndexBackfiller supports MVCC-compliant index
 	// backfillers via a new BACKFILLING index state, delete
 	// preserving temporary indexes, and a post-backfill merging
@@ -374,10 +364,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     EnablePebbleFormatVersionBlockProperties,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 	{
 		Key:     MVCCIndexBackfiller,
