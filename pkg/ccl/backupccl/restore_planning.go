@@ -502,7 +502,6 @@ func allocateDescriptorRewrites(
 
 		// Remap all of the descriptor belonging to system tables to the temp system
 		// DB.
-		descriptorRewrites[tempSysDBID] = &jobspb.DescriptorRewrite{ID: tempSysDBID}
 		for _, table := range tablesByID {
 			if table.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[table.GetID()] = &jobspb.DescriptorRewrite{
