@@ -1486,9 +1486,9 @@ func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *prop
 }
 
 func (b *logicalPropsBuilder) buildCreateFunctionProps(
-	cv *CreateFunctionExpr, rel *props.Relational,
+	cf *CreateFunctionExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
+	BuildSharedProps(cf, &rel.Shared, b.evalCtx)
 }
 
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
