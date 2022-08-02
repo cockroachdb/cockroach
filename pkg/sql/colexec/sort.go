@@ -52,16 +52,17 @@ func newSorter(
 	for i, ord := range orderingCols[:len(orderingCols)-1] {
 		partitioners[i] = newPartitioner(inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
 	}
-	return &sortOp{
-		allocator:             allocator,
-		input:                 input,
-		inputTypes:            inputTypes,
-		sorters:               make([]colSorter, len(orderingCols)),
-		partitioners:          partitioners,
-		orderingCols:          orderingCols,
-		state:                 sortSpooling,
-		maxOutputBatchMemSize: maxOutputBatchMemSize,
+	s := &sortOp{
+		allocator:    allocator,
+		input:        input,
+		inputTypes:   inputTypes,
+		sorters:      make([]colSorter, len(orderingCols)),
+		partitioners: partitioners,
+		orderingCols: orderingCols,
+		state:        sortSpooling,
 	}
+	s.helper.Init(allocator, maxOutputBatchMemSize)
+	return s
 }
 
 // spooler is a column vector operator that spools the data from its input.
@@ -180,6 +181,7 @@ type sortOp struct {
 	colexecop.InitHelper
 
 	allocator *colmem.Allocator
+	helper    colmem.AccountingHelper
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
@@ -222,8 +224,7 @@ type sortOp struct {
 		partitionsCol []bool
 	}
 
-	output                coldata.Batch
-	maxOutputBatchMemSize int64
+	output coldata.Batch
 
 	exported int
 }
@@ -287,10 +288,7 @@ func (p *sortOp) Next() coldata.Batch {
 				p.state = sortDone
 				continue
 			}
-			p.output, _ = p.allocator.ResetMaybeReallocate(
-				p.inputTypes, p.output, toEmit, p.maxOutputBatchMemSize,
-				true, /* desiredCapacitySufficient */
-			)
+			p.output, _ = p.helper.ResetMaybeReallocate(p.inputTypes, p.output, toEmit)
 			if toEmit > p.output.Capacity() {
 				toEmit = p.output.Capacity()
 			}

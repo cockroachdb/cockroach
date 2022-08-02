@@ -142,36 +142,79 @@ func TestCFetcherLimitsOutputBatch(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 
-	// We set up a table with 50 rows that take up 16KiB each and we lower the
-	// distsql_workmem session variable to 128KiB. We also collect the stats on
-	// the table so that we had an estimated row count of 50 for the scan. With
-	// such setup the cFetcher will allocate an output batch of capacity 50, yet
-	// after setting the 7th or so row the footprint of the batch will exceed
-	// the memory limit. As a result, we will get around 7 batches.
+	// Lower the distsql_workmem session variable to 128KiB to speed up the
+	// test.
 	_, err := conn.ExecContext(ctx, `SET distsql_workmem='128KiB';`)
 	assert.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `
-CREATE TABLE t (a PRIMARY KEY, b) AS
-SELECT i, repeat('a', 16 * 1024) FROM generate_series(1, 50) AS g(i);`)
-	assert.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `ANALYZE t`)
-	assert.NoError(t, err)
 
-	batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
-	rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) SELECT * FROM t`)
-	assert.NoError(t, err)
-	foundBatches := -1
-	for rows.Next() {
-		var res string
-		assert.NoError(t, rows.Scan(&res))
-		if matches := batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
-			foundBatches, err = strconv.Atoi(matches[1])
+	for _, tc := range []struct {
+		// numRows and rowSize must be of the same length, with each index
+		// specifying the number of rows of the corresponding size (in bytes) to
+		// be inserted.
+		numRows []int
+		rowSize []int
+		// batchCountLowerBound is a hard lower bound on the number of
+		// vectorized batches used to return all rows inserted in the current
+		// iteration.
+		batchCountLowerBound int
+	}{
+		// Set up a table with 50 rows that take up 16KiB each. We will also
+		// collect the stats on the table so that we had an estimated row count
+		// of 50 for the scan. With such setup the cFetcher will allocate an
+		// output batch of capacity 50, yet after setting the 7th or so row the
+		// footprint of the batch will exceed the memory limit. As a result, we
+		// will get around 7 batches.
+		{
+			numRows: []int{50},
+			rowSize: []int{16 * 1024},
+			// There is a bit of non-determinism (namely, in how data in
+			// coldata.Bytes is appended), so we require that we get at least 7
+			// batches. If we get more, that's still ok since it means that the
+			// batches were even smaller.
+			batchCountLowerBound: 7,
+		},
+		// Test case when the data is of variable size. The cFetcher is happy to
+		// put first 1024 rows that are small into a single batch, so it'll
+		// attempt to do the same for the large rows; however, after setting
+		// about 128 rows, the memory limit is exceeded, so no more rows will be
+		// added.
+		{
+			numRows: []int{1024, 1024},
+			rowSize: []int{1, 1024},
+			// We expect first 1024 rows to be returned in a single batch, but
+			// second 1024 rows are split into batches of 128, so we'll at least
+			// get 9 batches, maybe more.
+			batchCountLowerBound: 9,
+		},
+	} {
+		_, err = conn.ExecContext(ctx, `DROP TABLE IF EXISTS t`)
+		assert.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `CREATE TABLE t (k INT PRIMARY KEY, v STRING)`)
+		assert.NoError(t, err)
+		startIdx := 1
+		for i := range tc.numRows {
+			_, err = conn.ExecContext(ctx,
+				"INSERT INTO t SELECT i, repeat('a', $1) FROM generate_series($2, $3) AS g(i);",
+				tc.rowSize[i], startIdx, startIdx+tc.numRows[i]-1,
+			)
 			assert.NoError(t, err)
+			startIdx += tc.numRows[i]
 		}
-	}
+		_, err = conn.ExecContext(ctx, `ANALYZE t`)
+		assert.NoError(t, err)
 
-	// There is a bit of non-determinism (namely, in how data in coldata.Bytes
-	// is appended), so we require that we get at least 7 batches. If we get
-	// more, that's still ok since it means that the batches were even smaller.
-	assert.GreaterOrEqual(t, foundBatches, 7)
+		batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+		rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE) SELECT * FROM t`)
+		assert.NoError(t, err)
+		foundBatches := -1
+		for rows.Next() {
+			var res string
+			assert.NoError(t, rows.Scan(&res))
+			if matches := batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+				foundBatches, err = strconv.Atoi(matches[1])
+				assert.NoError(t, err)
+			}
+		}
+		assert.GreaterOrEqual(t, foundBatches, tc.batchCountLowerBound)
+	}
 }
