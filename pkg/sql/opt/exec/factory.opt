@@ -620,6 +620,14 @@ define CreateView {
     withData bool
 }
 
+# CreateFunction implements CREATE FUNCTION.
+define CreateFunction {
+    Schema cat.Schema
+    Cf *tree.CreateFunction
+    Deps opt.SchemaDeps
+    TypeDeps opt.SchemaTypeDeps
+}
+
 # SequenceSelect implements a scan of a sequence as a data source.
 define SequenceSelect {
     Sequence cat.Sequence
@@ -750,17 +758,4 @@ define AlterRangeRelocate {
     subjectReplicas tree.RelocateSubject
     toStoreID tree.TypedExpr
     fromStoreID tree.TypedExpr
-}
-
-# CreateFunction implements CREATE FUNCTION.
-define CreateFunction {
-    Schema cat.Schema
-    FuncName *tree.FunctionName
-    Replace bool
-    FuncArgs tree.FuncArgs
-    ReturnType tree.FuncReturnType
-    Options tree.FunctionOptions
-    Body tree.FunctionBodyStr
-    Deps opt.SchemaDeps
-    TypeDeps opt.SchemaTypeDeps
 }

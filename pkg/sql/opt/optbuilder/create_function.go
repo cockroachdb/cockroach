@@ -33,9 +33,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
 	}
-	sch, prefix := b.resolveSchemaForCreateFunction(&cf.FuncName)
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.FuncName)
 	schID := b.factory.Metadata().AddSchema(sch)
-	funcName := tree.MakeFunctionNameFromPrefix(prefix, cf.FuncName.ObjectName)
+	cf.FuncName.ObjectNamePrefix = resName
 
 	b.insideFuncDef = true
 	b.trackSchemaDeps = true
@@ -96,19 +96,20 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	}
 
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	appendToFuncBodyStr := func(ast tree.Statement, newLine bool) {
+	appendFuncBodyStmt := func(ast tree.Statement, newLine bool) {
 		if newLine {
 			fmtCtx.WriteString("\n")
 		}
 		fmtCtx.FormatNode(ast)
 		fmtCtx.WriteString(";")
 	}
+
 	// TODO (mgartner): Inject argument names so that the builder doesn't panic on
 	// unknown column names which are actually argument names.
 	for i, stmt := range stmts {
 		defScope := b.buildStmtAtRoot(stmt.AST, nil)
 		// Format the statements with qualified datasource names.
-		appendToFuncBodyStr(stmt.AST, i > 0 /* newLine */)
+		appendFuncBodyStmt(stmt.AST, i > 0 /* newLine */)
 
 		if i == len(stmts)-1 {
 			err := validateReturnType(funcReturnType, defScope.cols)
@@ -122,6 +123,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = util.FastIntSet{}
+	}
+
+	// Override the function body so that references are fully qualified.
+	for i, option := range cf.Options {
+		if _, ok := option.(tree.FunctionBodyStr); ok {
+			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
+			break
+		}
 	}
 
 	// Collect user defined type dependencies from function signature.
@@ -148,15 +157,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateFunction(
 		&memo.CreateFunctionPrivate{
-			Schema:       schID,
-			FunctionName: &funcName,
-			Replace:      cf.Replace,
-			Args:         cf.Args,
-			ReturnType:   cf.ReturnType,
-			Options:      funcOptions,
-			Body:         tree.FunctionBodyStr(fmtCtx.String()),
-			Deps:         deps,
-			TypeDeps:     typeDeps,
+			Schema:   schID,
+			Syntax:   cf,
+			Deps:     deps,
+			TypeDeps: typeDeps,
 		},
 	)
 	return outScope

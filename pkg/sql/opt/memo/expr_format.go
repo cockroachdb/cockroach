@@ -673,29 +673,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			n.Child(f.Buffer.String())
 		}
 	case *CreateFunctionExpr:
-		// Arguments.
-		if len(t.Args) > 0 {
-			f.Buffer.Reset()
-			f.Buffer.WriteString("arguments:")
-			for _, arg := range t.Args {
-				fmt.Fprintf(f.Buffer, " %s", arg.Type.SQLString())
-			}
-			tp.Child(f.Buffer.String())
-		}
-		// Return type.
-		f.Buffer.Reset()
-		f.Buffer.WriteString("return_type: ")
-		if t.ReturnType.IsSet {
-			f.Buffer.WriteString("setof ")
-		}
-		f.Buffer.WriteString(t.ReturnType.Type.SQLString())
-		tp.Child(f.Buffer.String())
-		// Function body.
-		tp.Child(string(t.Body))
-		// Dependencies.
-		if len(t.Deps) == 0 {
-			return
-		}
+		tp.Child(t.Syntax.String())
 		n := tp.Child("dependencies")
 		for _, dep := range t.Deps {
 			f.Buffer.Reset()
