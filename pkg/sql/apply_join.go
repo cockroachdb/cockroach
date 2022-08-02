@@ -306,6 +306,7 @@ func runPlanInsidePlan(
 			plan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
+			false, /* skipDistSQLDiagramGeneration */
 		) {
 			return resultWriter.Err()
 		}
