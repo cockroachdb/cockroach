@@ -54,12 +54,6 @@ var upgrades = []upgrade.Upgrade{
 		preconditionBeforeStartingAnUpgrade,
 		NoTenantUpgradeFunc,
 	),
-	upgrade.NewTenantUpgrade(
-		"add column target to system.protected_ts_records",
-		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
-		NoPrecondition,
-		alterTableProtectedTimestampRecords,
-	),
 	upgrade.NewTenantUpgrade("update synthetic public schemas to be backed by a descriptor",
 		toCV(clusterversion.PublicSchemasWithDescriptors), // TODO(celia) - what to do here?
 		NoPrecondition,

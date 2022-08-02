@@ -14,7 +14,6 @@ package ptstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -54,10 +53,9 @@ var _ protectedts.Storage = (*storage)(nil)
 
 // TODO(adityamaru): Delete in 22.2.
 func useDeprecatedProtectedTSStorage(
-	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
+	_ context.Context, _ *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
-	return !st.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) ||
-		knobs.DisableProtectedTimestampForMultiTenant
+	return knobs.DisableProtectedTimestampForMultiTenant
 }
 
 // New creates a new Storage.
