@@ -563,9 +563,9 @@ func deprecatedRestoreOldVersionClusterTest(exportDir string) func(t *testing.T)
 			{"craig", "", "{}"},
 			{"root", "", "{admin}"},
 		})
-		sqlDB.CheckQueryResults(t, "SELECT * FROM system.comments", [][]string{
-			{"0", "52", "0", "database comment string"},
-			{"1", "53", "0", "table comment string"},
+		sqlDB.CheckQueryResults(t, "SELECT comment FROM system.comments ORDER BY object_id", [][]string{
+			{"database comment string"},
+			{"table comment string"},
 		})
 		// In the backup, Public schemas for non-system databases have ID 29.
 		// These should all be updated to explicit public schemas.
