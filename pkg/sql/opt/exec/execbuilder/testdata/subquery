@@ -149,7 +149,7 @@ vectorized: true
 │                 columns: (a, b, c)
 │                 estimated row count: 1,000 (missing stats)
 │                 table: abc@abc_pkey
-│                 spans: FULL SCAN
+│                 spans: FULL SCAN (SOFT LIMIT)
 │
 └── • subquery
     │ id: @S2
@@ -177,7 +177,7 @@ vectorized: true
                       ordering: -a
                       estimated row count: 1,000 (missing stats)
                       table: abc@abc_pkey
-                      spans: FULL SCAN
+                      spans: FULL SCAN (SOFT LIMIT)
 
 # IN expression transformed into semi-join.
 query T

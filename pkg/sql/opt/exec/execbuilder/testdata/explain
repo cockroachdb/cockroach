@@ -917,7 +917,7 @@ vectorized: true
               columns: (v)
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
-              spans: FULL SCAN
+              spans: FULL SCAN (SOFT LIMIT)
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))

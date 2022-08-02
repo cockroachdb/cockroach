@@ -71,6 +71,16 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client,
 	return httpClient, err
 }
 
+// GetAuthenticatedHTTPClient implements the TestServerInterface.
+func (ts *httpTestServer) GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error) {
+	authUser := authenticatedUserName()
+	if !isAdmin {
+		authUser = authenticatedUserNameNoAdmin()
+	}
+	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	return cookie, err
+}
+
 func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 	authUser username.SQLUsername, isAdmin bool,
 ) (http.Client, *serverpb.SessionCookie, error) {
