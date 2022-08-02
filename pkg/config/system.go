@@ -419,7 +419,7 @@ func (s *SystemConfig) GetZoneConfigForObject(
 	// in a weird intermediate state whereby the system tenant's config is no
 	// longer respected, but neither is the secondary tenant's.
 	if !codec.ForSystemTenant() &&
-		(id == 0 || !version.IsActive(clusterversion.EnableSpanConfigStore)) {
+		(id == 0) {
 		codec, id = keys.SystemSQLCodec, keys.TenantsRangesID
 	}
 	entry, err = s.getZoneEntry(codec, id)

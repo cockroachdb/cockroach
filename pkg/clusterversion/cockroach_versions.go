@@ -172,17 +172,17 @@ const (
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
 	PebbleFormatBlockPropertyCollector // TODO(celia) - pkg/storage
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
-	PublicSchemasWithDescriptors
+	PublicSchemasWithDescriptors // TODO(celia) - WIP
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
 	// reconciliation process at least once.
-	EnsureSpanConfigReconciliation
+	EnsureSpanConfigReconciliation // TODO(celia) - GetConfReader
 	// EnsureSpanConfigSubscription ensures that all KV nodes are subscribed to
 	// the global span configuration state, observing the entries installed as
 	// in EnsureSpanConfigReconciliation.
-	EnsureSpanConfigSubscription
+	EnsureSpanConfigSubscription // TODO(celia) - GetConfReader
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
-	EnableSpanConfigStore
+	EnableSpanConfigStore // TODO(celia) - GetConfReader
 	// SCRAM authentication is available.
 	SCRAMAuthentication
 	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason

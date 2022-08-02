@@ -2385,8 +2385,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		}
 
 		if s.cfg.SpanConfigsDisabled ||
-			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-			!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
 			repl.SetSpanConfig(conf)
 		}
 
