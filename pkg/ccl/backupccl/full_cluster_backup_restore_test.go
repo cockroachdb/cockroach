@@ -776,7 +776,6 @@ func TestDropDatabaseRevisionHistory(t *testing.T) {
 	const numAccounts = 1
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE same_name_db;`)
 	sqlDB.Exec(t, `DROP DATABASE same_name_db;`)
