@@ -66,59 +66,36 @@ SELECT count(1) FROM [SHOW TABLES FROM system] WHERE table_name LIKE 'crdb_inter
 ----
 4
 
-query-sql
-SELECT max(id) FROM system.namespace WHERE name NOT LIKE 'crdb_internal_copy_%';
-----
-112
-
-# We should have remapped the 4 conflicting system tables to IDs higher than any
-# descriptor in the backup.
-query-sql
-SELECT id FROM system.namespace WHERE name LIKE 'crdb_internal_copy_%' ORDER BY id;
-----
-113
-114
-115
-116
-
-# Be paranoid and check that there is no descriptor with ID above the 4th remapped system table.
-query-sql
-SELECT count(*) FROM system.namespace WHERE id > 116;
-----
-0
-
-# The system table IDs should have been replaced by restored descriptors.
+# We should have left the 4 system tables where they were.
 query-sql
 SELECT name, id FROM system.namespace WHERE id IN (104,105,106,107);
 ----
-data 104
-foo 107
-public 105
-bank 106
+crdb_internal_copy_104 104
+crdb_internal_copy_105 105
+crdb_internal_copy_106 106
+crdb_internal_copy_107 107
 
-# Check that we have copied over the system table rows correctly.
+query-sql
+SELECT name, id FROM system.namespace WHERE name LIKE 'crdb_internal_copy_%';
+----
+crdb_internal_copy_104 104
+crdb_internal_copy_105 105
+crdb_internal_copy_106 106
+crdb_internal_copy_107 107
+
+# Check that we have not written over the new system table rows.
 query-sql
 SELECT name, value FROM system.crdb_internal_copy_104
 ----
 tab_104 true
 
 query-sql
-SELECT name, value FROM system.crdb_internal_copy_105
-----
-tab_105 true
-
-query-sql
-SELECT name, value FROM system.crdb_internal_copy_106
-----
-tab_106 true
-
-query-sql
 SELECT name, value FROM system.crdb_internal_copy_107
 ----
 tab_107 true
 
-# Sanity check that we can write to the keyspace where we had conflicting
-# descriptors on restore.
+# Sanity check that we can write to the new remapped table that had an ID that
+# now belongs to one of the new system tabels.
 exec-sql
 INSERT INTO data.bank VALUES (100,100,'');
 ----
