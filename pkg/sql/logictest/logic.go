@@ -1283,7 +1283,8 @@ func (t *logicTest) newCluster(
 				AllowSettingClusterSettings: true,
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain: true,
+						DeterministicExplain:            true,
+						UseTransactionalDescIDGenerator: true,
 					},
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",
