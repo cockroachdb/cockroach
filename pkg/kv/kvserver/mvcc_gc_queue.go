@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -220,6 +219,7 @@ func makeMVCCGCQueueScore(
 	// trigger GC at the same time.
 	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
+		gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
 	)
 	return r
 }
@@ -322,6 +322,7 @@ func makeMVCCGCQueueScoreImpl(
 	gcTTL time.Duration,
 	lastGC hlc.Timestamp,
 	canAdvanceGCThreshold bool,
+	txnCleanupThreshold time.Duration,
 ) mvccGCQueueScore {
 	ms.Forward(now.WallTime)
 	var r mvccGCQueueScore
@@ -404,7 +405,7 @@ func makeMVCCGCQueueScoreImpl(
 
 	// Finally, queue if we find large abort spans for abandoned transactions.
 	if largeAbortSpan(ms) && !r.ShouldQueue &&
-		(r.LastGC == 0 || r.LastGC > kvserverbase.TxnCleanupThreshold) {
+		(r.LastGC == 0 || r.LastGC > txnCleanupThreshold) {
 		r.ShouldQueue = true
 		r.FinalScore++
 	}
@@ -567,12 +568,14 @@ func (mgcq *mvccGCQueue) process(
 	intentAgeThreshold := gc.IntentAgeThreshold.Get(&repl.store.ClusterSettings().SV)
 	maxIntentsPerCleanupBatch := gc.MaxIntentsPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	maxIntentKeyBytesPerCleanupBatch := gc.MaxIntentKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
+	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
 		gc.RunOptions{
 			IntentAgeThreshold:                     intentAgeThreshold,
 			MaxIntentsPerIntentCleanupBatch:        maxIntentsPerCleanupBatch,
 			MaxIntentKeyBytesPerIntentCleanupBatch: maxIntentKeyBytesPerCleanupBatch,
+			TxnCleanupThreshold:                    txnCleanupThreshold,
 			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
 			IntentCleanupBatchTimeout:              mvccGCQueueIntentBatchTimeout,
 		},

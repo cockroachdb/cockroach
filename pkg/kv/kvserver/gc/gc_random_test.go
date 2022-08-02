@@ -90,6 +90,7 @@ var (
 )
 
 const intentAgeThreshold = 2 * time.Hour
+const txnCleanupThreshold = time.Hour
 
 // TestRunNewVsOld exercises the behavior of Run relative to the old
 // implementation. It runs both the new and old implementation and ensures
@@ -130,7 +131,10 @@ func TestRunNewVsOld(t *testing.T) {
 			ttl := time.Duration(tc.ttlSec) * time.Second
 			newThreshold := CalculateThreshold(tc.now, ttl)
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
-				newThreshold, RunOptions{IntentAgeThreshold: intentAgeThreshold}, ttl,
+				newThreshold, RunOptions{
+					IntentAgeThreshold:  intentAgeThreshold,
+					TxnCleanupThreshold: txnCleanupThreshold,
+				}, ttl,
 				&oldGCer,
 				oldGCer.resolveIntents,
 				oldGCer.resolveIntentsAsync)
@@ -138,7 +142,10 @@ func TestRunNewVsOld(t *testing.T) {
 
 			newGCer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
-				newThreshold, RunOptions{IntentAgeThreshold: intentAgeThreshold}, ttl,
+				newThreshold, RunOptions{
+					IntentAgeThreshold:  intentAgeThreshold,
+					TxnCleanupThreshold: txnCleanupThreshold,
+				}, ttl,
 				&newGCer,
 				newGCer.resolveIntents,
 				newGCer.resolveIntentsAsync)
@@ -168,7 +175,10 @@ func BenchmarkRun(b *testing.B) {
 			intentThreshold = time.Duration(spec.intentAgeSec) * time.Second
 		}
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
-			CalculateThreshold(spec.now, ttl), RunOptions{IntentAgeThreshold: intentThreshold},
+			CalculateThreshold(spec.now, ttl), RunOptions{
+				IntentAgeThreshold:  intentThreshold,
+				TxnCleanupThreshold: txnCleanupThreshold,
+			},
 			ttl,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
@@ -276,7 +286,10 @@ func TestNewVsInvariants(t *testing.T) {
 
 			gcer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, desc, beforeGC, tc.now,
-				gcThreshold, RunOptions{IntentAgeThreshold: intentAgeThreshold}, ttl,
+				gcThreshold, RunOptions{
+					IntentAgeThreshold:  intentAgeThreshold,
+					TxnCleanupThreshold: txnCleanupThreshold,
+				}, ttl,
 				&gcer,
 				gcer.resolveIntents,
 				gcer.resolveIntentsAsync)

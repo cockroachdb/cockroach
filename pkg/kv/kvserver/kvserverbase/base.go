@@ -34,15 +34,6 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// TxnCleanupThreshold is the threshold after which a transaction is
-// considered abandoned and fit for removal, as measured by the
-// maximum of its last heartbeat and timestamp. Abort spans for the
-// transaction are cleaned up at the same time.
-//
-// TODO(tschottdorf): need to enforce at all times that this is much
-// larger than the heartbeat interval used by the coordinator.
-const TxnCleanupThreshold = time.Hour
-
 // CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
 
