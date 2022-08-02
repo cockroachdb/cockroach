@@ -1,0 +1,70 @@
+# external_connection_privileges tests the basic interaction of granting and
+# revoking privileges to an external connection. For more detailed tests around
+# usage please refer to backup, restore, import and CDC tests that use external
+# connections.
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----
+
+# Attempt to grant on an external connection that does not exist.
+statement error pq: failed to resolve External Connection: external connection with name foo does not exist
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+
+statement ok
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo'
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+
+query TTTT
+SELECT * FROM system.privileges
+----
+testuser  /externalconn/foo  {USAGE}  {}
+
+statement ok
+REVOKE USAGE ON EXTERNAL CONNECTION foo FROM testuser
+
+query TTTT
+SELECT * FROM system.privileges
+----
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+
+statement ok
+CREATE USER bar
+
+# Attempt to grant usage as testuser, this should fail since we did not specify WITH GRANT OPTION
+user testuser
+
+statement error pq: user testuser missing WITH GRANT OPTION privilege on USAGE
+GRANT USAGE ON EXTERNAL CONNECTION foo TO bar
+
+user root
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser WITH GRANT OPTION
+
+# Attempt to grant usage as testuser, this should succeed since we did specify WITH GRANT OPTION
+user testuser
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO bar
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY username
+----
+bar       /externalconn/foo  {USAGE}  {}
+testuser  /externalconn/foo  {USAGE}  {USAGE}
+
+# Invalid grants on external connections.
+
+statement error pq: invalid privilege type SELECT for external_connection
+GRANT SELECT ON EXTERNAL CONNECTION foo TO testuser
+
+statement error pq: invalid privilege type INSERT for external_connection
+GRANT INSERT ON EXTERNAL CONNECTION foo TO testuser

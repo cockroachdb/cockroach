@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -214,6 +215,21 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 			}
 		}
 		return ret, nil
+	case privilege.ExternalConnection:
+		var ret []syntheticprivilege.Object
+		for _, externalConnectionName := range n.targets.ExternalConnections {
+			// Ensure that an External Connection of this name actually exists.
+			if _, err := externalconn.LoadExternalConnection(ctx, externalConnectionName.String(),
+				p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
+				return nil, errors.Wrap(err, "failed to resolve External Connection")
+			}
+
+			ret = append(ret, &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: externalConnectionName.String(),
+			})
+		}
+		return ret, nil
+
 	default:
 		panic(errors.AssertionFailedf("unknown grant on object %v", n.grantOn))
 	}

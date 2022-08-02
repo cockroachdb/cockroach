@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -58,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1475,18 +1478,37 @@ func checkPrivilegesForRestore(
 	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
-	// Check that none of the sources rely on implicit access.
+
+	// Check destination specific privileges.
 	for i := range from {
 		for j := range from[i] {
 			conf, err := cloud.ExternalStorageConfFromURI(from[i][j], p.User())
 			if err != nil {
 				return err
 			}
+
+			// Check if the destination requires the user to be an admin.
 			if !conf.AccessIsWithExplicitAuth() {
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
 					"only users with the admin role are allowed to RESTORE from the specified %s URI",
 					conf.Provider.String())
+			}
+
+			// If the restore is running to an External Connection, check that the user
+			// has adequate privileges.
+			if conf.Provider == cloudpb.ExternalStorageProvider_external {
+				if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemExternalConnectionsTable) {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"version %v must be finalized to restore from an External Connection",
+						clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
+				}
+				ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+					ConnectionName: conf.ExternalConnectionConfig.Name,
+				}
+				if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+					return err
+				}
 			}
 		}
 	}

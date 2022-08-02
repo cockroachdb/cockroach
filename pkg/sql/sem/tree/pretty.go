@@ -2181,6 +2181,9 @@ func (node *GrantTargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Tables.SequenceOnly {
 		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))
 	}
+	if node.ExternalConnections != nil {
+		return p.row("EXTERNAL CONNECTION", p.Doc(&node.ExternalConnections))
+	}
 	return p.row("TABLE", p.Doc(&node.Tables.TablePatterns))
 }
 

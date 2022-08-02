@@ -359,6 +359,7 @@ grant_targets ::=
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
 	| 'DATABASE' name_list
+	| 'EXTERNAL' 'CONNECTION' name_list
 
 role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
