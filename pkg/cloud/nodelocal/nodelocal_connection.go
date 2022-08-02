@@ -13,78 +13,33 @@ package nodelocal
 import (
 	"context"
 	"net/url"
-	"path"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/errors"
 )
 
-var _ externalconn.ConnectionDetails = &localFileConnectionDetails{}
-
-type localFileConnectionDetails struct {
-	connectionpb.ConnectionDetails
-}
-
-// Dial implements the external.ConnectionDetails interface.
-func (l *localFileConnectionDetails) Dial(
-	ctx context.Context, connectionCtx externalconn.ConnectionContext, subdir string,
-) (externalconn.Connection, error) {
-	args := connectionCtx.ExternalStorageContext()
-	cfg := l.GetNodelocal().Cfg
-	cfg.Path = path.Join(cfg.Path, subdir)
-	externalStorageConf := cloudpb.ExternalStorage{
-		Provider:        cloudpb.ExternalStorageProvider_nodelocal,
-		LocalFileConfig: cfg,
-	}
-	es, err := cloud.MakeExternalStorage(ctx, externalStorageConf, args.IOConf, args.Settings,
-		args.BlobClientFactory, args.InternalExecutor, args.DB, args.Limiters, args.Options...)
-	if err != nil {
-		return nil, errors.Wrap(err,
-			"failed to construct `nodelocal` ExternalStorage while resolving external connection")
-	}
-
-	return es, nil
-}
-
-// ConnectionType implements the external.ConnectionDetails interface.
-func (l *localFileConnectionDetails) ConnectionType() connectionpb.ConnectionType {
-	return l.ConnectionDetails.Type()
-}
-
-// ConnectionProto implements the external.ConnectionDetails interface.
-func (l *localFileConnectionDetails) ConnectionProto() *connectionpb.ConnectionDetails {
-	return &l.ConnectionDetails
-}
-
-func parseLocalFileConnectionURI(
+func parseAndValidateLocalFileConnectionURI(
 	_ context.Context, uri *url.URL,
-) (connectionpb.ConnectionDetails, error) {
+) (externalconn.ExternalConnection, error) {
+	if err := validateLocalFileURI(uri); err != nil {
+		return nil, errors.Wrap(err, "invalid `nodelocal` URI")
+	}
+
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_nodelocal,
 		Details: &connectionpb.ConnectionDetails_Nodelocal{
-			Nodelocal: &connectionpb.NodelocalConnectionDetails{},
+			Nodelocal: &connectionpb.NodelocalConnectionDetails{
+				URI: uri.String(),
+			},
 		},
 	}
-	var err error
-	connDetails.GetNodelocal().Cfg, err = makeLocalFileConfig(uri)
-	return connDetails, err
-}
-
-func makeLocalFileConnectionDetails(
-	_ context.Context, details connectionpb.ConnectionDetails,
-) externalconn.ConnectionDetails {
-	return &localFileConnectionDetails{ConnectionDetails: details}
+	return externalconn.NewExternalConnection(connDetails), nil
 }
 
 func init() {
 	const scheme = "nodelocal"
 	externalconn.RegisterConnectionDetailsFromURIFactory(
-		connectionpb.ConnectionProvider_nodelocal,
 		scheme,
-		parseLocalFileConnectionURI,
-		makeLocalFileConnectionDetails,
+		parseAndValidateLocalFileConnectionURI,
 	)
 }

@@ -599,7 +599,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	if log.ExpensiveLogEnabled(ctx, 2) {
+	if !planCtx.skipDistSQLDiagramGeneration && log.ExpensiveLogEnabled(ctx, 2) {
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -1309,6 +1309,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
+	skipDistSQLDiagramGeneration bool,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -1320,6 +1321,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			subqueryPlans,
 			recv,
 			subqueryResultMemAcc,
+			skipDistSQLDiagramGeneration,
 		); err != nil {
 			recv.SetError(err)
 			// Usually we leave the closure of subqueries to occur when the
@@ -1350,6 +1352,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
+	skipDistSQLDiagramGeneration bool,
 ) error {
 	subqueryMonitor := mon.NewMonitor(
 		"subquery",
@@ -1376,6 +1379,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
 		distribute)
 	subqueryPlanCtx.stmtType = tree.Rows
+	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
@@ -1726,10 +1730,12 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if distributePostquery {
 		distribute = DistributionTypeAlways
 	}
-	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
-		distribute)
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
+	// Postqueries are only executed on the main query path where we skip the
+	// diagram generation.
+	postqueryPlanCtx.skipDistSQLDiagramGeneration = true
 	if planner.instrumentation.ShouldSaveFlows() {
 		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
