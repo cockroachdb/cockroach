@@ -81,7 +81,7 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 		},
 		name:  "hash",
 		order: unordered,
@@ -95,7 +95,7 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 		},
 		name:  "hash-partial-order",
 		order: partial,

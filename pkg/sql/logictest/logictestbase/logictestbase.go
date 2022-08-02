@@ -82,6 +82,12 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
+	// SkipDropDatabases allows a configuration to skip dropping of the database.
+	// This exists to enable development while DROP DATABASE for a feature is
+	// broken.
+	//
+	// TODO(ajwerner,chengxiong-ruan): Remove this before 22.2 is released.
+	SkipDropDatabases bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -449,6 +455,16 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:    roachpb.Version{Major: 22, Minor: 1},
 		BinaryVersion:       roachpb.Version{Major: 22, Minor: 2},
 		DisableUpgrade:      true,
+	},
+	{
+		Name:     "local-udf",
+		NumNodes: 1,
+		// local is the configuration where we run all tests which have bad
+		// interactions with the default test tenant.
+		DisableDefaultTestTenant: true,
+		// Set SkipDropDatabases to true for now to enable development on UDFs.
+		// TODO(ajwerner,chengxiong-ruan): Remove this before the 22.2 release.
+		SkipDropDatabases: true,
 	},
 }
 
