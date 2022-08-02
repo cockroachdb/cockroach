@@ -191,7 +191,7 @@ CREATE TABLE data2.foo (a int);
 		// Not specifying the schema makes the query search using defaultdb first.
 		// which ends up returning the error
 		// pq: database "defaultdb" is offline: restoring
-		checkZones := "SELECT * FROM system.public.zones"
+		checkZones := "SELECT n.name, z.config FROM system.public.zones z, system.public.namespace n WHERE n.id = z.id ORDER BY n.name ASC"
 		sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
 
 		// Check that the user tables are still offline.
@@ -265,11 +265,14 @@ CREATE TABLE data2.foo (a int);
 			switch table {
 			case systemschema.TableStatisticsTable.GetName():
 				// createdAt and statisticsID are re-generated on RESTORE.
-				query := `SELECT "tableID", name, "columnIDs", "rowCount" FROM system.table_statistics`
+				query := `SELECT name, "columnIDs", "rowCount" FROM system.table_statistics`
 				verificationQueries[i] = query
 			case systemschema.SettingsTable.GetName():
 				// We don't include the cluster version.
 				query := fmt.Sprintf("SELECT * FROM system.%s WHERE name <> 'version'", table)
+				verificationQueries[i] = query
+			case systemschema.CommentsTable.GetName():
+				query := fmt.Sprintf("SELECT comment FROM system.%s", table)
 				verificationQueries[i] = query
 			default:
 				query := fmt.Sprintf("SELECT * FROM system.%s", table)
@@ -280,13 +283,6 @@ CREATE TABLE data2.foo (a int);
 		for _, read := range verificationQueries {
 			sqlDBRestore.CheckQueryResults(t, read, sqlDB.QueryStr(t, read))
 		}
-	})
-
-	t.Run("ensure table IDs have not changed", func(t *testing.T) {
-		// Check that all tables have been restored. DISTINCT is needed in order to
-		// deal with the inclusion of schemas in the system.namespace table.
-		tableIDCheck := "SELECT * FROM system.namespace ORDER BY id"
-		sqlDBRestore.CheckQueryResults(t, tableIDCheck, sqlDB.QueryStr(t, tableIDCheck))
 	})
 
 	t.Run("ensure user table data restored", func(t *testing.T) {
@@ -312,16 +308,16 @@ CREATE TABLE data2.foo (a int);
 	t.Run("zone_configs", func(t *testing.T) {
 		// The restored zones should be a superset of the zones in the backed up
 		// cluster.
-		zoneIDsResult := sqlDB.QueryStr(t, `SELECT id FROM system.zones`)
+		zoneIDsResult := sqlDB.QueryStr(t, `SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n.id`)
 		var q strings.Builder
-		q.WriteString("SELECT * FROM system.zones WHERE id IN (")
-		for i, restoreZoneIDRow := range zoneIDsResult {
+		q.WriteString("SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n. id AND name IN (")
+		for i, restoreZoneNameRow := range zoneIDsResult {
 			if i > 0 {
 				q.WriteString(", ")
 			}
-			q.WriteString(restoreZoneIDRow[0])
+			q.WriteString(fmt.Sprintf("'%s'", restoreZoneNameRow[0]))
 		}
-		q.WriteString(")")
+		q.WriteString(") ORDER BY name ASC")
 		sqlDBRestore.CheckQueryResults(t, q.String(), sqlDB.QueryStr(t, q.String()))
 	})
 
@@ -1050,15 +1046,12 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 DROP DATABASE defaultdb;
 CREATE DATABASE defaultdb; 
 `)
-	row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'defaultdb'`)
-	var expectedDefaultDBID string
-	row.Scan(&expectedDefaultDBID)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
 
-	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
-		{"0", "0", "defaultdb", expectedDefaultDBID},
+	sqlDBRestore.CheckQueryResults(t, `SELECT name FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
+		{"defaultdb"},
 	})
 }
 
@@ -1083,30 +1076,5 @@ DROP DATABASE defaultdb;
 
 	sqlDBRestore.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
 		{"0"},
-	})
-}
-
-func TestRestoreToClusterWithDroppedDefaultDB(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
-	defer cleanupFn()
-	defer cleanupEmptyCluster()
-
-	expectedRow := sqlDB.QueryRow(t, `SELECT * FROM system.namespace WHERE name = 'defaultdb'`)
-	var parentID, parentSchemaID, ID int
-	var name string
-	expectedRow.Scan(&parentID, &parentSchemaID, &name, &ID)
-
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-
-	sqlDBRestore.Exec(t, `
-DROP DATABASE defaultdb;
-`)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
-	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
-		{fmt.Sprint(parentID), fmt.Sprint(parentSchemaID), name, fmt.Sprint(ID)},
 	})
 }
