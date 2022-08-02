@@ -116,3 +116,13 @@ query T
 SELECT ('63616665-6630-3064-6465-616462656562' COLLATE en)::uuid
 ----
 63616665-6630-3064-6465-616462656562
+
+# Regression test for incorrect concatenation of a UUID with a STRING in the
+# vectorized engine (#83093).
+statement ok
+CREATE TABLE t83093 (u) AS SELECT 'eb64afe6-ade7-40ce-8352-4bb5eec39075'::UUID
+
+query T
+SELECT u || 'foo' FROM t83093
+----
+eb64afe6-ade7-40ce-8352-4bb5eec39075foo

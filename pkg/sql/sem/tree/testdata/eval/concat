@@ -52,6 +52,11 @@ true || 'a' || false
 'trueafalse'
 
 eval
+'eb64afe6-ade7-40ce-8352-4bb5eec39075'::UUID || 'a'
+----
+'eb64afe6-ade7-40ce-8352-4bb5eec39075a'
+
+eval
 (1,2) || 'a' || (3,4)
 ----
 '(1,2)a(3,4)'
