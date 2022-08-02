@@ -919,7 +919,8 @@ func (s *adminServer) tableDetailsHelper(
 					sum(
 						(d->>'key_bytes')::INT8 + 
 						(d->>'val_bytes')::INT8 + 
-						(d->>'intent_bytes')::INT8 + 
+						COALESCE((d->>'range_key_bytes')::INT8, 0) +
+						COALESCE((d->>'range_val_bytes')::INT8, 0) +
 						(d->>'sys_bytes')::INT8) AS total
 				FROM
 					range_stats
