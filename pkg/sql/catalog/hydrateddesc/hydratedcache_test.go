@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package hydratedtables
+package hydrateddesc
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -35,14 +36,11 @@ func TestHydratedCache(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("basic caching", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, _, res := makeCache()
 		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 1)
+		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Observe that the cache's lookup functionality only gets each type
 		// one time. The table in question uses one type two times.
@@ -58,31 +56,25 @@ func TestHydratedCache(t *testing.T) {
 		cached, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
 		require.Equal(t, hydrated, cached)
-		assertMetrics(t, m, 1, 1)
+		assertMetrics(t, m, 1, 1, catalog.Table)
 
 		// Observe that the cache's cache checking functionality only gets each
 		// type one time.
 		require.Equal(t, res.calls, 2)
 	})
 	t.Run("no UDT, no metrics", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, _, res := makeCache()
 		td := tableDescNoUDT.ImmutableCopy().(catalog.TableDescriptor)
 		_, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 0)
+		assertMetrics(t, m, 0, 0, catalog.Table)
 	})
 	t.Run("name change causes eviction", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, dg, res := makeCache()
 		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 1)
+		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Change the database name.
 		dbDesc := dbdesc.NewBuilder(dg.LookupDescriptorEntry(dbID).(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
@@ -94,19 +86,16 @@ func TestHydratedCache(t *testing.T) {
 		// the name change.
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 2)
+		assertMetrics(t, m, 0, 2, catalog.Table)
 
 		require.NotEqual(t, hydrated, retrieved)
 	})
 	t.Run("unqualified resolution after qualified does not cause eviction", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, _, res := makeCache()
 		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 1)
+		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Attempt to retrieve retrieve the same hydrated descriptor
 		// using a resolver that does not create a qualified name and
@@ -115,20 +104,17 @@ func TestHydratedCache(t *testing.T) {
 		res.unqualifiedName = true
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 1, 1)
+		assertMetrics(t, m, 1, 1, catalog.Table)
 
 		require.Equal(t, hydrated, retrieved)
 	})
 	t.Run("qualified resolution after unqualified causes eviction", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, _, res := makeCache()
 		res.unqualifiedName = true
 		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 1)
+		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Attempt to retrieve retrieve the same hydrated descriptor
 		// using a resolver that does create a qualified name and
@@ -137,20 +123,17 @@ func TestHydratedCache(t *testing.T) {
 		res.unqualifiedName = false
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 2)
+		assertMetrics(t, m, 0, 2, catalog.Table)
 
 		require.NotEqual(t, hydrated, retrieved)
 	})
 	t.Run("version change causes eviction", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, dg, res := makeCache()
 		res.unqualifiedName = true
 		td := tableDescUDT.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 1)
+		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Change the type descriptor.
 		typDesc := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
@@ -160,7 +143,7 @@ func TestHydratedCache(t *testing.T) {
 		// Ensure that a new descriptor is returned.
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
 		require.NoError(t, err)
-		assertMetrics(t, m, 0, 2)
+		assertMetrics(t, m, 0, 2, catalog.Table)
 
 		require.NotEqual(t, hydrated, retrieved)
 	})
@@ -168,9 +151,7 @@ func TestHydratedCache(t *testing.T) {
 	// propagate back to a concurrent retrieval as it could be due to something
 	// like cancellation.
 	t.Run("errors do not propagate to concurrent calls", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, _, dg, res := makeCache()
 		calledCh := make(chan chan error, 1)
 		res.called = func(ctx context.Context, id descpb.ID) error {
 			errCh := make(chan error, 1)
@@ -195,12 +176,10 @@ func TestHydratedCache(t *testing.T) {
 		unblockCallOne <- context.Canceled
 		require.Equal(t, context.Canceled, <-callOneErrCh)
 		require.NoError(t, <-callTwoErrCh)
-		assertMetrics(t, c.Metrics(), 0, 1)
+		assertMetrics(t, c.Metrics(), 0, 1, catalog.Table)
 	})
 	t.Run("modified table gets rejected", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, _, dg, res := makeCache()
 		mut := tabledesc.NewBuilder(dg.LookupDescriptorEntry(tableUDTID).(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		td := mut.ImmutableCopy().(catalog.TableDescriptor)
@@ -209,11 +188,7 @@ func TestHydratedCache(t *testing.T) {
 		require.Nil(t, hydrated)
 	})
 	t.Run("modified type does not get cached", func(t *testing.T) {
-		c := NewCache(cluster.MakeTestingClusterSettings())
-		m := c.Metrics()
-
-		dg := mkDescGetter(descs...)
-		res := &descGetterTypeDescriptorResolver{dg: &dg}
+		c, m, dg, res := makeCache()
 
 		mut := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
@@ -232,13 +207,13 @@ func TestHydratedCache(t *testing.T) {
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, resWithMut)
 			require.NoError(t, err)
 			require.NotNil(t, hydrated)
-			assertMetrics(t, m, 0, 1)
+			assertMetrics(t, m, 0, 1, catalog.Table)
 		}
 		{
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, resWithMut)
 			require.NoError(t, err)
 			require.NotNil(t, hydrated)
-			assertMetrics(t, m, 0, 2)
+			assertMetrics(t, m, 0, 2, catalog.Table)
 		}
 
 		// Now cache the old version.
@@ -246,13 +221,13 @@ func TestHydratedCache(t *testing.T) {
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 			require.NoError(t, err)
 			require.NotNil(t, hydrated)
-			assertMetrics(t, m, 0, 3)
+			assertMetrics(t, m, 0, 3, catalog.Table)
 		}
 		{
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
 			require.NoError(t, err)
 			require.NotNil(t, hydrated)
-			assertMetrics(t, m, 1, 3)
+			assertMetrics(t, m, 1, 3, catalog.Table)
 		}
 
 		// Show that now we won't use the cache for the mutated type.
@@ -260,10 +235,87 @@ func TestHydratedCache(t *testing.T) {
 			hydrated, err := c.GetHydratedTableDescriptor(ctx, td, resWithMut)
 			require.NoError(t, err)
 			require.Nil(t, hydrated)
-			assertMetrics(t, m, 1, 3)
+			assertMetrics(t, m, 1, 3, catalog.Table)
 		}
-
 	})
+	t.Run("function basic caching", func(t *testing.T) {
+		c, m, _, res := makeCache()
+
+		fd := funcUDTDesc.ImmutableCopy().(catalog.FunctionDescriptor)
+		hydrated, err := c.GetHydratedFunctionDescriptor(ctx, fd, res)
+		require.NoError(t, err)
+		assertMetrics(t, m, 0, 1, catalog.Function)
+
+		// The function use 2 UDTs.
+		require.Equal(t, res.calls, 2)
+
+		// Show that the cache returned a new pointer and hydrated the UDT
+		// (user-defined type).
+		require.NotEqual(t, tableDescUDT, hydrated)
+		require.EqualValues(t, hydrated.GetReturnType().Type, typ1T)
+		require.EqualValues(t, hydrated.GetArgs()[0].Type, typ1T)
+		require.EqualValues(t, hydrated.GetArgs()[1].Type, typ2T)
+
+		// Try again and ensure we get pointer-for-pointer the same descriptor.
+		res.calls = 0
+		cached, err := c.GetHydratedFunctionDescriptor(ctx, fd, res)
+		require.NoError(t, err)
+		require.Equal(t, hydrated, cached)
+		assertMetrics(t, m, 1, 1, catalog.Function)
+		require.Equal(t, res.calls, 2)
+	})
+	t.Run("function without UDT, no metric", func(t *testing.T) {
+		c, m, _, res := makeCache()
+		td := tableDescNoUDT.ImmutableCopy().(catalog.TableDescriptor)
+		_, err := c.GetHydratedTableDescriptor(ctx, td, res)
+		require.NoError(t, err)
+		assertMetrics(t, m, 0, 0, catalog.Function)
+	})
+	t.Run("schema basic caching", func(t *testing.T) {
+		c, m, _, res := makeCache()
+
+		sd := schemaUDTDesc.ImmutableCopy().(catalog.SchemaDescriptor)
+		hydrated, err := c.GetHydratedSchemaDescriptor(ctx, sd, res)
+		require.NoError(t, err)
+		assertMetrics(t, m, 0, 1, catalog.Schema)
+
+		// The function use 2 UDTs.
+		require.Equal(t, res.calls, 2)
+
+		// Show that the cache returned a new pointer and hydrated the UDT
+		// (user-defined type).
+		require.NotEqual(t, tableDescUDT, hydrated)
+		fns, found := hydrated.GetFunction("f_udt")
+		require.True(t, found)
+		require.Equal(t, 1, len(fns.Overloads))
+		require.EqualValues(t, fns.Overloads[0].ArgTypes[0], typ1T)
+		require.EqualValues(t, fns.Overloads[0].ArgTypes[1], typ2T)
+		require.EqualValues(t, fns.Overloads[0].ReturnType, typ1T)
+
+		// Try again and ensure we get pointer-for-pointer the same descriptor.
+		res.calls = 0
+		cached, err := c.GetHydratedSchemaDescriptor(ctx, sd, res)
+		require.NoError(t, err)
+		require.Equal(t, hydrated, cached)
+		assertMetrics(t, m, 1, 1, catalog.Schema)
+		require.Equal(t, res.calls, 2)
+	})
+	t.Run("schema without UDT, no metric", func(t *testing.T) {
+		c, m, _, res := makeCache()
+		sd := schemaNoUDTDesc.ImmutableCopy().(catalog.SchemaDescriptor)
+		_, err := c.GetHydratedSchemaDescriptor(ctx, sd, res)
+		require.NoError(t, err)
+		assertMetrics(t, m, 0, 0, catalog.Schema)
+	})
+}
+
+func makeCache() (*Cache, *Metrics, nstree.MutableCatalog, *descGetterTypeDescriptorResolver) {
+	c := NewCache(cluster.MakeTestingClusterSettings())
+	m := c.Metrics()
+	dg := mkDescGetter(descs...)
+	res := &descGetterTypeDescriptorResolver{dg: &dg}
+
+	return c, m, dg, res
 }
 
 func mkTypeT(desc catalog.TypeDescriptor, name *tree.TypeName) *types.T {
@@ -281,6 +333,10 @@ const (
 	typ2ID       = 4
 	tableUDTID   = 5
 	tableNoUDTID = 6
+	scUDTID      = 7
+	scNoUDTID    = 8
+	funcUDTID    = 9
+	funcNoUDTID  = 10
 )
 
 // This block contains definitions for a mocked schema.
@@ -357,8 +413,51 @@ var (
 			{Name: "a", ID: 1, Type: types.Int},
 		},
 	}).BuildExistingMutableTable()
+	schemaUDTDesc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		Name:     "schemaUDT",
+		ID:       scUDTID,
+		ParentID: dbID,
+		Functions: map[string]descpb.SchemaDescriptor_Function{
+			"f_udt": {
+				Name: "f_udt",
+				Overloads: []descpb.SchemaDescriptor_FunctionOverload{
+					{
+						ID:         funcUDTID,
+						ArgTypes:   []*types.T{typ1TSerialized, typ2TSerialized},
+						ReturnType: typ1TSerialized,
+					},
+				},
+			},
+		},
+	}).BuildExistingMutable()
+	schemaNoUDTDesc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		Name:     "schemaNoUDT",
+		ID:       scNoUDTID,
+		ParentID: dbID,
+		Functions: map[string]descpb.SchemaDescriptor_Function{
+			"f_no_udt": {
+				Name: "f_no_udt",
+				Overloads: []descpb.SchemaDescriptor_FunctionOverload{
+					{ID: funcNoUDTID, ArgTypes: []*types.T{types.Int}, ReturnType: types.Void},
+				},
+			},
+		},
+	}).BuildExistingMutable()
+	funcUDTDesc = funcdesc.NewBuilder(&descpb.FunctionDescriptor{
+		Name:       "f_udt",
+		ID:         funcUDTID,
+		Args:       []descpb.FunctionDescriptor_Argument{{Type: typ1TSerialized}, {Type: typ2TSerialized}},
+		ReturnType: descpb.FunctionDescriptor_ReturnType{Type: typ1TSerialized},
+	}).BuildExistingMutable()
+	funcNoUDTDesc = funcdesc.NewBuilder(&descpb.FunctionDescriptor{
+		Name:       "f_no_udt",
+		ID:         funcNoUDTID,
+		Args:       []descpb.FunctionDescriptor_Argument{{Type: types.Int}},
+		ReturnType: descpb.FunctionDescriptor_ReturnType{Type: types.Void},
+	}).BuildExistingMutable()
 	descs = []catalog.MutableDescriptor{
 		dbDesc, schemaDesc, typ1Desc, typ2Desc, tableDescUDT, tableDescNoUDT,
+		schemaUDTDesc, schemaNoUDTDesc, funcUDTDesc, funcNoUDTDesc,
 	}
 )
 
@@ -398,10 +497,10 @@ func (d *descGetterTypeDescriptorResolver) GetTypeDescriptor(
 	return name, desc.(catalog.TypeDescriptor), nil
 }
 
-func assertMetrics(t *testing.T, m *Metrics, hits, misses int64) {
+func assertMetrics(t *testing.T, m *Metrics, hits, misses int64, dt catalog.DescriptorType) {
 	t.Helper()
-	require.Equal(t, hits, m.Hits.Count())
-	require.Equal(t, misses, m.Misses.Count())
+	require.Equal(t, hits, m.Hits[dt].Count())
+	require.Equal(t, misses, m.Misses[dt].Count())
 }
 
 var _ catalog.TypeDescriptorResolver = (*descGetterTypeDescriptorResolver)(nil)

@@ -181,5 +181,10 @@ func (tc *Collection) getSchemaByID(
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
 	}
 
-	return schemaDesc, nil
+	hydrated, err := tc.hydrateTypesInDescWithOptions(ctx, txn, schemaDesc, flags.IncludeOffline, flags.AvoidLeased)
+	if err != nil {
+		return nil, err
+	}
+
+	return hydrated.(catalog.SchemaDescriptor), nil
 }
