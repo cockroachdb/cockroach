@@ -345,7 +345,7 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 			// len(op.buckets)-op.curOutputBucketIdx (the number of remaining
 			// output tuples) capacity.
 			op.output, _ = op.accountingHelper.ResetMaybeReallocate(
-				op.outputTypes, op.output, len(op.buckets)-op.curOutputBucketIdx, true, /* desiredCapacitySufficient */
+				op.outputTypes, op.output, len(op.buckets)-op.curOutputBucketIdx,
 			)
 			curOutputIdx := 0
 			for batchDone := false; op.curOutputBucketIdx < len(op.buckets) && !batchDone; {
