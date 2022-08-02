@@ -277,14 +277,14 @@ type cFetcher struct {
 
 func (cf *cFetcher) resetBatch() {
 	var reallocated bool
-	var minDesiredCapacity int
+	var remainingTuples int
 	if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
 		// use the hint to size the batch. Note that if it exceeds
 		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
-		minDesiredCapacity = cf.machine.limitHint
+		remainingTuples = cf.machine.limitHint
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not
 		// present, it'll be 0 and ResetMaybeReallocate will allocate the
@@ -294,13 +294,13 @@ func (cf *cFetcher) resetBatch() {
 		// into an int. We have to be careful: if we just cast it directly, a
 		// giant estimate will wrap around and become negative.
 		if cf.estimatedRowCount > uint64(coldata.BatchSize()) {
-			minDesiredCapacity = coldata.BatchSize()
+			remainingTuples = coldata.BatchSize()
 		} else {
-			minDesiredCapacity = int(cf.estimatedRowCount)
+			remainingTuples = int(cf.estimatedRowCount)
 		}
 	}
 	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
-		cf.table.typs, cf.machine.batch, minDesiredCapacity, false, /* desiredCapacitySufficient */
+		cf.table.typs, cf.machine.batch, remainingTuples,
 	)
 	if reallocated {
 		cf.machine.colvecs.SetBatch(cf.machine.batch)

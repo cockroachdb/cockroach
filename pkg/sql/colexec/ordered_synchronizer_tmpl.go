@@ -210,7 +210,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
 	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
-		o.typs, o.output, 1 /* minDesiredCapacity */, false, /* desiredCapacitySufficient */
+		o.typs, o.output, 0, /* remainingTuples */
 	)
 	if reallocated {
 		o.outVecs.SetBatch(o.output)
