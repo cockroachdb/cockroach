@@ -111,8 +111,9 @@ func (d *dev) getDockerRunArgs(
 	_, err = d.exec.CommandContextSilent(ctx, "docker", "volume", "inspect", volume)
 	if err != nil {
 		log.Printf("Creating volume %s with Docker...", volume)
-		_, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "create", volume)
+		out, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "create", volume)
 		if err != nil {
+			printStdoutAndErr(string(out), err)
 			return nil, err
 		}
 		// When Docker creates the volume, the owner will be `root`.
