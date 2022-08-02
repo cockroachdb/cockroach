@@ -185,8 +185,8 @@ func (tc *Collection) getDescriptorsByID(
 		//
 		// TODO(ajwerner): Sort out the hydration mess; define clearly what is
 		// hydrated where and test the API boundary accordingly.
-		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			desc, err = tc.hydrateTypesInTableDescWithOptions(ctx, txn, table, flags.IncludeOffline, flags.AvoidLeased)
+		if hydratable, ok := desc.(catalog.HydratableDescriptor); ok {
+			desc, err = tc.hydrateTypesInDescWithOptions(ctx, txn, hydratable, flags.IncludeOffline, flags.AvoidLeased)
 			if err != nil {
 				return nil, err
 			}
@@ -246,10 +246,10 @@ func (q *byIDLookupContext) lookupCached(id descpb.ID) (_ catalog.Descriptor, er
 			return nil, err
 		}
 	}
-	// Hydrate any types in the descriptor if necessary, for uncomitted
+	// Hydrate any types in the descriptor if necessary, for uncommitted
 	// descriptors we are going to include offline and get non-cached view.
-	if tableDesc, isTableDesc := sd.(catalog.TableDescriptor); isTableDesc {
-		sd, err = q.tc.hydrateTypesInTableDescWithOptions(q.ctx, q.txn, tableDesc, true, true)
+	if desc, ok := sd.(catalog.HydratableDescriptor); ok {
+		sd, err = q.tc.hydrateTypesInDescWithOptions(q.ctx, q.txn, desc, true, true)
 		if err != nil {
 			return nil, err
 		}

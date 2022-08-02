@@ -103,7 +103,7 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
@@ -226,7 +226,7 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
@@ -325,7 +325,7 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
@@ -394,7 +394,7 @@ INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)

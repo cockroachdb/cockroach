@@ -149,6 +149,11 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 	return coldata.NewMemBatchNoCols(typs, capacity)
 }
 
+// ResetBatch resets the batch while keeping the memory accounting updated.
+func (a *Allocator) ResetBatch(batch coldata.Batch) {
+	a.ReleaseMemory(batch.ResetInternalBatch())
+}
+
 // ResetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
 // state (meaning it is ready to be used) and to have the capacity of at least
 // 1. minDesiredCapacity is a hint about the capacity of the returned batch
@@ -201,7 +206,7 @@ func (a *Allocator) ResetMaybeReallocate(
 		}
 		if useOldBatch {
 			reallocated = false
-			a.ReleaseMemory(oldBatch.ResetInternalBatch())
+			a.ResetBatch(oldBatch)
 			newBatch = oldBatch
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
@@ -380,6 +385,8 @@ func (a *Allocator) AdjustMemoryUsage(delta int64) {
 func (a *Allocator) ReleaseMemory(size int64) {
 	if size < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly negative size in ReleaseMemory: %d", size))
+	} else if size == 0 {
+		return
 	}
 	if size > a.acc.Used() {
 		size = a.acc.Used()

@@ -447,3 +447,18 @@ func (desc *immutable) GetPrivilegeDescriptor(
 ) (*catpb.PrivilegeDescriptor, error) {
 	return desc.GetPrivileges(), nil
 }
+
+// FuncDesc implements the catalog.FunctionDescriptor interface.
+func (desc *immutable) FuncDesc() *descpb.FunctionDescriptor {
+	return &desc.FunctionDescriptor
+}
+
+// ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
+func (desc *immutable) ContainsUserDefinedTypes() bool {
+	for i := range desc.Args {
+		if desc.Args[i].Type.UserDefined() {
+			return true
+		}
+	}
+	return desc.ReturnType.Type.UserDefined()
+}

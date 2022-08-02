@@ -44,20 +44,18 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // makeNotUsableFalseBuiltin creates a builtin that takes no arguments and
 // always returns a boolean with the value false.
 func makeNotUsableFalseBuiltin() builtinDefinition {
-	return builtinDefinition{
-		props: defProps(),
-		overloads: []tree.Overload{
-			{
-				Types:      tree.ArgTypes{},
-				ReturnType: tree.FixedReturnType(types.Bool),
-				Fn: func(*eval.Context, tree.Datums) (tree.Datum, error) {
-					return tree.DBoolFalse, nil
-				},
-				Info:       notUsableInfo,
-				Volatility: volatility.Volatile,
+	return makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(*eval.Context, tree.Datums) (tree.Datum, error) {
+				return tree.DBoolFalse, nil
 			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Volatile,
 		},
-	}
+	)
 }
 
 // typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
@@ -152,26 +150,24 @@ func initPGBuiltins() {
 var errUnimplemented = pgerror.New(pgcode.FeatureNotSupported, "unimplemented")
 
 func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefinition {
-	return builtinDefinition{
-		props: tree.FunctionProperties{
+	return makeBuiltin(
+		tree.FunctionProperties{
 			Category: builtinconstants.CategoryCompatibility,
 		},
-		overloads: []tree.Overload{
-			{
-				Types:      argTypes,
-				ReturnType: tree.FixedReturnType(returnType),
-				Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-					return nil, errUnimplemented
-				},
-				Info:       notUsableInfo,
-				Volatility: volatility.Volatile,
-				// Ignore validity checks for typeio builtins. We don't
-				// implement these anyway, and they are very hard to special
-				// case.
-				IgnoreVolatilityCheck: true,
+		tree.Overload{
+			Types:      argTypes,
+			ReturnType: tree.FixedReturnType(returnType),
+			Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				return nil, errUnimplemented
 			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Volatile,
+			// Ignore validity checks for typeio builtins. We don't
+			// implement these anyway, and they are very hard to special
+			// case.
+			IgnoreVolatilityCheck: true,
 		},
-	}
+	)
 }
 
 // makeTypeIOBuiltins generates the 4 i/o builtins that Postgres implements for
@@ -420,12 +416,12 @@ func makePGPrivilegeInquiryDef(
 			Volatility: volatility.Stable,
 		})
 	}
-	return builtinDefinition{
-		props: tree.FunctionProperties{
+	return makeBuiltin(
+		tree.FunctionProperties{
 			DistsqlBlocklist: true,
 		},
-		overloads: variants,
-	}
+		variants...,
+	)
 }
 
 // getNameForArg determines the object name for the specified argument, which

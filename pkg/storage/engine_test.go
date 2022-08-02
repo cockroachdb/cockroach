@@ -1023,14 +1023,15 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify MVCCIterate.
 			index := 0
-			if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
-				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
-					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
-						index, keys[index], vals[index], kv.Key, kv.Value)
-				}
-				index++
-				return nil
-			}); err != nil {
+			if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+				func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
+					if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+						t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
+							index, keys[index], vals[index], kv.Key, kv.Value)
+					}
+					index++
+					return nil
+				}); err != nil {
 				t.Fatal(err)
 			}
 

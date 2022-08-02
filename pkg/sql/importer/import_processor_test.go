@@ -564,7 +564,7 @@ func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *cancellableImportResumer) OnFailOrCancel(context.Context, interface{}, error) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our Resume handler returned an
 	// error (after pausing the job), we need to short-circuits
@@ -850,29 +850,6 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Verify that after resume we have not processed any additional rows.
 	assert.Zero(t, importSummary.Rows)
-}
-
-func TestImportWithPartialIndexesErrs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				DistSQL: &execinfra.TestingKnobs{
-					BulkAdderFlushesEveryBatch: true,
-				},
-			},
-		})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING, INDEX (data) WHERE id > 0)")
-	defer sqlDB.Exec(t, `DROP TABLE t`)
-
-	sqlDB.ExpectErr(t, "cannot import into table with partial indexes", `IMPORT INTO t (id, data) CSV DATA ('https://foo.bar')`)
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
