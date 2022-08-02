@@ -32,7 +32,8 @@ import (
 // TestBackupRestoreRandomDataRoundtrips conducts backup/restore roundtrips on
 // randomly generated tables and verifies their data and schema are preserved.
 // It tests that full database backup as well as all subsets of per-table backup
-// roundtrip properly.
+// roundtrip properly. 50% of the time, the test runs the restore with the
+// schema_only parameter, which does not restore any rows from user tables.
 func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -66,6 +67,11 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	}
 	numInserts := 20
 
+	runSchemaOnlyExtension := ""
+	if rng.Intn(10)%2 == 0 {
+		runSchemaOnlyExtension = ", schema_only"
+	}
+
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 
 database_name = 'rand' AND schema_name = 'public'`)
 	var tableNames []string
@@ -87,7 +93,9 @@ database_name = 'rand' AND schema_name = 'public'`)
 	expectedData := make(map[string][][]string)
 	for _, tableName := range tableNames {
 		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tableName))[0][0]
-		expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tableName))
+		if runSchemaOnlyExtension == "" {
+			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tableName))
+		}
 	}
 
 	// Now that we've created our random tables, backup and restore the whole DB
@@ -97,12 +105,12 @@ database_name = 'rand' AND schema_name = 'public'`)
 	tablesBackup := localFoo + "alltables"
 	dbBackups := []string{dbBackup, tablesBackup}
 	if err := backuputils.VerifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP DATABASE rand TO $1", dbBackup,
+		t, sqlDB, "BACKUP DATABASE rand INTO $1", dbBackup,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := backuputils.VerifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP TABLE rand.* TO $1", tablesBackup,
+		t, sqlDB, "BACKUP TABLE rand.* INTO $1", tablesBackup,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +126,12 @@ database_name = 'rand' AND schema_name = 'public'`)
 				fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, restoreTable))[0][0]
 			assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
 				"SHOW CREATE %s not equal after RESTORE", tableName)
-			sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, tableName), expectedData[tableName])
+			if runSchemaOnlyExtension == "" {
+				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, restoreTable), expectedData[tableName])
+			} else {
+				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM %s`, restoreTable),
+					[][]string{{"0"}})
+			}
 		}
 	}
 
@@ -128,17 +141,17 @@ database_name = 'rand' AND schema_name = 'public'`)
 	for _, backup := range dbBackups {
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
+		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s)", runSchemaOnlyExtension)
 		if err := backuputils.VerifyBackupRestoreStatementResult(
-			t, sqlDB, "RESTORE rand.* FROM $1 WITH OPTIONS (into_db='restoredb')", backup,
+			t, sqlDB, tableQuery, backup,
 		); err != nil {
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
-		if err := backuputils.VerifyBackupRestoreStatementResult(
-			t, sqlDB, "RESTORE DATABASE rand FROM $1 WITH OPTIONS (new_db_name='restoredb')", backup,
-		); err != nil {
+		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s)", runSchemaOnlyExtension)
+		if err := backuputils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames)
@@ -155,8 +168,9 @@ database_name = 'rand' AND schema_name = 'public'`)
 		}
 		tables := strings.Join(combo, ", ")
 		t.Logf("Testing subset backup/restore %s", tables)
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s TO $1`, tables), backupTarget)
-		_, err := tc.Conns[0].Exec(fmt.Sprintf("RESTORE TABLE %s FROM $1 WITH OPTIONS (into_db='restoredb')", tables),
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
+		_, err := tc.Conns[0].Exec(
+			fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s)", tables, runSchemaOnlyExtension),
 			backupTarget)
 		if err != nil {
 			if strings.Contains(err.Error(), "skip_missing_foreign_keys") {

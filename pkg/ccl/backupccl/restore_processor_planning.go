@@ -118,7 +118,6 @@ func distRestore(
 			TableRekeys:  tableRekeys,
 			TenantRekeys: tenantRekeys,
 			PKIDs:        pkIDs,
-			Validation:   jobspb.RestoreValidation_DefaultRestore,
 		}
 
 		if len(splitAndScatterSpecs) == 0 {
@@ -308,7 +307,6 @@ func makeSplitAndScatterSpecs(
 				}},
 				TableRekeys:  tableRekeys,
 				TenantRekeys: tenantRekeys,
-				Validation:   jobspb.RestoreValidation_DefaultRestore,
 			}
 		}
 	}

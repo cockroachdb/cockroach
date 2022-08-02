@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -247,7 +246,6 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			require.NoError(t, err)
 
 			post := execinfrapb.PostProcessSpec{}
-			c.procSpec.Validation = jobspb.RestoreValidation_DefaultRestore
 			proc, err := newSplitAndScatterProcessor(&flowCtx, 0 /* processorID */, c.procSpec, &post, out)
 			require.NoError(t, err)
 			ssp, ok := proc.(*splitAndScatterProcessor)

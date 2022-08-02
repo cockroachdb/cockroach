@@ -62,46 +62,53 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 		testdataBase = testutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
-	for _, isClusterRestore := range []bool{true, false} {
-		name := "table"
-		if isClusterRestore {
-			name = "cluster"
+	for _, isSchemaOnly := range []bool{true, false} {
+		name := "regular-"
+		if isSchemaOnly {
+			name = "schema-only-"
 		}
-		t.Run(name, func(t *testing.T) {
-			// blockLocations indicates whether the backup taken was blocked before or
-			// after the backfill portion of the schema change.
-			for _, blockLocation := range []string{"before", "after"} {
-				t.Run(blockLocation, func(t *testing.T) {
-					versionDirs, err := ioutil.ReadDir(filepath.Join(exportDirs, blockLocation))
-					require.NoError(t, err)
-
-					for _, clusterVersionDir := range versionDirs {
-						if clusterVersionDir.Name() == "19.2" && isClusterRestore {
-							// 19.2 does not support cluster backups.
-							continue
-						}
-
-						t.Run(clusterVersionDir.Name(), func(t *testing.T) {
-							require.True(t, clusterVersionDir.IsDir())
-							fullClusterVersionDir, err := filepath.Abs(
-								filepath.Join(exportDirs, blockLocation, clusterVersionDir.Name()))
-							require.NoError(t, err)
-
-							// In each version folder (e.g. "19.2", "20.1"), there is a backup for
-							// each schema change.
-							backupDirs, err := ioutil.ReadDir(fullClusterVersionDir)
-							require.NoError(t, err)
-
-							for _, backupDir := range backupDirs {
-								fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
-								require.NoError(t, err)
-								t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(), isClusterRestore))
-							}
-						})
-					}
-				})
+		for _, isClusterRestore := range []bool{true, false} {
+			name = name + "table"
+			if isClusterRestore {
+				name = name + "cluster"
 			}
-		})
+			t.Run(name, func(t *testing.T) {
+				// blockLocations indicates whether the backup taken was blocked before or
+				// after the backfill portion of the schema change.
+				for _, blockLocation := range []string{"before", "after"} {
+					t.Run(blockLocation, func(t *testing.T) {
+						versionDirs, err := ioutil.ReadDir(filepath.Join(exportDirs, blockLocation))
+						require.NoError(t, err)
+
+						for _, clusterVersionDir := range versionDirs {
+							if clusterVersionDir.Name() == "19.2" && isClusterRestore {
+								// 19.2 does not support cluster backups.
+								continue
+							}
+
+							t.Run(clusterVersionDir.Name(), func(t *testing.T) {
+								require.True(t, clusterVersionDir.IsDir())
+								fullClusterVersionDir, err := filepath.Abs(
+									filepath.Join(exportDirs, blockLocation, clusterVersionDir.Name()))
+								require.NoError(t, err)
+
+								// In each version folder (e.g. "19.2", "20.1"), there is a backup for
+								// each schema change.
+								backupDirs, err := ioutil.ReadDir(fullClusterVersionDir)
+								require.NoError(t, err)
+
+								for _, backupDir := range backupDirs {
+									fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
+									require.NoError(t, err)
+									t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(),
+										isClusterRestore, isSchemaOnly))
+								}
+							})
+						}
+					})
+				}
+			})
+		}
 	}
 }
 
@@ -132,7 +139,12 @@ func expectedSCJobCount(scName string) int {
 }
 
 func validateTable(
-	t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, dbName string, tableName string,
+	t *testing.T,
+	kvDB *kv.DB,
+	sqlDB *sqlutils.SQLRunner,
+	dbName string,
+	tableName string,
+	isSchemaOnly bool,
 ) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
@@ -140,7 +152,11 @@ func validateTable(
 
 	var rowCount int
 	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.%s`, dbName, tableName)).Scan(&rowCount)
-	require.Greater(t, rowCount, 0, "expected table to have some rows")
+	if isSchemaOnly {
+		require.Equal(t, rowCount, 0, "expected table to have no rows")
+	} else {
+		require.Greater(t, rowCount, 0, "expected table to have some rows")
+	}
 	// The number of entries in all indexes should be the same.
 	for _, index := range desc.AllIndexes() {
 		var indexCount int
@@ -162,7 +178,9 @@ func getTablesInTest(scName string) (tableNames []string) {
 	return
 }
 
-func verifyMidSchemaChange(t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+func verifyMidSchemaChange(
+	t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, isSchemaOnly bool,
+) {
 	tables := getTablesInTest(scName)
 
 	// Check that we are left with the expected number of schema change jobs.
@@ -174,7 +192,7 @@ func verifyMidSchemaChange(t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlu
 		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, synthesizedSchemaChangeJobs)
 
 	for _, tableName := range tables {
-		validateTable(t, kvDB, sqlDB, "defaultdb", tableName)
+		validateTable(t, kvDB, sqlDB, "defaultdb", tableName, isSchemaOnly)
 		// Ensure that a schema change can complete on the restored table.
 		schemaChangeQuery := fmt.Sprintf("ALTER TABLE defaultdb.%s ADD CONSTRAINT post_restore_const CHECK (a > 0)", tableName)
 		sqlDB.Exec(t, schemaChangeQuery)
@@ -183,7 +201,7 @@ func verifyMidSchemaChange(t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlu
 }
 
 func restoreMidSchemaChange(
-	backupDir, schemaChangeName string, isClusterRestore bool,
+	backupDir, schemaChangeName string, isClusterRestore bool, isSchemaOnly bool,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
@@ -213,16 +231,19 @@ func restoreMidSchemaChange(
 		require.NoError(t, err)
 
 		sqlDB.Exec(t, "USE defaultdb")
-		restoreQuery := "RESTORE defaultdb.* from $1"
+		restoreQuery := "RESTORE defaultdb.* FROM $1"
 		if isClusterRestore {
-			restoreQuery = "RESTORE from $1"
+			restoreQuery = "RESTORE FROM $1"
+		}
+		if isSchemaOnly {
+			restoreQuery = restoreQuery + "with schema_only"
 		}
 		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
 		sqlDB.Exec(t, restoreQuery, localFoo)
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
-		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB)
+		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isSchemaOnly)
 
 		// Because crdb_internal.invalid_objects is a virtual table, by default, the
 		// query will take a lease on the database sqlDB is connected to and only run

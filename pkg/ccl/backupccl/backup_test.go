@@ -2674,99 +2674,109 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Protects numTypeChangesStarted and numTypeChangesFinished.
-			var mu syncutil.Mutex
-			numTypeChangesStarted := 0
-			numTypeChangesFinished := 0
-			typeChangesStarted := make(chan struct{})
-			waitForBackup := make(chan struct{})
-			typeChangesFinished := make(chan struct{})
-			_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-							RunBeforeEnumMemberPromotion: func(context.Context) error {
-								mu.Lock()
-								if numTypeChangesStarted < len(tc.queries) {
-									numTypeChangesStarted++
-									if numTypeChangesStarted == len(tc.queries) {
-										close(typeChangesStarted)
+		for _, isSchemaOnly := range []bool{true, false} {
+			suffix := ""
+			if isSchemaOnly {
+				suffix = "-schema-only"
+			}
+			t.Run(tc.name+suffix, func(t *testing.T) {
+				// Protects numTypeChangesStarted and numTypeChangesFinished.
+				var mu syncutil.Mutex
+				numTypeChangesStarted := 0
+				numTypeChangesFinished := 0
+				typeChangesStarted := make(chan struct{})
+				waitForBackup := make(chan struct{})
+				typeChangesFinished := make(chan struct{})
+				_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
+					ServerArgs: base.TestServerArgs{
+						Knobs: base.TestingKnobs{
+							SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+								RunBeforeEnumMemberPromotion: func(context.Context) error {
+									mu.Lock()
+									if numTypeChangesStarted < len(tc.queries) {
+										numTypeChangesStarted++
+										if numTypeChangesStarted == len(tc.queries) {
+											close(typeChangesStarted)
+										}
+										mu.Unlock()
+										<-waitForBackup
+									} else {
+										mu.Unlock()
 									}
-									mu.Unlock()
-									<-waitForBackup
-								} else {
-									mu.Unlock()
-								}
-								return nil
+									return nil
+								},
 							},
 						},
 					},
-				},
-			})
-			defer cleanupFn()
+				})
+				defer cleanupFn()
 
-			// Create a database with a type.
-			sqlDB.Exec(t, `
+				// Create a database with a type.
+				sqlDB.Exec(t, `
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 `)
 
-			// Start ALTER TYPE statement(s) that will block.
-			for _, query := range tc.queries {
-				go func(query string, totalQueries int) {
-					// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
-					if _, err := sqlDB.DB.ExecContext(context.Background(), query); err != nil {
-						t.Error(err)
-					}
-					mu.Lock()
-					numTypeChangesFinished++
-					if numTypeChangesFinished == totalQueries {
-						close(typeChangesFinished)
-					}
-					mu.Unlock()
-				}(query, len(tc.queries))
-			}
+				// Start ALTER TYPE statement(s) that will block.
+				for _, query := range tc.queries {
+					go func(query string, totalQueries int) {
+						// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
+						if _, err := sqlDB.DB.ExecContext(context.Background(), query); err != nil {
+							t.Error(err)
+						}
+						mu.Lock()
+						numTypeChangesFinished++
+						if numTypeChangesFinished == totalQueries {
+							close(typeChangesFinished)
+						}
+						mu.Unlock()
+					}(query, len(tc.queries))
+				}
 
-			// Wait on the type changes to start.
-			<-typeChangesStarted
+				// Wait on the type changes to start.
+				<-typeChangesStarted
 
-			// Now create a backup while the type change job is blocked so that
-			// greeting is backed up with some enum members in READ_ONLY state.
-			sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+				// Now create a backup while the type change job is blocked so that
+				// greeting is backed up with some enum members in READ_ONLY state.
+				sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
 
-			// Let the type change finish.
-			close(waitForBackup)
-			<-typeChangesFinished
+				// Let the type change finish.
+				close(waitForBackup)
+				<-typeChangesFinished
 
-			// Now drop the database and restore.
-			sqlDB.Exec(t, `DROP DATABASE d`)
-			sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+				// Now drop the database and restore.
+				sqlDB.Exec(t, `DROP DATABASE d`)
+				restoreQuery := `RESTORE DATABASE d FROM 'nodelocal://0/test/'`
+				if isSchemaOnly {
+					restoreQuery = restoreQuery + " with schema_only"
+				}
+				sqlDB.Exec(t, restoreQuery)
 
-			// The type change job should be scheduled and finish. Note that we can't use
-			// sqlDB.CheckQueryResultsRetry as it Fatal's upon an error. The case below
-			// will error until the job completes.
-			for i, query := range tc.succeedAfter {
-				testutils.SucceedsSoon(t, func() error {
-					_, err := sqlDB.DB.ExecContext(context.Background(), query)
-					return err
-				})
-				sqlDB.CheckQueryResults(t, query, [][]string{{tc.expectedSuccess[i]}})
-			}
+				// The type change job should be scheduled and finish. Note that we can't use
+				// sqlDB.CheckQueryResultsRetry as it Fatal's upon an error. The case below
+				// will error until the job completes.
+				for i, query := range tc.succeedAfter {
+					testutils.SucceedsSoon(t, func() error {
+						_, err := sqlDB.DB.ExecContext(context.Background(), query)
+						return err
+					})
+					sqlDB.CheckQueryResults(t, query, [][]string{{tc.expectedSuccess[i]}})
+				}
 
-			for i, query := range tc.errorAfter {
-				testutils.SucceedsSoon(t, func() error {
-					_, err := sqlDB.DB.ExecContext(context.Background(), query)
-					if err == nil {
-						return errors.New("expected error, found none")
-					}
-					if !testutils.IsError(err, tc.expectedError[i]) {
-						return errors.Newf("expected error %q, found %v", tc.expectedError[i], pgerror.FullError(err))
-					}
-					return nil
-				})
-			}
-		})
+				for i, query := range tc.errorAfter {
+					testutils.SucceedsSoon(t, func() error {
+						_, err := sqlDB.DB.ExecContext(context.Background(), query)
+						if err == nil {
+							return errors.New("expected error, found none")
+						}
+						if !testutils.IsError(err, tc.expectedError[i]) {
+							return errors.Newf("expected error %q, found %v", tc.expectedError[i], pgerror.FullError(err))
+						}
+						return nil
+					})
+				}
+			})
+		}
 	}
 }
 

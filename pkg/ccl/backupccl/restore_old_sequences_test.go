@@ -31,7 +31,7 @@ import (
 //
 //  VERSION=...
 //  roachprod create local
-//  roachprod wipe local
+//  roachprod wipe localÅ
 //  roachprod stage local release ${VERSION}
 //  roachprod start local
 //  roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_sequences/create.sql)"
@@ -50,16 +50,22 @@ func TestRestoreOldSequences(t *testing.T) {
 	t.Run("sequences-restore", func(t *testing.T) {
 		dirs, err := ioutil.ReadDir(exportDirs)
 		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreOldSequencesTest(exportDir))
+		for _, isSchemaOnly := range []bool{true, false} {
+			suffix := ""
+			if isSchemaOnly {
+				suffix = "-schema-only"
+			}
+			for _, dir := range dirs {
+				require.True(t, dir.IsDir())
+				exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
+				require.NoError(t, err)
+				t.Run(dir.Name()+suffix, restoreOldSequencesTest(exportDir, isSchemaOnly))
+			}
 		}
 	})
 }
 
-func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
+func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
@@ -71,10 +77,17 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, localFoo).Scan(
+		restoreQuery := `RESTORE test.* FROM $1`
+		if isSchemaOnly {
+			restoreQuery = restoreQuery + " with schema_only"
+		}
+		sqlDB.QueryRow(t, restoreQuery, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
-		const totalRows = 4
+		totalRows := 4
+		if isSchemaOnly {
+			totalRows = 0
+		}
 		if importedRows != totalRows {
 			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
 		}
@@ -99,6 +112,12 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		expectedRows := [][]string{
 			{"1", "1"},
 			{"2", "2"},
+		}
+		if isSchemaOnly {
+			// In a schema_only RESTORE, the restored sequence will be empty
+			expectedRows = [][]string{
+				{"1", "1"},
+			}
 		}
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY i`, expectedRows)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.v`, [][]string{{"1"}})
