@@ -2419,27 +2419,36 @@ func (s *statusServer) HotRangesV2(
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
-					_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
-					if err != nil {
-						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
-						continue
-					}
-					parent := rangeReportMetas[tableID].parentID
-					if parent != 0 {
-						tableName = rangeReportMetas[tableID].tableName
-						dbName = rangeReportMetas[parent].dbName
-					} else {
-						dbName = rangeReportMetas[tableID].dbName
-					}
-					schemaParent := rangeReportMetas[tableID].schemaParentID
-					schemaName = rangeReportMetas[schemaParent].schemaName
-					_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
-					if err == nil {
-						indexName = rangeReportMetas[tableID].indexNames[idxID]
-					}
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
+					if r.Desc.StartKey.Equal(roachpb.RKeyMin) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta1Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta2Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.SystemPrefix) {
+						dbName = "system"
+						tableName = r.Desc.StartKey.String()
+					} else {
+						_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
+						if err != nil {
+							log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
+							continue
+						}
+						parent := rangeReportMetas[tableID].parentID
+						if parent != 0 {
+							tableName = rangeReportMetas[tableID].tableName
+							dbName = rangeReportMetas[parent].dbName
+						} else {
+							dbName = rangeReportMetas[tableID].dbName
+						}
+						schemaParent := rangeReportMetas[tableID].schemaParentID
+						schemaName = rangeReportMetas[schemaParent].schemaName
+						_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
+						if err == nil {
+							indexName = rangeReportMetas[tableID].indexNames[idxID]
+						}
+					}
+
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
 						RangeID:           r.Desc.RangeID,
 						NodeID:            nodeID,
