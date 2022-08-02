@@ -183,9 +183,12 @@ func (b *AppendOnlyBufferedBatch) Reset([]*types.T, int, coldata.ColumnFactory) 
 }
 
 // ResetInternalBatch implements the coldata.Batch interface.
+// NB: any memory released during this call is automatically released from the
+// allocator that created the batch.
 func (b *AppendOnlyBufferedBatch) ResetInternalBatch() int64 {
 	b.SetLength(0 /* n */)
-	return b.batch.ResetInternalBatch()
+	b.allocator.ReleaseMemory(b.batch.ResetInternalBatch())
+	return 0
 }
 
 // String implements the coldata.Batch interface.
