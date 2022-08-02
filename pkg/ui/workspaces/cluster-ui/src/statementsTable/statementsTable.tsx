@@ -193,11 +193,19 @@ function makeCommonColumns(
         TimestampToNumber(stmt.stats.last_exec_timestamp),
       showByDefault: false,
     },
+    {
+      name: "statementFingerprintId",
+      title: statisticsTableTitles.statementFingerprintId(statType),
+      cell: (stmt: AggregateStatistics) => stmt.aggregatedFingerprintHexID,
+      sort: (stmt: AggregateStatistics) => stmt.aggregatedFingerprintHexID,
+      showByDefault: false,
+    },
   ];
 }
 
 export interface AggregateStatistics {
   aggregatedFingerprintID: string;
+  aggregatedFingerprintHexID: string;
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
   // summary exists only for SELECT/INSERT/UPSERT/UPDATE statements, and is
