@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1135,6 +1136,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
 		Detached:                  opts.Detached,
+		SchemaOnly:                opts.SchemaOnly,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1221,6 +1223,12 @@ func restorePlanHook(
 		"RESTORE",
 	); err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	if restoreStmt.Options.SchemaOnly &&
+		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
+		return nil, nil, nil, false,
+			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
 	}
 
 	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
@@ -2026,7 +2034,7 @@ func doRestorePlan(
 		// TODO(msbutler): Delete in 23.1
 		RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
 		PreRewriteTenantId: oldTenantID,
-		Validation:         jobspb.RestoreValidation_DefaultRestore,
+		SchemaOnly:         restoreStmt.Options.SchemaOnly,
 	}
 
 	jr := jobs.Record{

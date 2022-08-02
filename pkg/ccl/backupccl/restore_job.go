@@ -133,6 +133,7 @@ func restoreWithRetry(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
+
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
 	// errors that are also rpc errors. Don't retry to aggressively.
@@ -578,13 +579,26 @@ func spansForAllRestoreTableIndexes(
 	codec keys.SQLCodec,
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
+	schemaOnly bool,
 ) []roachpb.Span {
+
+	skipTableData := func(table catalog.TableDescriptor) bool {
+		// We only import spans for physical tables.
+		if !table.IsPhysicalTable() {
+			return true
+		}
+		// The only table data restored during a schemaOnly restore are from system tables,
+		// which only get restored during a cluster restore.
+		if table.GetParentID() != keys.SystemDatabaseID && schemaOnly {
+			return true
+		}
+		return false
+	}
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		// We only import spans for physical tables.
-		if !table.IsPhysicalTable() {
+		if skipTableData(table) {
 			continue
 		}
 		for _, index := range table.ActiveIndexes() {
@@ -607,8 +621,7 @@ func spansForAllRestoreTableIndexes(
 		rawTbl, _, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && !rawTbl.Dropped() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			// We only import spans for physical tables.
-			if !tbl.IsPhysicalTable() {
+			if skipTableData(tbl) {
 				continue
 			}
 			for _, idx := range tbl.ActiveIndexes() {
@@ -713,8 +726,8 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	preRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil)
-	postRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil)
+	preRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly)
+	postRestoreSpans := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly)
 
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
@@ -1230,10 +1243,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
-
-	if details.Validation != jobspb.RestoreValidation_DefaultRestore {
-		return errors.Errorf("No restore validation tools are supported")
-	}
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)

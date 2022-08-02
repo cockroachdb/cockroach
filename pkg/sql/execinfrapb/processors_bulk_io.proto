@@ -302,7 +302,7 @@ message RestoreDataSpec {
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
-  optional jobs.jobspb.RestoreValidation validation = 7 [(gogoproto.nullable) = false];
+  optional bool schema_only = 7 [(gogoproto.nullable) = false];
 
   // NEXT ID: 8.
 }
@@ -316,7 +316,7 @@ message SplitAndScatterSpec {
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
   repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
   repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
-  optional jobs.jobspb.RestoreValidation validation = 5 [(gogoproto.nullable) = false];
+  optional bool schema_only = 5 [(gogoproto.nullable) = false];
 
   // NEXTID: 6.
 }
