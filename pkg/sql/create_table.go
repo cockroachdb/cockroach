@@ -579,9 +579,10 @@ func (n *createTableNode) startExec(params runParams) error {
 					break
 				}
 
-				// Periodically flush out the batches, so that we don't issue gigantic,
+				// Periodically flush out the batches, so that we don't issue gigantic
 				// raft commands.
-				if ti.currentBatchSize >= ti.maxBatchSize {
+				if ti.currentBatchSize >= ti.maxBatchSize ||
+					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
 					if err := tw.flushAndStartNewBatch(params.ctx); err != nil {
 						return err
 					}

@@ -974,6 +974,11 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
+	{
+		_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID())
+		require.NoError(t, err)
+	}
+
 	// A read-write transaction that uses the old version of the descriptor.
 	txReadWrite, err := sqlDB.Begin()
 	if err != nil {
@@ -994,6 +999,10 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	// Modify the table descriptor.
 	if _, err := sqlDB.Exec(`ALTER TABLE t.kv ADD m CHAR DEFAULT 'z';`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC')`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1046,13 +1055,17 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
+	checkDeadlineErr := func(err error, t *testing.T) {
+		var pqe (*pq.Error)
+		if !errors.As(err, &pqe) || pgcode.MakeCode(string(pqe.Code)) != pgcode.SerializationFailure ||
+			!testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
+			t.Fatalf("expected deadline exceeded, got: %v", err)
+		}
+	}
+
 	// The transaction read at one timestamp and wrote at another so it
 	// has to be restarted because the spans read were modified by the backfill.
-	if err := txReadWrite.Commit(); !testutils.IsError(err,
-		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
-			"due to a conflict: committed value on key /Table/\\d+/1/\"a\"/0\\)") {
-		t.Fatalf("err = %v", err)
-	}
+	checkDeadlineErr(txReadWrite.Commit(), t)
 
 	// This INSERT will cause the transaction to be pushed transparently,
 	// which will be detected when we attempt to Commit() below only because
@@ -1061,13 +1074,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	checkDeadlineErr := func(err error, t *testing.T) {
-		var pqe (*pq.Error)
-		if !errors.As(err, &pqe) || pgcode.MakeCode(string(pqe.Code)) != pgcode.SerializationFailure ||
-			!testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
-			t.Fatalf("expected deadline exceeded, got: %v", err)
-		}
-	}
 	checkDeadlineErr(txWrite.Commit(), t)
 
 	// Test the deadline exceeded error with a CREATE/DROP INDEX.
@@ -2685,7 +2691,7 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 	// to drain the name.
 	dropErrChan := make(chan error, 1)
 	go func() {
-		_, err := db.Exec("DROP TABLE foo")
+		_, err := db.Exec("SET use_declarative_schema_changer = off;DROP TABLE foo")
 		dropErrChan <- err
 	}()
 	// Detect that the drop was noticed by the lease manager (note that this
