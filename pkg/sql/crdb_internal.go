@@ -3194,7 +3194,9 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder,
 	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
-	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT AS range_size
+	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
 FROM crdb_internal.ranges_no_leases
 `,
 	resultColumns: colinfo.ResultColumns{
