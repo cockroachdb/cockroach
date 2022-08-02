@@ -894,21 +894,116 @@ DROP TABLE parent
 
 ############################################################################
 # The following tests check for ALTER INDEX ... VISIBLE | NOT VISIBLE. 
+# - if an index is already what they want, logs a notice
+# - altering a primary index to not visible throws an error.
+# - altering a unique index to not visible logs a notice.
+# - altering a unique index to not visible logs a notice.
 ############################################################################
 statement ok
-CREATE TABLE t (p INT PRIMARY KEY, INDEX idx (p) VISIBLE)
+CREATE TABLE t (p INT PRIMARY KEY, other INT, UNIQUE (p), UNIQUE INDEX u_idx (p), INDEX idx (other))
+
+# Primary index cannot be invisible.
+statement error pq: primary index cannot be invisible
+ALTER INDEX t_pkey NOT VISIBLE
+
+# Error if index does not exist and no IF EXISTS.
+statement error pq: index "nonexistent_idx" does not exist
+ALTER INDEX nonexistent_idx NOT VISIBLE
+
+# No error if index does not exist and IF EXISTS is specified.
+statement ok
+ALTER INDEX IF EXISTS nonexistent_idx NOT VISIBLE
+
+# If an index is already what they want, logs a notice. 
+query T noticetrace
+ALTER INDEX t_p_key VISIBLE
+----
+NOTICE: index is already visible
+
+# Altering a unique constraint index to not visible logs a notice. 
+query T noticetrace
+ALTER INDEX t_p_key NOT VISIBLE
+----
+NOTICE: invisible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Altering a unique index to not visible logs a notice. 
+query T noticetrace
+ALTER INDEX u_idx NOT VISIBLE
+----
+NOTICE: invisible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+# Check if the index is indeed invisible. 
+query T
+EXPLAIN SELECT * FROM t WHERE other > 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@idx
+  spans: [/3 - ]
+
+query T noticetrace
+ALTER INDEX idx NOT VISIBLE
+----
+
+# SELECT ignores idx.
+query T
+EXPLAIN SELECT * FROM t WHERE other > 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: other > 2
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE TABLE child1 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES t(p), INDEX idx_visible (p))
+
+# Alter an index in a child table to not visible logs a warning.
+query T noticetrace
+ALTER INDEX idx_visible NOT VISIBLE
+----
+NOTICE: invisible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT, INDEX idx_visible (p))
+
+query T noticetrace
+ALTER TABLE child2 ADD CONSTRAINT fk FOREIGN KEY (p) REFERENCES t(p);
+----
+
+# Check ambiguous index error. 
+statement error pq: index name "idx_visible" is ambiguous
+ALTER INDEX idx_visible NOT VISIBLE
+
+# Alter an index in a child table to not visible logs a warning.
+query T noticetrace
+ALTER INDEX child2@idx_visible NOT VISIBLE
+----
+NOTICE: invisible indexes may still be used for unique or foreign key constraint check, so the query plan may be different from dropping the index completely.
 
 query TTB
 SELECT index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY index_name, seq_in_index
 ----
-idx     p  true
-t_pkey  p  true
+idx      other  false
+idx      p      false
+t_p_key  p      false
+t_pkey   p      true
+t_pkey   other  true
+u_idx    p      false
 
-statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
-ALTER INDEX idx NOT VISIBLE
+statement ok
+DROP TABLE child2
 
-statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
-ALTER INDEX idx VISIBLE
+statement ok
+DROP TABLE child1
 
 statement ok
 DROP TABLE t
