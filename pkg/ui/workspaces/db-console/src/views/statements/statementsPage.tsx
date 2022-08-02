@@ -80,6 +80,7 @@ type StatementStatistics = util.StatementStatistics;
 
 interface StatementsSummaryData {
   statementFingerprintID: string;
+  statementFingerprintHexID: string;
   statement: string;
   statementSummary: string;
   aggregatedTs: number;
@@ -139,6 +140,8 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
+          statementFingerprintHexID:
+            stmt.statement_fingerprint_id?.toString(16),
           statement: stmt.statement,
           statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
@@ -156,6 +159,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         aggregatedFingerprintID: stmt.statementFingerprintID,
+        aggregatedFingerprintHexID: stmt.statementFingerprintHexID,
         label: stmt.statement,
         summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,
