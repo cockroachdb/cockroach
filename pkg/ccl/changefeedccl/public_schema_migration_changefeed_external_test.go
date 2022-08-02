@@ -29,6 +29,7 @@ func TestPublicSchemaMigrationWithCreateChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	// TODO(celia) -- not sure what to do with `PublicSchemasWithDescriptors` below?
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -65,6 +66,7 @@ func TestPublicSchemaMigrationWithCreateChangefeed(t *testing.T) {
 	tdb.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsLogical)
 
 	// Kick off public schema migration.
+	// TODO(celia) -- not sure what to do with `PublicSchemasWithDescriptors` below?
 	{
 		_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 			clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors).String())

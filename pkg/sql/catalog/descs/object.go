@@ -13,8 +13,6 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -202,29 +200,6 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 		false, // alwaysLookupLeasedPublicSchema
 	)
 	if !found || err != nil {
-		// We add a special case to deal with the public schema migration. During
-		// that migration, we create a real descriptor for the public schema and we
-		// re-parent the members of the descriptor-less public schema into this new
-		// schema. The hazard is that we have a lease on the database descriptor
-		// which does not know about the new public schema, but the table we're
-		// going to lease does. When we fail to find the descriptor we're looking
-		// for and notice that we're using the old public schema ID, and that we're
-		// in the midst of the relevant migration, then we go back around through
-		// the same logic but with a flag (alwaysLookupLeasedPublicSchema) which will
-		// suppress the assumption that a missing public schema implies a public
-		// synthetic ID=29 public schema, and force resolution of the correct
-		// schema ID.
-		//
-		// TODO(ajwerner): Remove this for 22.2.
-		if !alwaysLookupLeasedPublicSchema && sc.GetID() == keys.PublicSchemaID &&
-			!tc.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) &&
-			tc.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors-1) {
-			const alwaysLookupLeasedPublicSchema = true
-			return tc.getObjectByNameIgnoringRequiredAndType(
-				ctx, txn, catalogName, schemaName, objectName, flags,
-				alwaysLookupLeasedPublicSchema,
-			)
-		}
 		return prefix, nil, err
 	}
 	return prefix, obj, nil

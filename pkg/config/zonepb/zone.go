@@ -166,7 +166,7 @@ func ResolveZoneSpecifier(
 	}
 	// TODO(richardjcai): Remove version gating logic in 22.2.
 	var schemaID uint32
-	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && tn.SchemaName == tree.PublicSchemaName {
+	if tn.SchemaName == tree.PublicSchemaName {
 		// If we're not on version PublicSchemasWithDescriptors, we're guaranteed
 		// databases are not backed by descriptors, thus we use keys.PublicSchemaID.
 		schemaID = keys.PublicSchemaID

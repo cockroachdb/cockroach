@@ -13,14 +13,12 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
@@ -96,17 +94,6 @@ func (td *temporaryDescriptors) getSchemaByName(
 			return true, schemadesc.NewTemporarySchema(
 				tsp.GetTemporarySchemaName(),
 				schemaID,
-				dbID,
-			)
-		}
-	}
-	if !td.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-		// checking for public schema.
-		if schemaName == tree.PublicSchema {
-			return true, schemadesc.NewTemporarySchema(
-				schemaName,
-				keys.PublicSchemaID,
 				dbID,
 			)
 		}

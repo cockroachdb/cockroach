@@ -61,7 +61,7 @@ var upgrades = []upgrade.Upgrade{
 		alterTableProtectedTimestampRecords,
 	),
 	upgrade.NewTenantUpgrade("update synthetic public schemas to be backed by a descriptor",
-		toCV(clusterversion.PublicSchemasWithDescriptors),
+		toCV(clusterversion.PublicSchemasWithDescriptors), // TODO(celia) - what to do here?
 		NoPrecondition,
 		publicSchemaMigration,
 	),

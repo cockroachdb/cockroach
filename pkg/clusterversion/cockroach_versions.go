@@ -170,8 +170,7 @@ const (
 	// Pebble version that provides block property collectors that can be used
 	// for fine-grained time bound iteration. See
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
-	// TODO - pkg/storage
-	PebbleFormatBlockPropertyCollector
+	PebbleFormatBlockPropertyCollector // TODO(celia) - pkg/storage
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
