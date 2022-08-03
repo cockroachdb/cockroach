@@ -410,7 +410,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
-		{`ALTER FUNCTION a`, 17511, `alter function`, ``},
 
 		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},

@@ -1862,6 +1862,15 @@ func (*DropFunction) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (*DropFunction) StatementTag() string { return "DROP FUNCTION" }
 
+// StatementReturnType implements the Statement interface.
+func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterFunctionOptions) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterFunctionOptions) StatementTag() string { return "ALTER FUNCTION" }
+
 func (n *AlterChangefeed) String() string                  { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string              { return AsString(n) }
 func (n *AlterBackup) String() string                      { return AsString(n) }
@@ -1878,6 +1887,7 @@ func (n *AlterDatabaseAlterSuperRegion) String() string    { return AsString(n) 
 func (n *AlterDatabaseSecondaryRegion) String() string     { return AsString(n) }
 func (n *AlterDatabaseDropSecondaryRegion) String() string { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string           { return AsString(n) }
+func (n *AlterFunctionOptions) String() string             { return AsString(n) }
 func (n *AlterSchema) String() string                      { return AsString(n) }
 func (n *AlterTable) String() string                       { return AsString(n) }
 func (n *AlterTableCmds) String() string                   { return AsString(n) }

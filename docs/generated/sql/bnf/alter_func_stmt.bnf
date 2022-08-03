@@ -1,0 +1,2 @@
+alter_func_stmt ::=
+	alter_func_options_stmt

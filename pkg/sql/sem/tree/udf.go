@@ -355,3 +355,19 @@ func (node FuncObj) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	}
 }
+
+// AlterFunctionOptions represents a ALTER FUNCTION...action statement.
+type AlterFunctionOptions struct {
+	Function FuncObj
+	Options  FunctionOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION ")
+	ctx.FormatNode(node.Function)
+	for _, option := range node.Options {
+		ctx.WriteString(" ")
+		ctx.FormatNode(option)
+	}
+}
