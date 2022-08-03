@@ -4143,7 +4143,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
 ----
 name                                                  setting             category  short_desc  extra_desc  vartype
 alter_primary_region_super_region_override            off                 NULL      NULL        NULL        string
@@ -4268,7 +4268,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
 ----
 name                                                  setting             unit  context  enumvals  boot_val            reset_val
 alter_primary_region_super_region_override            off                 NULL  user     NULL      off                 off
@@ -4398,6 +4398,7 @@ bytea_output                                          NULL    NULL     NULL     
 check_function_bodies                                 NULL    NULL     NULL     NULL        NULL
 client_encoding                                       NULL    NULL     NULL     NULL        NULL
 client_min_messages                                   NULL    NULL     NULL     NULL        NULL
+copy_fast_path_enabled                                NULL    NULL     NULL     NULL        NULL
 cost_scans_with_default_col_size                      NULL    NULL     NULL     NULL        NULL
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL

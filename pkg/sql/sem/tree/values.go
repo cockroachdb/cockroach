@@ -24,6 +24,42 @@ type ValuesClause struct {
 	Rows []Exprs
 }
 
+// ExprContainer represents an abstract container of Exprs
+type ExprContainer interface {
+	// NumRows returns number of rows.
+	NumRows() int
+	// NumCols returns number of columns.
+	NumCols() int
+	//Get returns the Expr at row i column j.
+	Get(i, j int) Expr
+}
+
+// RawRows exposes a [][]TypedExpr as an ExprContainer.
+type RawRows struct {
+	Rows [][]TypedExpr
+}
+
+// NumRows implements the ExprContainer interface.
+func (r *RawRows) NumRows() int {
+	return len(r.Rows)
+}
+
+// NumCols implements the ExprContainer interface.
+func (r *RawRows) NumCols() int {
+	return len(r.Rows[0])
+}
+
+// Get implements the ExprContainer interface.
+func (r *RawRows) Get(i, j int) Expr {
+	return r.Rows[i][j]
+}
+
+// LiteralValuesClause is like ValuesClause but values have been typed checked
+// and evaluated and are assumed to be ready to use Datums.
+type LiteralValuesClause struct {
+	Rows ExprContainer
+}
+
 // Format implements the NodeFormatter interface.
 func (node *ValuesClause) Format(ctx *FmtCtx) {
 	ctx.WriteString("VALUES ")
@@ -32,6 +68,24 @@ func (node *ValuesClause) Format(ctx *FmtCtx) {
 		ctx.WriteString(comma)
 		ctx.WriteByte('(')
 		ctx.FormatNode(&node.Rows[i])
+		ctx.WriteByte(')')
+		comma = ", "
+	}
+}
+
+// Format implements the NodeFormatter interface.
+func (node *LiteralValuesClause) Format(ctx *FmtCtx) {
+	ctx.WriteString("VALUES ")
+	comma := ""
+	for i := 0; i < node.Rows.NumRows(); i++ {
+		ctx.WriteString(comma)
+		ctx.WriteByte('(')
+		comma2 := ""
+		for j := 0; j < node.Rows.NumCols(); j++ {
+			ctx.WriteString(comma2)
+			ctx.FormatNode(node.Rows.Get(i, j))
+			comma2 = ", "
+		}
 		ctx.WriteByte(')')
 		comma = ", "
 	}

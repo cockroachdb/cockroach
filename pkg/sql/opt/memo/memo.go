@@ -492,3 +492,31 @@ func (m *Memo) Detach() {
 func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
 }
+
+// ValuesContainer lets ValuesExpr and and LiteralValuesExpr share code.
+type ValuesContainer interface {
+	RelExpr
+
+	Len() int
+	ColList() opt.ColList
+}
+
+// ColList implements the ValuesContainer interface.
+func (v *ValuesExpr) ColList() opt.ColList {
+	return v.Cols
+}
+
+// Len implements the ValuesContainer interface.
+func (v *ValuesExpr) Len() int {
+	return len(v.Rows)
+}
+
+// ColList implements the ValuesContainer interface.
+func (l *LiteralValuesExpr) ColList() opt.ColList {
+	return l.Cols
+}
+
+// Len implements the ValuesContainer interface.
+func (l *LiteralValuesExpr) Len() int {
+	return l.Rows.Rows.NumRows()
+}

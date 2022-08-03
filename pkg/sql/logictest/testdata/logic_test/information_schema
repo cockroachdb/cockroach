@@ -4655,7 +4655,8 @@ WHERE
       'vectorize',
       'experimental_distsql_planning',
       'use_declarative_schema_changer',
-      'distsql_workmem'
+      'distsql_workmem',
+      'copy_fast_path_enabled'
     );
 ----
 variable                                              value
@@ -4776,7 +4777,7 @@ transaction_rows_read_log                             0
 transaction_rows_written_err                          0
 transaction_rows_written_log                          0
 transaction_status                                    NoTxn
-troubleshooting_mode                          off
+troubleshooting_mode                                  off
 unconstrained_non_covering_index_scan_enabled         off
 xmloption                                             content
 

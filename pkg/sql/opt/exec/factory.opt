@@ -759,3 +759,10 @@ define CreateFunction {
     Deps opt.SchemaDeps
     TypeDeps opt.SchemaTypeDeps
 }
+
+# LiteralValues allows datums to be planned directly that are type checked
+# and evaluated (ie literals).
+define LiteralValues {
+    Rows tree.ExprContainer
+    Columns colinfo.ResultColumns
+}

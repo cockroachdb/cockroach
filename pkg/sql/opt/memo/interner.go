@@ -758,6 +758,10 @@ func (h *hasher) HashVolatility(val volatility.V) {
 	h.HashInt(int(val))
 }
 
+func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1217,6 +1221,10 @@ func (h *hasher) IsPersistenceEqual(l, r tree.Persistence) bool {
 }
 
 func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
+	return l == r
+}
+
+func (h *hasher) IsLiteralRowsEqual(l, r *opt.LiteralRows) bool {
 	return l == r
 }
 
