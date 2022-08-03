@@ -1871,6 +1871,42 @@ func (*AlterFunctionOptions) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterFunctionOptions) StatementTag() string { return "ALTER FUNCTION" }
 
+// StatementReturnType implements the Statement interface.
+func (*AlterFunctionRename) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterFunctionRename) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterFunctionRename) StatementTag() string { return "ALTER FUNCTION" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterFunctionSetSchema) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterFunctionSetSchema) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterFunctionSetSchema) StatementTag() string { return "ALTER FUNCTION" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterFunctionSetOwner) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterFunctionSetOwner) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterFunctionSetOwner) StatementTag() string { return "ALTER FUNCTION" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterFunctionDepExtension) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterFunctionDepExtension) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterFunctionDepExtension) StatementTag() string { return "ALTER FUNCTION" }
+
 func (n *AlterChangefeed) String() string                  { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string              { return AsString(n) }
 func (n *AlterBackup) String() string                      { return AsString(n) }
@@ -1888,6 +1924,10 @@ func (n *AlterDatabaseSecondaryRegion) String() string     { return AsString(n) 
 func (n *AlterDatabaseDropSecondaryRegion) String() string { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string           { return AsString(n) }
 func (n *AlterFunctionOptions) String() string             { return AsString(n) }
+func (n *AlterFunctionRename) String() string              { return AsString(n) }
+func (n *AlterFunctionSetSchema) String() string           { return AsString(n) }
+func (n *AlterFunctionSetOwner) String() string            { return AsString(n) }
+func (n *AlterFunctionDepExtension) String() string        { return AsString(n) }
 func (n *AlterSchema) String() string                      { return AsString(n) }
 func (n *AlterTable) String() string                       { return AsString(n) }
 func (n *AlterTableCmds) String() string                   { return AsString(n) }

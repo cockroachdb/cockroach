@@ -30,3 +30,43 @@ DETAIL: source SQL:
 ALTER FUNCTION f()
                   ^
 HINT: try \h ALTER
+
+parse
+ALTER FUNCTION f(int) RENAME TO g
+----
+ALTER FUNCTION f(IN INT8) RENAME TO g -- normalized!
+ALTER FUNCTION f(IN INT8) RENAME TO g -- fully parenthesized
+ALTER FUNCTION f(IN INT8) RENAME TO g -- literals removed
+ALTER FUNCTION _(IN INT8) RENAME TO g -- identifiers removed
+
+parse
+ALTER FUNCTION f(int) OWNER TO CURRENT_USER
+----
+ALTER FUNCTION f(IN INT8) OWNER TO CURRENT_USER -- normalized!
+ALTER FUNCTION f(IN INT8) OWNER TO CURRENT_USER -- fully parenthesized
+ALTER FUNCTION f(IN INT8) OWNER TO CURRENT_USER -- literals removed
+ALTER FUNCTION _(IN INT8) OWNER TO _ -- identifiers removed
+
+parse
+ALTER FUNCTION f(int) SET SCHEMA test_sc
+----
+ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- normalized!
+ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- fully parenthesized
+ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- literals removed
+ALTER FUNCTION _(IN INT8) SET SCHEMA test_sc -- identifiers removed
+
+parse
+ALTER FUNCTION f(int) DEPENDS ON EXTENSION postgis
+----
+ALTER FUNCTION  f(IN INT8) DEPENDS ON EXTENSION postgis -- normalized!
+ALTER FUNCTION  f(IN INT8) DEPENDS ON EXTENSION postgis -- fully parenthesized
+ALTER FUNCTION  f(IN INT8) DEPENDS ON EXTENSION postgis -- literals removed
+ALTER FUNCTION  _(IN INT8) DEPENDS ON EXTENSION postgis -- identifiers removed
+
+parse
+ALTER FUNCTION f(int) NO DEPENDS ON EXTENSION postgis
+----
+ALTER FUNCTION  f(IN INT8) NO DEPENDS ON EXTENSION postgis -- normalized!
+ALTER FUNCTION  f(IN INT8) NO DEPENDS ON EXTENSION postgis -- fully parenthesized
+ALTER FUNCTION  f(IN INT8) NO DEPENDS ON EXTENSION postgis -- literals removed
+ALTER FUNCTION  _(IN INT8) NO DEPENDS ON EXTENSION postgis -- identifiers removed
