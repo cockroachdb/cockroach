@@ -429,6 +429,15 @@ func createChangefeedJobRecord(
 		// TODO: Set the default envelope to row here when using a sink and format
 		// that support it.
 		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
+
+		// TODO(#85143): do not enforce schema_change_policy='stop' for changefeed expressions.
+		schemachangeOptions, err := opts.GetSchemaChangeHandlingOptions()
+		if err != nil {
+			return nil, err
+		}
+		if schemachangeOptions.Policy != changefeedbase.OptSchemaChangePolicyStop {
+			return nil, errors.Errorf(`using "AS SELECT" requires option schema_change_policy='stop'`)
+		}
 	}
 
 	// TODO(dan): In an attempt to present the most helpful error message to the
