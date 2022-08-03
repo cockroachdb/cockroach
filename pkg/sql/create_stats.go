@@ -261,11 +261,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	// Identify which columns we should create statistics for.
 	var colStats []jobspb.CreateStatsDetails_ColStat
+	var deleteOtherStats bool
 	if len(n.ColumnNames) == 0 {
 		multiColEnabled := stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
 		if colStats, err = createStatsDefaultColumns(tableDesc, multiColEnabled); err != nil {
 			return nil, err
 		}
+		deleteOtherStats = true
 	} else {
 		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
 		if err != nil {
@@ -334,13 +336,14 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		Statements:  []string{statement},
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
-			Name:            string(n.Name),
-			FQTableName:     fqTableName,
-			Table:           *tableDesc.TableDesc(),
-			ColumnStats:     colStats,
-			Statement:       eventLogStatement,
-			AsOf:            asOfTimestamp,
-			MaxFractionIdle: n.Options.Throttling,
+			Name:             string(n.Name),
+			FQTableName:      fqTableName,
+			Table:            *tableDesc.TableDesc(),
+			ColumnStats:      colStats,
+			Statement:        eventLogStatement,
+			AsOf:             asOfTimestamp,
+			MaxFractionIdle:  n.Options.Throttling,
+			DeleteOtherStats: deleteOtherStats,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
