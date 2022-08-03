@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -253,8 +255,13 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
 			if s == nil {
-				newSession, err := l.createSession(ctx)
-				if err != nil {
+				var newSession *session
+				if err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", l.hb(), func(ctx context.Context) error {
+					var err error
+					newSession, err = l.createSession(ctx)
+					return err
+				}); err != nil {
+					log.Errorf(ctx, "sqlliveness failed to create new session: %v", err)
 					func() {
 						l.mu.Lock()
 						defer l.mu.Unlock()
@@ -270,12 +277,20 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 				t.Reset(l.hb())
 				continue
 			}
-			found, err := l.extendSession(ctx, s)
-			if err != nil {
+			var found bool
+			if err := contextutil.RunWithTimeout(ctx, "sqlliveness extend session", l.hb(), func(ctx context.Context) error {
+				var err error
+				found, err = l.extendSession(ctx, s)
+				return err
+			}); err != nil && !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+				// Unable to extend session due to unknown error.
+				// Clear and stop heartbeat loop.
+				log.Errorf(ctx, "sqlliveness failed to extend session: %v", err)
 				l.clearSession(ctx)
 				return
 			}
 			if !found {
+				// No existing session found, immediately create one.
 				l.clearSession(ctx)
 				// Start next loop iteration immediately to insert a new session.
 				t.Reset(0)
