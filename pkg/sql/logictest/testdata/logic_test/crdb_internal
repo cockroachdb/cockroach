@@ -1134,3 +1134,9 @@ statement ok
 CREATE TABLE t69684(a NAME);
 INSERT INTO t69684 VALUES ('foo');
 SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)
+
+# Exercise unsafe gossip builtin functions.
+query B
+SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
+----
+false

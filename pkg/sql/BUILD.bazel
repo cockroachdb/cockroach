@@ -102,6 +102,7 @@ go_library(
         "explain_vec.go",
         "export.go",
         "filter.go",
+        "gossip.go",
         "grant_revoke.go",
         "grant_role.go",
         "group.go",
