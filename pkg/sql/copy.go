@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -28,18 +27,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
+// CopyBatchRowSizeDefault is the number of rows we insert in one insert
+// statement.
+const CopyBatchRowSizeDefault = 100
+
+// When this many rows are in the copy buffer, they are inserted.
+var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 10000)
+
 type copyMachineInterface interface {
 	run(ctx context.Context) error
+
+	// Close closes memory accounts associated with copy.
+	Close(ctx context.Context)
 }
 
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
@@ -79,10 +90,12 @@ type copyMachine struct {
 	// row between protocol messages.
 	buf bytes.Buffer
 	// rows accumulates a batch of rows to be eventually inserted.
-	rows []tree.Exprs
+	rows rowcontainer.RowContainer
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
+	// copyMon tracks copy's memory usage.
+	copyMon *mon.BytesMonitor
 	// rowsMemAcc accounts for memory used by `rows`.
 	rowsMemAcc mon.BoundAccount
 	// bufMemAcc accounts for memory used by `buf`; it is kept in sync with
@@ -108,6 +121,8 @@ type copyMachine struct {
 	parsingEvalCtx *eval.Context
 
 	processRows func(ctx context.Context) error
+
+	scratchRow []tree.Datum
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -117,6 +132,7 @@ func newCopyMachine(
 	n *tree.CopyFrom,
 	p *planner,
 	txnOpt copyTxnOpt,
+	parentMon *mon.BytesMonitor,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -128,9 +144,8 @@ func newCopyMachine(
 		format:          n.Options.CopyFormat,
 		txnOpt:          txnOpt,
 		csvExpectHeader: n.Options.Header,
-		// The planner will be prepared before use.
-		p:              p,
-		execInsertPlan: execInsertPlan,
+		p:               p,
+		execInsertPlan:  execInsertPlan,
 	}
 
 	// We need a planner to do the initial planning, in addition
@@ -244,10 +259,25 @@ func newCopyMachine(
 			}
 		}
 	}
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.initMonitoring(ctx, parentMon)
 	c.processRows = c.insertRows
+	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), copyBatchRowSize)
+	c.scratchRow = make(tree.Datums, len(c.resultColumns))
 	return c, nil
+}
+
+func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMonitor) {
+	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
+	memMetrics := &MemoryMetrics{}
+	const noteworthyCopyMemoryUsageBytes = 10 << 20
+	c.copyMon = mon.NewMonitor("copy",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		0, /* increment */
+		noteworthyCopyMemoryUsageBytes, c.p.ExecCfg().Settings)
+	c.copyMon.StartNoReserved(ctx, parentMon)
+	c.bufMemAcc = c.copyMon.MakeBoundAccount()
+	c.rowsMemAcc = c.copyMon.MakeBoundAccount()
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
@@ -268,12 +298,15 @@ type copyTxnOpt struct {
 	resetExtraTxnState func(ctx context.Context)
 }
 
+func (c *copyMachine) Close(ctx context.Context) {
+	c.rows.Close(ctx)
+	c.bufMemAcc.Close(ctx)
+	c.copyMon.Stop(ctx)
+}
+
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
 func (c *copyMachine) run(ctx context.Context) error {
-	defer c.rowsMemAcc.Close(ctx)
-	defer c.bufMemAcc.Close(ctx)
-
 	format := pgwirebase.FormatText
 	if c.format == tree.CopyFormatBinary {
 		format = pgwirebase.FormatBinary
@@ -418,7 +451,7 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := len(c.rows); !final && (ln == 0 || ln < copyBatchRowSize) {
+	if ln := c.rows.Len(); !final && (ln == 0 || ln < copyBatchRowSize) {
 		return nil
 	}
 	return c.processRows(ctx)
@@ -529,12 +562,12 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 			"expected %d values, got %d", expected, len(record))
 	}
 	record = c.maybeIgnoreHiddenColumnsStr(record)
-	exprs := make(tree.Exprs, len(record))
+	datums := c.scratchRow
 	for i, s := range record {
 		// NB: When we implement FORCE_NULL, then quoted values also are allowed
 		// to be treated as NULL.
 		if !s.Quoted && s.Val == c.null {
-			exprs[i] = tree.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx)
@@ -542,18 +575,12 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 			return err
 		}
 
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return err
-		}
-
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+	_, err := c.rows.AddRow(ctx, datums)
+	if err != nil {
 		return err
 	}
-
-	c.rows = append(c.rows, exprs)
 	return nil
 }
 
@@ -614,10 +641,10 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 		return nil, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
-	exprs := make(tree.Exprs, fieldCount)
+	datums := make(tree.Datums, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
-	for i := range exprs {
+	for i := range datums {
 		n, err := io.ReadFull(&c.buf, byteCountBytes[:])
 		readSoFar = append(readSoFar, byteCountBytes[:n]...)
 		if err != nil {
@@ -625,7 +652,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 		}
 		byteCount = int32(binary.BigEndian.Uint32(byteCountBytes[:]))
 		if byteCount == -1 {
-			exprs[i] = tree.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		data := make([]byte, byteCount)
@@ -644,16 +671,12 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 			return nil, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return nil, err
-		}
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err = c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+	_, err = c.rows.AddRow(ctx, datums)
+	if err != nil {
 		return nil, err
 	}
-	c.rows = append(c.rows, exprs)
 	return nil, nil
 }
 
@@ -727,19 +750,36 @@ func (p *planner) preparePlannerForCopy(
 
 // insertRows transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
-	if len(c.rows) == 0 {
+	if c.rows.Len() == 0 {
 		return nil
 	}
 	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
+	numRows := c.rows.Len()
 
-	vc := &tree.ValuesClause{Rows: c.rows}
-	numRows := len(c.rows)
-	// Reuse the same backing array once the Insert is complete.
-	c.rows = c.rows[:0]
-	c.rowsMemAcc.Clear(ctx)
+	copyFastPath := c.p.SessionData().CopyFastPathEnabled
+	var vc tree.SelectStatement
+	if copyFastPath {
+		vc = &tree.LiteralValuesClause{Rows: &c.rows}
+	} else {
+		// This is best effort way of mimic'ing pre-copyFastPath behavior, its
+		// not exactly the same but should suffice to workaround any bugs due to
+		// circumventing the optimizer if they pop up. The difference is this
+		// way of emulating the old behavior has the datums go through the row
+		// container before becoming []tree.Exprs.
+		exprs := make([]tree.Exprs, c.rows.Len())
+		for i := 0; i < c.rows.Len(); i++ {
+			r := c.rows.At(i)
+			newrow := make(tree.Exprs, len(r))
+			for j, val := range r {
+				newrow[j] = val
+			}
+			exprs[i] = newrow
+		}
+		vc = &tree.ValuesClause{Rows: exprs}
+	}
 
 	c.p.stmt = Statement{}
 	c.p.stmt.AST = &tree.Insert{
@@ -768,8 +808,8 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 			"Inserted %d out of %d rows.", rows, numRows)
 	}
 	c.insertedRows += numRows
-
-	return nil
+	// We're done reset for next batch.
+	return c.rows.UnsafeReset(ctx)
 }
 
 func (c *copyMachine) maybeIgnoreHiddenColumnsBytes(in [][]byte) [][]byte {
@@ -793,12 +833,12 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			"expected %d values, got %d", expected, len(parts))
 	}
 	parts = c.maybeIgnoreHiddenColumnsBytes(parts)
-	exprs := make(tree.Exprs, len(parts))
+	datums := c.scratchRow
 	for i, part := range parts {
 		s := string(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
-			exprs[i] = tree.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		switch t := c.resultColumns[i].Typ; t.Family() {
@@ -826,19 +866,10 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			return err
 		}
 
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return err
-		}
-
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
-		return err
-	}
-
-	c.rows = append(c.rows, exprs)
-	return nil
+	_, err := c.rows.AddRow(ctx, datums)
+	return err
 }
 
 // decodeCopy unescapes a single COPY field.
