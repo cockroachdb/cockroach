@@ -348,10 +348,10 @@ func createPostgresSequences(
 }
 
 func getSchemaByNameFromMap(
-	_ context.Context, // TODO(celia) - unused, maybe remove from getSchemaByNameFromMap()?
+	_ context.Context, // TODO(celia): unused, maybe remove from getSchemaByNameFromMap()?
 	schemaAndTableName schemaAndTableName,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
-	_ clusterversion.Handle, // TODO(celia) - unused, maybe remove?
+	_ clusterversion.Handle, // TODO(celia): unused, maybe remove?
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
 	var ok bool

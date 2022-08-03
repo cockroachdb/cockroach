@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -153,7 +152,7 @@ func ResolveDest(
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
-	if exists && !dest.Exists && chosenSuffix != "") {
+	if exists && !dest.Exists && chosenSuffix != "" {
 		// We disallow a user from writing a full backup to a path in a collection containing an
 		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
 		return "",

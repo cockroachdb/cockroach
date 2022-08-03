@@ -128,7 +128,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					curDetails = schemaMetadata.schemaPreparedDetails
 				}
 
-				// TODO(celia) -- should I remove or keep below comment?
+				// TODO(celia): should I remove or keep below comment?
 				// In 22.1, the Public schema should always be present in the database.
 				// Make sure it is part of schemaMetadata, it is not guaranteed to
 				// be added in prepareSchemasForIngestion if we're not importing any

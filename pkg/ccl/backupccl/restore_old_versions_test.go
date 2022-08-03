@@ -938,8 +938,3 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})
 	}
 }
-
-// TODO(celia) - confirm okay to delete entire these tests???
-// - restorePublicSchemaMixedVersion
-// - restoreSyntheticPublicSchemaNamespaceEntry
-// - restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail

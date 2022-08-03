@@ -157,7 +157,7 @@ const (
 	_ Key = iota - 1 // want first named one to start at zero
 
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
-	V21_2 // TODO(celia) - still indirectly referenced by Pebble.SetMinVersion
+	V21_2 // TODO(celia): still indirectly referenced by Pebble.SetMinVersion
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
