@@ -49,12 +49,6 @@ var registry = make(map[clusterversion.ClusterVersion]upgrade.Upgrade)
 
 var upgrades = []upgrade.Upgrade{
 	upgrade.NewTenantUpgrade(
-		"ensure preconditions are met before starting upgrading to v22.1",
-		toCV(clusterversion.Start22_1),
-		preconditionBeforeStartingAnUpgrade,
-		NoTenantUpgradeFunc,
-	),
-	upgrade.NewTenantUpgrade(
 		"remove grant privilege from users",
 		toCV(clusterversion.RemoveGrantPrivilege),
 		NoPrecondition,

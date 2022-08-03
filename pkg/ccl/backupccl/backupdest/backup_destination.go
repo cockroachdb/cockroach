@@ -153,8 +153,7 @@ func ResolveDest(
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
-	if exists && !dest.Exists && chosenSuffix != "" && execCfg.Settings.Version.IsActive(ctx,
-		clusterversion.Start22_1) {
+	if exists && !dest.Exists && chosenSuffix != "") {
 		// We disallow a user from writing a full backup to a path in a collection containing an
 		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
 		return "",

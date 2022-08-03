@@ -13,7 +13,6 @@ package tabledesc
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1129,15 +1128,6 @@ func (desc *wrapper) validateTableIndexes(
 		columnsByID[col.GetID()] = col
 	}
 
-	if !vea.IsActive(clusterversion.Start22_1) {
-		// Verify that the primary index columns are not virtual.
-		for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
-			if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
-				return errors.Newf("primary index column %q cannot be virtual", col.GetName())
-			}
-		}
-	}
-
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
@@ -1289,12 +1279,6 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if !vea.IsActive(clusterversion.Start22_1) {
-				if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-					return errors.Newf("index %q cannot store virtual column %d", idx.GetName(), colID)
-				}
-			}
-
 			if _, ok := columnsByID[colID]; !ok {
 				return errors.Newf("column %d does not exist in table %s", colID, desc.Name)
 			}
