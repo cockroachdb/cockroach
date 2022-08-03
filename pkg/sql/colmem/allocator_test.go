@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -94,94 +93,6 @@ func TestMaybeAppendColumn(t *testing.T) {
 		require.Equal(t, 1, b.Width())
 		require.Equal(t, coldata.BatchSize(), b.ColVec(colIdx).Length())
 		_ = b.ColVec(colIdx).Int64()[0]
-	})
-}
-
-func TestResetMaybeReallocate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
-
-	t.Run("ResettingBehavior", func(t *testing.T) {
-		if coldata.BatchSize() == 1 {
-			skip.IgnoreLint(t, "the test assumes coldata.BatchSize() is at least 2")
-		}
-
-		var b coldata.Batch
-		typs := []*types.T{types.Bytes}
-
-		// Allocate a new batch and modify it.
-		b, _, _ = testAllocator.ResetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */)
-		b.SetSelection(true)
-		b.Selection()[0] = 1
-		b.ColVec(0).Bytes().Set(1, []byte("foo"))
-
-		oldBatch := b
-		b, _, _ = testAllocator.ResetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */)
-		// We should have used the same batch, and now it should be in a "reset"
-		// state.
-		require.Equal(t, oldBatch, b)
-		require.Nil(t, b.Selection())
-		// We should be able to set in the Bytes vector using an arbitrary
-		// position since the vector should have been reset.
-		require.NotPanics(t, func() { b.ColVec(0).Bytes().Set(0, []byte("bar")) })
-	})
-
-	t.Run("LimitingByMemSize", func(t *testing.T) {
-		if coldata.BatchSize() == 1 {
-			skip.IgnoreLint(t, "the test assumes coldata.BatchSize() is at least 2")
-		}
-
-		var b coldata.Batch
-		typs := []*types.T{types.Int}
-		const minDesiredCapacity = 2
-		const smallMemSize = 0
-		const largeMemSize = math.MaxInt64
-
-		// Allocate a batch with smaller capacity.
-		smallBatch := testAllocator.NewMemBatchWithFixedCapacity(typs, minDesiredCapacity/2)
-
-		// Allocate a new batch attempting to use the batch with too small of a
-		// capacity - new batch should **not** be allocated because the memory
-		// limit is already exceeded.
-		b, _, _ = testAllocator.ResetMaybeReallocate(typs, smallBatch, minDesiredCapacity, smallMemSize, false /* desiredCapacitySufficient */)
-		require.Equal(t, smallBatch, b)
-		require.Equal(t, minDesiredCapacity/2, b.Capacity())
-
-		oldBatch := b
-
-		// Reset the batch asking for the same small desired capacity when it is
-		// sufficient - the same batch should be returned.
-		b, _, _ = testAllocator.ResetMaybeReallocate(typs, b, minDesiredCapacity/2, smallMemSize, true /* desiredCapacitySufficient */)
-		require.Equal(t, smallBatch, b)
-		require.Equal(t, minDesiredCapacity/2, b.Capacity())
-
-		// Reset the batch and confirm that a new batch is allocated because we
-		// have given larger memory limit.
-		b, _, _ = testAllocator.ResetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */)
-		require.NotEqual(t, oldBatch, b)
-		require.Equal(t, minDesiredCapacity, b.Capacity())
-
-		if coldata.BatchSize() >= minDesiredCapacity*2 {
-			// Now reset the batch with large memory limit - we should get a new
-			// batch with the double capacity.
-			//
-			// ResetMaybeReallocate truncates the capacity at
-			// coldata.BatchSize(), so we run this part of the test only when
-			// doubled capacity will not be truncated.
-			b, _, _ = testAllocator.ResetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */)
-			require.NotEqual(t, oldBatch, b)
-			require.Equal(t, 2*minDesiredCapacity, b.Capacity())
-		}
 	})
 }
 
