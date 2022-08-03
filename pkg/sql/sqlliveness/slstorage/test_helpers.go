@@ -21,7 +21,8 @@ import (
 
 // FakeStorage implements the sqlliveness.Storage interface.
 type FakeStorage struct {
-	mu struct {
+	BlockCh chan struct{}
+	mu      struct {
 		syncutil.Mutex
 		sessions map[sqlliveness.SessionID]hlc.Timestamp
 	}
@@ -46,10 +47,18 @@ func (s *FakeStorage) IsAlive(
 
 // Insert implements the sqlliveness.Storage interface.
 func (s *FakeStorage) Insert(
-	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.BlockCh != nil {
+		select {
+		case <-s.BlockCh:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	if _, ok := s.mu.sessions[sid]; ok {
 		return errors.Errorf("session %s already exists", sid)
 	}
@@ -59,10 +68,18 @@ func (s *FakeStorage) Insert(
 
 // Update implements the sqlliveness.Storage interface.
 func (s *FakeStorage) Update(
-	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.BlockCh != nil {
+		select {
+		case <-s.BlockCh:
+			break
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
 	if _, ok := s.mu.sessions[sid]; !ok {
 		return false, nil
 	}
