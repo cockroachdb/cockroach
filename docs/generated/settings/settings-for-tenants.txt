@@ -257,6 +257,7 @@ sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are period
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to sql.stats.aggregation.interval
 sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode
+sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request

@@ -11,10 +11,14 @@
 package stats
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -28,7 +32,20 @@ const (
 	// time between refreshes. See comments in automatic_stats.go for more
 	// details.
 	keepCount = 4
+
+	// defaultKeepTime is the default time to keep around old stats for columns that are
+	// not collected by default.
+	defaultKeepTime = 24 * time.Hour
 )
+
+// TableStatisticsRetentionPeriod controls the cluster setting for the
+// retention period of statistics that are not collected by default.
+var TableStatisticsRetentionPeriod = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.non_default_columns.min_retention_period",
+	"minimum retention period for table statistics collected on non-default columns",
+	defaultKeepTime,
+).WithPublic()
 
 // DeleteOldStatsForColumns deletes old statistics from the
 // system.table_statistics table. For the given tableID and columnIDs,
@@ -68,6 +85,48 @@ func DeleteOldStatsForColumns(
 		jobspb.AutoStatsName,
 		columnIDsVal,
 		keepCount,
+	)
+	return err
+}
+
+// DeleteOldStatsForOtherColumns deletes statistics from the
+// system.table_statistics table for columns *not* in the given set of column
+// IDs that are older than keepTime.
+func DeleteOldStatsForOtherColumns(
+	ctx context.Context,
+	executor sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	tableID descpb.ID,
+	columnIDs [][]descpb.ColumnID,
+	keepTime time.Duration,
+) error {
+	var columnIDsPlaceholders bytes.Buffer
+	placeholderVals := make([]interface{}, 0, len(columnIDs)+2)
+	placeholderVals = append(placeholderVals, tableID, keepTime)
+	columnIDsPlaceholdersStart := len(placeholderVals) + 1
+	for i := range columnIDs {
+		columnIDsVal := tree.NewDArray(types.Int)
+		for _, c := range columnIDs[i] {
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
+				return err
+			}
+		}
+		if i > 0 {
+			columnIDsPlaceholders.WriteString(", ")
+		}
+		columnIDsPlaceholders.WriteString(fmt.Sprintf("$%d::string", i+columnIDsPlaceholdersStart))
+		placeholderVals = append(placeholderVals, columnIDsVal)
+	}
+
+	// This will delete all statistics for the given table that are not
+	// on the given columns and are older than keepTime.
+	_, err := executor.Exec(
+		ctx, "delete-statistics", txn,
+		fmt.Sprintf(`DELETE FROM system.table_statistics
+               WHERE "tableID" = $1
+               AND "columnIDs"::string NOT IN (%s)
+               AND "createdAt" < now() - $2`, columnIDsPlaceholders.String()),
+		placeholderVals...,
 	)
 	return err
 }

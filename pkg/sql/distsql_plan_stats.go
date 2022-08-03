@@ -234,6 +234,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		TableID:          desc.GetID(),
 		JobID:            jobID,
 		RowsExpected:     rowsExpected,
+		DeleteOtherStats: details.DeleteOtherStats,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.gatewaySQLInstanceID
