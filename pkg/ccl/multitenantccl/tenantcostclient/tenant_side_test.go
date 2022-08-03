@@ -930,7 +930,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 	// Make the tenant heartbeat like crazy.
 	ctx := context.Background()
 	//slinstance.DefaultTTL.Override(ctx, &st.SV, 20*time.Millisecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, 10*time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID:                    tenantID,
