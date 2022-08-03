@@ -36,10 +36,11 @@ type SelectStatement interface {
 	selectStatement()
 }
 
-func (*ParenSelect) selectStatement()  {}
-func (*SelectClause) selectStatement() {}
-func (*UnionClause) selectStatement()  {}
-func (*ValuesClause) selectStatement() {}
+func (*ParenSelect) selectStatement()         {}
+func (*SelectClause) selectStatement()        {}
+func (*UnionClause) selectStatement()         {}
+func (*ValuesClause) selectStatement()        {}
+func (*LiteralValuesClause) selectStatement() {}
 
 // Select represents a SelectStatement with an ORDER and/or LIMIT.
 type Select struct {
