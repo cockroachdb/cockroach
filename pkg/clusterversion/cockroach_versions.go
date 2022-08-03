@@ -156,15 +156,8 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
-	// TODO - remove pre-22.1 cluster versions
-
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
-	V21_2
-
-	// v22.1 versions.
-	//
-	// Start22_1 demarcates work towards CockroachDB v22.1.
-	Start22_1
+	V21_2 // TODO(celia) - still indirectly referenced by Pebble.SetMinVersion
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -260,12 +253,6 @@ var versionsSingleton = keyedVersions{
 		Key:     V21_2,
 		Version: roachpb.Version{Major: 21, Minor: 2},
 	},
-
-	// v22.1 versions. Internal versions must be even.
-	{
-		Key:     Start22_1,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
@@ -352,7 +339,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V21_2)
+	binaryMinSupportedVersion = ByKey(V22_1)
 
 	// binaryVersion is the version of this binary.
 	//
@@ -363,7 +350,7 @@ var (
 func init() {
 	const isReleaseBranch = false
 	if isReleaseBranch {
-		if binaryVersion != ByKey(V21_2) {
+		if binaryVersion != ByKey(V22_1) {
 			panic("unexpected cluster version greater than release's binary version")
 		}
 	}
