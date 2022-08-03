@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build lint
 // +build lint
 
 package lint
@@ -1152,6 +1153,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!*.pb.gw.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
+			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
