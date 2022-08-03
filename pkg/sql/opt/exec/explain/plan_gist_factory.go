@@ -400,7 +400,11 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 		f.encodeInt(0)
 	}
 
-	f.encodeInt(int(params.HardLimit))
+	if params.HardLimit > 0 {
+		f.encodeInt(1)
+	} else {
+		f.encodeInt(0)
+	}
 }
 
 func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
@@ -428,6 +432,12 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	}
 
 	hardLimit := f.decodeInt()
+
+	// Since we no longer record the limit value and its just a bool tell the emit code
+	// to just print "limit", instead the misleading "limit: 1".
+	if hardLimit > 0 {
+		hardLimit = -1
+	}
 
 	return exec.ScanParams{NeededCols: neededCols, IndexConstraint: idxConstraint, InvertedConstraint: invertedConstraint, HardLimit: int64(hardLimit)}
 }

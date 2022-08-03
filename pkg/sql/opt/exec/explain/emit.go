@@ -512,6 +512,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 		if a.Params.HardLimit > 0 {
 			ob.Attr("limit", a.Params.HardLimit)
+		} else if a.Params.HardLimit == -1 {
+			ob.Attr("limit", "")
 		}
 
 		if a.Params.Parallelize {
@@ -924,7 +926,8 @@ func (e *emitter) emitSpans(
 
 func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 	if scanParams.InvertedConstraint == nil && scanParams.IndexConstraint == nil {
-		if scanParams.HardLimit > 0 {
+		// HardLimit can be -1 to signal unknown limit (for gists).
+		if scanParams.HardLimit != 0 {
 			return "LIMITED SCAN"
 		}
 		if scanParams.SoftLimit > 0 {
