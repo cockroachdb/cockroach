@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -697,13 +696,6 @@ func (p *pebbleIterator) EngineRangeKeys() []EngineRangeKeyValue {
 		rkvs = append(rkvs, EngineRangeKeyValue{Version: rk.Suffix, Value: rk.Value})
 	}
 	return rkvs
-}
-
-// ComputeStats implements the MVCCIterator interface.
-func (p *pebbleIterator) ComputeStats(
-	start, end roachpb.Key, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	return ComputeStatsForRange(p, start, end, nowNanos)
 }
 
 // Go-only version of IsValidSplitKey. Checks if the specified key is in

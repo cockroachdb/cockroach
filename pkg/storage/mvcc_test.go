@@ -872,7 +872,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 }
 
 // Regression test for #28205: MVCCGet and MVCCScan, FindSplitKey, and
-// ComputeStats need to invalidate the cached iterator data.
+// ComputeStatsForIter need to invalidate the cached iterator data.
 func TestMVCCInvalidateIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -923,9 +923,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 						_, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, ts2, MVCCScanOptions{})
 					case "findSplitKey":
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
-					case "computeStats":
+					case "computeStatsForIter":
 						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-						_, err = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
+						iter.SeekGE(MVCCKey{Key: iterOptions.LowerBound})
+						_, err = ComputeStatsForIter(iter, 0)
 						iter.Close()
 					}
 					if err != nil {
@@ -2179,29 +2180,6 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	})
 }
 
-func computeStats(
-	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
-) enginepb.MVCCStats {
-	t.Helper()
-
-	if len(from) == 0 {
-		from = keys.LocalMax
-	}
-	if len(to) == 0 {
-		to = keys.MaxKey
-	}
-
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: from,
-		UpperBound: to,
-	})
-	defer iter.Close()
-	ms, err := ComputeStatsForRange(iter, from, to, nowNanos)
-	require.NoError(t, err)
-	return ms
-}
-
 // TestMVCCClearTimeRangeOnRandomData sets up mostly random KVs and then picks
 // some random times to which to revert, ensuring that a MVCC-Scan at each of
 // those times before reverting matches the result of an MVCC-Scan done at a
@@ -2269,7 +2247,9 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	ms.AgeTo(2000)
 
 	// Sanity check starting stats.
-	require.Equal(t, computeStats(t, e, localMax, keyMax, 2000), ms)
+	msComputed, err := ComputeStats(e, localMax, keyMax, 2000)
+	require.NoError(t, err)
+	require.Equal(t, msComputed, ms)
 
 	// Pick timestamps to which we'll revert, and sort them so we can go back
 	// though them in order. The largest will still be less than randTimeRange so
@@ -2305,7 +2285,9 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 				batch.Close()
 			}
 
-			require.Equal(t, computeStats(t, e, localMax, keyMax, 2000), ms)
+			msComputed, err := ComputeStats(e, localMax, keyMax, 2000)
+			require.NoError(t, err)
+			require.Equal(t, msComputed, ms)
 			// Scanning at "now" post-revert should yield the same result as scanning
 			// at revert-time pre-revert.
 			resAfter, err := MVCCScan(ctx, e, localMax, keyMax, now, MVCCScanOptions{MaxKeys: numKVs})
@@ -4898,12 +4880,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 
 			// Verify aggregated stats match computed stats after GC.
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-				IterOptions{UpperBound: roachpb.KeyMax, KeyTypes: IterKeyTypePointsAndRanges})
-			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					expMS, err := mvccStatsTest.fn(iter, localMax, roachpb.KeyMax, gcTime.WallTime)
+					expMS, err := mvccStatsTest.fn(engine, localMax, roachpb.KeyMax, gcTime.WallTime)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -5761,12 +5740,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 						"not all range tombstone expectations were consumed")
 
 					ms.AgeTo(tsMax.WallTime)
-					it = engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-						KeyTypes:   IterKeyTypePointsAndRanges,
-						LowerBound: d.rangeStart,
-						UpperBound: d.rangeEnd,
-					})
-					expMs, err := ComputeStatsForRange(it, rangeStart, rangeEnd, tsMax.WallTime)
+					expMs, err := ComputeStats(engine, d.rangeStart, d.rangeEnd, tsMax.WallTime)
 					require.NoError(t, err, "failed to compute stats for range")
 					require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 				})

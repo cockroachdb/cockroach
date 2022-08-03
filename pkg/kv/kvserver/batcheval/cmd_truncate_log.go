@@ -117,14 +117,8 @@ func TruncateLog(
 	// Note that any sideloaded payloads that may be removed by this truncation
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
-	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: start,
-		UpperBound: end,
-	})
-	defer iter.Close()
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(readWriter, start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}
