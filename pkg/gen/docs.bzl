@@ -33,6 +33,8 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:alter_database_to_schema_stmt.bnf",
   "//docs/generated/sql/bnf:alter_ddl_stmt.bnf",
   "//docs/generated/sql/bnf:alter_default_privileges_stmt.bnf",
+  "//docs/generated/sql/bnf:alter_func_options_stmt.bnf",
+  "//docs/generated/sql/bnf:alter_func_stmt.bnf",
   "//docs/generated/sql/bnf:alter_index_partition_by.bnf",
   "//docs/generated/sql/bnf:alter_index_stmt.bnf",
   "//docs/generated/sql/bnf:alter_partition_stmt.bnf",

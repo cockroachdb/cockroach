@@ -254,3 +254,6 @@ WHERE id = $max_desc_id;
 
 statement error pq: unimplemented: drop function not supported.*
 DROP FUNCTION f
+
+statement error pq: unimplemented: alter function not supported.*
+ALTER FUNCTION f() IMMUTABLE

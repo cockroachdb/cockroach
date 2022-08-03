@@ -990,6 +990,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
+%type <tree.Statement> alter_func_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1053,6 +1054,9 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 // ALTER DEFAULT PRIVILEGES
 %type <tree.Statement> alter_default_privileges_stmt
+
+// ALTER FUNCTION
+%type <tree.Statement> alter_func_options_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1544,7 +1548,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list func_args func_args_list
 %type <tree.FuncArg> func_arg_with_default func_arg
 %type <tree.ResolvableTypeReference> func_return_type func_arg_type
-%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list
+%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list alter_func_opt_list
 %type <tree.FunctionOption> create_func_opt_item common_func_opt_item
 %type <tree.FuncArgClass> func_arg_class
 %type <*tree.UnresolvedObjectName> func_create_name
@@ -1689,6 +1693,7 @@ alter_ddl_stmt:
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
+| alter_func_stmt
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1853,6 +1858,9 @@ alter_database_stmt:
 | alter_database_drop_super_region
 | alter_database_set_secondary_region_stmt
 | alter_database_drop_secondary_region
+
+alter_func_stmt:
+  alter_func_options_stmt
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -3463,11 +3471,7 @@ import_format:
   }
 
 alter_unsupported_stmt:
-  ALTER FUNCTION error
-  {
-    return unimplementedWithIssueDetail(sqllex, 17511, "alter function")
-  }
-| ALTER DOMAIN error
+  ALTER DOMAIN error
   {
     return unimplemented(sqllex, "alter domain")
   }
@@ -4248,6 +4252,29 @@ func_args_list:
   {
     $$.val = append($1.functionArgs(), $3.functionArg())
   }
+
+alter_func_options_stmt:
+  ALTER FUNCTION function_with_argtypes alter_func_opt_list opt_restrict
+  {
+    $$.val = &tree.AlterFunctionOptions{
+      Function: $3.functionObj(),
+      Options: $4.functionOptions(),
+    }
+  }
+
+alter_func_opt_list:
+  common_func_opt_item
+  {
+    $$.val = tree.FunctionOptions{$1.functionOption()}
+  }
+| alter_func_opt_list common_func_opt_item
+  {
+    $$.val = append($1.functionOptions(), $2.functionOption())
+  }
+
+opt_restrict:
+  RESTRICT {}
+| /* EMPTY */ {}
 
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
