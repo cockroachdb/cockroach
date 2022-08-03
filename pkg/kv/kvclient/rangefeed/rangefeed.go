@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,6 +56,7 @@ type DB interface {
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- *roachpb.RangeFeedEvent,
+		opts ...kvcoord.RangeFeedOption,
 	) error
 
 	// Scan encapsulates scanning a key span at a given point in time. The method
@@ -290,7 +292,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			return f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh)
+			return f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh, f.rfOpts...)
 		}
 		processEventsTask := func(ctx context.Context) error {
 			return f.processEvents(ctx, frontier, eventCh)

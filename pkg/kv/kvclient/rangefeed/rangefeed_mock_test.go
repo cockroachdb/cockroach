@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,6 +37,7 @@ type mockClient struct {
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- *roachpb.RangeFeedEvent,
+		opts ...kvcoord.RangeFeedOption,
 	) error
 
 	scan func(
@@ -53,8 +55,9 @@ func (m *mockClient) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
+	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC, opts...)
 }
 
 func (m *mockClient) Scan(
@@ -162,7 +165,8 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool,
+				eventC chan<- *roachpb.RangeFeedEvent, opts ...kvcoord.RangeFeedOption,
 			) error {
 				assert.False(t, withDiff) // it was not set
 				sendEvent := func(ts hlc.Timestamp) {
@@ -263,7 +267,8 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool,
+				eventC chan<- *roachpb.RangeFeedEvent, opts ...kvcoord.RangeFeedOption,
 			) error {
 				assert.True(t, withDiff)
 				eventC <- &roachpb.RangeFeedEvent{

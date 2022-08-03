@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,6 +44,7 @@ type config struct {
 	onSSTable            OnSSTable
 	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
+	rfOpts               []kvcoord.RangeFeedOption
 }
 
 type scanConfig struct {
@@ -279,5 +281,12 @@ func WithScanRetryBehavior(b ScanRetryBehavior) Option {
 func WithPProfLabel(key, value string) Option {
 	return optionFunc(func(c *config) {
 		c.extraPProfLabels = append(c.extraPProfLabels, key, value)
+	})
+}
+
+// WithMuxRangeFeed configures rangefeed to use MuxRangeFeed RPC.
+func WithMuxRangeFeed() Option {
+	return optionFunc(func(c *config) {
+		c.rfOpts = append(c.rfOpts, kvcoord.WithMuxRangeFeed())
 	})
 }

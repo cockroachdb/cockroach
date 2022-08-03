@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	kvcoord "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	gomock "github.com/golang/mock/gomock"
@@ -37,17 +38,22 @@ func (m *MockDB) EXPECT() *MockDBMockRecorder {
 }
 
 // RangeFeed mocks base method.
-func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 bool, arg4 chan<- *roachpb.RangeFeedEvent) error {
+func (m *MockDB) RangeFeed(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 bool, arg4 chan<- *roachpb.RangeFeedEvent, arg5 ...kvcoord.RangeFeedOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeFeed", arg0, arg1, arg2, arg3, arg4)
+	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
+	for _, a := range arg5 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RangeFeed", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RangeFeed indicates an expected call of RangeFeed.
-func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockDB)(nil).RangeFeed), arg0, arg1, arg2, arg3, arg4)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockDB)(nil).RangeFeed), varargs...)
 }
 
 // Scan mocks base method.
