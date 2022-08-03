@@ -71,3 +71,20 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-distributed' AND usage_count > 0
 ----
 sql.exec.query.is-distributed
+
+# Regression test for an error of seeking to /Min key for a Get request issued
+# for the reverse scan (#83618). Placement of the ranges here doesn't matter.
+statement ok
+CREATE TABLE a (id TEXT PRIMARY KEY);
+CREATE TABLE b (
+  id TEXT PRIMARY KEY,
+  a_id TEXT,
+  status INT,
+  INDEX b_a_id (a_id ASC),
+  INDEX b_status_idx (status ASC)
+);
+SELECT a.id FROM a
+LEFT JOIN b AS b2 ON (a.id = b2.a_id AND b2.status = 2)
+WHERE (a.id IN ('3f90e30a-c87a-4017-b9a0-8f964b91c4af', '3adaf3da-0368-461a-8437-ee448724b78d', 'd0c13b06-5368-4522-8126-105b0a9513cd'))
+ORDER BY id DESC
+LIMIT 2;
