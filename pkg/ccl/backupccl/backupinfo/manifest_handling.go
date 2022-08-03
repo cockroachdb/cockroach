@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -982,26 +981,6 @@ func WriteBackupManifestCheckpoint(
 		if err != nil {
 			return err
 		}
-	}
-
-	// If the cluster is still running on a mixed version, we want to write
-	// to the base directory instead of the progress directory. That way if
-	// an old node resumes a backup, it doesn't have to start over.
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		// We want to overwrite the latest checkpoint in the base directory,
-		// just write to the non versioned BACKUP-CHECKPOINT file.
-		err = cloud.WriteFile(ctx, defaultStore, BackupManifestCheckpointName, bytes.NewReader(descBuf))
-		if err != nil {
-			return err
-		}
-
-		checksum, err := GetChecksum(descBuf)
-		if err != nil {
-			return err
-		}
-
-		return cloud.WriteFile(ctx, defaultStore, BackupManifestCheckpointName+
-			BackupManifestChecksumSuffix, bytes.NewReader(checksum))
 	}
 
 	// We timestamp the checkpoint files in order to enforce write once backups.
