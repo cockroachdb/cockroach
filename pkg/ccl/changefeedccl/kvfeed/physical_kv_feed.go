@@ -31,6 +31,7 @@ type rangeFeedConfig struct {
 	Spans    []kvcoord.SpanTimePair
 	WithDiff bool
 	Knobs    TestingKnobs
+	UseMux   bool
 }
 
 type rangefeedFactory func(
@@ -74,8 +75,13 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
+	var rfOpts []kvcoord.RangeFeedOption
+	if cfg.UseMux {
+		rfOpts = append(rfOpts, kvcoord.WithMuxRangeFeed())
+	}
+
 	g.GoCtx(func(ctx context.Context) error {
-		return p(ctx, cfg.Spans, cfg.WithDiff, feed.eventC)
+		return p(ctx, cfg.Spans, cfg.WithDiff, feed.eventC, rfOpts...)
 	})
 	return g.Wait()
 }

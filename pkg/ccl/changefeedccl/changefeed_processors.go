@@ -407,6 +407,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaChangePolicy:      schemaChange.Policy,
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
+		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
 	}, nil
 }
 
