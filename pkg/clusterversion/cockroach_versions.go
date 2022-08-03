@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
-	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
-	ClusterLocksVirtualTable
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
@@ -331,10 +328,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     ClusterLocksVirtualTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
 	},
 	{
 		Key:     AutoStatsTableSettings,
