@@ -103,6 +103,8 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // clear_range    k=<key> end=<key>
 // clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
 //
+// gc_clear_range k=<key> end=<key> ts=<int>[,<int>]
+//
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
 // sst_clear_range    k=<key> end=<key>
@@ -656,6 +658,7 @@ var commands = map[string]cmd{
 	"del_range_pred": {typDataUpdate, cmdDeleteRangePredicate},
 	"export":         {typReadOnly, cmdExport},
 	"get":            {typReadOnly, cmdGet},
+	"gc_clear_range": {typDataUpdate, cmdGCClearRange},
 	"increment":      {typDataUpdate, cmdIncrement},
 	"initput":        {typDataUpdate, cmdInitPut},
 	"merge":          {typDataUpdate, cmdMerge},
@@ -901,6 +904,17 @@ func cmdClearRangeKey(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
 	return e.engine.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+}
+
+func cmdGCClearRange(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+	return e.withWriter("gc_clear_range", func(rw ReadWriter) error {
+		return MVCCGarbageCollectWithClearRange(e.ctx, rw, e.ms, ts, []CollectableGCClearRangeKey{{
+			Span:      roachpb.Span{Key: key, EndKey: endKey},
+			LatchSpan: roachpb.Span{Key: key.Prevish(10), EndKey: endKey.Next()},
+		}})
+	})
 }
 
 func cmdCPut(e *evalCtx) error {
