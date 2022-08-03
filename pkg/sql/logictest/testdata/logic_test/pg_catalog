@@ -4634,7 +4634,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-2004  array_in  array_in
+2005  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed
