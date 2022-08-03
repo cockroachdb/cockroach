@@ -1044,6 +1044,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 
 	ep := execPlan{outputCols: outputCols}
 
+	b.recordJoinType(joinType)
+	b.recordJoinAlgorithm(exec.ApplyJoin)
 	ep.root, err = b.factory.ConstructApplyJoin(
 		joinType,
 		leftPlan.root,
@@ -1128,11 +1130,12 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		rightExpr.Relational().OutputCols,
 		*filters,
 	)
+	isCrossJoin := len(leftEq) == 0
 	if !b.disableTelemetry {
-		if len(leftEq) > 0 {
-			telemetry.Inc(sqltelemetry.JoinAlgoHashUseCounter)
-		} else {
+		if isCrossJoin {
 			telemetry.Inc(sqltelemetry.JoinAlgoCrossUseCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.JoinAlgoHashUseCounter)
 		}
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.Op()))
 	}
@@ -1160,6 +1163,12 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ToSet())
 	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ToSet())
 
+	b.recordJoinType(joinType)
+	if isCrossJoin {
+		b.recordJoinAlgorithm(exec.CrossJoin)
+	} else {
+		b.recordJoinAlgorithm(exec.HashJoin)
+	}
 	ep.root, err = b.factory.ConstructHashJoin(
 		joinType,
 		left.root, right.root,
@@ -1214,6 +1223,8 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	reqOrd := ep.reqOrdering(join)
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ColSet())
 	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ColSet())
+	b.recordJoinType(joinType)
+	b.recordJoinAlgorithm(exec.MergeJoin)
 	ep.root, err = b.factory.ConstructMergeJoin(
 		joinType,
 		left.root, right.root,
@@ -1732,6 +1743,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	}
 
 	res := execPlan{outputCols: output}
+	b.recordJoinAlgorithm(exec.IndexJoin)
 	res.root, err = b.factory.ConstructIndexJoin(
 		input.root, tab, keyCols, needed, res.reqOrdering(join), locking, join.RequiredPhysical().LimitHintInt64(),
 	)
@@ -1827,8 +1839,11 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
+	joinType := joinOpToJoinType(join.JoinType)
+	b.recordJoinType(joinType)
+	b.recordJoinAlgorithm(exec.LookupJoin)
 	res.root, err = b.factory.ConstructLookupJoin(
-		joinOpToJoinType(join.JoinType),
+		joinType,
 		input.root,
 		tab,
 		idx,
@@ -1942,8 +1957,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		locking = forUpdateLocking
 	}
 
+	joinType := joinOpToJoinType(join.JoinType)
+	b.recordJoinType(joinType)
+	b.recordJoinAlgorithm(exec.InvertedJoin)
 	res.root, err = b.factory.ConstructInvertedJoin(
-		joinOpToJoinType(join.JoinType),
+		joinType,
 		invertedExpr,
 		input.root,
 		tab,
@@ -2043,6 +2061,7 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	b.recordJoinAlgorithm(exec.ZigZagJoin)
 	res.root, err = b.factory.ConstructZigzagJoin(
 		leftTable,
 		leftIndex,
@@ -2660,6 +2679,33 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	default:
 		return expr.Op().SyntaxTag()
 	}
+}
+
+// recordJoinType increments the counter for the given join type for telemetry
+// reporting.
+func (b *Builder) recordJoinType(joinType descpb.JoinType) {
+	if b.JoinTypeCounts == nil {
+		b.JoinTypeCounts = make(map[descpb.JoinType]int)
+	}
+	// Don't bother distinguishing between left and right.
+	switch joinType {
+	case descpb.RightOuterJoin:
+		joinType = descpb.LeftOuterJoin
+	case descpb.RightSemiJoin:
+		joinType = descpb.LeftSemiJoin
+	case descpb.RightAntiJoin:
+		joinType = descpb.LeftAntiJoin
+	}
+	b.JoinTypeCounts[joinType]++
+}
+
+// recordJoinAlgorithm increments the counter for the given join algorithm for
+// telemetry reporting.
+func (b *Builder) recordJoinAlgorithm(joinAlgorithm exec.JoinAlgorithm) {
+	if b.JoinAlgorithmCounts == nil {
+		b.JoinAlgorithmCounts = make(map[exec.JoinAlgorithm]int)
+	}
+	b.JoinAlgorithmCounts[joinAlgorithm]++
 }
 
 // boundedStalenessAllowList contains the operators that may be used with
