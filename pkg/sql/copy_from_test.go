@@ -98,7 +98,7 @@ func BenchmarkCopyFrom(b *testing.B) {
 	r.Exec(b, lineitemSchema)
 
 	// send data in 5 batches of 10k rows
-	ROWS := 50000
+	const ROWS = sql.CopyBatchRowSizeDefault * 4
 	datalen := 0
 	var rows []string
 	for i := 0; i < ROWS; i++ {
@@ -106,15 +106,24 @@ func BenchmarkCopyFrom(b *testing.B) {
 		rows = append(rows, row)
 		datalen += len(row)
 	}
-	start := timeutil.Now()
-	pprof.Do(ctx, pprof.Labels("run", "copy"), func(ctx context.Context) {
-		rows, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", rows)
-		require.NoError(b, err)
-		require.Equal(b, ROWS, rows)
-	})
-	duration := timeutil.Since(start)
-	b.ReportMetric(float64(datalen)/(1024*1024)/duration.Seconds(), "mb/s")
-	b.ReportMetric(float64(ROWS)/duration.Seconds(), "rows/s")
+	rowsize := datalen / ROWS
+	for _, batchSizeFactor := range []float64{.5, 1, 2, 4} {
+		batchSize := int(batchSizeFactor * sql.CopyBatchRowSizeDefault)
+		b.Run(fmt.Sprintf("%d", batchSize), func(b *testing.B) {
+			actualRows := rows[:batchSize]
+			for i := 0; i < b.N; i++ {
+				pprof.Do(ctx, pprof.Labels("run", "copy"), func(ctx context.Context) {
+					rowcount, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", actualRows)
+					require.NoError(b, err)
+					require.Equal(b, len(actualRows), rowcount)
+				})
+				b.StopTimer()
+				r.Exec(b, "TRUNCATE TABLE c.lineitem")
+				b.StartTimer()
+			}
+			b.SetBytes(int64(len(actualRows) * rowsize))
+		})
+	}
 }
 
 func BenchmarkParallelCopyFrom(b *testing.B) {
@@ -129,9 +138,9 @@ func BenchmarkParallelCopyFrom(b *testing.B) {
 
 	r := sqlutils.MakeSQLRunner(conn)
 	r.Exec(b, lineitemSchema)
-	ROWS := 50000
+	const ROWS = 50000
 	datalen := 0
-	THREADS := 10
+	const THREADS = 10
 	var allrows [][]string
 
 	chunk := ROWS / THREADS

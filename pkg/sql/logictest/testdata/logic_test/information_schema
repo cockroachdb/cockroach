@@ -4663,7 +4663,8 @@ WHERE
       'vectorize',
       'experimental_distsql_planning',
       'use_declarative_schema_changer',
-      'distsql_workmem'
+      'distsql_workmem',
+      'copy_fast_path_enabled'
     );
 ----
 variable                                              value

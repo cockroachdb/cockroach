@@ -237,12 +237,13 @@ import (
 //  - copy,copy-error
 //    Runs a COPY FROM STDIN statement, because of the separate data chunk it requires
 //    special logictest support. Format is:
-//    copy
-//    COPY <table> FROM STDIN;
-//    <blankline>
-//    COPY DATA
-//    ----
-//    <NUMROWS>
+//      copy
+//      COPY <table> FROM STDIN;
+//      <blankline>
+//      COPY DATA
+//      ----
+//      <NUMROWS>
+//
 //    copy-error is just like copy but an error is expected and results should be error
 //    string.
 //
@@ -2298,11 +2299,14 @@ func (t *logicTest) processSubtest(
 			if !sep {
 				return errors.Errorf("%s: expected ---- separator at end of copy data", query.pos)
 			}
-			// TODO: This is broken, t.cluster.Server(0) may not be the same tenant as t.db points to, for now
-			// the copy tests disable the 3node-tenant config but we should fix this. Also RunCopyFrom does an
-			// end run around the t.db connection entirely and runs copies w/o using the client protocol at all,
-			// not ideal but the go sql.DB interface doesn't support COPY so fixing it the right way that would
-			// require major surgery (ie making logictest use libpq or something low level like that).
+			// TODO(cucaroach): This is broken, t.cluster.Server(0) may not be
+			// the same tenant as t.db points to, for now the copy tests disable
+			// the 3node-tenant config but we should fix this. Also RunCopyFrom
+			// does an end run around the t.db connection entirely and runs
+			// copies w/o using the client protocol at all, not ideal but the go
+			// sql.DB interface doesn't support COPY so fixing it the right way
+			// that would require major surgery (ie making logictest use libpq
+			// or something low level like that).
 			rows, err := sql.RunCopyFrom(context.Background(), t.cluster.Server(0), "test", nil, query.sql, []string{data.String()})
 			result := fmt.Sprintf("%d", rows)
 			if err != nil {
