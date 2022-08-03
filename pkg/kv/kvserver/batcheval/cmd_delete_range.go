@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -93,10 +94,20 @@ func DeleteRange(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
+		// If no predicate parameters are passed, use the fast path. If we're
+		// deleting the entire Raft range, use an even faster path that avoids a
+		// point key scan to update MVCC stats.
 		if args.Predicates == (roachpb.DeleteRangePredicates{}) {
-			// If no predicate parameters are passed, use the fast path.
+			var statsCovered *enginepb.MVCCStats
+			if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
+				// NB: We take the fast path even if stats are estimates, because the
+				// slow path will likely end up with similarly poor stats anyway.
+				s := cArgs.EvalCtx.GetMVCCStats()
+				statsCovered = &s
+			}
 			err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
-				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
+				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents,
+				statsCovered)
 			return result.Result{}, err
 		}
 
