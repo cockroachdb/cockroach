@@ -963,6 +963,9 @@ message CreateStatsDetails {
 
   // Fully qualified table name.
   string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];
+
+  // If true, delete old stats for columns not included in this message.
+  bool delete_other_stats = 8;
 }
 
 message CreateStatsProgress {
