@@ -171,8 +171,6 @@ const (
 	// for fine-grained time bound iteration. See
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
 	PebbleFormatBlockPropertyCollector // TODO(celia) - pkg/storage
-	// PublicSchemasWithDescriptors backs public schemas with descriptors.
-	PublicSchemasWithDescriptors // TODO(celia) - WIP
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -277,10 +275,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatBlockPropertyCollector,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
-	},
-	{
-		Key:     PublicSchemasWithDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
 	},
 	{
 		Key:     V22_1,

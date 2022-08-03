@@ -43,7 +43,7 @@ func (p *planner) ReparentDatabase(
 ) (planNode, error) {
 	return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 		"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
-		clusterversion.PublicSchemasWithDescriptors)
+		clusterversion.TODOPreV22_1)
 }
 
 func (n *reparentDatabaseNode) startExec(params runParams) error {

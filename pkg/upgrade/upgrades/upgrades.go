@@ -54,11 +54,6 @@ var upgrades = []upgrade.Upgrade{
 		preconditionBeforeStartingAnUpgrade,
 		NoTenantUpgradeFunc,
 	),
-	upgrade.NewTenantUpgrade("update synthetic public schemas to be backed by a descriptor",
-		toCV(clusterversion.PublicSchemasWithDescriptors), // TODO(celia) - what to do here?
-		NoPrecondition,
-		publicSchemaMigration,
-	),
 	upgrade.NewTenantUpgrade(
 		"enable span configs infrastructure",
 		toCV(clusterversion.EnsureSpanConfigReconciliation),
