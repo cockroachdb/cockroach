@@ -1,98 +1,263 @@
+# 1.Clear empty range
+run ok stats
+gc_points_clear_range k=a ts=3 end=z
+----
+>> gc_points_clear_range k=a ts=3 end=z
+stats: no change
+>> at end:
+<no data>
+stats: 
+
+# 2.Clear range starting from a version under value
 run ok
-put k=A v=B ts=10
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
 ----
 >> at end:
-data: "A"/10.000000000,0 -> /BYTES/B
-
-# Check that we can't invoke gc_clear_range if we have live data.
-run error
-gc_clear_range k=A end=Z ts=30
-----
->> at end:
-data: "A"/10.000000000,0 -> /BYTES/B
-error: (*withstack.withStack:) range contains live data, can't use GC clear range
-
-run ok
-del k=A ts=30
-----
-del: "A": found key true
->> at end:
-data: "A"/30.000000000,0 -> /<empty>
-data: "A"/10.000000000,0 -> /BYTES/B
-
-# Check that we can't invoke gc_clear_range if we are not covered by range tombstones.
-run error
-gc_clear_range k=A end=Z ts=30
-----
->> at end:
-data: "A"/30.000000000,0 -> /<empty>
-data: "A"/10.000000000,0 -> /BYTES/B
-error: (*withstack.withStack:) found key not covered by range tombstone "A"/30.000000000,0
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
 
 run ok stats
-del_range_ts k=A endKey=Z ts=50
+gc_points_clear_range k=a startTs=2 end=z ts=5
 ----
->> del_range_ts k=A endKey=Z ts=50
-stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 gc_bytes_age=+700
+>> gc_points_clear_range k=a startTs=2 end=z ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
 >> at end:
-rangekey: A{-\x00}/[50.000000000,0=/<empty>]
-data: "A"/30.000000000,0 -> /<empty>
-data: "A"/10.000000000,0 -> /BYTES/B
-stats: key_count=1 key_bytes=26 val_count=2 val_bytes=6 range_key_count=1 range_key_bytes=14 range_val_count=1 gc_bytes_age=2940
+data: "a"/5.000000000,0 -> /BYTES/12
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=7 live_count=1 live_bytes=21
 
-# Check that we can't delete if range tombstone covering all range is above gc threshold.
-run error
-gc_clear_range k=A end=Z ts=40
+run ok
+clear_range k=a end=z
 ----
 >> at end:
-rangekey: A{-\x00}/[50.000000000,0=/<empty>]
-data: "A"/30.000000000,0 -> /<empty>
-data: "A"/10.000000000,0 -> /BYTES/B
-error: (*withstack.withStack:) range tombstones above gc threshold. GC=40.000000000,0, range=50.000000000,0
+<no data>
 
-# Check that we can delete if range tombstone covers all range.
-run stats ok
-gc_clear_range k=A end=Z ts=60
+# 3. Clear range from version under tombstone
+run ok
+put k=a v=11 ts=2,0
+del k=a ts=5,0
 ----
->> gc_clear_range k=A end=Z ts=60
-stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-6 range_key_count=-1 range_key_bytes=-14 range_val_count=-1 gc_bytes_age=-2940
+del: "a": found key true
+>> at end:
+data: "a"/5.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a startTs=5 end=z ts=5
+----
+>> gc_points_clear_range k=a startTs=5 end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-7 gc_bytes_age=-3135
 >> at end:
 <no data>
 stats: 
 
-# Check that is we have range tombstone coverage that covers subset but there's no other data we can still clear.
+# 4. Clear range from version under range tombstone
 run ok
-put k=A v=B ts=10
-del_range_ts k=A endKey=D ts=20
+put k=a v=11 ts=2,0
+del_range_ts k=a end=b ts=5,0
 ----
 >> at end:
-rangekey: A{-\x00}/[20.000000000,0=/<empty>]
-data: "A"/10.000000000,0 -> /BYTES/B
+rangekey: {a-b}/[5.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/11
 
-run stats ok
-gc_clear_range k=A end=Z ts=60
+run ok stats
+gc_points_clear_range k=a startTs=2 end=z ts=5
 ----
->> gc_clear_range k=A end=Z ts=60
-stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-6 range_key_count=-1 range_key_bytes=-14 range_val_count=-1 gc_bytes_age=-2720
+>> gc_points_clear_range k=a startTs=2 end=z ts=5
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-7 gc_bytes_age=-1995
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 5. Clear range up to another value
+run ok
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
+put k=c v=13 ts=5,0
+----
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+data: "c"/5.000000000,0 -> /BYTES/13
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=c ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=c ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "c"/5.000000000,0 -> /BYTES/13
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=14 live_count=2 live_bytes=42
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 6. Clear range up to another intent
+run ok
+put k=a v=11 ts=2,0
+put k=a v=12 ts=5,0
+with t=A k=c
+  txn_begin ts=4,0
+  put v=1
+----
+>> at end:
+txn: "A" meta={id=00000000 key="c" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+meta: "c"/0,0 -> txn={id=00000000 key="c" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/4.000000000,0 -> /BYTES/1
+
+run ok stats
+gc_points_clear_range k=a startTs=2 end=c ts=5
+----
+>> gc_points_clear_range k=a startTs=2 end=c ts=5
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
+>> at end:
+data: "a"/5.000000000,0 -> /BYTES/12
+meta: "c"/0,0 -> txn={id=00000000 key="c" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/4.000000000,0 -> /BYTES/1
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=64 live_count=2 live_bytes=92 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=96
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 7. Clear from before first key
+run ok
+put k=b v=11 ts=2,0
+del k=b ts=5,0
+----
+del: "b": found key true
+>> at end:
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/11
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-7 gc_bytes_age=-3135
 >> at end:
 <no data>
 stats: 
 
-# Check that gc clear range can't be performed over intents
 run ok
-with t=A
-  txn_begin ts=10
-  put k=B v=O
+clear_range k=a end=z
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
-meta: "B"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "B"/10.000000000,0 -> /BYTES/O
+<no data>
 
-run error
-gc_clear_range k=A end=Z ts=40
+# 8. Clear value under range tombstone
+run ok
+put k=b v=123 ts=2,0
+del_range_ts k=a end=c ts=5,0
 ----
 >> at end:
-meta: "B"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "B"/10.000000000,0 -> /BYTES/O
-error: (*withstack.withStack:) range contains live data, can't use GC clear range
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-8 gc_bytes_age=-2090
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 9. Clear value under point tombstone
+run ok
+put k=b v=123 ts=2,0
+del k=b ts=5,0
+----
+del: "b": found key true
+>> at end:
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3230
+>> at end:
+<no data>
+stats: 
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 10. Clear value under point and range tombstone (checking that garbage age is correctly calculated)
+run ok
+put k=b v=123 ts=2,0
+del k=b ts=4,0
+del_range_ts k=a end=c ts=5,0
+----
+del: "b": found key true
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+data: "b"/4.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3264
+>> at end:
+rangekey: {a-c}/[5.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1235
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 11. Clear value under range and point tombstone (checking that garbage age is correctly calculated)
+run ok
+put k=b v=123 ts=2,0
+del_range_ts k=a end=c ts=4,0
+del k=b ts=5,0
+----
+del: "b": found key false
+>> at end:
+rangekey: {a-c}/[4.000000000,0=/<empty>]
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/123
+
+run ok stats
+gc_points_clear_range k=a end=z ts=5
+----
+>> gc_points_clear_range k=a end=z ts=5
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-8 gc_bytes_age=-3250
+>> at end:
+rangekey: {a-c}/[4.000000000,0=/<empty>]
+stats: range_key_count=1 range_key_bytes=13 range_val_count=1 gc_bytes_age=1248
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
