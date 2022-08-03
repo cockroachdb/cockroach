@@ -24,6 +24,7 @@ type FakeStorage struct {
 	mu struct {
 		syncutil.Mutex
 		sessions map[sqlliveness.SessionID]hlc.Timestamp
+		blockCh  chan struct{}
 	}
 }
 
@@ -46,8 +47,16 @@ func (s *FakeStorage) IsAlive(
 
 // Insert implements the sqlliveness.Storage interface.
 func (s *FakeStorage) Insert(
-	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) error {
+	if ch := s.getBlockCh(); ch != nil {
+		select {
+		case <-ch:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.mu.sessions[sid]; ok {
@@ -59,8 +68,16 @@ func (s *FakeStorage) Insert(
 
 // Update implements the sqlliveness.Storage interface.
 func (s *FakeStorage) Update(
-	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (bool, error) {
+	if ch := s.getBlockCh(); ch != nil {
+		select {
+		case <-ch:
+			break
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.mu.sessions[sid]; !ok {
@@ -76,4 +93,24 @@ func (s *FakeStorage) Delete(_ context.Context, sid sqlliveness.SessionID) error
 	defer s.mu.Unlock()
 	delete(s.mu.sessions, sid)
 	return nil
+}
+
+// SetBlockCh is used to block the storage for testing purposes
+func (s *FakeStorage) SetBlockCh() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.blockCh = make(chan struct{})
+}
+
+// CloseBlockCh is used to unblock the storage for testing purposes
+func (s *FakeStorage) CloseBlockCh() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	close(s.mu.blockCh)
+}
+
+func (s *FakeStorage) getBlockCh() chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.blockCh
 }
