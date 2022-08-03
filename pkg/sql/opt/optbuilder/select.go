@@ -852,6 +852,9 @@ func (b *Builder) buildSelectStmt(
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
+	case *tree.LiteralValuesClause:
+		return b.buildLiteralValuesClause(stmt, desiredTypes, inScope)
+
 	case *tree.ParenSelect:
 		return b.buildSelect(stmt.Select, locking, desiredTypes, inScope)
 
@@ -941,6 +944,10 @@ func (b *Builder) buildSelectStmtWithoutParens(
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch t := wrapped.(type) {
+	case *tree.LiteralValuesClause:
+		b.rejectIfLocking(locking, "VALUES")
+		outScope = b.buildLiteralValuesClause(t, desiredTypes, inScope)
+
 	case *tree.ParenSelect:
 		panic(errors.AssertionFailedf(
 			"%T in buildSelectStmtWithoutParens", wrapped))

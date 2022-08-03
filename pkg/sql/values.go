@@ -30,6 +30,10 @@ type valuesNode struct {
 	// a vtable value generator. This changes distsql physical planning.
 	specifiedInQuery bool
 
+	// externallyOwnedContainer allows an external entity to control its
+	// lifetime so we don't call Close.  Used by copy to reuse the container.
+	externallyOwnedContainer bool
+
 	valuesRun
 }
 
@@ -99,7 +103,7 @@ func (n *valuesNode) Values() tree.Datums {
 }
 
 func (n *valuesNode) Close(ctx context.Context) {
-	if n.rows != nil {
+	if n.rows != nil && !n.externallyOwnedContainer {
 		n.rows.Close(ctx)
 		n.rows = nil
 	}
