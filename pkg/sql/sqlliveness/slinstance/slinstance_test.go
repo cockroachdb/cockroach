@@ -40,8 +40,8 @@ func TestSQLInstance(t *testing.T) {
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 1*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
@@ -90,4 +90,121 @@ func TestSQLInstance(t *testing.T) {
 	sqlInstance.ClearSessionForTest(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
+}
+
+// TestSQLInstanceDeadlines tests that we have proper deadlines set on the
+// create and extend session operations. This is done by inserting delays into
+// the fake storage layer and ensuring that no sessions get created because the
+// timeouts are constantly triggered.
+func TestSQLInstanceDeadlines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 1*time.Millisecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	// block the fake storage
+	fakeStorage.BlockCh = make(chan chan struct{})
+	cleanUpFunc := func() {
+		ch := <-fakeStorage.BlockCh
+		close(ch)
+		close(fakeStorage.BlockCh)
+		fakeStorage.BlockCh = nil
+	}
+	defer cleanUpFunc()
+
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance.Start(ctx)
+
+	// verify that we do not create a session
+	require.Never(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return false
+			}
+			return true
+		},
+		10*time.Millisecond, 1*time.Millisecond,
+	)
+}
+
+func TestSQLInstanceDeadlinesExtend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Millisecond)
+	// Must be shorter than the storage sleep amount below
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 1*time.Millisecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance.Start(ctx)
+
+	// verify that eventually session is created successfully
+	require.Eventually(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return false
+			}
+			return true
+		},
+		10*time.Millisecond, 1*time.Millisecond,
+	)
+
+	// verify that session is also extended successfully a few times
+	require.Never(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return true
+			}
+			return false
+		},
+		10*time.Millisecond, 1*time.Millisecond,
+	)
+
+	// block the fake storage
+	fakeStorage.BlockCh = make(chan chan struct{})
+	cleanUpFunc := func() {
+		ch := <-fakeStorage.BlockCh
+		close(ch)
+		close(fakeStorage.BlockCh)
+		fakeStorage.BlockCh = nil
+	}
+	defer cleanUpFunc()
+
+	// expect subsequent create/extend calls to fail
+	require.Eventually(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return true
+			}
+			return false
+		},
+		10*time.Millisecond, 1*time.Millisecond,
+	)
 }
