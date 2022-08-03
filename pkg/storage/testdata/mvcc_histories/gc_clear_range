@@ -1,0 +1,57 @@
+run ok
+put k=A v=B ts=10
+----
+>> at end:
+data: "A"/10.000000000,0 -> /BYTES/B
+
+run error
+gc_clear_range k=A endKey=Z ts=30
+----
+>> at end:
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) range contains live data, can't use GC clear range
+
+run ok
+del k=A ts=30
+----
+del: "A": found key true
+>> at end:
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+
+run error
+gc_clear_range k=A endKey=Z ts=30
+----
+>> at end:
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) found key not covered by range tombstone "A"/30.000000000,0
+
+run ok stats
+del_range_ts k=A endKey=Z ts=50
+----
+>> del_range_ts k=A endKey=Z ts=50
+stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 gc_bytes_age=+700
+>> at end:
+rangekey: A{-\x00}/[50.000000000,0=/<empty>]
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=6 range_key_count=1 range_key_bytes=14 range_val_count=1 gc_bytes_age=2940
+
+run error
+gc_clear_range k=A endKey=Z ts=40
+----
+>> at end:
+rangekey: A{-\x00}/[50.000000000,0=/<empty>]
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) range tombstones above gc threshold. GC=40.000000000,0, range=50.000000000,0
+
+run stats ok
+gc_clear_range k=A endKey=Z ts=60
+----
+>> gc_clear_range k=A endKey=Z ts=60
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-6 range_key_count=-1 range_key_bytes=-14 range_val_count=-1 gc_bytes_age=-2940
+>> at end:
+<no data>
+stats: 
