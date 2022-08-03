@@ -3,7 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 filegroup(
     name = "testdata",
-    srcs = glob(["testdata/**"]),
+    srcs = glob(
+        ["testdata/**"],
+        exclude = [
+            "**/*~",
+            "**/#*#",
+            "**/.*.swp",
+            "**/.#*",
+        ],
+    ),
     visibility = [
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
