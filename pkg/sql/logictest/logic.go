@@ -234,6 +234,18 @@ import (
 //    Completes a pending statement with the provided name, validating its
 //    results as expected per the given options to "statement async <name>...".
 //
+//  - copy,copy-error
+//    Runs a COPY FROM STDIN statement, because of the separate data chunk it requires
+//    special logictest support. Format is:
+//    copy
+//    COPY <table> FROM STDIN;
+//    <blankline>
+//    COPY DATA
+//    ----
+//    <NUMROWS>
+//    copy-error is just like copy but an error is expected and results should be error
+//    string.
+//
 //  - query <typestring> <options> <label>
 //    Runs the query that follows and verifies the results (specified after the
 //    query and a ---- separator). Example:
@@ -2259,6 +2271,60 @@ func (t *logicTest) processSubtest(
 			}
 
 			delete(t.pendingQueries, name)
+			t.success(path)
+
+		case "copy", "copy-error":
+			expectError := cmd == "copy-error"
+			var query logicQuery
+			query.pos = fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile)
+			gotsep, err := query.readSQL(t, s, true /* allowSeparator */)
+			if err != nil {
+				return err
+			}
+			if gotsep {
+				return errors.Errorf("%s: unexpected ---- separator, copy statement and data have to separated by empty line", query.pos)
+			}
+			var data bytes.Buffer
+			sep := false
+			for s.Scan() {
+				line := s.Text()
+				t.emit(line)
+				if line == "----" {
+					sep = true
+					break
+				}
+				fmt.Fprintln(&data, line)
+			}
+			if !sep {
+				return errors.Errorf("%s: expected ---- separator at end of copy data", query.pos)
+			}
+			// TODO: This is broken, t.cluster.Server(0) may not be the same tenant as t.db points to, for now
+			// the copy tests disable the 3node-tenant config but we should fix this. Also RunCopyFrom does an
+			// end run around the t.db connection entirely and runs copies w/o using the client protocol at all,
+			// not ideal but the go sql.DB interface doesn't support COPY so fixing it the right way that would
+			// require major surgery (ie making logictest use libpq or something low level like that).
+			rows, err := sql.RunCopyFrom(context.Background(), t.cluster.Server(0), "test", nil, query.sql, []string{data.String()})
+			result := fmt.Sprintf("%d", rows)
+			if err != nil {
+				if !expectError {
+					return err
+				}
+				result = err.Error()
+			} else if expectError {
+				return errors.Errorf("%s: copy-error expected error did not occur", query.pos)
+			}
+			if *rewriteResultsInTestfiles {
+				t.emit(result)
+			}
+			if s.Scan() {
+				exp := s.Text()
+				if !*rewriteResultsInTestfiles && result != exp {
+					return errors.Errorf("%s: got %s, expected %s", query.pos, result, exp)
+				}
+			} else if !*rewriteResultsInTestfiles {
+				return errors.Errorf("EOF looking for expected copy results")
+			}
+			t.finishOne("OK")
 			t.success(path)
 
 		case "query":

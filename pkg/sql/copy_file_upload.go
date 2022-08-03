@@ -88,7 +88,7 @@ func newFileUploadMachine(
 	c := &copyMachine{
 		conn: conn,
 		// The planner will be prepared before use.
-		p: planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
+		p: &planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
 	}
 	f = &fileUploadMachine{
 		c: c,

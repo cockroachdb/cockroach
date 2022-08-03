@@ -429,6 +429,13 @@ func TestLogic_connect_privilege(
 	runLogicTest(t, "connect_privilege")
 }
 
+func TestLogic_copyfrom(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "copyfrom")
+}
+
 func TestLogic_crdb_internal(
 	t *testing.T,
 ) {
