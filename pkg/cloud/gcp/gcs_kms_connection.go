@@ -26,8 +26,11 @@ func parseAndValidateGCSKMSConnectionURI(
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Details: &connectionpb.ConnectionDetails_GCSKMS{
-			GCSKMS: &connectionpb.GCSKMSConnectionDetails{URI: uri.String()},
+		Provider: connectionpb.ConnectionProvider_TypeGSKMS,
+		Details: &connectionpb.ConnectionDetails_SimpleURI{
+			SimpleURI: &connectionpb.SimpleURI{
+				URI: uri.String(),
+			},
 		},
 	}
 
