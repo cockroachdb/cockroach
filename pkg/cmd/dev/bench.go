@@ -82,7 +82,15 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if timeout > 0 {
-		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+		// The bazel timeout should be higher than the timeout passed to the
+		// test binary (giving it ample time to clean up, 5 seconds is probably
+		// enough).
+		args = append(args, fmt.Sprintf("--test_timeout=%d", 5+int(timeout.Seconds())))
+		args = append(args, "--test_arg", fmt.Sprintf("-test.timeout=%s", timeout.String()))
+
+		// If --test-args '-test.timeout=X' is specified as well, or
+		// -- --test_args '-test.timeout=X', that'll take precedence further
+		// below.
 	}
 
 	var testTargets []string
