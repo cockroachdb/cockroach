@@ -325,13 +325,6 @@ func FindLatestFile(
 func WriteNewLatestFile(
 	ctx context.Context, settings *cluster.Settings, exportStore cloud.ExternalStorage, suffix string,
 ) error {
-	// If the cluster is still running on a mixed version, we want to write
-	// to the base directory instead of the metadata/latest directory. That
-	// way an old node can still find the LATEST file.
-	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		return cloud.WriteFile(ctx, exportStore, backupbase.LatestFileName, strings.NewReader(suffix))
-	}
-
 	// HTTP storage does not support listing and so we cannot rely on the
 	// above-mentioned List method to return us the most recent latest file.
 	// Instead, we disregard write once semantics and always read and write

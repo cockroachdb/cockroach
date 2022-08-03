@@ -239,10 +239,6 @@ const (
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
-	// BackupDoesNotOverwriteLatestAndCheckpoint is the version where we
-	// stop overwriting the LATEST and checkpoint files during backup execution.
-	// Instead, it writes new files alongside the old in reserved subdirectories.
-	BackupDoesNotOverwriteLatestAndCheckpoint
 	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
 	// can be used to construct schema change plan node.
 	EnableDeclarativeSchemaChanger
@@ -456,10 +452,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
-	},
-	{
-		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
 	{
 		Key:     EnableDeclarativeSchemaChanger,
