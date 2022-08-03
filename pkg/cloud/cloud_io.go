@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/net/http2"
 )
 
 // Timeout is a cluster setting used for cloud storage interactions.
@@ -147,10 +148,26 @@ func DelayedRetry(
 // In addition, we treat connection reset by peer errors (which can
 // happen if we didn't read from the connection too long due to e.g. load),
 // the same as unexpected eof errors.
+// We also retry on http2.StreamError if the error code is
+// http2.ErrCodeInternal.
 func IsResumableHTTPError(err error) bool {
-	return errors.Is(err, io.ErrUnexpectedEOF) ||
+	if errors.Is(err, io.ErrUnexpectedEOF) ||
 		sysutil.IsErrConnectionReset(err) ||
-		sysutil.IsErrConnectionRefused(err)
+		sysutil.IsErrConnectionRefused(err) {
+		return true
+	}
+
+	if e := (http2.StreamError{}); errors.As(err, &e) {
+		if e.Code == http2.ErrCodeInternal {
+			return true
+		}
+	}
+
+	if e := (errors.Wrapper)(nil); errors.As(err, &e) {
+		return IsResumableHTTPError(e.Unwrap())
+	}
+
+	return false
 }
 
 // Maximum number of times we can attempt to retry reading from external storage,
