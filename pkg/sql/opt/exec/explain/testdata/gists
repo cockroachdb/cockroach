@@ -17,7 +17,7 @@ CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
 
 # ConstructScan/ConstructSerializingProject
 gist-explain-roundtrip
-SELECT * from foo LIMIT 1
+SELECT * from foo LIMIT 10
 ----
 hash: 12007264394566425707
 plan-gist: AgFqAgAHAAACBgY=
@@ -26,12 +26,12 @@ explain(shape):
   missing stats
   table: foo@foo_pkey
   spans: LIMITED SCAN
-  limit: 1
+  limit: 10
 explain(gist):
 • scan
   table: foo@foo_pkey
   spans: LIMITED SCAN
-  limit: 1
+  limit
 
 # ConstructFilter
 gist-explain-roundtrip
