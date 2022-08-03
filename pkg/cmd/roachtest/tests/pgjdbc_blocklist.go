@@ -747,7 +747,6 @@ var pgjdbcBlockList22_1 = blocklist{
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetTimestampWithTimeZone":                                                                                              "26097",
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetUuid":                                                                                                               "26097",
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetXml":                                                                                                                "26097",
-	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyNotVisibilityTableDuringFunctionCreation":                                                            "17511",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyNotVisibilityTableInsideFunction":                                                                    "17511",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyVisibilityFunction":                                                                                  "17511",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyVisibilityTableDuringFunctionCreation":                                                               "17511",
