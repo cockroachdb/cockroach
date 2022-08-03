@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
-	// can be used to construct schema change plan node.
-	EnableDeclarativeSchemaChanger
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
@@ -345,10 +342,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     EnableDeclarativeSchemaChanger,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
 	},
 	{
 		Key:     RowLevelTTL,
