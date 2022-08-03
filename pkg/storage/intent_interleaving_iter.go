@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1165,12 +1164,6 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 	value := i.UnsafeValue()
 	return protoutil.Unmarshal(value, msg)
-}
-
-func (i *intentInterleavingIter) ComputeStats(
-	start, end roachpb.Key, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	return ComputeStatsForRange(i, start, end, nowNanos)
 }
 
 func (i *intentInterleavingIter) FindSplitKey(
