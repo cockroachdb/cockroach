@@ -97,12 +97,19 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	_, err = fmt.Sscan(det.Stdout, &copy, &rows)
 	require.NoError(t, err)
 	rate := int(float64(rows) / dur.Seconds())
-	t.L().Printf("results: %d rows/s", rate)
+
+	det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "wc -c /tmp/lineitem-table.csv")
+	require.NoError(t, err)
+	var bytes float64
+	_, err = fmt.Sscan(det.Stdout, &bytes)
+	require.NoError(t, err)
+	dataRate := bytes / 1024 / 1024 / dur.Seconds()
+	t.L().Printf("results: %d rows/s, %f mb/s", rate, dataRate)
 	// Write the copy rate into the stats.json file to be used by roachperf.
 	c.Run(ctx, c.Node(1), "mkdir", t.PerfArtifactsDir())
 	cmd := fmt.Sprintf(
-		`echo '{ "copy_rate": %d }' > %s/stats.json`,
-		rate, t.PerfArtifactsDir(),
+		`echo '{ "copy_row_rate": %d, "copy_data_rate": %f}' > %s/stats.json`,
+		rate, dataRate, t.PerfArtifactsDir(),
 	)
 	c.Run(ctx, c.Node(1), cmd)
 }

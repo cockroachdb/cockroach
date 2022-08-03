@@ -164,3 +164,43 @@ func (dsp *DistSQLPlanner) Exec(
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
 	return rw.Err()
 }
+
+// ExecLocalAll is basically a conn_executor free version of execWithDistSQLEngine
+// hard coded for non-distributed statements (currently used by copy testing).
+func (dsp *DistSQLPlanner) ExecLocalAll(
+	ctx context.Context, execCfg ExecutorConfig, p *planner, res RestrictedCommandResult,
+) error {
+	recv := MakeDistSQLReceiver(
+		ctx,
+		res,
+		p.stmt.AST.StatementReturnType(),
+		execCfg.RangeDescriptorCache,
+		p.txn,
+		execCfg.Clock,
+		p.ExtendedEvalContext().Tracing,
+		execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
+	)
+	defer recv.Release()
+
+	distributionType := DistributionType(DistributionTypeNone)
+	evalCtx := p.ExtendedEvalContext()
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distributionType)
+	planCtx.stmtType = recv.stmtType
+
+	var evalCtxFactory func() *extendedEvalContext
+	var factoryEvalCtx extendedEvalContext = extendedEvalContext{
+		Tracing: &SessionTracing{},
+	}
+	evalCtxFactory = func() *extendedEvalContext {
+		factoryEvalCtx.Placeholders = &p.semaCtx.Placeholders
+		factoryEvalCtx.Annotations = &p.semaCtx.Annotations
+		// Query diagnostics can change the Context; make sure we are using the
+		// same one.
+		// TODO(radu): consider removing this if/when #46164 is addressed.
+		factoryEvalCtx.Context = evalCtx.Context
+		return &factoryEvalCtx
+	}
+	return dsp.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+}
