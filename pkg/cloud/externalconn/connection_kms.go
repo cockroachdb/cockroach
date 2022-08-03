@@ -50,8 +50,8 @@ func makeExternalConnectionKMS(
 	// Construct a KMS handle for the underlying resource represented by the
 	// external connection object.
 	switch d := ec.ConnectionProto().Details.(type) {
-	case *connectionpb.ConnectionDetails_GCSKMS:
-		return cloud.KMSFromURI(ctx, d.GCSKMS.URI, env)
+	case *connectionpb.ConnectionDetails_SimpleURI:
+		return cloud.KMSFromURI(ctx, d.SimpleURI.URI, env)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for a KMS connection", d)
 	}

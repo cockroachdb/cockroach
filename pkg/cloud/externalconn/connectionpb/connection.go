@@ -14,12 +14,12 @@ import "github.com/cockroachdb/errors"
 
 // Type returns the ConnectionType of the receiver.
 func (d *ConnectionDetails) Type() ConnectionType {
-	switch t := d.Details.(type) {
-	case *ConnectionDetails_Nodelocal:
+	switch d.Provider {
+	case ConnectionProvider_TypeNodelocal:
 		return TypeStorage
-	case *ConnectionDetails_GCSKMS:
+	case ConnectionProvider_TypeGSKMS:
 		return TypeKMS
 	default:
-		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", t))
+		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", d.Provider.String()))
 	}
 }
