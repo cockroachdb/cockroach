@@ -40,8 +40,8 @@ func TestSQLInstance(t *testing.T) {
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 500*time.Microsecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 250*time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
@@ -90,4 +90,101 @@ func TestSQLInstance(t *testing.T) {
 	sqlInstance.ClearSessionForTest(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
+}
+
+// TestSQLInstanceDeadlines tests that we have proper deadlines set on the
+// create and extend session operations. This is done by inserting delays into
+// the fake storage layer and ensuring that no sessions get created because the
+// timeouts are constantly triggered.
+func TestSQLInstanceDeadlines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 500*time.Microsecond)
+	// Must be shorter than the storage sleep amount below
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 250*time.Microsecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	fakeStorage.InsertSleep = 2 * time.Millisecond
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance.Start(ctx)
+
+	require.Never(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return false
+			}
+			return true
+		},
+		1*time.Millisecond, 100*time.Microsecond,
+	)
+}
+
+func TestSQLInstanceDeadlinesExtend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 0*time.Microsecond)
+	// Must be shorter than the storage sleep amount below
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 250*time.Microsecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance.Start(ctx)
+
+	require.Eventually(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return false
+			}
+			return true
+		},
+		1*time.Millisecond, 100*time.Microsecond,
+	)
+
+	require.Never(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return true
+			}
+			return false
+		},
+		1*time.Millisecond, 100*time.Microsecond,
+	)
+
+	fakeStorage.InsertSleep = 2 * time.Millisecond
+
+	require.Eventually(
+		t,
+		func() bool {
+			_, err := sqlInstance.Session(ctx)
+			if err != nil {
+				return true
+			}
+			return false
+		},
+		1*time.Millisecond, 100*time.Microsecond,
+	)
 }
