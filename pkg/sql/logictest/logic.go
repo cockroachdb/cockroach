@@ -236,12 +236,13 @@ import (
 //  - copy,copy-error
 //    Runs a COPY FROM STDIN statement, because of the separate data chunk it requires
 //    special logictest support. Format is:
-//    copy
-//    COPY <table> FROM STDIN;
-//    <blankline>
-//    COPY DATA
-//    ----
-//    <NUMROWS>
+//      copy
+//      COPY <table> FROM STDIN;
+//      <blankline>
+//      COPY DATA
+//      ----
+//      <NUMROWS>
+//
 //    copy-error is just like copy but an error is expected and results should be error
 //    string.
 //

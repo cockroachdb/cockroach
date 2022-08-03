@@ -98,7 +98,7 @@ func BenchmarkCopyFrom(b *testing.B) {
 	r.Exec(b, lineitemSchema)
 
 	// send data in 5 batches of 10k rows
-	ROWS := 50000
+	const ROWS = 50000
 	datalen := 0
 	var rows []string
 	for i := 0; i < ROWS; i++ {
@@ -129,9 +129,9 @@ func BenchmarkParallelCopyFrom(b *testing.B) {
 
 	r := sqlutils.MakeSQLRunner(conn)
 	r.Exec(b, lineitemSchema)
-	ROWS := 50000
+	const ROWS = 50000
 	datalen := 0
-	THREADS := 10
+	const THREADS = 10
 	var allrows [][]string
 
 	chunk := ROWS / THREADS

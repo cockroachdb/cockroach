@@ -15,11 +15,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,7 +35,11 @@ type fakeConn struct {
 	rd *bufio.Reader
 }
 
-// Rd returns a reader to be used to consume bytes from the connection.
+var _ io.Reader = &fakeConn{}
+var _ pgwirebase.BufferedReader = &fakeConn{}
+
+// Rd is part of the pgwirebase.Conn interface and returns a reader to be used
+// to consume bytes from the connection.
 func (c *fakeConn) Rd() pgwirebase.BufferedReader {
 	return c
 }
@@ -53,16 +59,16 @@ func (c *fakeConn) ReadByte() (byte, error) {
 	return c.rd.ReadByte()
 }
 
-// BeginCopyIn sends a message to the client about column info to client,
-// not currently used in these tests but it is called by copyMachine.run.
+// BeginCopyIn is part of the pgwirebase.Conn interface. Not needed for shim
+// purposes.
 func (c *fakeConn) BeginCopyIn(
 	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
 ) error {
 	return nil
 }
 
-// SendCommandComplete sends a serverMsgCommandComplete with the given
-// payload.
+// SendCommandComplete is part of the pgwirebase.Conn interface. Not needed for shim
+// purposes.
 func (c *fakeConn) SendCommandComplete(tag []byte) error {
 	return nil
 }
@@ -112,6 +118,7 @@ func RunCopyFrom(
 	}
 	defer cleanup()
 
+	// Write what the client side would write into a buffer and then make it the conn's data.
 	var buf []byte
 	for _, d := range data {
 		b := make([]byte, 0, len(d)+10)
@@ -127,7 +134,8 @@ func RunCopyFrom(
 		rd: bufio.NewReader(bytes.NewReader(buf)),
 	}
 	rows := 0
-	c, err := newCopyMachine(ctx, conn, stmt.AST.(*tree.CopyFrom), p, txnOpt,
+	mon := execinfra.NewTestMemMonitor(ctx, execCfg.Settings)
+	c, err := newCopyMachine(ctx, conn, stmt.AST.(*tree.CopyFrom), p, txnOpt, mon,
 		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 			err := dsp.ExecLocalAll(ctx, execCfg, p, res)
 			if err != nil {

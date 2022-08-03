@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -73,6 +74,24 @@ func (ef *execFactory) ConstructValues(
 		columns:          cols,
 		tuples:           rows,
 		specifiedInQuery: true,
+	}, nil
+}
+
+// ConstructLiteralValues is part of the exec.Factory interface.
+func (ef *execFactory) ConstructLiteralValues(
+	rows tree.ExprContainer, cols colinfo.ResultColumns,
+) (exec.Node, error) {
+	if len(cols) == 0 && rows.NumRows() == 1 {
+		return &unaryNode{}, nil
+	}
+	if rows.NumRows() == 0 {
+		return &zeroNode{columns: cols}, nil
+	}
+	return &valuesNode{
+		columns:                  cols,
+		specifiedInQuery:         true,
+		externallyOwnedContainer: true,
+		valuesRun:                valuesRun{rows: rows.(*rowcontainer.RowContainer)},
 	}, nil
 }
 
