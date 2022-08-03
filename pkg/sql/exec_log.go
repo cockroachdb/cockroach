@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -409,6 +410,21 @@ func (p *planner) maybeLogStatementInternal(
 				BytesRead:                queryStats.bytesRead,
 				RowsRead:                 queryStats.rowsRead,
 				RowsWritten:              queryStats.rowsWritten,
+				InnerJoinCount:           int64(p.curPlan.instrumentation.joinTypeCounts[descpb.InnerJoin]),
+				LeftOuterJoinCount:       int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftOuterJoin]),
+				FullOuterJoinCount:       int64(p.curPlan.instrumentation.joinTypeCounts[descpb.FullOuterJoin]),
+				SemiJoinCount:            int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftSemiJoin]),
+				AntiJoinCount:            int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftAntiJoin]),
+				IntersectAllJoinCount:    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.IntersectAllJoin]),
+				ExceptAllJoinCount:       int64(p.curPlan.instrumentation.joinTypeCounts[descpb.ExceptAllJoin]),
+				HashJoinCount:            int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.HashJoin]),
+				CrossJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.CrossJoin]),
+				IndexJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.IndexJoin]),
+				LookupJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.LookupJoin]),
+				MergeJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.MergeJoin]),
+				InvertedJoinCount:        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
+				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
+				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {
