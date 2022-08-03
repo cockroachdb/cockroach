@@ -239,10 +239,6 @@ const (
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
-	// BackupDoesNotOverwriteLatestAndCheckpoint is the version where we
-	// stop overwriting the LATEST and checkpoint files during backup execution.
-	// Instead, it writes new files alongside the old in reserved subdirectories.
-	BackupDoesNotOverwriteLatestAndCheckpoint
 	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
 	// can be used to construct schema change plan node.
 	EnableDeclarativeSchemaChanger
@@ -251,9 +247,6 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
-	// IncrementalBackupSubdir enables backing up new incremental backups to a
-	// dedicated subdirectory, to make it easier to apply a different ttl.
-	IncrementalBackupSubdir
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -458,10 +451,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
 	},
 	{
-		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
-	},
-	{
 		Key:     EnableDeclarativeSchemaChanger,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
 	},
@@ -472,10 +461,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
-	},
-	{
-		Key:     IncrementalBackupSubdir,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,

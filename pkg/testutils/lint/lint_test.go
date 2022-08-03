@@ -1193,6 +1193,7 @@ func TestLint(t *testing.T) {
 			":!spanconfig/errors.go",
 			":!roachpb/replica_unavailable_error.go",
 			":!roachpb/ambiguous_result_error.go",
+			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
