@@ -332,8 +332,8 @@ func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
 		return "no-op due to no non-conflicting key range"
 	}
 
-	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey,
-		m.ts, hlc.ClockTimestamp{}, m.key, m.endKey, math.MaxInt64 /* maxIntents */)
+	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey, m.ts,
+		hlc.ClockTimestamp{}, m.key, m.endKey, math.MaxInt64 /* maxIntents */, nil /* msCovered */)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
