@@ -164,9 +164,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		) {
 			return
 		}
-
-		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
+		// At this point, we know that either we communicated with this replica
+		// recently, or we became the leader recently. The latter case is ambiguous
+		// w.r.t. the actual state of that replica, but it is temporary.
+		//
+		// We do a second check using the NodeLiveness to increase the chance
+		// of disambiguating here, and also to catch other slowness that may be
+		// surfaced in the liveness but not in isFollowerActiveSince.
+		if l := r.store.cfg.NodeLiveness; l != nil && !l.IsAvailable(rep.NodeID) {
 			return
 		}
 
@@ -219,7 +224,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		if progress.Match > 0 && progress.Match < minIndex {
 			minIndex = progress.Match
 		}
-		// If this is the most recently added replica and it has caught up, clear
+		// If this is the most recently added replica, and it has caught up, clear
 		// our state that was tracking it. This is unrelated to managing proposal
 		// quota, but this is a convenient place to do so.
 		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
