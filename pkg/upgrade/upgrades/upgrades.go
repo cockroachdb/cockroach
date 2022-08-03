@@ -60,12 +60,6 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		removeGrantMigration,
 	),
-	upgrade.NewTenantUpgrade(
-		"delete comments that belong to dropped indexes",
-		toCV(clusterversion.DeleteCommentsWithDroppedIndexes),
-		NoPrecondition,
-		ensureCommentsHaveNonDroppedIndexes,
-	),
 	upgrade.NewSystemUpgrade(
 		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
 		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
