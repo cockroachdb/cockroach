@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "alter_sql_instances_locality.go",
         "alter_statement_statistics_index_recommendations.go",
-        "comment_on_index_migration.go",
         "descriptor_utils.go",
         "precondition_before_starting_an_upgrade.go",
         "raft_applied_index_term.go",
@@ -61,7 +60,6 @@ go_test(
         "alter_sql_instances_locality_test.go",
         "alter_statement_statistics_index_recommendations_test.go",
         "builtins_test.go",
-        "comment_on_index_migration_external_test.go",
         "descriptor_utils_test.go",
         "helpers_test.go",
         "main_test.go",
@@ -94,7 +92,6 @@ go_test(
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
