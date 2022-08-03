@@ -81,7 +81,15 @@ go_test(
 
 filegroup(
     name = "testdata",
-    srcs = glob(["testdata/**"]),
+    srcs = glob(
+        ["testdata/**"],
+        exclude = [
+            "**/*~",
+            "**/#*#",
+            "**/.*.swp",
+            "**/.#*",
+        ],
+    ),
     visibility = [
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
