@@ -631,6 +631,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+		planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
+		planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
@@ -652,6 +654,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+		planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
+		planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
