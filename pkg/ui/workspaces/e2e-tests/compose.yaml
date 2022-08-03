@@ -8,21 +8,19 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: curl --fail --head http://localhost:8080 || exit 1
-      interval: 1s
-      timeout: 30s
-      retries: 10
+      test: "[ -r ./init_success ] && curl --fail --head http://localhost:8080 || exit 1"
+      interval: 0.5s
+      timeout: 10s
+      retries: 25
     environment:
       COCKROACH_USER: cypress
       COCKROACH_PASSWORD: tests
       COCKROACH_DATABASE: movr
-    volumes:
-      - shared:/shared:rw
 
   cypress:
     image: cypress/browsers:node16.14.2-slim-chrome100-ff99-edge
     working_dir: /e2e
-    command: /bin/sh -c 'mkdir -p /scratch; cp -T --no-preserve=owner -r /e2e/ /scratch; cd /scratch; rm -rf node_modules/ && yarn install --force && yarn cy:run'
+    entrypoint: ./build/compose-entrypoint.sh
     environment:
       IS_DOCKER: "1"
     depends_on:
@@ -31,13 +29,9 @@ services:
     networks:
       - db
     volumes:
-      - shared:/shared:ro
       - ./:/e2e
       - ./artifacts:/artifacts
+      - ../../yarn-vendor:/yarn-vendor
 
 networks:
   db:
-
-volumes:
-  cypress:
-  shared:

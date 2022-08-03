@@ -103,7 +103,11 @@ popd
 # Use eval() to execute the provided command so that environment variables are
 # expanded properly (e.g. `$0 'cat $SHLVL'`, where $SHLVL must
 # be evaluated after this file is executed, not before).
-eval $@
+(
+  # Temporarily disable globbing, so strings containing ** (e.g.
+  # '--spec "cypress/e2e/health-check/**"') aren't evaluated.
+  set -f; eval "$@"; set +f
+)
 
 # Stash COMMAND's exit code so we can return it in the cleanup hook.
 EXIT_CODE=$?

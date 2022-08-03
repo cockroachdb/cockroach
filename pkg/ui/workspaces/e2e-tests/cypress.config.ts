@@ -12,6 +12,7 @@ import { defineConfig } from "cypress";
 
 const DOCKER_OVERRIDES: Partial<Cypress.UserConfigOptions["e2e"]> = {
   baseUrl: "https://crdbhost:8080",
+  reporter: "teamcity",
   downloadsFolder: "/artifacts/cypress/downloads",
   screenshotsFolder: "/artifacts/cypress/screenshots",
   videosFolder: "/artifacts/cypress/videos",
