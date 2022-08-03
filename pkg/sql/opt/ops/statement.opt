@@ -62,6 +62,7 @@ define CreateViewPrivate {
     WithData bool
 }
 
+# CreateFunction represents a CREATE FUNCTION statement.
 [Relational, DDL, Mutation]
 define CreateFunction {
     _ CreateFunctionPrivate
@@ -72,25 +73,8 @@ define CreateFunctionPrivate {
     # Schema is the ID of the catalog schema into which the new function goes.
     Schema SchemaID
 
-    # FunctionName is the name of the new function.
-    FunctionName FunctionName
-
-    # Replace indicates whether the existing function, if found, should be
-    # replaced with the new definition or not.
-    Replace bool
-
-    # Args is a slice of Arguments of the new function.
-    Args FuncArgs
-
-    # ReturnType is the return type of the new function.
-    ReturnType FuncReturnType
-
-    # TODO (Chengxiong): break Options into individual option fields.
-    # Options is a slice of attribute values of the new function.
-    Options FunctionOptions
-
-    # Body holds all statements of the new function.
-    Body FunctionBodyStr
+    # Syntax is the CREATE FUNCTION AST node.
+    Syntax CreateFunction
 
     # Deps contains the data source dependencies of the view.
     Deps SchemaDeps

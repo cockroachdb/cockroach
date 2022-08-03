@@ -15,24 +15,21 @@ build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 ----
 create-function
- ├── return_type: INT8
- └── SELECT 1;
+ ├── CREATE FUNCTION f() RETURNS INT8 LANGUAGE SQL AS $$SELECT 1;$$
+ └── no dependencies
 
 build
 CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 ----
 create-function
- ├── arguments: workday
- ├── return_type: INT8
- └── SELECT 1;
+ ├── CREATE FUNCTION f(IN a workday) RETURNS INT8 LANGUAGE SQL AS $$SELECT 1;$$
+ └── no dependencies
 
 build
 CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
 ----
 create-function
- ├── arguments: INT8
- ├── return_type: INT8
- ├── SELECT a FROM t.public.ab;
+ ├── CREATE FUNCTION f(IN a INT8) RETURNS INT8 LANGUAGE SQL AS $$SELECT a FROM t.public.ab;$$
  └── dependencies
       └── ab [columns: a]
 
@@ -40,8 +37,7 @@ build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT b FROM ab@idx $$
 ----
 create-function
- ├── return_type: INT8
- ├── SELECT b FROM t.public.ab@idx;
+ ├── CREATE FUNCTION f() RETURNS INT8 LANGUAGE SQL AS $$SELECT b FROM t.public.ab@idx;$$
  └── dependencies
       └── ab@idx [columns: b]
 
@@ -52,9 +48,8 @@ CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
 $$
 ----
 create-function
- ├── return_type: INT8
- ├── SELECT a FROM t.public.ab;
- │   SELECT nextval('s');
+ ├── CREATE FUNCTION f() RETURNS INT8 LANGUAGE SQL AS $$SELECT a FROM t.public.ab;
+ │   SELECT nextval('s');$$
  └── dependencies
       ├── ab [columns: a]
       └── s

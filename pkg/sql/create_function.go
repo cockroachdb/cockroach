@@ -32,13 +32,7 @@ import (
 )
 
 type createFunctionNode struct {
-	funcName    *tree.FunctionName
-	replace     bool
-	args        tree.FuncArgs
-	returnType  tree.FuncReturnType
-	options     tree.FunctionOptions
-	funcBody    tree.FunctionBodyStr
-	routineBody *tree.RoutineBody
+	cf *tree.CreateFunction
 
 	dbDesc   catalog.DatabaseDescriptor
 	scDesc   catalog.SchemaDescriptor
@@ -49,7 +43,7 @@ type createFunctionNode struct {
 func (n *createFunctionNode) ReadingOwnWrites() {}
 
 func (n *createFunctionNode) startExec(params runParams) error {
-	if n.routineBody != nil {
+	if n.cf.RoutineBody != nil {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
@@ -59,7 +53,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return err
 	}
 
-	for _, arg := range n.args {
+	for _, arg := range n.cf.Args {
 		pbArg, err := makeFunctionArg(params.ctx, arg, params.p)
 		if err != nil {
 			return err
@@ -70,8 +64,8 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	// Set default values before applying options. This simplifies
 	// the replacing logic.
 	resetFuncOption(udfMutableDesc)
-	for _, option := range n.options {
-		err := setFuncOption(udfMutableDesc, option)
+	for _, option := range n.cf.Options {
+		err := setFuncOption(params, udfMutableDesc, option)
 		if err != nil {
 			return err
 		}
@@ -83,13 +77,6 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			udfMutableDesc.Volatility.String(),
 		)
 	}
-
-	// Replace sequence names with IDs in any expressions.
-	seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, string(n.funcBody), true)
-	if err != nil {
-		return err
-	}
-	udfMutableDesc.SetFuncBody(seqReplacedFuncBody)
 
 	// Get all table IDs for which we need to update back references, including
 	// tables used directly in function body or as implicit types.
@@ -140,7 +127,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.funcName, updated.desc.GetName(), updated.desc.GetID(),
+				n.cf.FuncName.String(), updated.desc.GetName(), updated.desc.GetID(),
 			),
 		); err != nil {
 			return err
@@ -154,7 +141,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.funcName, backRefMutable.GetName(), backRefMutable.GetID(),
+				n.cf.FuncName.String(), backRefMutable.GetName(), backRefMutable.GetID(),
 			),
 		); err != nil {
 			return err
@@ -193,13 +180,13 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		roachpb.Key{}, // UDF does not have namespace entry.
 		udfMutableDesc.GetID(),
 		udfMutableDesc,
-		tree.AsStringWithFQNames(n.funcName, params.Ann()),
+		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
 	)
 	if err != nil {
 		return err
 	}
 
-	returnType, err := tree.ResolveType(params.ctx, n.returnType.Type, params.p)
+	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
 	if err != nil {
 		return err
 	}
@@ -228,7 +215,7 @@ func (*createFunctionNode) Values() tree.Datums                 { return tree.Da
 func (*createFunctionNode) Close(ctx context.Context)           {}
 
 func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mutable, error) {
-	if n.replace {
+	if n.cf.Replace {
 		return nil, unimplemented.New("CREATE OR REPLACE FUNCTION", "replacing function")
 	}
 	// TODO (Chengxiong) add function resolution and check if it's a Replace.
@@ -243,7 +230,7 @@ func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mut
 		return nil, err
 	}
 
-	returnType, err := tree.ResolveType(params.ctx, n.returnType.Type, params.p)
+	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
 	if err != nil {
 		return nil, err
 	}
@@ -261,17 +248,17 @@ func (n *createFunctionNode) getMutableFuncDesc(params runParams) (*funcdesc.Mut
 		funcDescID,
 		n.dbDesc.GetID(),
 		n.scDesc.GetID(),
-		string(n.funcName.ObjectName),
-		len(n.args),
+		string(n.cf.FuncName.ObjectName),
+		len(n.cf.Args),
 		returnType,
-		n.returnType.IsSet,
+		n.cf.ReturnType.IsSet,
 		privileges,
 	)
 
 	return &newUdfDesc, nil
 }
 
-func setFuncOption(udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
+func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
 	switch t := option.(type) {
 	case tree.FunctionVolatility:
 		v, err := funcdesc.VolatilityToProto(t)
@@ -293,6 +280,13 @@ func setFuncOption(udfDesc *funcdesc.Mutable, option tree.FunctionOption) error 
 			return err
 		}
 		udfDesc.SetLang(v)
+	case tree.FunctionBodyStr:
+		// Replace any sequence names in the function body with IDs.
+		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, string(t), true)
+		if err != nil {
+			return err
+		}
+		udfDesc.SetFuncBody(seqReplacedFuncBody)
 	default:
 		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 	}
