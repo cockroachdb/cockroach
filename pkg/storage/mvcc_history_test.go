@@ -111,6 +111,8 @@ var (
 // clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
 // clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
 //
+// gc_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
+//
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
 // sst_clear_range    k=<key> end=<key>
@@ -668,6 +670,7 @@ var commands = map[string]cmd{
 	"del_range_pred":   {typDataUpdate, cmdDeleteRangePredicate},
 	"export":           {typReadOnly, cmdExport},
 	"get":              {typReadOnly, cmdGet},
+	"gc_clear_range":   {typDataUpdate, cmdGCClearRange},
 	"increment":        {typDataUpdate, cmdIncrement},
 	"initput":          {typDataUpdate, cmdInitPut},
 	"merge":            {typDataUpdate, cmdMerge},
@@ -946,6 +949,16 @@ func cmdClearTimeRange(e *evalCtx) error {
 		e.results.buf.Printf("clear_time_range: resume=%s\n", resume)
 	}
 	return nil
+}
+
+func cmdGCClearRange(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	gcTs := e.getTs(nil)
+	return e.withWriter("gc_clear_range", func(rw ReadWriter) error {
+		cms, err := ComputeStats(rw, key, endKey, 100e9)
+		require.NoError(e.t, err, "failed to compute range stats")
+		return MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
+	})
 }
 
 func cmdCPut(e *evalCtx) error {
