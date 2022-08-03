@@ -5277,6 +5277,11 @@ func pt(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
 	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts), Value: val}}
 }
 
+// tb creates a point tombstone.
+func tb(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
+	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts)}}
+}
+
 // txn wraps point update and adds transaction to it for intent creation.
 func txn(d rangeTestDataItem) rangeTestDataItem {
 	ts := d.point.Key.Timestamp
@@ -5812,6 +5817,12 @@ func rangesFromRequests(
 	return collectableKeys
 }
 
+func clearRangesFromRequest(
+	rangeKey roachpb.GCRequest_GCClearRangeKey,
+) (start, end roachpb.Key, timestamp hlc.Timestamp, leftPeek, rightPeek roachpb.Key) {
+	return rangeKey.StartKey, rangeKey.EndKey, rangeKey.StartKeyTimestamp, rangeKey.StartKey.Prevish(99), rangeKey.EndKey.Next()
+}
+
 func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5913,6 +5924,244 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 					d.before.populateEngine(t, engine, nil)
 					rangeKeys := rangesFromRequests(rangeStart, rangeEnd, d.request)
 					err := MVCCGarbageCollectRangeKeys(ctx, engine, nil, rangeKeys)
+					require.Errorf(t, err, "expected error '%s' but found none", d.error)
+					require.True(t, testutils.IsError(err, d.error),
+						"expected error '%s' found '%s'", d.error, err)
+				})
+			}
+		})
+	}
+}
+
+func TestMVCCGarbageCollectClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyB := mkKey("bb")
+	keyC := mkKey("ccc")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts1 := mkTs(1)
+	ts2 := mkTs(2)
+	ts3 := mkTs(3)
+	ts4 := mkTs(4)
+	tsMax := mkTs(9)
+
+	mkGCReq := func(start roachpb.Key, startTs hlc.Timestamp, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
+		return roachpb.GCRequest_GCClearRangeKey{
+			StartKey:          start,
+			StartKeyTimestamp: startTs,
+			EndKey:            end,
+		}
+	}
+
+	testData := []struct {
+		name string
+		// Note that range test data should be in ascending order (valid writes).
+		before  rangeTestData
+		request roachpb.GCRequest_GCClearRangeKey
+		after   rangeTestData
+		// Optional start and end range for tests that want to restrict default
+		// key range.
+		rangeStart roachpb.Key
+		rangeEnd   roachpb.Key
+	}{
+		{
+			name: "single point",
+			before: rangeTestData{
+				pt(keyB, ts2),
+				tb(keyB, ts3),
+			},
+			request: mkGCReq(keyB, ts2, keyD),
+			after: rangeTestData{
+				tb(keyB, ts3),
+			},
+		},
+		{
+			name: "clear over range tombstone deleted points",
+			before: rangeTestData{
+				pt(keyB, ts2),
+				rng(keyA, keyD, ts4),
+			},
+			request: mkGCReq(keyA, ts2, keyD),
+			after: rangeTestData{
+				rng(keyA, keyA.Next(), ts4),
+			},
+		},
+		{
+			name: "clear over multiple versions",
+			before: rangeTestData{
+				pt(keyB, ts1),
+				pt(keyB, ts2),
+				tb(keyB, ts3),
+				tb(keyB, ts4),
+				pt(keyC, ts1),
+				tb(keyC, ts2),
+				pt(keyC, ts3),
+				tb(keyC, ts4),
+			},
+			request: mkGCReq(keyA, hlc.Timestamp{}, keyD),
+			after: rangeTestData{},
+		},
+	}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			for _, d := range testData {
+				t.Run(d.name, func(t *testing.T) {
+					engine := engineImpl.create()
+					defer engine.Close()
+
+					// Populate range descriptor defaults.
+					if len(d.rangeStart) == 0 {
+						d.rangeStart = rangeStart
+					}
+					if len(d.rangeEnd) == 0 {
+						d.rangeEnd = rangeEnd
+					}
+
+					var ms enginepb.MVCCStats
+					d.before.populateEngine(t, engine, &ms)
+
+					start, end, startTs, leftPeek, rightPeek := clearRangesFromRequest(d.request)
+					require.NoError(t,
+						MVCCGarbageCollectWithClearRange(ctx, engine, &ms, start, end, startTs, tsMax, leftPeek,
+							rightPeek),
+						"failed to run mvcc range tombstone garbage collect")
+
+					expected := engineImpl.create()
+					defer expected.Close()
+					var expMs enginepb.MVCCStats
+					d.after.populateEngine(t, expected, &expMs)
+
+					rks := scanRangeKeys(t, engine)
+					expRks := scanRangeKeys(t, expected)
+					require.EqualValues(t, expRks, rks)
+
+					ks := scanPointKeys(t, engine)
+					expKs := scanPointKeys(t, expected)
+					require.EqualValues(t, expKs, ks)
+
+					ms.AgeTo(tsMax.WallTime)
+					it := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						KeyTypes:   IterKeyTypePointsAndRanges,
+						LowerBound: d.rangeStart,
+						UpperBound: d.rangeEnd,
+					})
+					expMs, err := ComputeStatsForRange(it, rangeStart, rangeEnd, tsMax.WallTime)
+					require.NoError(t, err, "failed to compute stats for range")
+					require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+				})
+			}
+		})
+	}
+}
+
+func TestMVCCGarbageCollectClearRangeFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts0 := mkTs(0)
+	ts1 := mkTs(1)
+	tsGC := mkTs(5)
+	tsMax := mkTs(9)
+
+	mkGCReq := func(start roachpb.Key, startTs hlc.Timestamp, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
+		return roachpb.GCRequest_GCClearRangeKey{
+			StartKey:          start,
+			StartKeyTimestamp: startTs,
+			EndKey:            end,
+		}
+	}
+
+	testData := []struct {
+		name string
+		// Note that range test data should be in ascending order (valid writes).
+		before  rangeTestData
+		request roachpb.GCRequest_GCClearRangeKey
+		error   string
+		// Optional start and end range for tests that want to restrict default
+		// key range.
+		rangeStart roachpb.Key
+		rangeEnd   roachpb.Key
+	}{
+		{
+			name: "clear over intent",
+			before: rangeTestData{
+				txn(pt(keyA, ts1)),
+			},
+			request: mkGCReq(keyA, ts0, keyD),
+			error: `attempt to clear range with data /Table/42/"a"`,
+		},
+		{
+			name: "clear over non-deleted data",
+			before: rangeTestData{
+				pt(keyA, ts1),
+			},
+			request: mkGCReq(keyA, ts1, keyD),
+			error: `attempt to clear range with data /Table/42/"a"/1.000000000,0`,
+		},
+		{
+			name: "clear over recent range tombstone",
+			before: rangeTestData{
+				rng(keyA, keyD, tsMax),
+			},
+			request: mkGCReq(keyA, ts1, keyD),
+			error: `attempt to clear range with data /Table/42/"{a"-dddd"}/9.000000000,0`,
+		},
+	}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			for _, d := range testData {
+				t.Run(d.name, func(t *testing.T) {
+					engine := engineImpl.create()
+					defer engine.Close()
+
+					// Populate range descriptor defaults.
+					if len(d.rangeStart) == 0 {
+						d.rangeStart = rangeStart
+					}
+					if len(d.rangeEnd) == 0 {
+						d.rangeEnd = rangeEnd
+					}
+
+					var ms enginepb.MVCCStats
+					d.before.populateEngine(t, engine, &ms)
+
+					start, end, startTs, leftPeek, rightPeek := clearRangesFromRequest(d.request)
+					err := MVCCGarbageCollectWithClearRange(ctx, engine, &ms, start, end, startTs, tsGC, leftPeek,
+							rightPeek)
 					require.Errorf(t, err, "expected error '%s' but found none", d.error)
 					require.True(t, testutils.IsError(err, d.error),
 						"expected error '%s' found '%s'", d.error, err)

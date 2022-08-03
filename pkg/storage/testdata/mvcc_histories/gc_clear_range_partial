@@ -1,0 +1,396 @@
+# Each error uses distinct data set and multiple tests are combined in this file.
+# 5
+# 4 [v1] [v4]           [v9] v10       v13
+# 3 x    x    x              x                        x                   x              o---------o       o-------o
+# 2 v2   v5   v88            v11  x    o---------o         o----o         v17       o--------------o   o---------------o
+# 1 v3   v6                       v12  v14  v15       v16                                     v18              v19
+#   a    b    c    d    e    f    g    h    i    j    k    l    m    n    o    p    q    r    s    t   u   v   w   x   z
+
+run ok
+# for case #1
+with k=a
+  put v=v3 ts=1,0
+  put v=v2 ts=2,0
+  del ts=3,0
+  with t=A
+    txn_begin ts=4,0
+    put v=v1
+# for case #2
+with k=b
+  put v=v6 ts=1,0
+  put v=v5 ts=2,0
+  del ts=3,0
+  with t=B
+    txn_begin ts=4,0
+    put v=v4
+with k=c
+  put v=v99 ts=2,0
+  del ts=3,0
+# for case #3
+with k=e t=C
+  txn_begin ts=4,0
+  put v=v5
+# for case #4
+with k=f
+  put v=v11 ts=2,0
+  del ts=3,0
+  put v=v10 ts=4,0
+with k=g
+  put v=v12 ts=1,0
+  del ts=2,0
+# for case #5
+put k=h v=v14 ts=1,0
+put k=i v=v15 ts=1,0
+del_range_ts k=h end=j ts=2,0
+put k=h v=v13 ts=4,0
+# for case #6
+with k=k
+  put k=k v=16 ts=1,0
+  del ts=3,0
+del_range_ts k=l end=m ts=2,0
+# for case #7
+with k=o
+  put v=17 ts=2,0
+  del ts=3,0
+# for case #8
+put k=s v=v18 ts=1,0
+del_range_ts k=q end=t ts=2,0
+del_range_ts k=r end=t ts=3,0
+# for case #9
+put k=w v=v19 ts=1,0
+del_range_ts k=u end=z ts=2,0
+del_range_ts k=v end=x ts=3,0
+----
+>> at end:
+txn: "C" meta={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+rangekey: {h-j}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/v2
+data: "a"/1.000000000,0 -> /BYTES/v3
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/v5
+data: "b"/1.000000000,0 -> /BYTES/v6
+data: "c"/3.000000000,0 -> /<empty>
+data: "c"/2.000000000,0 -> /BYTES/v99
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/v11
+data: "g"/2.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/v12
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "h"/1.000000000,0 -> /BYTES/v14
+data: "i"/1.000000000,0 -> /BYTES/v15
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+
+#1
+run ok stats
+gc_clear_range k=a end=b startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=a end=b startTs=2,0 ts=3,0
+stats: key_bytes=-24 val_count=-2 val_bytes=-14 gc_bytes_age=-3705
+>> at end:
+rangekey: {h-j}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> /BYTES/v5
+data: "b"/1.000000000,0 -> /BYTES/v6
+data: "c"/3.000000000,0 -> /<empty>
+data: "c"/2.000000000,0 -> /BYTES/v99
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/v11
+data: "g"/2.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/v12
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "h"/1.000000000,0 -> /BYTES/v14
+data: "i"/1.000000000,0 -> /BYTES/v15
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=12 key_bytes=300 val_count=23 val_bytes=274 range_key_count=7 range_key_bytes=109 range_val_count=9 live_count=5 live_bytes=260 gc_bytes_age=41253 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#2
+run ok stats
+gc_clear_range k=b end=e startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=b end=e startTs=2,0 ts=3,0
+stats: key_count=-1 key_bytes=-50 val_count=-4 val_bytes=-22 gc_bytes_age=-7003
+>> at end:
+rangekey: {h-j}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/v11
+data: "g"/2.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/v12
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "h"/1.000000000,0 -> /BYTES/v14
+data: "i"/1.000000000,0 -> /BYTES/v15
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=11 key_bytes=250 val_count=19 val_bytes=252 range_key_count=7 range_key_bytes=109 range_val_count=9 live_count=5 live_bytes=260 gc_bytes_age=34250 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#3
+run ok stats
+gc_clear_range k=e end=f startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=e end=f startTs=2,0 ts=3,0
+stats: no change
+>> at end:
+rangekey: {h-j}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "f"/2.000000000,0 -> /BYTES/v11
+data: "g"/2.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /BYTES/v12
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "h"/1.000000000,0 -> /BYTES/v14
+data: "i"/1.000000000,0 -> /BYTES/v15
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=11 key_bytes=250 val_count=19 val_bytes=252 range_key_count=7 range_key_bytes=109 range_val_count=9 live_count=5 live_bytes=260 gc_bytes_age=34250 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#4
+run ok stats
+gc_clear_range k=f end=h startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=f end=h startTs=2,0 ts=3,0
+stats: key_count=-1 key_bytes=-38 val_count=-3 val_bytes=-16 gc_bytes_age=-5272
+>> at end:
+rangekey: {h-j}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "h"/1.000000000,0 -> /BYTES/v14
+data: "i"/1.000000000,0 -> /BYTES/v15
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=10 key_bytes=212 val_count=16 val_bytes=236 range_key_count=7 range_key_bytes=109 range_val_count=9 live_count=5 live_bytes=260 gc_bytes_age=28978 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#5
+run ok stats
+gc_clear_range k=h end=j startTs=1,0 ts=3,0
+----
+>> gc_clear_range k=h end=j startTs=1,0 ts=3,0
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-16 range_key_bytes=+1 gc_bytes_age=-4018
+>> at end:
+rangekey: h{-\x00}/[2.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "k"/3.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/16
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=9 key_bytes=186 val_count=14 val_bytes=220 range_key_count=7 range_key_bytes=110 range_val_count=9 live_count=5 live_bytes=260 gc_bytes_age=24960 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#6
+run ok stats
+gc_clear_range k=k end=m startTs=1,0 ts=3,0
+----
+>> gc_clear_range k=k end=m startTs=1,0 ts=3,0
+stats: key_bytes=-12 val_count=-1 val_bytes=-7 range_key_count=-1 range_key_bytes=-13 range_val_count=-1 gc_bytes_age=-3117
+>> at end:
+rangekey: h{-\x00}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "k"/3.000000000,0 -> /<empty>
+data: "o"/3.000000000,0 -> /<empty>
+data: "o"/2.000000000,0 -> /BYTES/17
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=9 key_bytes=174 val_count=13 val_bytes=213 range_key_count=6 range_key_bytes=97 range_val_count=8 live_count=5 live_bytes=260 gc_bytes_age=21843 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#7
+run ok stats
+gc_clear_range k=n end=p startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=n end=p startTs=2,0 ts=3,0
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-7 gc_bytes_age=-3201
+>> at end:
+rangekey: h{-\x00}/[2.000000000,0=/<empty>]
+rangekey: {q-r}/[2.000000000,0=/<empty>]
+rangekey: {r-t}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "k"/3.000000000,0 -> /<empty>
+data: "s"/1.000000000,0 -> /BYTES/v18
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=8 key_bytes=148 val_count=11 val_bytes=206 range_key_count=6 range_key_bytes=97 range_val_count=8 live_count=5 live_bytes=260 gc_bytes_age=18642 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#8
+run ok stats
+gc_clear_range k=p end=t startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=p end=t startTs=2,0 ts=3,0
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-8 range_key_count=-2 range_key_bytes=-35 range_val_count=-3 gc_bytes_age=-5573
+>> at end:
+rangekey: h{-\x00}/[2.000000000,0=/<empty>]
+rangekey: {u-v}/[2.000000000,0=/<empty>]
+rangekey: {v-x}/[3.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "k"/3.000000000,0 -> /<empty>
+data: "w"/1.000000000,0 -> /BYTES/v19
+stats: key_count=7 key_bytes=134 val_count=10 val_bytes=198 range_key_count=4 range_key_bytes=62 range_val_count=5 live_count=5 live_bytes=260 gc_bytes_age=13069 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288
+
+#9
+run ok stats
+gc_clear_range k=u end=x startTs=2,0 ts=3,0
+----
+>> gc_clear_range k=u end=x startTs=2,0 ts=3,0
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-8 range_key_count=-1 range_key_bytes=-21 range_val_count=-2 gc_bytes_age=-4201
+>> at end:
+rangekey: h{-\x00}/[2.000000000,0=/<empty>]
+rangekey: u{-\x00}/[2.000000000,0=/<empty>]
+rangekey: {x-z}/[2.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/v1
+data: "a"/3.000000000,0 -> /<empty>
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/4.000000000,0 -> /BYTES/v4
+data: "b"/3.000000000,0 -> /<empty>
+meta: "e"/0,0 -> txn={id=00000000 key="e" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/4.000000000,0 -> /BYTES/v5
+data: "f"/4.000000000,0 -> /BYTES/v10
+data: "f"/3.000000000,0 -> /<empty>
+data: "h"/4.000000000,0 -> /BYTES/v13
+data: "k"/3.000000000,0 -> /<empty>
+stats: key_count=6 key_bytes=120 val_count=9 val_bytes=190 range_key_count=3 range_key_bytes=41 range_val_count=3 live_count=5 live_bytes=260 gc_bytes_age=8868 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=288

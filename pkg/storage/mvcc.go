@@ -4891,6 +4891,190 @@ func MVCCGarbageCollectRangeKeys(
 	return nil
 }
 
+var emptyMetaToken enginepb.MVCCMetadata
+
+// MVCCGarbageCollectWithClearRange removes garbage collected data falling under
+// ranges covered by rks. This function performs a check to ensure that no
+// non-deleted data (most recent or history with timestamp greater that
+// threshold) is being deleted.
+func MVCCGarbageCollectWithClearRange(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	start, end roachpb.Key,
+	startTimestamp hlc.Timestamp,
+	gcThreshold hlc.Timestamp,
+	leftPeekBound, rightPeekBound roachpb.Key,
+) error {
+	var countKeys int64
+	var removedEntries int64
+	defer func(begin time.Time) {
+		// TODO(oleg): this could be misleading if GC fails, but this function still
+		// reports how many keys were GC'd. The approach is identical to what point
+		// key GC does for consistency, but both places could be improved.
+		log.Eventf(ctx,
+			"done with GC evaluation for clear range at %.2f keys/sec. Deleted %d entries",
+			countKeys, float64(countKeys)*1e9/float64(timeutil.Since(begin)), removedEntries)
+	}(timeutil.Now())
+
+	if leftPeekBound == nil || !startTimestamp.IsEmpty() {
+		leftPeekBound = start
+	}
+	if rightPeekBound == nil {
+		rightPeekBound = end
+	}
+
+	firstFull := start
+	if !startTimestamp.IsEmpty() {
+		firstFull = start.Next()
+	}
+
+	// Bound the iterator appropriately for the set of keys we'll be garbage
+	// collecting. We are using latch bounds to collect info about adjacent
+	// range fragments for correct MVCCStats updates.
+	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: leftPeekBound,
+		UpperBound: rightPeekBound,
+		KeyTypes:   IterKeyTypePointsAndRanges,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(MVCCKey{Key: start})
+
+	var (
+		prevPointKey           MVCCKey
+		rangeTombstoneStartKey roachpb.Key
+		rangeTombstones        MVCCRangeKeyStack
+	)
+
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange {
+			rangeBounds := iter.RangeBounds()
+			if !rangeBounds.Key.Equal(rangeTombstoneStartKey) {
+				rangeTombstoneStartKey = rangeBounds.Key.Clone()
+				rangeTombstones = iter.RangeKeys().Clone()
+
+				// Range overlaps or to the right of first full, need to update deletion
+				// stats and check for errors.
+				if rangeBounds.EndKey.Compare(firstFull) > 0 {
+					if gcThreshold.Less(rangeTombstones.Newest()) {
+						return errors.Errorf("attempt to clear range with data %s",
+							rangeTombstones.AsRangeKey(rangeTombstones.Versions[0]).String())
+					}
+					if ms != nil {
+						// Process range key deletion and trim
+						if rangeTombstones.Bounds.Key.Compare(firstFull) < 0 && rangeTombstones.Bounds.EndKey.Compare(firstFull) > 0 {
+							ms.Add(UpdateStatsOnRangeKeySplit(firstFull, rangeTombstones.Versions))
+							rangeTombstones.Bounds.Key = firstFull
+						}
+						if rangeTombstones.Bounds.ContainsKey(end) {
+							ms.Add(UpdateStatsOnRangeKeySplit(end, rangeTombstones.Versions))
+							rangeTombstones.Bounds.EndKey = end
+						}
+						ms.Add(updateStatsOnRangeKeyClear(rangeTombstones))
+					}
+					removedEntries+=int64(rangeTombstones.Len())
+				}
+			}
+		} else {
+			rangeTombstones = MVCCRangeKeyStack{}
+		}
+
+		if hasPoint {
+			countKeys++
+			unsafeKey := iter.UnsafeKey()
+			newKey := !prevPointKey.Key.Equal(unsafeKey.Key)
+			if newKey {
+				prevPointKey.Key = unsafeKey.Key.Clone()
+				prevPointKey.Timestamp = hlc.Timestamp{}
+			}
+
+			// Skip keys that fall outside of range.
+			if unsafeKey.Compare(MVCCKey{Key: end}) >= 0 {
+				break
+			}
+			if unsafeKey.Compare(MVCCKey{Key: start, Timestamp: startTimestamp}) < 0 {
+				prevPointKey.Timestamp = unsafeKey.Timestamp
+				continue
+			}
+
+			if unsafeKey.Timestamp.IsEmpty() {
+				return errors.Errorf("attempt to clear range with data %s", unsafeKey.String())
+			}
+			if gcThreshold.Less(unsafeKey.Timestamp) {
+				return errors.Errorf("attempt to clear range with data %s", unsafeKey.String())
+			}
+
+			// Unmarshal value to check if we are dealing with tombstone.
+			unsafeValRaw := iter.UnsafeValue()
+			unsafeVal, unsafeValOK, err := tryDecodeSimpleMVCCValue(unsafeValRaw)
+			if !unsafeValOK && err == nil {
+				unsafeVal, err = decodeExtendedMVCCValue(unsafeValRaw)
+			}
+			if err != nil {
+				return err
+			}
+
+			// Find timestamp covering current key.
+			coveredBy := prevPointKey.Timestamp
+			if rangeKeyCover, ok := rangeTombstones.FirstAbove(unsafeKey.Timestamp); ok {
+				// If there's a range between current value and value above
+				// use that timestamp.
+				if coveredBy.IsEmpty() || rangeKeyCover.Timestamp.Less(coveredBy) {
+					coveredBy = rangeKeyCover.Timestamp
+				}
+			}
+			isCovered := !coveredBy.IsEmpty() && coveredBy.LessEq(gcThreshold)
+
+			isTombstone := unsafeVal.IsTombstone()
+			validTill := coveredBy
+			if isTombstone {
+				validTill = unsafeKey.Timestamp
+			}
+
+			if !isCovered && !isTombstone {
+				return errors.Errorf("attempt to clear range with data %s", unsafeKey.String())
+			}
+
+			// Prevent deletion of values on gcThreshold.
+			if !isTombstone && unsafeKey.Timestamp.Equal(gcThreshold) {
+				return errors.Errorf("attempt to clear range with data %s", unsafeKey.String())
+			}
+
+			if ms != nil {
+				if newKey {
+					ms.Add(updateStatsOnGC(unsafeKey.Key, int64(EncodedMVCCKeyPrefixLength(unsafeKey.Key)), 0,
+						&emptyMetaToken, validTill.WallTime))
+				}
+				ms.Add(updateStatsOnGC(unsafeKey.Key, MVCCVersionTimestampSize, int64(len(unsafeValRaw)), nil,
+					validTill.WallTime))
+			}
+			prevPointKey.Timestamp = unsafeKey.Timestamp
+			removedEntries++
+		}
+	}
+
+	// If timestamp is not empty we delete subset of versions (this may be first
+	// key of requested range or full extent).
+	if !startTimestamp.IsEmpty() {
+		if err := rw.ClearMVCCVersions(MVCCKey{Key: start, Timestamp: startTimestamp}, MVCCKey{Key: firstFull}); err != nil {
+			return err
+		}
+	}
+	// If any keys are left in full part of range, remove everything there.
+	if !firstFull.Equal(end) {
+		return rw.ClearRawRange(firstFull, end, true, true)
+	}
+	return nil
+}
+
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.

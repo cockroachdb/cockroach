@@ -1,0 +1,122 @@
+# Each error uses distinct data set and multiple tests are combined in this file.
+#  5                  o-------o   x       v4      [v5]
+#  4
+#  3  ~~~~~   ~~~~~       ~~~~~   ~~~~~   ~~~~~   ~~~~~  Clear ranges at GC threshold
+#  2
+#  1  [v1]    v2                  v3
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+
+run ok
+with t=A k=a
+  txn_begin ts=1,0
+  put  v=1
+put  k=c v=2 ts=1,0
+del_range_ts  k=e end=g ts=5,0
+put  k=h v=3 ts=1,0
+del  k=h ts=5,0
+put  k=j v=4 ts=5,0
+with t=B k=l
+  txn_begin ts=5,0
+  put v=5
+----
+>> at end:
+txn: "B" meta={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+
+run error
+gc_clear_range k=a end=b startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data "a"
+
+run error
+gc_clear_range k=c end=d startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data "c"/1.000000000,0
+
+run error
+gc_clear_range k=h end=i startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data "h"/5.000000000,0
+
+run error
+gc_clear_range k=f end=g startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data {e\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff-g}/5.000000000,0
+
+run error
+gc_clear_range k=j end=k startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data "j"/5.000000000,0
+
+run error
+gc_clear_range k=l end=m startTs=0,0 ts=4,0
+----
+>> at end:
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/1
+data: "c"/1.000000000,0 -> /BYTES/2
+data: "h"/5.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/3
+data: "j"/5.000000000,0 -> /BYTES/4
+meta: "l"/0,0 -> txn={id=00000000 key="l" pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/5.000000000,0 -> /BYTES/5
+error: (*withstack.withStack:) attempt to clear range with data "l"
