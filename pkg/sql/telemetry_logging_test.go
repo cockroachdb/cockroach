@@ -555,3 +555,239 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		}
 	}
 }
+
+func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := installTelemetryLogFileSink(sc, t)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, "CREATE TABLE t ("+
+		"pk INT PRIMARY KEY,"+
+		"col1 INT,"+
+		"col2 INT,"+
+		"other STRING,"+
+		"j JSON,"+
+		"INDEX other_index (other),"+
+		"INVERTED INDEX j_index (j)"+
+		");")
+	db.Exec(t, "CREATE TABLE u ("+
+		"pk INT PRIMARY KEY,"+
+		"fk INT REFERENCES t (pk),"+
+		"j JSON,"+
+		"INDEX fk_index (fk),"+
+		"INVERTED INDEX j_index (j)"+
+		");")
+
+	stubMaxEventFrequency := int64(1000000)
+	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+
+	testData := []struct {
+		name                   string
+		query                  string
+		expectedLogStatement   string
+		expectedNumLogs        int
+		expectedJoinTypes      map[string]int
+		expectedJoinAlgorithms map[string]int
+	}{
+		{
+			"no-index-join",
+			"SELECT * FROM t LIMIT 1;",
+			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+			1,
+			map[string]int{},
+			map[string]int{},
+		},
+		{
+			"index-join",
+			"SELECT * FROM t WHERE other='other';",
+			`"SELECT * FROM \"\".\"\".t WHERE other = ‹'other'›"`,
+			1,
+			map[string]int{},
+			map[string]int{"IndexJoin": 1},
+		},
+		{
+			"inner-hash-join",
+			"SELECT * FROM t INNER HASH JOIN u ON t.pk = u.fk;",
+			`"SELECT * FROM \"\".\"\".t INNER HASH JOIN \"\".\"\".u ON t.pk = u.fk"`,
+			1,
+			map[string]int{"InnerJoin": 1},
+			map[string]int{"HashJoin": 1},
+		},
+		{
+			"cross-join",
+			"SELECT * FROM t CROSS JOIN u",
+			`"SELECT * FROM \"\".\"\".t CROSS JOIN \"\".\"\".u"`,
+			1,
+			map[string]int{"InnerJoin": 1},
+			map[string]int{"CrossJoin": 1},
+		},
+		{
+			"left-hash-join",
+			"SELECT * FROM t LEFT OUTER HASH JOIN u ON t.pk = u.fk;",
+			`"SELECT * FROM \"\".\"\".t LEFT HASH JOIN \"\".\"\".u ON t.pk = u.fk"`,
+			1,
+			map[string]int{"LeftOuterJoin": 1},
+			map[string]int{"HashJoin": 1},
+		},
+		{
+			"full-hash-join",
+			"SELECT * FROM t FULL OUTER HASH JOIN u ON t.pk = u.fk;",
+			`"SELECT * FROM \"\".\"\".t FULL HASH JOIN \"\".\"\".u ON t.pk = u.fk"`,
+			1,
+			map[string]int{"FullOuterJoin": 1},
+			map[string]int{"HashJoin": 1},
+		},
+		{
+			"anti-merge-join",
+			"SELECT * FROM t@t_pkey WHERE NOT EXISTS (SELECT * FROM u@fk_index WHERE t.pk = u.fk);",
+			`"SELECT * FROM \"\".\"\".t@t_pkey WHERE NOT EXISTS (SELECT * FROM \"\".\"\".u@fk_index WHERE t.pk = u.fk)"`,
+			1,
+			map[string]int{"AntiJoin": 1},
+			map[string]int{"MergeJoin": 1},
+		},
+		{
+			"inner-lookup-join",
+			"SELECT * FROM t INNER LOOKUP JOIN u ON t.pk = u.fk;",
+			`"SELECT * FROM \"\".\"\".t INNER LOOKUP JOIN \"\".\"\".u ON t.pk = u.fk"`,
+			1,
+			map[string]int{"InnerJoin": 2},
+			map[string]int{"LookupJoin": 2},
+		},
+		{
+			"inner-merge-join",
+			"SELECT * FROM t INNER MERGE JOIN u ON t.pk = u.fk;",
+			`"SELECT * FROM \"\".\"\".t INNER MERGE JOIN \"\".\"\".u ON t.pk = u.fk"`,
+			1,
+			map[string]int{"InnerJoin": 1},
+			map[string]int{"MergeJoin": 1},
+		},
+		{
+			"inner-inverted-join",
+			"SELECT * FROM t INNER INVERTED JOIN u ON t.j @> u.j;",
+			`"SELECT * FROM \"\".\"\".t INNER INVERTED JOIN \"\".\"\".u ON t.j @> u.j"`,
+			1,
+			map[string]int{"InnerJoin": 2},
+			map[string]int{"InvertedJoin": 1, "LookupJoin": 1},
+		},
+		{
+			"semi-apply-join",
+			"SELECT * FROM t WHERE col1 IN (SELECT generate_series(col1, col2) FROM u);",
+			`"SELECT * FROM \"\".\"\".t WHERE col1 IN (SELECT generate_series(col1, col2) FROM \"\".\"\".u)"`,
+			1,
+			map[string]int{"SemiJoin": 1},
+			map[string]int{"ApplyJoin": 1},
+		},
+		{
+			"zig-zag-join",
+			"SELECT * FROM t@{FORCE_ZIGZAG} WHERE t.j @> '{\"a\":\"b\"}' AND t.j @> '{\"c\":\"d\"}';",
+			`"SELECT * FROM \"\".\"\".t@{FORCE_ZIGZAG} WHERE (t.j @> ‹'{\"a\":\"b\"}'›) AND (t.j @> ‹'{\"c\":\"d\"}'›)"`,
+			1,
+			map[string]int{"InnerJoin": 1},
+			map[string]int{"ZigZagJoin": 1, "LookupJoin": 1},
+		},
+		{
+			"intersect-all-merge-join",
+			"SELECT * FROM (SELECT t.pk FROM t INTERSECT ALL SELECT u.pk FROM u) ORDER BY pk;",
+			`"SELECT * FROM (SELECT t.pk FROM \"\".\"\".t INTERSECT ALL SELECT u.pk FROM \"\".\"\".u) ORDER BY pk"`,
+			1,
+			map[string]int{"IntersectAllJoin": 1},
+			map[string]int{"MergeJoin": 1},
+		},
+		{
+			"except-all-hash-join",
+			"SELECT t.col1 FROM t EXCEPT SELECT u.fk FROM u;",
+			`"SELECT t.col1 FROM \"\".\"\".t EXCEPT SELECT u.fk FROM \"\".\"\".u"`,
+			1,
+			map[string]int{"ExceptAllJoin": 1},
+			map[string]int{"HashJoin": 1},
+		},
+		{
+			// UNION is not implemented with a join.
+			"union",
+			"SELECT t.col1 FROM t UNION SELECT u.fk FROM u;",
+			`"SELECT t.col1 FROM \"\".\"\".t UNION SELECT u.fk FROM \"\".\"\".u"`,
+			1,
+			map[string]int{},
+			map[string]int{},
+		},
+	}
+
+	for _, tc := range testData {
+		db.Exec(t, tc.query)
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, tc := range testData {
+		numLogsFound := 0
+		for i := len(entries) - 1; i >= 0; i-- {
+			e := entries[i]
+			if strings.Contains(e.Message, tc.expectedLogStatement) {
+				numLogsFound++
+				for joinType, count := range tc.expectedJoinTypes {
+					msg := fmt.Sprintf("\"%sCount\":%d", joinType, count)
+					containsJoinType := strings.Contains(e.Message, msg)
+					if !containsJoinType {
+						t.Errorf("%s: expected %s to be found, but found none in: %s", tc.name, msg, e.Message)
+					}
+				}
+				for _, joinType := range []string{
+					"InnerJoin", "LeftOuterJoin", "FullOuterJoin", "SemiJoin", "AntiJoin", "IntersectAllJoin",
+					"ExceptAllJoin",
+				} {
+					if _, ok := tc.expectedJoinTypes[joinType]; !ok {
+						containsJoinType := strings.Contains(e.Message, joinType)
+						if containsJoinType {
+							t.Errorf("%s: unexpected \"%s\" found in: %s", tc.name, joinType, e.Message)
+						}
+					}
+				}
+				for joinAlg, count := range tc.expectedJoinAlgorithms {
+					msg := fmt.Sprintf("\"%sCount\":%d", joinAlg, count)
+					containsJoinAlg := strings.Contains(e.Message, msg)
+					if !containsJoinAlg {
+						t.Errorf("%s: expected %s to be found, but found none in: %s", tc.name, msg, e.Message)
+					}
+				}
+				for _, joinAlg := range []string{
+					"HashJoin", "CrossJoin", "IndexJoin", "LookupJoin", "MergeJoin", "InvertedJoin",
+					"ApplyJoin", "ZigZagJoin",
+				} {
+					if _, ok := tc.expectedJoinAlgorithms[joinAlg]; !ok {
+						containsJoinAlg := strings.Contains(e.Message, joinAlg)
+						if containsJoinAlg {
+							t.Errorf("%s: unexpected \"%s\" found in: %s", tc.name, joinAlg, e.Message)
+						}
+					}
+				}
+			}
+		}
+		if numLogsFound != tc.expectedNumLogs {
+			t.Errorf("%s: expected %d log entries, found %d", tc.name, tc.expectedNumLogs, numLogsFound)
+		}
+	}
+}

@@ -364,3 +364,19 @@ const (
 	// Streaming means that the grouping columns are fully ordered.
 	Streaming
 )
+
+// JoinAlgorithm is the type of join algorithm used.
+type JoinAlgorithm int8
+
+// The following are all the supported join algorithms.
+const (
+	HashJoin JoinAlgorithm = iota
+	CrossJoin
+	IndexJoin
+	LookupJoin
+	MergeJoin
+	InvertedJoin
+	ApplyJoin
+	ZigZagJoin
+	NumJoinAlgorithms
+)

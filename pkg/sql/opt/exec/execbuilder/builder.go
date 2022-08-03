@@ -13,6 +13,7 @@ package execbuilder
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -142,6 +143,14 @@ type Builder struct {
 	// NanosSinceStatsCollected is the maximum number of nanoseconds that have
 	// passed since stats were collected on any table scanned by this query.
 	NanosSinceStatsCollected time.Duration
+
+	// JoinTypeCounts records the number of times each type of logical join was
+	// used in the query.
+	JoinTypeCounts map[descpb.JoinType]int
+
+	// JoinAlgorithmCounts records the number of times each type of join algorithm
+	// was used in the query.
+	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
 
 	// wrapFunctionOverride overrides default implementation to return resolvable
 	// function reference for function with specified function name.

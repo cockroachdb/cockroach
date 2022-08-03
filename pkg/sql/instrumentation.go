@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -150,6 +151,14 @@ type instrumentationHelper struct {
 	// nanosSinceStatsCollected is the maximum number of nanoseconds that have
 	// passed since stats were collected on any table scanned by this query.
 	nanosSinceStatsCollected time.Duration
+
+	// joinTypeCounts records the number of times each type of logical join was
+	// used in the query.
+	joinTypeCounts map[descpb.JoinType]int
+
+	// joinAlgorithmCounts records the number of times each type of join algorithm
+	// was used in the query.
+	joinAlgorithmCounts map[exec.JoinAlgorithm]int
 }
 
 // outputMode indicates how the statement output needs to be populated (for
