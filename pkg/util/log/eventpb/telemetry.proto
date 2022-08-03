@@ -91,6 +91,51 @@ message SampledQuery {
 
   // The number of rows written.
   int64 rows_written = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of inner joins in the query plan.
+  int64 inner_join_count = 22 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of left (or right) outer joins in the query plan.
+  int64 left_outer_join_count = 23 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of full outer joins in the query plan.
+  int64 full_outer_join_count = 24 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of semi joins in the query plan.
+  int64 semi_join_count = 25 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of anti joins in the query plan.
+  int64 anti_join_count = 26 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of intersect all joins in the query plan.
+  int64 intersect_all_join_count = 27 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of except all joins in the query plan.
+  int64 except_all_join_count = 28 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of hash joins in the query plan.
+  int64 hash_join_count = 29 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of cross joins in the query plan.
+  int64 cross_join_count = 30 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of index joins in the query plan.
+  int64 index_join_count = 31 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of lookup joins in the query plan.
+  int64 lookup_join_count = 32 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of merge joins in the query plan.
+  int64 merge_join_count = 33 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of inverted joins in the query plan.
+  int64 inverted_join_count = 34 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of apply joins in the query plan.
+  int64 apply_join_count = 35 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of zig zag joins in the query plan.
+  int64 zig_zag_join_count = 36 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CapturedIndexUsageStats
