@@ -8,10 +8,7 @@ proto_library(
     srcs = ["connection.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cloud/cloudpb:cloudpb_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
@@ -20,10 +17,7 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb",
     proto = ":connectionpb_proto",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cloud/cloudpb",
-        "@com_github_gogo_protobuf//gogoproto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
 
 go_library(
