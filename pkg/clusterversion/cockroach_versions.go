@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// IncrementalBackupSubdir enables backing up new incremental backups to a
-	// dedicated subdirectory, to make it easier to apply a different ttl.
-	IncrementalBackupSubdir
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -337,10 +334,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     IncrementalBackupSubdir,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,
