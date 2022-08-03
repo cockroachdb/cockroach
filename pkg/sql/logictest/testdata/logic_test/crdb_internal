@@ -1146,3 +1146,9 @@ query I
 SELECT crdb_internal.num_inverted_index_entries(NULL::STRING, 0)
 ----
 0
+
+# Exercise unsafe gossip builtin functions.
+query B
+SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
+----
+false
