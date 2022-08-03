@@ -186,8 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// RowLevelTTL is the version where we allow row level TTL tables.
-	RowLevelTTL
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
@@ -342,10 +340,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     RowLevelTTL,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
 	},
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
