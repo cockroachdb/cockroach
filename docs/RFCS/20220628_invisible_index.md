@@ -8,7 +8,7 @@
 
 # Summary
 
-An invisible index is an index that is maintained up to date but is ignored by
+An invisible index is an index that is maintained up-to-date but is ignored by
 the optimizer unless explicitly selected with [index
 hinting](https://www.cockroachlabs.com/docs/v22.1/table-expressions#force-index-selection).
 
@@ -76,7 +76,7 @@ performance issues.
 When a parent table performs update or delete operations, the optimizer must
 perform a FK check on the child table to ensure that there are no rows in the
 child table referencing the columns being deleted or updated. If there are such
-rows, this operation will fail. If the foreig key column on the child table is
+rows, this operation will fail. If the foreign key column on the child table is
 not indexed, this check would require a full table level lock. This means that
 if there is another operation on any rows in the child table, the operation will
 still hang. On occasions, this could even lead to deadlocks.
@@ -93,8 +93,7 @@ invisible.
 
 # Implementation Decisions
 Please let me know if you have any questions or different opinions on these
-decisions. It should be relatively easy to make a change. Any feedback would be
-greatly appreciated : )
+decisions. It should be relatively easy to make a change. 
 
 ### Conclusion:
 - Users can create an invisible index or alter an existing index to be invisible.
@@ -102,8 +101,7 @@ greatly appreciated : )
 - Primary indexes are not allowed to be invisible.
 - Constraints cannot be created with invisible indexes. Creating a unique or a foreign key constraint with invisible indexes is not supported.
 - Partial invisible indexes or inverted invisible indexes are both supported. The behavior is as expected.
-- Queries can be instructed to use invisible indexes explicitly through force index or index hinting.
-- Recreating an invisible index will make the index visible by default.
+- Queries can be instructed to use invisible indexes explicitly through force index (index hinting).
 - Session variable, `optimizer_use_invisible_indexes`, can be set to true to use invisible indexes or false to ignore invisible indexes. By default, `optimizer_use_invisible_indexes` is set to false.
 
 The following points are where you should be cautious; making an index invisible is not exactly the same as dropping the index.
@@ -335,7 +333,7 @@ The invisible index test cases need to exercise these dimensions and try to call
   - System descriptors 
   - Check some basic test cases using EXPLAIN
 
-#### III. Dogfooding already existing test cases. 
+#### III. Using already existing test cases. 
 - Instead of creating new test cases, we will check the scan flag in the new output of the existing test cases to make sure that the flag has been passed correctly.
 - The invisible index feature should be disabled during any unique constraint check.
   - Check when a table with unique indexes performs INSERT ON CONFLICT, DO NOTHING, DO UPDATE SET, ON CONSTRAINT.
@@ -355,10 +353,6 @@ Invisible index feature is introducing four new user facing syntaxes. Since Post
 the invisible index feature yet, we will use MySQL and Oracle as a reference for the standardized syntax. CRDB is already supporting a similar feature, invisible column feature.
 
 ### a. CREATE INDEX, CREATE TABLE, ALTER INDEX statements
-When users are creating a new invisible index with `CREATE TABLE`, `CREATE INDEX` or altering an index to be invisible with `ALTER INDEX`, they will need to specify whether the index is invisible. The two options that we have discussed are `NOT VISIBLE`, `INVISIBLE`. MySQL and Oracle both support `INVISIBLE` instead. Invisible column feature is using `NOT VISIBLE`.
-
-- **Conclusion**: We have decided that being consistent with the invisible column feature is more important. If you are wondering about why the Invisible column feature chose `NOT VISIBLE` over `INVISIBLE`, please look at this PR https://github.com/cockroachdb/cockroach/pull/26644 for more information.
-
 #### Create Index Statements
 ```sql
 CREATE [UNIQUE | INVERTED] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
@@ -418,10 +412,6 @@ ALTER INDEX a@b NOT VISIBLE
 ```
 
 ### b. SHOW INDEX Statements
-The second user-facing syntax is related to SQL statements like SHOW INDEX. The three options are `is_hidden`, `visible`, or `is_visible`. MySQL is using [`visible`](https://dev.mysql.com/doc/refman/8.0/en/show-index.html). Invisible column feature is using `is_hidden` for [`SHOW COLUMNS`](https://www.cockroachlabs.com/docs/stable/show-columns.html).
-
-- **Conclusion**: we have decided that it is more important to stay consistent with the first user-facing syntax and also with MySQL —use visible.
-
 A new column needs to be added to the output of following SQL statements:
 ```sql
 SHOW INDEX FROM (table_name)
@@ -438,23 +428,62 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 ```
 
 ### c. Tables that store indexes information
-The third user-facing syntax is with `crdb_internal.table_indexes` and `information_schema.statistics`. Invisible column feature uses `hidden` for `table_columns`. MySQL uses `is_visible`. Oracle uses `visibility`.
-- **Conclusion**: we have decided that being consistent with the second-user facing syntax and with MySQL is more important --- use `is_visible`.
-
+A new column needs to be added to the output of `crdb_internal.table_indexes` and `information_schema.statistics`.
 `crdb_internal.table_indexes`
 ```
 descriptor_id descriptor_name index_id index_name index_type is_unique is_inverted is_sharded ***is_visible*** shard_bucket_count created_at                                                                                              
 ```
+
 `information_schema.statistics`
 ```
 table_catalog table_schema table_name non_unique index_schema index_name seq_in_index column_name COLLATION cardinality direction storing implicit ***is_visible***
 ```
 
-We are also introducing another field in the index descriptor (just for internal use). The options are `Hidden`, `Invisible`, or `NotVisible`. The invisible column feature is using `Hidden` in the column descriptor. Using visible or visibility would be odd as well since the default boolean value is false (by default, index should be visible).
+## d. Alternative Syntax Considered 
+### a. CREATE INDEX, CREATE TABLE, ALTER INDEX statements
+The two options that we have discussed are `NOT VISIBLE` and `INVISIBLE`. 
+
+- Reason why `NOT VISIBLE` is good: CRDB currently supports a similar feature, invisible column feature. And invisible column feature is using `NOT VISIBLE` for its syntax.
+- Reason why `INVISIBLE` is good: MySQL and Oracle both support `INVISIBLE`. 
+
+**Conclusion**: we have decided that being consistent with what CRDB already has is more important than being consistent with other database engines. 
+
+There has been discussion about supporting INVISIBLE as an alias. But this could lead to more issues: 
+1. If we support INVISIBLE as an alias for invisible index feature, we would have to support INVISIBLE as an alias for the invisble column feature as well. 
+There are some technical issues in the grammar to do that. 
+2. If users are migrating from other database to CRDB, they would need to rewrite their SQL anyways. 
+3. This might add confusion when user tries to create invisible columns or indexes. 
+Overall, supporting `INVISIBLE` as an alias doesn't seem to provide a large benefit.
+
+If you are wondering about why the invisible column feature chose `NOT VISIBLE` over `INVISIBLE`, please look at this PR https://github.com/cockroachdb/cockroach/pull/26644 for more information.
+
+### b. SHOW INDEX Statements
+The three options are `is_hidden`, `is_visible`, and `visible`. 
+
+- Reason why `is_hidden` is good: Invisible column feature is using `is_hidden` for [`SHOW COLUMNS`](https://www.cockroachlabs.com/docs/stable/show-columns.html).
+- Reason why `visible` is good: This is more consistent what we chose with the first syntax --- VISIBLE | NOT VISIBLE. MySQL is also using [`visible`](https://dev.mysql.com/doc/refman/8.0/en/show-index.html).
+This is also more consistent with other columns in [`SHOW INDEX`](https://www.cockroachlabs.com/docs/stable/show-index.html) such as `storing, implicit, non_unique`.
+
+**Conclusion**: we have decided that it is more important to stay consistent with the first user-facing syntax and use `is_visible`.
+
+### c. Tables that store indexes information: `crdb_internal.table_indexes` and `information_schema.statistics`
+The three options are `is_hidden`, `is_visible`, and `visible`. 
+
+- Reason why `hidden` is good: Invisible column feature uses `hidden` for `table_columns`.
+- Reason why `is_visible` is good: MySQL uses `is_visible`. Also, this is more consistent with other columns in `table_indexes`, such as is_unique, is_inverted, is_sharded.
+- Reason why `visibility` is good: Oracle uses `visibility`.
+
+- **Conclusion**: we have decided that being consistent with the second-user facing syntax is more important --- use `is_visible`.
+
+### d. Index Descriptor
+
+We are also introducing another field in the index descriptor (just for internal use). The options are `Hidden`, `Invisible`, or `NotVisible`. 
+The invisible column feature is using `Hidden` in the column descriptor. 
+Using visible or visibility would be odd as well since the default boolean value is false (by default, index should be visible).
 
 - **Conclusion**: we have decided to use `NotVisible`. Since we chose `visible` for all invisible index features above, choosing `NotVisible` or `Invisible` here is more consistent. `NotVisible` is preferred here because we are trying to stay away from the keyword `Invisible` to avoid confusion for the first user-facing syntax.
 
-For more context about how this conclusion was drawn, please see https://github.com/cockroachdb/cockroach/pull/83388 and this RFC PR’s discussion thread.
+For more context about how this conclusion was drawn, please see https://github.com/cockroachdb/cockroach/pull/83388 and this RFC PR’s discussion
 
 # Fine-Grained Control of Index Visibility
 As of now, the plan is to introduce the general feature of invisible index
@@ -475,6 +504,7 @@ of index visibility by introducing the following two features.
    index visibility for indexes. Related:
    https://github.com/cockroachdb/cockroach/issues/82363
 
+3. We can consider introducing another session variable that gives the exact same behaviour as dropping an index.
 Another option regarding scope of invisibility is to support two types of
 indexes. Invisible indexes would stay the same as described above. We can also
 consider supporting another type of index where the optimizer ignores
