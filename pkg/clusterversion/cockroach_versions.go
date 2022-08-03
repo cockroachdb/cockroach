@@ -247,9 +247,6 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
-	// IncrementalBackupSubdir enables backing up new incremental backups to a
-	// dedicated subdirectory, to make it easier to apply a different ttl.
-	IncrementalBackupSubdir
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -464,10 +461,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
-	},
-	{
-		Key:     IncrementalBackupSubdir,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,
