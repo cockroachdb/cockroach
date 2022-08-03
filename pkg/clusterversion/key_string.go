@@ -9,47 +9,28 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[V21_2-0]
-	_ = x[Start22_1-1]
-	_ = x[PebbleFormatBlockPropertyCollector-2]
-	_ = x[PublicSchemasWithDescriptors-3]
-	_ = x[EnsureSpanConfigReconciliation-4]
-	_ = x[EnsureSpanConfigSubscription-5]
-	_ = x[EnableSpanConfigStore-6]
-	_ = x[AddRaftAppliedIndexTermMigration-7]
-	_ = x[EnableDeclarativeSchemaChanger-8]
-	_ = x[RowLevelTTL-9]
-	_ = x[PebbleFormatSplitUserKeysMarked-10]
-	_ = x[IncrementalBackupSubdir-11]
-	_ = x[EnableNewStoreRebalancer-12]
-	_ = x[ClusterLocksVirtualTable-13]
-	_ = x[AutoStatsTableSettings-14]
-	_ = x[SuperRegions-15]
-	_ = x[EnableNewChangefeedOptions-16]
-	_ = x[SpanCountTable-17]
-	_ = x[PreSeedSpanCountTable-18]
-	_ = x[SeedSpanCountTable-19]
-	_ = x[V22_1-20]
-	_ = x[Start22_2-21]
-	_ = x[LocalTimestamps-22]
-	_ = x[PebbleFormatSplitUserKeysMarkedCompacted-23]
-	_ = x[EnsurePebbleFormatVersionRangeKeys-24]
-	_ = x[EnablePebbleFormatVersionRangeKeys-25]
-	_ = x[TrigramInvertedIndexes-26]
-	_ = x[RemoveGrantPrivilege-27]
-	_ = x[MVCCRangeTombstones-28]
-	_ = x[UpgradeSequenceToBeReferencedByID-29]
-	_ = x[SampledStmtDiagReqs-30]
-	_ = x[AddSSTableTombstones-31]
-	_ = x[SystemPrivilegesTable-32]
-	_ = x[EnablePredicateProjectionChangefeed-33]
-	_ = x[AlterSystemSQLInstancesAddLocality-34]
-	_ = x[SystemExternalConnectionsTable-35]
-	_ = x[AlterSystemStatementStatisticsAddIndexRecommendations-36]
+	_ = x[V22_1-1]
+	_ = x[Start22_2-2]
+	_ = x[LocalTimestamps-3]
+	_ = x[PebbleFormatSplitUserKeysMarkedCompacted-4]
+	_ = x[EnsurePebbleFormatVersionRangeKeys-5]
+	_ = x[EnablePebbleFormatVersionRangeKeys-6]
+	_ = x[TrigramInvertedIndexes-7]
+	_ = x[RemoveGrantPrivilege-8]
+	_ = x[MVCCRangeTombstones-9]
+	_ = x[UpgradeSequenceToBeReferencedByID-10]
+	_ = x[SampledStmtDiagReqs-11]
+	_ = x[AddSSTableTombstones-12]
+	_ = x[SystemPrivilegesTable-13]
+	_ = x[EnablePredicateProjectionChangefeed-14]
+	_ = x[AlterSystemSQLInstancesAddLocality-15]
+	_ = x[SystemExternalConnectionsTable-16]
+	_ = x[AlterSystemStatementStatisticsAddIndexRecommendations-17]
 }
 
-const _Key_name = "V21_2Start22_1PebbleFormatBlockPropertyCollectorPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreAddRaftAppliedIndexTermMigrationEnableDeclarativeSchemaChangerRowLevelTTLPebbleFormatSplitUserKeysMarkedIncrementalBackupSubdirEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsSpanCountTablePreSeedSpanCountTableSeedSpanCountTableV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendations"
+const _Key_name = "V21_2V22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendations"
 
-var _Key_index = [...]uint16{0, 5, 14, 48, 76, 106, 134, 155, 187, 217, 228, 259, 282, 306, 330, 352, 364, 390, 404, 425, 443, 448, 457, 472, 512, 546, 580, 602, 622, 641, 674, 693, 713, 734, 769, 803, 833, 886}
+var _Key_index = [...]uint16{0, 5, 10, 19, 34, 74, 108, 142, 164, 184, 203, 236, 255, 275, 296, 331, 365, 395, 448}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
