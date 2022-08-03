@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
-	// 22.1.
-	EnableNewStoreRebalancer
 	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
 	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
 	ClusterLocksVirtualTable
@@ -334,10 +331,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     EnableNewStoreRebalancer,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
 	},
 	{
 		Key:     ClusterLocksVirtualTable,
