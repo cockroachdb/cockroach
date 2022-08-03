@@ -55,17 +55,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"enable span configs infrastructure",
-		toCV(clusterversion.EnsureSpanConfigReconciliation),
-		NoPrecondition,
-		ensureSpanConfigReconciliation,
-	),
-	upgrade.NewSystemUpgrade(
-		"enable span configs infrastructure",
-		toCV(clusterversion.EnsureSpanConfigSubscription),
-		ensureSpanConfigSubscription,
-	),
-	upgrade.NewTenantUpgrade(
 		"remove grant privilege from users",
 		toCV(clusterversion.RemoveGrantPrivilege),
 		NoPrecondition,
