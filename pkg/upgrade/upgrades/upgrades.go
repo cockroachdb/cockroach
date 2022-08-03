@@ -60,16 +60,6 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		removeGrantMigration,
 	),
-	upgrade.NewSystemUpgrade(
-		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
-		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
-		raftAppliedIndexTermMigration,
-	),
-	upgrade.NewSystemUpgrade(
-		"purge all replicas not populating RangeAppliedState.RaftAppliedIndexTerm",
-		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
-		postRaftAppliedIndexTermMigration,
-	),
 	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
 		toCV(clusterversion.UpgradeSequenceToBeReferencedByID),
