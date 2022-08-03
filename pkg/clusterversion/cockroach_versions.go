@@ -166,12 +166,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
-	// Pebble version that provides block property collectors that can be used
-	// for fine-grained time bound iteration. See
-	// https://github.com/cockroachdb/pebble/issues/1190 for details.
-	PebbleFormatBlockPropertyCollector // TODO(celia) - pkg/storage
-
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
@@ -271,10 +265,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     PebbleFormatBlockPropertyCollector,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
 	},
 	{
 		Key:     V22_1,
