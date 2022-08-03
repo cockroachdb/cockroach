@@ -1468,6 +1468,18 @@ var opGenerators = []opGenerator{
 			sort.Slice(keys, func(i, j int) bool {
 				return keys[i].Less(keys[j])
 			})
+			// An sstable intended for ingest cannot have the same key appear
+			// multiple times. Remove any duplicates.
+			n := len(keys)
+			for i := 1; i < n; {
+				if keys[i-1].Equal(keys[i]) {
+					copy(keys[i:], keys[i+1:])
+					n--
+				} else {
+					i++
+				}
+			}
+			keys = keys[:n]
 
 			return &ingestOp{
 				m:    m,
