@@ -1024,8 +1024,8 @@ func (ex *connExecutor) rollbackSQLTransaction(
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
-// If an error is returned, the connection needs to stop processing queries.
-// Query execution errors are written to res; they are not returned; it is
+// If an error is returned, the connection needs to stop processing queries.`
+// Query execution errors are written to res; they are not returned; it is`
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
@@ -1525,40 +1525,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			return &factoryEvalCtx
 		}
 	}
-
-	if len(planner.curPlan.subqueryPlans) != 0 {
-		// Create a separate memory account for the results of the subqueries.
-		// Note that we intentionally defer the closure of the account until we
-		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := planner.EvalContext().Mon.MakeBoundAccount()
-		defer subqueryResultMemAcc.Close(ctx)
-		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
-			// Skip the diagram generation since on this "main" query path we
-			// can get it via the statement bundle.
-			true, /* skipDistSQLDiagramGeneration */
-		) {
-			return *recv.stats, recv.commErr
-		}
-	}
-	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
-	// We pass in whether or not we wanted to distribute this plan, which tells
-	// the planner whether or not to plan remote table readers.
-	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
-	)
-	// Note that we're not cleaning up right away because postqueries might
-	// need to have access to the main query tree.
-	defer cleanup()
-	if recv.commErr != nil || res.Err() != nil {
-		return *recv.stats, recv.commErr
-	}
-
-	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
-	)
-
-	return *recv.stats, recv.commErr
+	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+	return *recv.stats, err
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
