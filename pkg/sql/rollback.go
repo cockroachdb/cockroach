@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -123,58 +125,102 @@ func DeleteTableWithPredicate(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
+	distSender *kvcoord.DistSender,
 	table catalog.TableDescriptor,
 	predicates roachpb.DeleteRangePredicates,
 	batchSize int64,
 ) error {
 
 	log.Infof(ctx, "deleting data for table %d with predicate %s", table.GetID(), predicates.String())
-	tableKey := codec.TablePrefix(uint32(table.GetID()))
-	spans := []roachpb.Span{{Key: tableKey, EndKey: tableKey.PrefixEnd()}}
+	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
+	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
-	// TODO(msbutler): Currently, the distsender will split the predicate based
-	// delete range request into a requests for each range, and process them
-	// sequentially. Pre-split requests up using a rangedesc cache and run batches
-	// in parallel (since we're passing a key limit, distsender won't do its usual
-	// splitting/parallel sending to separate ranges).
-	for len(spans) != 0 {
+	// TODO (msbutler): tune these
+	rangesPerBatch := int64(100)
+	numworkers := 4
 
-		span := spans[0]
-		admissionHeader := roachpb.AdmissionHeader{
-			Priority:                 int32(admissionpb.BulkNormalPri),
-			CreateTime:               timeutil.Now().UnixNano(),
-			Source:                   roachpb.AdmissionHeader_FROM_SQL,
-			NoMemoryReservedAtSource: true,
+	initialSpans := make(roachpb.Spans, 1)
+
+	// Partition the inputted span such that each span
+	// partition contains 100 ranges of data.
+	var n int64
+	lastKey := tableSpan.Key
+	ri := kvcoord.MakeRangeIterator(distSender)
+	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
+		if !ri.Valid() {
+			return ri.Error()
 		}
-		delRangeRequest := &roachpb.DeleteRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key:    span.Key,
-				EndKey: span.EndKey,
-			},
-			UseRangeTombstone: true,
-			Predicates:        predicates,
-		}
-		log.VEventf(ctx, 2, "deleting range %s - %s", span.Key, span.EndKey)
-		rawResp, err := kv.SendWrappedWithAdmission(
-			ctx,
-			db.NonTransactionalSender(),
-			roachpb.Header{MaxSpanRequestKeys: batchSize},
-			admissionHeader,
-			delRangeRequest)
-
-		spans = spans[:0]
-
-		if err != nil {
-			return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
-		}
-
-		resp := rawResp.(*roachpb.DeleteRangeResponse)
-		if resp.ResumeSpan != nil {
-			if !resp.ResumeSpan.Valid() {
-				return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
+		if n++; n >= rangesPerBatch || !ri.NeedAnother(tableSpan) {
+			endKey := ri.Desc().EndKey
+			if tableSpan.EndKey.Less(endKey) {
+				endKey = tableSpan.EndKey
 			}
-			spans = append(spans, *resp.ResumeSpan)
+			initialSpans = append(initialSpans, roachpb.Span{Key: lastKey.AsRawKey(),
+				EndKey: endKey.AsRawKey()})
+			n = 0
+			lastKey = endKey
+		}
+
+		if !ri.NeedAnother(tableSpan) {
+			break
 		}
 	}
-	return nil
+
+	spansToDo := make(chan *roachpb.Span, len(initialSpans))
+	for _, span := range initialSpans {
+		spansToDo <- &span
+	}
+
+	// Spin up a few workers to issue DeleteRange requests on the spans in the
+	// spansToDo channel. Using several workers allows the distsender to handle
+	// the span partitions of the initial span concurrently.
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		return ctxgroup.GroupWorkers(ctx, numworkers, func(ctx context.Context, _ int) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case span := <-spansToDo:
+					admissionHeader := roachpb.AdmissionHeader{
+						Priority:                 int32(admissionpb.BulkNormalPri),
+						CreateTime:               timeutil.Now().UnixNano(),
+						Source:                   roachpb.AdmissionHeader_FROM_SQL,
+						NoMemoryReservedAtSource: true,
+					}
+					delRangeRequest := &roachpb.DeleteRangeRequest{
+						RequestHeader: roachpb.RequestHeader{
+							Key:    span.Key,
+							EndKey: span.EndKey,
+						},
+						UseRangeTombstone: true,
+						Predicates:        predicates,
+					}
+					log.VEventf(ctx, 2, "deleting range %s - %s", span.Key, span.EndKey)
+
+					rawResp, err := kv.SendWrappedWithAdmission(
+						ctx,
+						db.NonTransactionalSender(),
+						roachpb.Header{MaxSpanRequestKeys: batchSize},
+						admissionHeader,
+						delRangeRequest)
+
+					if err != nil {
+						return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
+					}
+					resp := rawResp.(*roachpb.DeleteRangeResponse)
+					if resp.ResumeSpan != nil {
+						if !resp.ResumeSpan.Valid() {
+							return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
+						}
+						spansToDo <- resp.ResumeSpan
+					}
+				default:
+					return nil
+				}
+			}
+		})
+	})
+
+	return grp.Wait()
 }

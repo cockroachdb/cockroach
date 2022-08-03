@@ -1506,7 +1506,12 @@ func (r *importResumer) dropTables(
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
 		if useDeleteRange {
 			predicates := roachpb.DeleteRangePredicates{StartTime: ts}
-			if err := sql.DeleteTableWithPredicate(ctx, execCfg.DB, execCfg.Codec, intoTable,
+			if err := sql.DeleteTableWithPredicate(
+				ctx,
+				execCfg.DB,
+				execCfg.Codec,
+				execCfg.DistSender,
+				intoTable,
 				predicates, sql.RevertTableDefaultBatchSize); err != nil {
 				return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 			}

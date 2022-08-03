@@ -99,7 +99,7 @@ func TestTableRollback(t *testing.T) {
 		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 
 		predicates := roachpb.DeleteRangePredicates{StartTime: targetTime}
-		require.NoError(t, sql.DeleteTableWithPredicate(context.Background(), kv, execCfg.Codec, desc, predicates, 10))
+		require.NoError(t, sql.DeleteTableWithPredicate(context.Background(), kv, execCfg.Codec, execCfg.DistSender,desc, predicates, 10))
 
 		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 	})
