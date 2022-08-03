@@ -778,6 +778,7 @@ func postgresCreateTableMutator(
 							Inverted: def.Inverted,
 							Columns:  newCols,
 							Storing:  def.Storing,
+							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
 						changed = true
 					}
@@ -828,6 +829,7 @@ func postgresCreateTableMutator(
 						Inverted: def.Inverted,
 						Columns:  newCols,
 						Storing:  def.Storing,
+						// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 					})
 					changed = true
 				default:

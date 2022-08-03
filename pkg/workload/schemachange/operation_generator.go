@@ -918,6 +918,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 		Unique:      og.randIntn(4) == 0,  // 25% UNIQUE
 		Inverted:    og.randIntn(10) == 0, // 10% INVERTED
 		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
+		// TODO(wenyihu6): uncomment the following line after we support not visible
+		// index.
+		// NotVisible:  og.randIntn(20) == 0, // 5% NOT VISIBLE
 	}
 
 	regionColumn := ""
