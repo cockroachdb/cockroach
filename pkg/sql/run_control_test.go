@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -740,10 +740,10 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 // main statement with a timeout is blocked.
 func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 78494, "flaky test")
+	//skip.WithIssue(t, 78494, "flaky test")
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "times out under stress")
+	//skip.UnderStress(t, "times out under stress")
 
 	require.True(t, buildutil.CrdbTestBuild)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -751,11 +751,13 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 
 	numBlockers := 4
+	var matches int64
 
 	// We can't get the tableID programmatically here, checked below with assert.
 	const tableID = 104
 	sqlEnc := keys.MakeSQLCodec(tenantID)
 	tableKey := sqlEnc.TablePrefix(tableID)
+
 	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	unblockClientCh := make(chan struct{})
@@ -769,9 +771,12 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	matchBatch := func(ctx context.Context, req *roachpb.BatchRequest) bool {
 		tid, ok := roachpb.TenantFromContext(ctx)
 		if ok && tid == tenantID && len(req.Requests) > 0 {
-			scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
-			if ok && tableSpan.ContainsKey(scan.Key) {
-				return true
+			scan, ok := req.Requests[0].GetInner().(*roachpb.GetRequest)
+			if ok {
+				fmt.Println(scan.Key, scan.EndKey)
+				if tableSpan.ContainsKey(scan.Key) {
+					return true
+				}
 			}
 		}
 		return false
@@ -789,6 +794,11 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
 					if matchBatch(ctx, &req) {
+						atomic.AddInt64(&matches, 1)
+						// If any of the blockers get retried just ignore.
+						if matches > int64(numBlockers) {
+							return nil
+						}
 						// Notify we're blocking.
 						unblockClientCh <- struct{}{}
 						<-qBlockersCh
@@ -796,11 +806,15 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 					return nil
 				},
 				TestingResponseErrorEvent: func(ctx context.Context, req *roachpb.BatchRequest, err error) {
-					if matchBatch(ctx, req) {
+					tid, ok := roachpb.TenantFromContext(ctx)
+					if ok && tid == tenantID && len(req.Requests) > 0 {
 						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
-						if ok && tableSpan.ContainsKey(scan.Key) {
-							cancel()
-							wg.Done()
+						if ok {
+							fmt.Println(scan.Key, scan.EndKey)
+							if tableSpan.ContainsKey(scan.Key) {
+								cancel()
+								wg.Done()
+							}
 						}
 					}
 				},
@@ -815,8 +829,8 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	defer db.Close()
 
 	r1 := sqlutils.MakeSQLRunner(db)
-	r1.Exec(t, `CREATE TABLE foo (t int)`)
-
+	r1.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+	r1.Exec(t, `CREATE TABLE foo (t int PRIMARY KEY)`)
 	row := r1.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'foo'`)
 	var id int64
 	row.Scan(&id)
@@ -835,7 +849,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	for _, r := range blockers {
 		go func(r *sqlutils.SQLRunner) {
 			defer wg.Done()
-			r.Exec(t, `SELECT * FROM foo`)
+			r.Exec(t, `SELECT * FROM foo WHERE t = 1234`)
 		}(r)
 	}
 	// Wait till all blockers are parked.
@@ -843,7 +857,6 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 		<-unblockClientCh
 	}
 	client.ExpectErr(t, "timeout", `SELECT * FROM foo`)
-	// Unblock the blockers.
 	for i := 0; i < numBlockers; i++ {
 		qBlockersCh <- struct{}{}
 	}
