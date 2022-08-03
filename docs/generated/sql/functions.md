@@ -2904,6 +2904,8 @@ table. Returns an error if validation fails.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.unsafe_clear_gossip_info"></a><code>crdb_internal.unsafe_clear_gossip_info(key: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td></tr>
 <tr><td><a name="current_schema"></a><code>current_schema() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current schema.</p>

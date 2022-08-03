@@ -398,6 +398,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
+	p.extendedEvalCtx.Gossip = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
