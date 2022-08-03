@@ -72,6 +72,9 @@ type Config struct {
 
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
+
+	// UseMux enables MuxRangeFeed rpc
+	UseMux bool
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -106,7 +109,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf, cfg.Knobs)
+		sc, pff, bf, cfg.UseMux, cfg.Knobs)
 	f.onBackfillCallback = cfg.OnBackfillCallback
 
 	g := ctxgroup.WithContext(ctx)
@@ -176,6 +179,8 @@ type kvFeed struct {
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
+	useMux bool
+
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
 	tableFeed     schemafeed.SchemaFeed
@@ -200,6 +205,7 @@ func newKVFeed(
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
+	useMux bool,
 	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
@@ -218,6 +224,7 @@ func newKVFeed(
 		scanner:             sc,
 		physicalFeed:        pff,
 		bufferFactory:       bf,
+		useMux:              useMux,
 		knobs:               knobs,
 	}
 }
@@ -463,6 +470,7 @@ func (f *kvFeed) runUntilTableEvent(
 		Frontier: resumeFrontier.Frontier(),
 		WithDiff: f.withDiff,
 		Knobs:    f.knobs,
+		UseMux:   f.useMux,
 	}
 
 	g.GoCtx(func(ctx context.Context) error {
