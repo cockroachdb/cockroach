@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -253,7 +254,12 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
 			if s == nil {
-				newSession, err := l.createSession(ctx)
+				var newSession *session
+				err := contextutil.RunWithTimeout(ctx, "create-hb-session", l.hb(), func(ctx context.Context) error {
+					s, err := l.createSession(ctx)
+					newSession = s
+					return err
+				})
 				if err != nil {
 					func() {
 						l.mu.Lock()
@@ -270,7 +276,12 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 				t.Reset(l.hb())
 				continue
 			}
-			found, err := l.extendSession(ctx, s)
+			var found bool
+			err := contextutil.RunWithTimeout(ctx, "extend-hb-session", l.hb(), func(ctx context.Context) error {
+				ff, err := l.extendSession(ctx, s)
+				found = ff
+				return err
+			})
 			if err != nil {
 				l.clearSession(ctx)
 				return
