@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -213,4 +214,12 @@ var ActiveProtectedTimestampsEnabled = settings.RegisterBoolSetting(
 	"changefeed.active_protected_timestamps.enabled",
 	"if set, rather than only protecting changefeed targets from garbage collection during backfills, data will always be protected up to the changefeed's frontier",
 	true,
+)
+
+// UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
+var UseMuxRangeFeed = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.mux_rangefeed.enabled",
+	"if true, changefeed uses multiplexing rangefeed RPC",
+	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
 )
