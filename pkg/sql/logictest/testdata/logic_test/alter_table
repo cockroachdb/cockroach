@@ -850,7 +850,7 @@ statement ok
 ALTER TABLE audit ADD COLUMN y INT
 
 # But not the audit settings.
-statement error change auditing settings on a table
+statement error pq: only users with admin or MODIFYCLUSTERSETTING system privilege are allowed to change audit settings on a table
 ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
 
 user root
