@@ -1543,7 +1543,13 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
 }
 
-func TestRangeCacheUpdateLease(t *testing.T) {
+// TestRangeCacheSyncTokenAndMaybeUpdateCache tests
+// RangeCacheSyncTokenAndMaybeUpdateCache() by ensuring the cache entry returned
+// contains the freshest (lease, range desc) combination given the arguments
+// supplied and what exists in the cache. Additionally, we also test that the
+// method only updates the cache with speculative leases if the accompanying
+// range descriptor is at-least as old as what is contained in the cache.
+func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -1562,21 +1568,23 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		StoreID:   3,
 		ReplicaID: 3,
 	}
-	repNonMember := roachpb.ReplicaDescriptor{
-		NodeID:    4,
-		StoreID:   4,
-		ReplicaID: 4,
-	}
 
-	staleRangeGeneration := roachpb.RangeGeneration(2)
-	nonStaleRangeGeneration := roachpb.RangeGeneration(3)
+	currentGeneration := roachpb.RangeGeneration(3)
+	staleRangeDescriptor := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep3,
+		},
+		Generation: currentGeneration - 1,
+	}
 	desc1 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: nonStaleRangeGeneration,
+		Generation: currentGeneration,
 	}
 	desc2 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1584,7 +1592,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep2, rep3,
 		},
-		Generation: nonStaleRangeGeneration + 1,
+		Generation: currentGeneration + 1,
 	}
 	desc3 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1592,7 +1600,16 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: nonStaleRangeGeneration + 2,
+		Generation: currentGeneration + 2,
+	}
+	// Incompatible key bounds/range ID with other descriptors.
+	incompatibleDescriptor := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey(keys.TableDataMin),
+		EndKey:   roachpb.RKey(keys.TableDataMax),
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep2,
+		},
 	}
 	startKey := desc1.StartKey
 
@@ -1602,108 +1619,324 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 
-	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:                  desc1,
-		Lease:                 roachpb.Lease{},
-		ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
-	})
+	testCases := []struct {
+		name   string
+		testFn func(*testing.T, *RangeCache)
+	}{
+		{
+			name: "basic",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:                  desc1,
+					Lease:                 roachpb.Lease{},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
 
-	// Check that initially the cache has an empty lease. Then, we'll UpdateLease().
-	tok, err := cache.LookupWithEvictionToken(
-		ctx, desc1.StartKey, EvictionToken{}, false /* useReverseScan */)
-	require.NoError(t, err)
-	require.Equal(t, desc1, *tok.Desc())
-	require.Nil(t, tok.Leaseholder())
-	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+				// Check that initially the cache has an empty lease. Then, we'll
+				// call SyncTokenAndMaybeUpdateCache().
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false /* useReverseScan */)
+				require.NoError(t, err)
+				require.Equal(t, desc1, *tok.Desc())
+				require.Nil(t, tok.Leaseholder())
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
 
-	l := &roachpb.Lease{
-		Replica:  rep1,
-		Sequence: 1,
+				l := &roachpb.Lease{
+					Replica:  rep1,
+					Sequence: 1,
+				}
+				oldTok := tok
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, l, &desc1)
+				require.True(t, updatedLeaseholder)
+				require.Equal(t, oldTok.Desc(), tok.Desc())
+				require.Equal(t, &l.Replica, tok.Leaseholder())
+				require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
+				ri := cache.GetCached(ctx, startKey, false /* inverted */)
+				require.NotNil(t, ri)
+				require.Equal(t, desc1, *ri.Desc())
+				require.Equal(t, rep1, ri.Lease().Replica)
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
+
+				// Ensure evicting the lease doesn't remove the closed timestamp
+				// policy/desc.
+				oldTok = tok
+				tok.EvictLease(ctx)
+				require.Equal(t, oldTok.Desc(), tok.Desc())
+				require.Nil(t, tok.Leaseholder())
+				require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
+				ri = cache.GetCached(ctx, startKey, false /* inverted */)
+				require.NotNil(t, ri)
+				require.Equal(t, desc1, *ri.Desc())
+				require.True(t, ri.lease.Empty())
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "sync newer descriptor",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that updating the lease while the cache has a newer descriptor
+				// updates the token to the newer descriptor.
+
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:                  desc1,
+					Lease:                 roachpb.Lease{},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false /* useReverseScan */)
+				require.NoError(t, err)
+
+				// Update the cache.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:  desc2,
+					Lease: roachpb.Lease{},
+				})
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &staleRangeDescriptor,
+				)
+				require.True(t, updatedLeaseholder)
+				require.NotNil(t, tok)
+				require.Equal(t, &desc2, tok.Desc())
+				require.Equal(t, &rep2, tok.Leaseholder())
+				require.Equal(t, tok.lease.Replica, rep2)
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "sync freshest descriptor",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the descriptor with something fresher
+				// than what is on the token but stale in comparison to what's contained
+				// in the cache behaves correctly. Specifically, the (freshest)
+				// descriptor from the cache should be on the token.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:                  desc1,
+					Lease:                 roachpb.Lease{},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false /* useReverseScan */)
+				require.NoError(t, err)
+
+				l := roachpb.Lease{
+					Replica:  rep2,
+					Sequence: 3,
+				}
+				// Update the cache.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:                  desc3,
+					Lease:                 l,
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &desc2)
+				require.False(t, updatedLeaseholder)
+				require.NotNil(t, tok)
+				require.Equal(t, &desc3, tok.Desc())
+				require.Equal(t, &rep2, tok.Leaseholder())
+				require.Equal(t, tok.lease.Replica, rep2)
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "sync newer lease",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that updating the descriptor while the cache has a newer lease
+				// updates the token to the newer lease.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc: staleRangeDescriptor,
+					Lease: roachpb.Lease{
+						Replica:  rep3,
+						Sequence: 4,
+					},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc2,
+				)
+				require.False(t, updatedLeaseholder)
+				require.NotNil(t, tok)
+				require.Equal(t, &desc2, tok.Desc())
+				require.Equal(t, &rep3, tok.Leaseholder())
+				require.Equal(t, tok.lease.Replica, rep3)
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "sync stale info",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the descriptor and lease while the token
+				// has newer versions of both is a no-op.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc: desc2,
+					Lease: roachpb.Lease{
+						Replica:  rep3,
+						Sequence: 4,
+					},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc1,
+				)
+				require.False(t, updatedLeaseholder)
+				require.NotNil(t, tok)
+				require.Equal(t, &desc2, tok.Desc())
+				require.Equal(t, &rep3, tok.Leaseholder())
+				require.Equal(t, tok.lease.Replica, rep3)
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "incompatible descriptor/lease",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the descriptor and lease such that the
+				// freshest lease and descriptor aren't compatible works as expected. In
+				// particular, the lease should be emptied out.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc: desc2,
+					Lease: roachpb.Lease{
+						Replica:  rep3,
+						Sequence: 4,
+					},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc3,
+				)
+				require.False(t, updatedLeaseholder)
+				require.NotNil(t, tok)
+				require.Equal(t, &desc3, tok.Desc())
+				require.Nil(t, tok.Leaseholder())
+				require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
+			},
+		},
+		{
+			name: "incompatible but fresher descriptor",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the cache with an incompatible but newer
+				// descriptor results in the token being invalidated. Additionally, we
+				// expect the cache entry corresponding to the older descriptor to be
+				// evicted and there to be a cache entry for the newer (incompatible)
+				// descriptor.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc: desc2,
+					Lease: roachpb.Lease{
+						Replica:  rep3,
+						Sequence: 4,
+					},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				l := roachpb.Lease{
+					Replica:  rep1,
+					Sequence: 2,
+				}
+				incompatibleDescriptor.Generation = desc2.Generation + 1
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &incompatibleDescriptor)
+				require.False(t, updatedLeaseholder)
+				require.False(t, tok.Valid())
+
+				entries := cache.GetCachedOverlapping(
+					ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
+				)
+				require.Equal(t, 1, len(entries))
+				require.Equal(t, incompatibleDescriptor, entries[0].desc)
+				require.Equal(t, l, entries[0].lease)
+			},
+		},
+		{
+			name: "incompatible but stale descriptor",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the cache with an incompatible but older
+				// descriptor results in no update being performed.
+				l := roachpb.Lease{
+					Replica:  rep3,
+					Sequence: 2,
+				}
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc:                  desc2,
+					Lease:                 l,
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				incompatibleDescriptor.Generation = desc2.Generation - 1
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+					ctx, &roachpb.Lease{Replica: rep2, Sequence: 4}, &incompatibleDescriptor,
+				)
+				require.False(t, updatedLeaseholder)
+				require.True(t, tok.Valid())
+
+				entries := cache.GetCachedOverlapping(
+					ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
+				)
+				require.Equal(t, 1, len(entries))
+				require.Equal(t, desc2, entries[0].desc)
+				require.Equal(t, l, entries[0].lease)
+			},
+		},
+		{
+			name: "speculative lease coming from a replica with a non-stale view",
+			testFn: func(t *testing.T, cache *RangeCache) {
+				// Check that trying to update the cache with a speculative lease coming
+				// from a replica that has a non-stale view of the world is persisted.
+				cache.Insert(ctx, roachpb.RangeInfo{
+					Desc: desc2,
+					Lease: roachpb.Lease{
+						Replica:  rep3,
+						Sequence: 2,
+					},
+					ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+				})
+				tok, err := cache.LookupWithEvictionToken(
+					ctx, startKey, EvictionToken{}, false, /* useReverseScan */
+				)
+				require.NoError(t, err)
+
+				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(
+					ctx, rep2, &desc2,
+				)
+				require.True(t, updatedLeaseholder)
+				require.Equal(t, &desc2, tok.Desc())
+				require.Equal(t, &rep2, tok.Leaseholder())
+				require.Equal(t, roachpb.LeaseSequence(0), tok.Lease().Sequence)
+			},
+		},
 	}
-	oldTok := tok
-	ok := tok.UpdateLease(ctx, l, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.Equal(t, oldTok.Desc(), tok.Desc())
-	require.Equal(t, &l.Replica, tok.Leaseholder())
-	require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
-	ri := cache.GetCached(ctx, startKey, false /* inverted */)
-	require.NotNil(t, ri)
-	require.Equal(t, desc1, *ri.Desc())
-	require.Equal(t, rep1, ri.Lease().Replica)
-	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
 
-	oldTok = tok
-	tok.EvictLease(ctx)
-	require.Equal(t, oldTok.Desc(), tok.Desc())
-	require.Nil(t, tok.Leaseholder())
-	require.Equal(t, oldTok.ClosedTimestampPolicy(), tok.ClosedTimestampPolicy())
-	ri = cache.GetCached(ctx, startKey, false /* inverted */)
-	require.NotNil(t, ri)
-	require.Equal(t, desc1, *ri.Desc())
-	require.True(t, ri.lease.Empty())
-	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
-
-	// Check that trying to update the lease to a non-member replica results in
-	// the entry's eviction and the token's invalidation if the descriptor
-	// generation in the error is not older than the cached descriptor generation.
-	l = &roachpb.Lease{
-		Replica:  repNonMember,
-		Sequence: 2,
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cache.Clear()
+			tc.testFn(t, cache)
+		})
 	}
-	// Check that there's no eviction if the range desc generation in the error is
-	// stale.
-	ok = tok.UpdateLease(ctx, l, staleRangeGeneration)
-	require.False(t, ok)
-	require.True(t, tok.Valid())
-
-	// However, expect an eviction when the error's desc generation is non-stale.
-	ok = tok.UpdateLease(ctx, l, nonStaleRangeGeneration)
-	require.False(t, ok)
-	require.False(t, tok.Valid())
-	ri = cache.GetCached(ctx, startKey, false /* inverted */)
-	require.Nil(t, ri)
-
-	// Check that updating the lease while the cache has a newer descriptor
-	// updates the token to the newer descriptor.
-
-	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:                  desc1,
-		Lease:                 roachpb.Lease{},
-		ClosedTimestampPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
-	})
-	tok, err = cache.LookupWithEvictionToken(
-		ctx, desc1.StartKey, EvictionToken{}, false /* useReverseScan */)
-	require.NoError(t, err)
-
-	// Update the cache.
-	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc2,
-		Lease: roachpb.Lease{},
-	})
-	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.NotNil(t, tok)
-	require.Equal(t, &desc2, tok.Desc())
-	require.Equal(t, &rep2, tok.Leaseholder())
-	require.Equal(t, tok.lease.Replica, rep2)
-	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, tok.ClosedTimestampPolicy())
-
-	// Update the cache again.
-	cache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc3,
-		Lease: roachpb.Lease{},
-	})
-	// This time try to specify a lease that's not compatible with the desc. The
-	// entry should end up evicted from the cache.
-	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4}, 0 /* descGeneration */)
-	require.False(t, ok)
-	require.False(t, tok.Valid())
-	ri = cache.GetCached(ctx, startKey, false /* inverted */)
-	require.Nil(t, ri)
 }
 
-func TestRangeCacheEntryUpdateLease(t *testing.T) {
+func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 
 	rep1 := roachpb.ReplicaDescriptor{
 		NodeID:    1,
@@ -1715,10 +1948,23 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	repNonMember := roachpb.ReplicaDescriptor{
+	rep3 := roachpb.ReplicaDescriptor{
 		NodeID:    3,
 		StoreID:   3,
 		ReplicaID: 3,
+	}
+	repStaleMember := roachpb.ReplicaDescriptor{
+		NodeID:    4,
+		StoreID:   4,
+		ReplicaID: 4,
+	}
+	staleDesc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, repStaleMember,
+		},
+		Generation: 2,
 	}
 	desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1726,7 +1972,23 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: 0,
+		Generation: 3,
+	}
+	desc2 := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep2, rep3,
+		},
+		Generation: 4,
+	}
+	desc3 := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			rep1, rep3,
+		},
+		Generation: 5,
 	}
 
 	e := &CacheEntry{
@@ -1739,69 +2001,111 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	ok, e := e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
+	updated, updatedLease, e := e.maybeUpdate(ctx, l, &desc)
+	require.True(t, updated)
+	require.True(t, updatedLease)
 	require.True(t, l.Equal(e.Lease()))
+	require.True(t, desc.Equal(e.Desc()))
 
-	// Check that a lease with no sequence number overwrites any other lease.
+	// Check that another lease with no seq num overwrites any other lease when
+	// the associated range descriptor isn't stale.
 	l = &roachpb.Lease{
-		Replica:  rep1,
+		Replica:  rep2,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc)
+	require.True(t, updated)
+	require.True(t, updatedLease)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
+	require.True(t, desc.Equal(e.Desc()))
 	// Check that Seq=0 leases are not returned by Lease().
 	require.Nil(t, e.Lease())
 
-	// Check that another lease with no seq num overwrites a lease with no seq num.
+	// Check that another lease with no sequence number overwrites a lease with no
+	// sequence num as long as the associated range descriptor isn't stale.
+	l = &roachpb.Lease{
+		Replica:  rep1,
+		Sequence: 0,
+	}
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc)
+	require.True(t, updated)
+	require.True(t, updatedLease)
+	require.NotNil(t, e.Leaseholder())
+	require.True(t, l.Replica.Equal(*e.Leaseholder()))
+	require.True(t, desc.Equal(e.Desc()))
+	// Check that Seq=0 leases are not returned by Lease().
+	require.Nil(t, e.Lease())
+
+	oldL := l
+	l = &roachpb.Lease{
+		Replica:  repStaleMember,
+		Sequence: 0,
+	}
+	// Ensure that a speculative lease is not overwritten when accompanied by a
+	// stale range descriptor.
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &staleDesc)
+	require.False(t, updated)
+	require.False(t, updatedLease)
+	require.NotNil(t, e.Leaseholder())
+	require.True(t, oldL.Replica.Equal(*e.Leaseholder()))
+	require.True(t, desc.Equal(e.Desc()))
+	// The old lease is still speculative; ensure it isn't returned by Lease().
+	require.Nil(t, e.Lease())
+
+	// Ensure a speculative lease is not overwritten by a "real" lease if the
+	// accompanying range descriptor is stale.
+	l = &roachpb.Lease{
+		Replica:  rep1,
+		Sequence: 1,
+	}
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &staleDesc)
+	require.False(t, updated)
+	require.False(t, updatedLease)
+	require.NotNil(t, e.Leaseholder())
+	require.True(t, oldL.Replica.Equal(*e.Leaseholder()))
+	require.True(t, desc.Equal(e.Desc()))
+
+	// Empty out the lease and ensure that it is overwritten by a lease even if
+	// the accompanying range descriptor is stale.
+	e.lease = roachpb.Lease{}
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &staleDesc)
+	require.True(t, updated)
+	require.True(t, updatedLease)
+	require.NotNil(t, e.Leaseholder())
+	require.True(t, oldL.Replica.Equal(*e.Leaseholder()))
+	require.True(t, e.Lease().Equal(l))
+	// The range descriptor shouldn't be updated because the one supplied was
+	// stale.
+	require.True(t, desc.Equal(e.Desc()))
+
+	// Ensure that a newer lease overwrites an older lease.
 	l = &roachpb.Lease{
 		Replica:  rep2,
-		Sequence: 0,
-	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.NotNil(t, e.Leaseholder())
-	require.True(t, l.Replica.Equal(*e.Leaseholder()))
-
-	// Check that another lease with no seq num overwrites a lease with no seq num.
-	l = &roachpb.Lease{
-		Replica:  rep1,
-		Sequence: 0,
-	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.NotNil(t, e.Leaseholder())
-	require.True(t, l.Replica.Equal(*e.Leaseholder()))
-
-	// Set a lease
-	l = &roachpb.Lease{
-		Replica:  rep1,
 		Sequence: 2,
 	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc)
+	require.True(t, updated)
+	require.True(t, updatedLease)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Equal(*e.Lease()))
+	require.True(t, desc.Equal(e.Desc()))
 
 	// Check that updating to an older lease doesn't work.
 	l = &roachpb.Lease{
-		Replica:  rep2,
+		Replica:  rep1,
 		Sequence: 1,
 	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.False(t, ok)
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc)
+	require.False(t, updated)
+	require.False(t, updatedLease)
 	require.False(t, l.Equal(*e.Lease()))
 
-	// Check that updating to a lease at the same sequence as the existing one works.
-	l = &roachpb.Lease{
-		Replica:  rep2,
-		Sequence: 2,
-	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.True(t, l.Equal(e.Lease()))
+	// Check that updating to an older descriptor doesn't work.
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &staleDesc)
+	require.False(t, updated)
+	require.False(t, updatedLease)
+	require.True(t, desc.Equal(e.Desc()))
 
 	// Check that updating to the same lease returns false.
 	l = &roachpb.Lease{
@@ -1809,19 +2113,33 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Sequence: 2,
 	}
 	require.True(t, l.Equal(e.Lease()))
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.False(t, ok)
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc)
+	require.False(t, updated)
+	require.False(t, updatedLease)
 	require.True(t, l.Equal(e.Lease()))
+	require.True(t, desc.Equal(e.Desc()))
 
-	// Check that updating the lease to a non-member replica returns a nil
-	// entry.
+	// Check that updating just the descriptor to a newer descriptor returns the
+	// correct values for updated and updatedLease.
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc2)
+	require.True(t, updated)
+	require.False(t, updatedLease)
+	require.True(t, l.Equal(e.Lease()))
+	require.True(t, desc2.Equal(e.Desc()))
+
+	// Check that  updating the cache entry to a newer descriptor such that it
+	// makes the (freshest) lease incompatible clears out the lease on the
+	// returned cache entry.
 	l = &roachpb.Lease{
-		Replica:  repNonMember,
-		Sequence: 0,
+		Replica:  rep1,
+		Sequence: 1,
 	}
-	ok, e = e.updateLease(l, 0 /* descGeneration */)
-	require.True(t, ok)
-	require.Nil(t, e)
+	require.Equal(t, roachpb.LeaseSequence(2), e.Lease().Sequence)
+	updated, updatedLease, e = e.maybeUpdate(ctx, l, &desc3)
+	require.True(t, updated)
+	require.False(t, updatedLease)
+	require.Nil(t, e.Lease())
+	require.True(t, desc3.Equal(e.Desc()))
 }
 
 func TestRangeCacheEntryOverrides(t *testing.T) {
