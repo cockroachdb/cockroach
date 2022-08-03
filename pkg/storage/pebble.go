@@ -468,6 +468,27 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) UpdateKeySuffixes(
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
+var _ pebble.BlockPropertyFilterMask = (*mvccWallTimeIntervalRangeKeyMask)(nil)
+
+type mvccWallTimeIntervalRangeKeyMask struct {
+	sstable.BlockIntervalFilter
+}
+
+// SetSuffix implements the pebble.BlockPropertyFilterMask interface.
+func (m *mvccWallTimeIntervalRangeKeyMask) SetSuffix(suffix []byte) error {
+	if len(suffix) == 0 {
+		// This is currently impossible, because the only range key Cockroach
+		// writes today is the MVCC Delete Range that's always suffixed.
+		return nil
+	}
+	ts, err := DecodeMVCCTimestampSuffix(suffix)
+	if err != nil {
+		return err
+	}
+	m.BlockIntervalFilter.SetInterval(uint64(ts.WallTime), math.MaxUint64)
+	return nil
+}
+
 // PebbleBlockPropertyCollectors is the list of functions to construct
 // BlockPropertyCollectors.
 var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{

@@ -40,6 +40,8 @@ type pebbleIterator struct {
 	lowerBoundBuf      []byte
 	upperBoundBuf      []byte
 	rangeKeyMaskingBuf []byte
+	// Filter to use if masking is enabled.
+	maskFilter mvccWallTimeIntervalRangeKeyMask
 
 	// True if the iterator's underlying reader supports range keys.
 	//
@@ -223,6 +225,8 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
+		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64)
+		p.options.RangeKeyMasking.Filter = &p.maskFilter
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
