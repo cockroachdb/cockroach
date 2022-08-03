@@ -170,4 +170,4 @@ SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
     └── • scan
           table: ?@?
           spans: 32 spans
-          limit: 10200
+          limit
