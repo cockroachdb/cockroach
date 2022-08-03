@@ -12,7 +12,6 @@ package flowinfra
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // errNoInboundStreamConnection is the error propagated through the flow when
@@ -239,8 +239,20 @@ type flowRetryableError struct {
 	cause error
 }
 
-func (e *flowRetryableError) Error() string {
-	return fmt.Sprintf("flow retryable error: %+v", e.cause)
+var _ errors.Wrapper = &flowRetryableError{}
+
+func (e *flowRetryableError) Error() string { return e.cause.Error() }
+func (e *flowRetryableError) Cause() error  { return e.cause }
+func (e *flowRetryableError) Unwrap() error { return e.Cause() }
+
+func decodeFlowRetryableError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return &flowRetryableError{cause: cause}
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*flowRetryableError)(nil)), decodeFlowRetryableError)
 }
 
 // IsFlowRetryableError returns true if an error represents a retryable
