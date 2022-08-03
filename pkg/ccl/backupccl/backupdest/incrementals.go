@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
@@ -166,9 +165,8 @@ func ResolveIncrementalsBackupLocation(
 				"Please choose a location manually with the `incremental_location` parameter.")
 	}
 
-	// If the cluster isn't fully migrated, or we have backups in the old default
-	// location, continue to use the old location.
-	if len(prevOld) > 0 || !execCfg.Settings.Version.IsActive(ctx, clusterversion.IncrementalBackupSubdir) {
+	// If we have backups in the old default location, continue to use the old location.
+	if len(prevOld) > 0 {
 		return resolvedIncrementalsBackupLocationOld, nil
 	}
 
