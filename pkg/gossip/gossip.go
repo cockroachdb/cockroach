@@ -1071,6 +1071,43 @@ func (g *Gossip) GetInfoProto(key string, msg protoutil.Message) error {
 	return protoutil.Unmarshal(bytes, msg)
 }
 
+// TryClearInfo attempts to clear an info object from the cluster's gossip
+// network. It does so by retrieving the object with the corresponding key. If
+// one does not exist, there's nothing to do and the method returns false.
+// Otherwise, the method re-gossips the same key-value pair with a TTL that is
+// long enough to reasonably ensure full propagation to all nodes in the cluster
+// but short enough to expire quickly once propagated.
+//
+// The method is best-effort. It is possible for the info object with the low
+// TTL to fail to reach full propagation before reaching its TTL. For instance,
+// this is possible during a transient network partition. The effect of this is
+// that the existing gossip info object with a higher (or no) TTL would remain
+// in the gossip network on some nodes and may eventually propagate back out to
+// other nodes once the partition heals.
+func (g *Gossip) TryClearInfo(key string) (bool, error) {
+	// Long enough to propagate to all nodes, short enough to expire quickly.
+	const ttl = 1 * time.Minute
+	return g.tryClearInfoWithTTL(key, ttl)
+}
+
+func (g *Gossip) tryClearInfoWithTTL(key string, ttl time.Duration) (bool, error) {
+	val, err := g.GetInfo(key)
+	if err != nil {
+		if errors.HasType(err, KeyNotPresentError{}) {
+			// Info object not known on this node. We can't force a deletion
+			// preemptively, e.g. with a poison entry, because we do not have a valid
+			// value object to populate and consumers may make assumptions about the
+			// format of the value.
+			return false, nil
+		}
+		return false, err
+	}
+	if err := g.AddInfo(key, val, ttl); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // InfoOriginatedHere returns true iff the latest info for the provided key
 // originated on this node. This is useful for ensuring that the system config
 // is regossiped as soon as possible when its lease changes hands.
