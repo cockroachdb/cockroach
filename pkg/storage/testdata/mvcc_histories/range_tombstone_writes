@@ -373,9 +373,10 @@ meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*roachpb.WriteIntentError:) conflicting intents on "i"
 
-# Writing above an inline value should error.
+# Writing above an inline value should error. We disable passing covered MVCC
+# stats in metamorphic tests because it changes the error message.
 run error
-del_range_ts k=h end=i ts=3
+del_range_ts k=h end=i ts=3 noCoveredStats
 ----
 >> at end:
 rangekey: {k-p}/[4.000000000,0=/<empty>]
