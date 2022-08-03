@@ -2024,12 +2024,6 @@ func (ds *DistSender) sendToReplicas(
 		// part of routing.entry.Desc. The transport starts up initialized with
 		// routing's replica info, but routing can be updated as we go through the
 		// replicas, whereas transport isn't.
-		//
-		// TODO(andrei): The structure around here is no good; we're potentially
-		// updating routing with replicas that are not part of transport, and so
-		// those replicas will never be tried. Instead, we'll exhaust the transport
-		// and bubble up a SendError, which will cause a cache eviction and a new
-		// descriptor lookup potentially unnecessarily.
 		lastErr := err
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
@@ -2211,11 +2205,9 @@ func (ds *DistSender) sendToReplicas(
 
 					var updatedLeaseholder bool
 					if tErr.Lease != nil {
-						updatedLeaseholder = routing.UpdateLease(ctx, tErr.Lease, tErr.RangeDesc.Generation)
+						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
 					} else if tErr.LeaseHolder != nil {
-						// tErr.LeaseHolder might be set when tErr.Lease isn't.
-						routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder, tErr.RangeDesc.Generation)
-						updatedLeaseholder = true
+						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(ctx, *tErr.LeaseHolder, &tErr.RangeDesc)
 					}
 					// Move the new leaseholder to the head of the queue for the next
 					// retry. Note that the leaseholder might not be the one indicated by
@@ -2228,8 +2220,26 @@ func (ds *DistSender) sendToReplicas(
 						// (possibly because it hasn't applied its lease yet). Perhaps that
 						// lease expires and someone else gets a new one, so by moving on we
 						// get out of possibly infinite loops.
-						if !lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
-							transport.MoveToFront(*lh)
+						if lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
+							moved := transport.MoveToFront(*lh)
+							if !moved {
+								// The transport always includes the client's view of the
+								// leaseholder when it's constructed. If the leaseholder can't
+								// be found on the transport then it must be the case that the
+								// routing was updated with lease information that is not
+								// compatible with the range descriptor that was used to
+								// construct the transport. A client may have an arbitrarily
+								// stale view of the leaseholder, but it is never expected to
+								// regress. As such, advancing through each replica on the
+								// transport until it's exhausted is unlikely to achieve much.
+								//
+								// We bail early by returning a SendError. The expectation is
+								// for the client to retry with a fresher eviction token.
+								log.VEventf(
+									ctx, 2, "transport incompatible with updated routing; bailing early",
+								)
+								return nil, newSendError(fmt.Sprintf("leaseholder not found in transport; last error: %s", tErr.Error()))
+							}
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
