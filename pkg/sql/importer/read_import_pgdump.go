@@ -653,6 +653,7 @@ func readPostgresStmt(
 			Inverted:         stmt.Inverted,
 			PartitionByIndex: stmt.PartitionByIndex,
 			StorageParams:    stmt.StorageParams,
+			// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 		}
 		if stmt.Unique {
 			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
