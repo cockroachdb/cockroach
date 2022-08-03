@@ -10,6 +10,7 @@ package kvfeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"math"
 	"sort"
 	"testing"
@@ -125,7 +126,9 @@ func TestKVFeed(t *testing.T) {
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater, tc.endTime,
 			keys.SystemSQLCodec,
-			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
+			tf, sf, rangefeedFactory(ref.run), bufferFactory,
+			util.ConstantWithMetamorphicTestBool("use_mux", true),
+			TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
