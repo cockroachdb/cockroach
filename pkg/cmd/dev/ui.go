@@ -609,19 +609,19 @@ launching test in a real browser. Extra flags are passed directly to the
 			}
 
 			// Run Cypress tests, passing any extra args through to 'cypress'
-			startCrdbMovrSh := path.Join(uiDirs.e2eTests, "build/start-crdb-movr.sh")
+			startCrdbThenSh := path.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
 			runCypressArgv := append(
 				[]string{"bazel"},
 				buildBazelYarnArgv("--silent", "--cwd", uiDirs.e2eTests, yarnTarget)...,
 			)
 			runCypressArgv = append(runCypressArgv, cmd.Flags().Args()...)
 
-			logCommand(startCrdbMovrSh, runCypressArgv...)
+			logCommand(startCrdbThenSh, runCypressArgv...)
 			env := append(
 				os.Environ(),
 				fmt.Sprintf("COCKROACH=%s", path.Join(workspace, "cockroach")),
 			)
-			err = d.exec.CommandContextWithEnv(ctx, env, startCrdbMovrSh, runCypressArgv...)
+			err = d.exec.CommandContextWithEnv(ctx, env, startCrdbThenSh, runCypressArgv...)
 			if err != nil {
 				return fmt.Errorf("error while running Cypress tests: %w", err)
 			}

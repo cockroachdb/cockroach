@@ -5,13 +5,12 @@
   "license": "BSL",
   "private": true,
   "scripts": {
-    "test": "./build/start-crdb-movr.sh yarn cy:run",
-    "test:debug": "./build/start-crdb-movr.sh yarn cy:debug",
+    "test": "./build/start-crdb-then.sh yarn cy:run",
+    "test:debug": "./build/start-crdb-then.sh yarn cy:debug",
     "cy:run": "cypress run --e2e",
     "cy:debug": "cypress open --e2e --browser=chrome",
     "lint": "eslint './**/*.ts'",
-    "lint:fix": "eslint --fix './**/*.ts'",
-    "movr": "../../../../cockroach demo movr --multitenant=false"
+    "lint:fix": "eslint --fix './**/*.ts'"
   },
   "devDependencies": {
     "@cockroachlabs/eslint-config": "0.1.11",
