@@ -13,4 +13,4 @@ PREPARE q AS SELECT '$large_string'
 exec
 SELECT encode(crdb_internal.serialize_session(), 'hex')
 ----
-ERROR: crdb_internal.serialize_session(): serialized session size 5.0 KiB exceeds max allowed size 2.0 KiB (SQLSTATE 54000)
+ERROR: crdb_internal.serialize_session(): serialized session size 5.1 KiB exceeds max allowed size 2.0 KiB (SQLSTATE 54000)

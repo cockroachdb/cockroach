@@ -3010,6 +3010,10 @@ func (m *sessionDataMutator) SetInsertFastPath(val bool) {
 	m.data.InsertFastPath = val
 }
 
+func (m *sessionDataMutator) SetScanPlaceholderFastPath(val bool) {
+	m.data.ScanPlaceholderFastPath = val
+}
+
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.SerialNormalizationMode) {
 	m.data.SerialNormalizationMode = val
 }

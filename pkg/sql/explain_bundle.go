@@ -539,6 +539,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "default_transaction_quality_of_service"},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
+		{sessionSetting: "enable_scan_placeholder_fast_path"},
 	}
 
 	for _, s := range relevantSettings {
