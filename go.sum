@@ -475,8 +475,8 @@ github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZ
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2/go.mod h1:8BT+cPK6xvFOcRlk0R8eg+OTkcqI6baNH4xAkpiYVvQ=
-github.com/cockroachdb/stress v0.0.0-20220310203902-58fb4627376e h1:ylndajQnDQCI6dIPJZmJpQ5i3gt19tijiwXA7BD3KXs=
-github.com/cockroachdb/stress v0.0.0-20220310203902-58fb4627376e/go.mod h1:oapRqABg5KA/TaAikQH53fpP5nvCe9sftYmYV/F/yVE=
+github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b h1:JbkTu68NpiczWOaciC2QSy33RFEnnq6H2pz7viQp0rc=
+github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b/go.mod h1:oapRqABg5KA/TaAikQH53fpP5nvCe9sftYmYV/F/yVE=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847 h1:c7yLgqcm/3c9lYtpWeVD9NYqA9cKsKHdpQM62PHtTUM=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847/go.mod h1:zq6QwlOf5SlnkVbMSr5EoBv3636FWnp+qbPhuoO21uA=
 github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11 h1:UAqRo5xPCyTtZznAJ9iPVpDUFxGI0a6QWtQ8E+zwJRg=
