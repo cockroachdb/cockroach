@@ -52,12 +52,10 @@ COPY t2 FROM STDIN
 ----
 1
 
-query I rowsort
-SELECT * FROM t
+query IT rowsort
+SELECT i,dec FROM t2
 ----
-1
-1
-2
+1  12.123
 
 copy-error
 COPY t2 FROM STDIN
@@ -173,6 +171,7 @@ COPY t4 FROM STDIN
 1
 ----
 duplicate key value violates unique constraint "t4_i_key"
+
 subtest defaults
 # Default column values tests
 
