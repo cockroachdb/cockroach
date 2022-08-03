@@ -15,13 +15,14 @@ services:
     environment:
       COCKROACH_USER: cypress
       COCKROACH_PASSWORD: tests
+      COCKROACH_DATABASE: movr
     volumes:
       - shared:/shared:rw
 
   cypress:
     image: cypress/browsers:node16.14.2-slim-chrome100-ff99-edge
     working_dir: /e2e
-    command: /bin/sh -c 'yarn install --force && yarn cy:run'
+    command: /bin/sh -c 'mkdir -p /scratch; cp -T --no-preserve=owner -r /e2e/ /scratch; cd /scratch; rm -rf node_modules/ && yarn install --force && yarn cy:run'
     environment:
       IS_DOCKER: "1"
     depends_on:

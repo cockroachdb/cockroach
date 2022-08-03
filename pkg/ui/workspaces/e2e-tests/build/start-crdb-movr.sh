@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -ueo pipefail
+
+# Compute the absolute path to the root of the cockroach repo.
+root=$(dirname $(dirname $(dirname $(dirname $(dirname $(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd ))))))
+# Set up a working directory to ensure the original working directory isn't littered.
+WORKDIR=$(mktemp -d)
+# Stash the original working directory to return to later
+ORIGINAL_PWD=$PWD
 
 print_usage() {
   cat<< EOF
 USAGE: $0 COMMAND [ARGS...]
 
 Starts a CockroachDB 'movr' demo, executing COMMAND with ARGS when the database
-serves HTTP traffic on port 8080. The path to a file containing the connection
-URL (from which a username and password can be extracted with standard URL
-parsing) is provided to COMMAND via the \$CONN_URL_FILE environment variable.
+serves HTTP traffic on port 8080.
 
 When COMMAND exits, the database is stopped.
 
@@ -16,8 +21,8 @@ EXAMPLES:
     $0 'curl http://localhost:8080'
         Load index.html once the database has started.
 
-    $0 'cat \$CONN_URL_FILE'
-        Print the connection string once the database has started.
+    $0 'yarn cy:run'
+        Run Cypress tests once the database has started.
 EOF
 }
 
@@ -30,6 +35,10 @@ cleanup() {
   # exit with non-zero. CRDB will exit non-zero (and 'wait' will too), but with
   # 'set -e' this entire script would normally exit *immediately*.
   set +e; wait %1; set -e
+
+  # Clean up the working directory.
+  cd $ORIGINAL_PWD
+  rm -rf $WORKDIR
 
   # Forward the exit code from COMMAND to the calling shell.
   exit $EXIT_CODE;
@@ -59,29 +68,40 @@ EOF
   exit 2
 fi
 
-# Accept an arbitrary Cockroach binary via the $COCKROACH environment variable
-CRDB=${COCKROACH:-../../../../cockroach}
+# Use an arbitrary Cockroach binary via the $COCKROACH_ENTRYPOINT environment
+# variable
+COCKROACH=${COCKROACH:-$root/cockroach}
 
-# Start a 'movr' demo cluster, writing the connection URL to a file.
-export CONN_URL_FILE=$(mktemp)
-$CRDB demo movr \
-  --nodes=1 \
-  --multitenant=false \
-  --http-port=8080 \
-  --listening-url-file=$CONN_URL_FILE \
-  --execute 'select pg_sleep(1000000)' &
+# Run cockroach from within the temporary directory, so extra files don't
+# clutter the original PWD.
+pushd $WORKDIR
+
+# Start a single-node cluster using the cockroach.sh script, which automatically
+# creates a user and database from provided environment variables.
+# Use standard shell backgrounding (*not* the cockroach --background flag) so
+# that this cluster can be shut down when $COMMAND exits.
+COCKROACH=$COCKROACH \
+COCKROACH_USER=cypress \
+COCKROACH_PASSWORD=tests \
+COCKROACH_DATABASE=movr \
+$root/build/deploy/cockroach.sh \
+  start-single-node \
+  --http-port=8080 & &> /dev/null
 
 # Close that cluster whenever this script exits.
 trap 'cleanup' EXIT
 
 # Wait for the connection URL file to exist and for the database's HTTP server
 # to be available.
-until [ -s $CONN_URL_FILE ] && curl --fail --silent --head http://localhost:8080 > /dev/null; do
+until [ -r ./init_success ] && curl --fail --silent --head http://localhost:8080 > /dev/null; do
   sleep 0.25
 done
 
+# Return to the original PWD before executing $COMMAND
+popd
+
 # Use eval() to execute the provided command so that environment variables are
-# expanded properly (e.g. `$0 'cat $CONN_URL_FILE'`, where $CONN_URL_FILE must
+# expanded properly (e.g. `$0 'cat $SHLVL'`, where $SHLVL must
 # be evaluated after this file is executed, not before).
 eval $@
 
