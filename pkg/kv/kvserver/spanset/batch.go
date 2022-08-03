@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -188,22 +187,6 @@ func (i *MVCCIterator) RangeBounds() roachpb.Span {
 // RangeKeys implements SimpleMVCCIterator.
 func (i *MVCCIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return i.i.RangeKeys()
-}
-
-// ComputeStats is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) ComputeStats(
-	start, end roachpb.Key, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	}
-	return i.i.ComputeStats(start, end, nowNanos)
 }
 
 // FindSplitKey is part of the storage.MVCCIterator interface.

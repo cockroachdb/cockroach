@@ -700,25 +700,11 @@ func (*Replica) sha512(
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
 	if !statsOnly {
-		// Do not want the lock table ranges since the iter has been constructed
-		// using MVCCKeyAndIntentsIterKind.
-		//
-		// TODO(sumeer): When we have replicated locks other than exclusive locks,
-		// we will probably not have any interleaved intents so we could stop
-		// using MVCCKeyAndIntentsIterKind and consider all locks here.
-		for _, span := range rditer.MakeReplicatedKeySpansExceptLockTable(&desc) {
-			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: span.Key,
-				UpperBound: span.EndKey,
-			})
-			spanMS, err := storage.ComputeStatsForRangeWithVisitors(
-				iter, span.Key, span.EndKey, 0 /* nowNanos */, pointKeyVisitor, rangeKeyVisitor)
-			iter.Close()
-			if err != nil {
-				return nil, err
-			}
-			ms.Add(spanMS)
+		var err error
+		ms, err = rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0, /* nowNanos */
+			pointKeyVisitor, rangeKeyVisitor)
+		if err != nil {
+			return nil, err
 		}
 	}
 

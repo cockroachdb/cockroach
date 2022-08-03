@@ -58,15 +58,9 @@ func assertEqImpl(
 		keyMin = keys.LocalMax
 		keyMax = roachpb.KeyMax
 	}
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: keyMin,
-		UpperBound: keyMax,
-	})
-	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
-		compMS, err := mvccStatsTest.fn(it, keyMin, keyMax, ms.LastUpdateNanos)
+		compMS, err := mvccStatsTest.fn(rw, keyMin, keyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1512,18 +1506,25 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 var mvccStatsTests = []struct {
 	name string
-	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
+	fn   func(Reader, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
 }{
 	{
 		name: "ComputeStats",
-		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return iter.ComputeStats(start, end, nowNanos)
+		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+			return ComputeStats(r, start, end, nowNanos)
 		},
 	},
 	{
-		name: "ComputeStatsForRange",
-		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStatsForRange(iter, start, end, nowNanos)
+		name: "ComputeStatsForIter",
+		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+			iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: start,
+				UpperBound: end,
+			})
+			defer iter.Close()
+			iter.SeekGE(MVCCKey{Key: start})
+			return ComputeStatsForIter(iter, nowNanos)
 		},
 	},
 }
@@ -1792,30 +1793,21 @@ func TestMVCCStatsRandomized(t *testing.T) {
 func TestMVCCComputeStatsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
 
-			// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
-			// protobuf.
-			if err := engine.PutUnversioned(roachpb.Key("garbage"), []byte("garbage")); err != nil {
-				t.Fatal(err)
-			}
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-				KeyTypes:   IterKeyTypePointsAndRanges,
-				LowerBound: roachpb.LocalMax,
-				UpperBound: roachpb.KeyMax,
-			})
-			defer iter.Close()
-			for _, mvccStatsTest := range mvccStatsTests {
-				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					_, err := mvccStatsTest.fn(iter, keys.LocalMax, roachpb.KeyMax, 100)
-					if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
-						t.Fatalf("expected %s, got %v", e, err)
-					}
-				})
+	// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
+	// protobuf.
+	if err := engine.PutUnversioned(roachpb.Key("garbage"), []byte("garbage")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mvccStatsTest := range mvccStatsTests {
+		t.Run(mvccStatsTest.name, func(t *testing.T) {
+			_, err := mvccStatsTest.fn(engine, keys.LocalMax, roachpb.KeyMax, 100)
+			if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
+				t.Fatalf("expected %s, got %v", e, err)
 			}
 		})
 	}
