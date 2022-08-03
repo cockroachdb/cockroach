@@ -75,9 +75,7 @@ message CertificateDetails {
   CertificateType type = 1;
   // "error_message" and "data" are mutually exclusive.
   string error_message = 2;
-  // data is the raw file contents of the certificate. This means PEM-encoded
-  // DER data.
-  bytes data = 3;
+  reserved 3;
   repeated Fields fields = 4 [ (gogoproto.nullable) = false ];
 }
 
