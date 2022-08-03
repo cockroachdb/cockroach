@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 function load_cockroach_docker_image() {
+  set -x
+  which docker && docker --version
+  which docker-compose && docker-compose --version
+  set +x
   docker load --input upstream_artifacts/cockroach-docker-image.tar.gz &> artifacts/docker-load.log || (cat artifacts/docker-load.log && false)
   rm artifacts/docker-load.log
 }
