@@ -223,6 +223,12 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
+		// TODO(jackson): Add a BlockIntervalFilter.Init method and add a
+		// BlockIntervalFilter to pebbleIterator to avoid the
+		// NewBlockIntervalFilter allocation.
+		p.options.RangeKeyMasking.Filter = mvccWallTimeIntervalRangeKeyMask{
+			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector, 0, math.MaxUint64),
+		}
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
