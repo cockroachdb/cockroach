@@ -5153,6 +5153,83 @@ func MVCCGarbageCollectRangeKeys(
 	return nil
 }
 
+// MVCCGarbageCollectWholeRange removes all the range data and resets counters.
+// It only does so if data is completely covered by range keys
+func MVCCGarbageCollectWholeRange(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	start, end roachpb.Key,
+	gcThreshold hlc.Timestamp,
+	rangeStats enginepb.MVCCStats,
+) error {
+	if rangeStats.ContainsEstimates == 0 && rangeStats.LiveCount > 0 {
+		return errors.Errorf("range contains live data, can't use GC clear range")
+	}
+	if err := CanGCEntireRange(ctx, rw, start, end, gcThreshold); err != nil {
+		return err
+	}
+	if err := rw.ClearRawRange(start, end, true, true); err != nil {
+		return err
+	}
+	if ms != nil {
+		// Reset point and range counters as we deleted the whole range.
+		rangeStats.AgeTo(ms.LastUpdateNanos)
+		ms.LiveCount -= rangeStats.LiveCount
+		ms.LiveBytes -= rangeStats.LiveBytes
+		ms.KeyCount -= rangeStats.KeyCount
+		ms.KeyBytes -= rangeStats.KeyBytes
+		ms.ValCount -= rangeStats.ValCount
+		ms.ValBytes -= rangeStats.ValBytes
+		ms.RangeKeyCount -= rangeStats.RangeKeyCount
+		ms.RangeKeyBytes -= rangeStats.RangeKeyBytes
+		ms.RangeValCount -= rangeStats.RangeValCount
+		ms.RangeValBytes -= rangeStats.RangeValBytes
+		ms.GCBytesAge -= rangeStats.GCBytesAge
+	}
+	return nil
+}
+
+// CanGCEntireRange checks if a span of keys doesn't contain any live data
+// and all data is covered by range tombstones at or below provided threshold.
+// This functions is meant for fast path deletion by GC where range can be
+// removed by a range tombstone.
+func CanGCEntireRange(
+	ctx context.Context, rw Reader, start, end roachpb.Key, gcThreshold hlc.Timestamp,
+) error {
+	// It makes no sense to check local ranges for fast path.
+	if isLocal(start) || isLocal(end) {
+		return errors.Errorf("range emptiness check can only be done on global ranges")
+	}
+	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		LowerBound:           start,
+		UpperBound:           end,
+		RangeKeyMaskingBelow: gcThreshold,
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: start})
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			return errors.Errorf("found key not covered by range tombstone %s", iter.UnsafeKey())
+		}
+		if hasRange {
+			newest := iter.RangeKeys().Newest()
+			if gcThreshold.Less(newest) {
+				return errors.Errorf("range tombstones above gc threshold. GC=%s, range=%s",
+					gcThreshold.String(), newest.String())
+			}
+		}
+	}
+	return nil
+}
+
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.
