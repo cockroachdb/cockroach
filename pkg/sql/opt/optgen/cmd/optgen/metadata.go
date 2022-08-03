@@ -222,6 +222,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Statement":           {fullName: "tree.Statement", isInterface: true},
 		"Subquery":            {fullName: "tree.Subquery", isPointer: true, usePointerIntern: true},
 		"CreateTable":         {fullName: "tree.CreateTable", isPointer: true, usePointerIntern: true},
+		"CreateFunction":      {fullName: "tree.CreateFunction", isPointer: true, usePointerIntern: true},
 		"CreateStats":         {fullName: "tree.CreateStats", isPointer: true, usePointerIntern: true},
 		"TableName":           {fullName: "tree.TableName", isPointer: true, usePointerIntern: true},
 		"Constraint":          {fullName: "constraint.Constraint", isPointer: true, usePointerIntern: true},
@@ -249,14 +250,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"InvertedSpans":       {fullName: "inverted.Spans", passByVal: true},
 		"Persistence":         {fullName: "tree.Persistence", passByVal: true},
 		"PreFiltererState":    {fullName: "invertedexpr.PreFiltererStateForInvertedFilterer", isPointer: true, usePointerIntern: true},
-		"FunctionName":        {fullName: "tree.FunctionName", isPointer: true, usePointerIntern: true},
-		"FuncArgs":            {fullName: "tree.FuncArgs", passByVal: true},
-		// TODO (Chengxiong): break function options into separate field with
-		// primitive types, so that we don't need to these type mappings.
-		"FuncReturnType":  {fullName: "tree.FuncReturnType", passByVal: true},
-		"FunctionOptions": {fullName: "tree.FunctionOptions", passByVal: true},
-		"FunctionBodyStr": {fullName: "tree.FunctionBodyStr", passByVal: true},
-		"Volatility":      {fullName: "volatility.V", passByVal: true},
+		"Volatility":          {fullName: "volatility.V", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

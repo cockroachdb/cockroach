@@ -112,6 +112,8 @@ var statusNodesColumnHeadersForStats = []string{
 	"live_bytes",
 	"key_bytes",
 	"value_bytes",
+	"range_key_bytes",
+	"range_value_bytes",
 	"intent_bytes",
 	"system_bytes",
 }
@@ -196,6 +198,8 @@ SELECT node_id AS id,
        sum((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
        sum((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
        sum((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
+       sum(coalesce((metrics->>'rangekeybytes')::DECIMAL, 0))::INT AS range_key_bytes,
+       sum(coalesce((metrics->>'rangevalbytes')::DECIMAL, 0))::INT AS range_value_bytes,
        sum((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
        sum((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
 FROM crdb_internal.kv_store_status

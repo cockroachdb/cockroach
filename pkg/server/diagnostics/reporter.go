@@ -306,7 +306,8 @@ func (r *Reporter) populateNodeInfo(
 		info.Node.KeyCount += info.Stores[i].KeyCount
 		info.Stores[i].RangeCount = int64(r.Metrics["replicas"])
 		info.Node.RangeCount += info.Stores[i].RangeCount
-		bytes := int64(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
+		bytes := int64(r.Metrics["sysbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"] +
+			r.Metrics["rangevalbytes"] + r.Metrics["rangekeybytes"])
 		info.Stores[i].Bytes = bytes
 		info.Node.Bytes += bytes
 		info.Stores[i].EncryptionAlgorithm = int64(r.Metrics["rocksdb.encryption.algorithm"])
