@@ -528,6 +528,33 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		return err
 	}
 
+	if s.spec.DeleteOtherStats {
+		columnsUsed := make([][]descpb.ColumnID, len(s.sketches))
+		for i, si := range s.sketches {
+			columnIDs := make([]descpb.ColumnID, len(si.spec.Columns))
+			for j, c := range si.spec.Columns {
+				columnIDs[j] = s.sampledCols[c]
+			}
+			columnsUsed[i] = columnIDs
+		}
+		keepTime := stats.TableStatisticsRetentionPeriod.Get(&s.FlowCtx.Cfg.Settings.SV)
+		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Delete old stats from columns that were not collected. This is
+			// important to prevent single-column stats from deleted columns or
+			// multi-column stats from deleted indexes from persisting indefinitely.
+			return stats.DeleteOldStatsForOtherColumns(
+				ctx,
+				s.FlowCtx.Cfg.Executor,
+				txn,
+				s.tableID,
+				columnsUsed,
+				keepTime,
+			)
+		}); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

@@ -170,4 +170,7 @@ message SampleAggregatorSpec {
   // CREATE STATISTICS. Used for progress reporting. If rows expected is 0,
   // reported progress is 0 until the very end.
   optional uint64 rows_expected = 7 [(gogoproto.nullable) = false];
+
+  // If true, delete old stats for columns not included in this message.
+  optional bool delete_other_stats = 10 [(gogoproto.nullable) = false];
 }
