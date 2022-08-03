@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function load_cockroach_docker_image() {
-  docker load /upstream_artifacts/cockroach-docker-image.tar.gz &> artifacts/docker-load.log || (cat artifacts/docker-load.log && false)
+  docker load --input /upstream_artifacts/cockroach-docker-image.tar.gz &> artifacts/docker-load.log || (cat artifacts/docker-load.log && false)
   rm artifacts/docker-load.log
 }
 
