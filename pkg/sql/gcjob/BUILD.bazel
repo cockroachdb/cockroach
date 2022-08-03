@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/timeutil",
@@ -51,6 +52,7 @@ go_test(
         "gc_job_test.go",
         "gc_protected_timestamp_test.go",
         "main_test.go",
+        "table_garbage_collection_test.go",
     ],
     embed = [":gcjob"],
     deps = [
@@ -59,6 +61,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
