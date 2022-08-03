@@ -186,10 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// EnableNewChangefeedOptions enables the usage of new changefeed options
-	// such as end_time, initial_scan_only, and setting the value of initial_scan
-	// to 'yes|no|only'
-	EnableNewChangefeedOptions
 	// SpanCountTable adds system.span_count to track the number of committed
 	// tenant spans.
 	SpanCountTable
@@ -323,10 +319,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     EnableNewChangefeedOptions,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 	{
 		Key:     SpanCountTable,
