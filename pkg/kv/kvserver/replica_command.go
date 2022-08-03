@@ -3237,7 +3237,6 @@ func (r *Replica) relocateOne(
 		shouldAdd = true
 	}
 
-	lhRemovalAllowed := false
 	var transferTarget *roachpb.ReplicationTarget
 	if len(args.targetsToRemove()) > 0 {
 		// Pick a replica to remove. Note that existingVoters/existingNonVoters may
