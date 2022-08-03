@@ -29,6 +29,7 @@ go_test(
     srcs = [
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
+        "empty_query_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",
@@ -109,6 +110,7 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
