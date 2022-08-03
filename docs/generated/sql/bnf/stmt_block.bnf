@@ -1030,6 +1030,7 @@ unreserved_keyword ::=
 	| 'DEFERRED'
 	| 'DEFINER'
 	| 'DELIMITER'
+	| 'DEPENDS'
 	| 'DESTINATION'
 	| 'DETACHED'
 	| 'DISCARD'
@@ -1563,6 +1564,10 @@ alter_backup_stmt ::=
 
 alter_func_stmt ::=
 	alter_func_options_stmt
+	| alter_func_rename_stmt
+	| alter_func_owner_stmt
+	| alter_func_set_schema_stmt
+	| alter_func_dep_extension_stmt
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -2145,6 +2150,18 @@ alter_backup_cmds ::=
 alter_func_options_stmt ::=
 	'ALTER' 'FUNCTION' function_with_argtypes alter_func_opt_list opt_restrict
 
+alter_func_rename_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'RENAME' 'TO' name
+
+alter_func_owner_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'OWNER' 'TO' role_spec
+
+alter_func_set_schema_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'SET' 'SCHEMA' schema_name
+
+alter_func_dep_extension_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2720,6 +2737,10 @@ alter_func_opt_list ::=
 
 opt_restrict ::=
 	'RESTRICT'
+	| 
+
+opt_no ::=
+	'NO'
 	| 
 
 role_option ::=
@@ -3345,6 +3366,7 @@ bare_label_keywords ::=
 	| 'CALLED'
 	| 'COST'
 	| 'DEFINER'
+	| 'DEPENDS'
 	| 'EXTERNAL'
 	| 'IMMUTABLE'
 	| 'INPUT'
