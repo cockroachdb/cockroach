@@ -11,9 +11,9 @@ tc_prepare
 
 tc_start_block "Load cockroachdb/cockroach-ci image"
 load_cockroach_docker_image
-build_docker_image
 tc_end_block "Load cockroachdb/cockroach-ci image"
 
 tc_start_block "Run Cypress health checks"
+cd $root/pkg/ui/workspaces/e2e-tests
 run_tests health
 tc_end_block "Run Cypress health checks"

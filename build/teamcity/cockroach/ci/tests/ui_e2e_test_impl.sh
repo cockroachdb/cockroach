@@ -10,11 +10,5 @@ function run_tests() {
     SPEC_ARG="--spec 'cypress/e2e/health-check/**'"
   fi
 
-  run docker run \
-    --rm \
-    -v $PWD/upstream_artifacts:/upstream_artifacts \
-    -v $PWD/artifacts:/artifacts \
-    cockroachdb/cockroach-cypress \
-    --reporter teamcity \
-    $SPEC_ARG
+  run docker compose run cypress -- $SPEC_ARG
 }
