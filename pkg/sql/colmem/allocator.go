@@ -157,7 +157,7 @@ func (a *Allocator) ResetBatch(batch coldata.Batch) {
 	a.ReleaseMemory(batch.ResetInternalBatch())
 }
 
-// ResetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
+// resetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
 // state (meaning it is ready to be used) and to have the capacity of at least
 // 1. minDesiredCapacity is a hint about the capacity of the returned batch
 // (subject to the memory limit).
@@ -180,8 +180,7 @@ func (a *Allocator) ResetBatch(batch coldata.Batch) {
 // old batch.
 // Note: the method assumes that minDesiredCapacity is at least 0 and will clamp
 // minDesiredCapacity to be between 1 and coldata.BatchSize() inclusive.
-// TODO(yuzefovich): unexport this method.
-func (a *Allocator) ResetMaybeReallocate(
+func (a *Allocator) resetMaybeReallocate(
 	typs []*types.T,
 	oldBatch coldata.Batch,
 	minDesiredCapacity int,
@@ -234,7 +233,7 @@ func (a *Allocator) ResetMaybeReallocate(
 	return newBatch, reallocated, oldBatchReachedMemSize
 }
 
-// ResetMaybeReallocateNoMemLimit is the same as ResetMaybeReallocate when
+// ResetMaybeReallocateNoMemLimit is the same as resetMaybeReallocate when
 // MaxInt64 is used as the maxBatchMemSize argument and the desired capacity is
 // sufficient. This should be used by the callers that know exactly the capacity
 // they need and have no control over that number. It is guaranteed that the
@@ -243,7 +242,7 @@ func (a *Allocator) ResetMaybeReallocate(
 func (a *Allocator) ResetMaybeReallocateNoMemLimit(
 	typs []*types.T, oldBatch coldata.Batch, requiredCapacity int,
 ) (newBatch coldata.Batch, reallocated bool) {
-	newBatch, reallocated, _ = a.ResetMaybeReallocate(typs, oldBatch, requiredCapacity, math.MaxInt64, true /* desiredCapacitySufficient */)
+	newBatch, reallocated, _ = a.resetMaybeReallocate(typs, oldBatch, requiredCapacity, math.MaxInt64, true /* desiredCapacitySufficient */)
 	return newBatch, reallocated
 }
 
@@ -544,7 +543,7 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 //   factor of two, then that batch is discarded, and the capacity will never
 //   exceed half of the capacity of the discarded batch;
 // - if the memory limit is not reached, then the behavior of the dynamic growth
-//   of the capacity provided by Allocator.ResetMaybeReallocate is still
+//   of the capacity provided by Allocator.resetMaybeReallocate is still
 //   applicable (i.e. the capacities will grow exponentially until
 //   coldata.BatchSize()).
 //
@@ -631,7 +630,7 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 	}
 	// By default, assume that the number of tuples to be set is sufficient and
 	// ask for it. If that number is unknown, we'll rely on the
-	// Allocator.ResetMaybeReallocate method to provide the dynamically-growing
+	// Allocator.resetMaybeReallocate method to provide the dynamically-growing
 	// batches.
 	minDesiredCapacity := tuplesToBeSet
 	desiredCapacitySufficient := tuplesToBeSet > 0
@@ -645,13 +644,13 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 		desiredCapacitySufficient = true
 	}
 	var oldBatchReachedMemSize bool
-	newBatch, reallocated, oldBatchReachedMemSize = h.allocator.ResetMaybeReallocate(
+	newBatch, reallocated, oldBatchReachedMemSize = h.allocator.resetMaybeReallocate(
 		typs, oldBatch, minDesiredCapacity, h.memoryLimit, desiredCapacitySufficient,
 	)
 	if oldBatchReachedMemSize && h.maxCapacity == 0 {
 		// The old batch has just reached the memory size for the first time, so
 		// we memorize the maximum capacity. Note that this is not strictly
-		// necessary to do (since Allocator.ResetMaybeReallocate would never
+		// necessary to do (since Allocator.resetMaybeReallocate would never
 		// allocate a new batch from now on), but it makes things more clear and
 		// allows us to avoid computing the memory size of the batch on each
 		// call.
@@ -753,7 +752,7 @@ func (h *SetAccountingHelper) ResetMaybeReallocate(
 	newBatch, reallocated = h.helper.ResetMaybeReallocate(typs, oldBatch, tuplesToBeSet)
 	h.curCapacity = newBatch.Capacity()
 	if reallocated && !h.allFixedLength {
-		// Allocator.ResetMaybeReallocate has released the precise memory
+		// Allocator.resetMaybeReallocate has released the precise memory
 		// footprint of the old batch and has accounted for the estimated
 		// footprint of the new batch. This means that we need to update our
 		// internal memory tracking state to those estimates.
