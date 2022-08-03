@@ -183,9 +183,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore // TODO(celia) - GetConfReader
-	// AddRaftAppliedIndexTermMigration is a migration that causes each range
-	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
-	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -306,10 +303,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     AddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
 	},
 	{
 		Key:     V22_1,

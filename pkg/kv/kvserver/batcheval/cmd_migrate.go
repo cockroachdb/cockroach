@@ -56,7 +56,7 @@ type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Re
 func init() {
 	_ = registerMigration // prevent unused warning.
 	registerMigration(
-		clusterversion.AddRaftAppliedIndexTermMigration, addRaftAppliedIndexTermMigration)
+		clusterversion.TODOPreV22_1, addRaftAppliedIndexTermMigration)
 }
 
 func registerMigration(key clusterversion.Key, migration migration) {
