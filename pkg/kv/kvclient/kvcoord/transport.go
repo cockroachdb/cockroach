@@ -81,9 +81,10 @@ type Transport interface {
 
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
-	// already been tried, it will be retried. If the specified replica
-	// can't be found, this is a noop.
-	MoveToFront(roachpb.ReplicaDescriptor)
+	// already been tried, it will be retried. Returns false if the specified
+	// replica can't be found and thus can't be moved to the front of the
+	// transport.
+	MoveToFront(roachpb.ReplicaDescriptor) bool
 
 	// Release releases any resources held by this Transport.
 	Release()
@@ -254,7 +255,7 @@ func (gt *grpcTransport) SkipReplica() {
 	gt.nextReplicaIdx++
 }
 
-func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 	for i := range gt.replicas {
 		if gt.replicas[i].IsSame(replica) {
 			// If we've already processed the replica, decrement the current
@@ -264,9 +265,10 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 			}
 			// Swap the client representing this replica to the front.
 			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // splitHealthy splits the grpcTransport's replica slice into healthy replica
@@ -377,7 +379,8 @@ func (s *senderTransport) SkipReplica() {
 	s.called = true
 }
 
-func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
+	return true
 }
 
 func (s *senderTransport) Release() {}
