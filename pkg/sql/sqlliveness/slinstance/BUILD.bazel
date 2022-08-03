@@ -9,6 +9,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
+        "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",
@@ -16,6 +17,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -36,6 +38,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
