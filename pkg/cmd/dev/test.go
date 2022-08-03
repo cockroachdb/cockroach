@@ -216,6 +216,22 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		testTargets = append(testTargets, target)
 	}
 
+	// Stressing is specifically for go tests. Take a second here to filter
+	// only the go_test targets so we don't end up stressing e.g. a
+	// disallowed_imports_test.
+	if stress {
+		query := fmt.Sprintf("kind('go_test', %s)", strings.Join(testTargets, " + "))
+		goTestLines, err := d.exec.CommandContextSilent(ctx, "bazel", "query", "--output=label", query)
+		if err != nil {
+			return err
+		}
+		testTargets = strings.Split(strings.TrimSpace(string(goTestLines)), "\n")
+		if len(testTargets) == 0 {
+			log.Printf("WARNING: no tests found")
+			return nil
+		}
+	}
+
 	args = append(args, testTargets...)
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
