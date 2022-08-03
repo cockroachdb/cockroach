@@ -173,16 +173,6 @@ const (
 	PebbleFormatBlockPropertyCollector // TODO(celia) - pkg/storage
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors // TODO(celia) - WIP
-	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
-	// reconciliation process at least once.
-	EnsureSpanConfigReconciliation // TODO(celia) - GetConfReader
-	// EnsureSpanConfigSubscription ensures that all KV nodes are subscribed to
-	// the global span configuration state, observing the entries installed as
-	// in EnsureSpanConfigReconciliation.
-	EnsureSpanConfigSubscription // TODO(celia) - GetConfReader
-	// EnableSpanConfigStore enables the use of the span configs infrastructure
-	// in KV.
-	EnableSpanConfigStore // TODO(celia) - GetConfReader
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -291,18 +281,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
-	},
-	{
-		Key:     EnsureSpanConfigReconciliation,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
-	},
-	{
-		Key:     EnsureSpanConfigSubscription,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
-	},
-	{
-		Key:     EnableSpanConfigStore,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
 	},
 	{
 		Key:     V22_1,
