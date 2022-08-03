@@ -18,7 +18,6 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",

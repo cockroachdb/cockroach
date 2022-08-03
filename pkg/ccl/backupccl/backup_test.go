@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -67,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -10148,67 +10146,6 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 	numLatest, thirdLatest := findNumLatestFiles()
 	require.Equal(t, numLatest, 3)
 	require.NotEqual(t, firstLatest, thirdLatest)
-}
-
-// TestBackupLatestInBaseDirectory tests to see that a LATEST
-// file in the base directory can be properly read when one is not found
-// in metadata/latest. This can occur when an older version node creates
-// the backup.
-func TestBackupLatestInBaseDirectory(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	disableUpgradeCh := make(chan struct{})
-	const numAccounts = 1
-	const userfile = "'userfile:///a'"
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint - 1),
-					DisableAutomaticVersionUpgrade: disableUpgradeCh,
-				},
-			},
-		},
-	}
-
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
-	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	ctx := context.Background()
-	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
-	require.NoError(t, err)
-
-	query := fmt.Sprintf("BACKUP INTO %s", userfile)
-	sqlDB.Exec(t, query)
-
-	// Confirm that the LATEST file was written to the base directory.
-	r, err := store.ReadFile(ctx, backupbase.LatestFileName)
-	require.NoError(t, err)
-	r.Close(ctx)
-
-	// Close the channel so that the cluster version is upgraded.
-	close(disableUpgradeCh)
-	// Check the cluster version is bumped to newVersion.
-	testutils.SucceedsSoon(t, func() error {
-		var version string
-		sqlDB.QueryRow(t, "SELECT value FROM system.settings WHERE name = 'version'").Scan(&version)
-		var v clusterversion.ClusterVersion
-		if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
-			return err
-		}
-		version = v.String()
-		if version != clusterversion.TestingBinaryVersion.String() {
-			return errors.Errorf("cluster version is still %s, should be %s", version, clusterversion.TestingBinaryVersion.String())
-		}
-		return nil
-	})
-
-	// Take an incremental backup on the new version using the latest file
-	// written by the old version in the base directory.
-	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
-	sqlDB.Exec(t, query)
-
 }
 
 // TestBackupRestoreTelemetryEvents tests that BACKUP and RESTORE correctly

@@ -13,7 +13,6 @@ package cockroach.cloud.externalconn.connectionpb;
 option go_package = "connectionpb";
 
 import "gogoproto/gogo.proto";
-import "cloud/cloudpb/external_storage.proto";
 
 // ConnectionType is the type of the External Connection object.
 enum ConnectionType {
