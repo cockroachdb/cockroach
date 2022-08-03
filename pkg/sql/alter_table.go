@@ -1556,7 +1556,7 @@ StatsLoop:
 
 	// Use Gossip to refresh the caches on other nodes.
 	if g, ok := params.extendedEvalCtx.ExecCfg.Gossip.Optional(47925); ok {
-		return stats.GossipTableStatAdded(g, desc.GetID())
+		return stats.GossipTableStatAdded(params.ctx, g, params.extendedEvalCtx.Settings, desc.GetID())
 	}
 	return nil
 }
