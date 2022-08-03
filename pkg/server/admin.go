@@ -248,6 +248,10 @@ func (s *adminServer) Databases(
 		return nil, serverError(ctx, err)
 	}
 
+	if err := s.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
 	r, err := s.databasesHelper(ctx, req, sessionUser, 0, 0)
 	return r, maybeHandleNotFoundError(ctx, err)
 }
@@ -312,6 +316,10 @@ func (s *adminServer) DatabaseDetails(
 	userName, err := userFromContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
+	}
+
+	if err := s.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
 	}
 
 	r, err := s.databaseDetailsHelper(ctx, req, userName)
@@ -676,6 +684,10 @@ func (s *adminServer) TableDetails(
 	userName, err := userFromContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
+	}
+
+	if err := s.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
 	}
 
 	r, err := s.tableDetailsHelper(ctx, req, userName)
@@ -1073,7 +1085,13 @@ func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	userName, err := s.requireAdminUser(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	err = s.requireViewActivityPermission(ctx)
 	if err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -1103,7 +1121,7 @@ func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	if _, err := s.requireAdminUser(ctx); err != nil {
+	if err := s.requireViewActivityPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
