@@ -4978,6 +4978,11 @@ func pt(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
 // values.
 var inlineValue hlc.Timestamp
 
+// tb creates a point tombstone.
+func tb(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
+	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts)}}
+}
+
 // txn wraps point update and adds transaction to it for intent creation.
 func txn(d rangeTestDataItem) rangeTestDataItem {
 	ts := d.point.Key.Timestamp
@@ -5729,6 +5734,106 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 	require.Errorf(t, err, "expected error '%s' but found none", expectedError)
 	require.True(t, testutils.IsError(err, expectedError),
 		"expected error '%s' found '%s'", expectedError, err)
+}
+
+func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyB := mkKey("bb")
+	keyC := mkKey("ccc")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts1 := mkTs(1)
+	ts2 := mkTs(2)
+	ts3 := mkTs(3)
+	ts4 := mkTs(4)
+	tsMax := mkTs(9)
+
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	var ms enginepb.MVCCStats
+	rangeTestData{
+		pt(keyB, ts1),
+		pt(keyB, ts2),
+		tb(keyB, ts3),
+		tb(keyB, ts4),
+		pt(keyC, ts1),
+		tb(keyC, ts2),
+		pt(keyC, ts3),
+		tb(keyC, ts4),
+	}.populateEngine(t, engine, &ms)
+
+	require.NoError(t,
+		MVCCGarbageCollectPointsWithClearRange(ctx, engine, &ms, keyA, keyD, hlc.Timestamp{}, tsMax),
+		"failed to run mvcc range tombstone garbage collect")
+
+	expected := NewDefaultInMemForTesting()
+	defer expected.Close()
+	var expMs enginepb.MVCCStats
+
+	rks := scanRangeKeys(t, engine)
+	expRks := scanRangeKeys(t, expected)
+	require.EqualValues(t, expRks, rks)
+
+	ks := scanPointKeys(t, engine)
+	expKs := scanPointKeys(t, expected)
+	require.EqualValues(t, expKs, ks)
+
+	ms.AgeTo(tsMax.WallTime)
+	expMs, err := ComputeStats(engine, rangeStart, rangeEnd, tsMax.WallTime)
+	require.NoError(t, err, "failed to compute stats for range")
+	require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+}
+
+func TestMVCCGarbageCollectClearRangeFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	var ms enginepb.MVCCStats
+	rangeTestData{
+		pt(keyA, mkTs(1)),
+	}.populateEngine(t, engine, &ms)
+
+	err := MVCCGarbageCollectPointsWithClearRange(ctx, engine, &ms, keyA, keyD, mkTs(1), mkTs(5))
+	errMsg := `attempt to clear range with data /Table/42/"a"/1.000000000,0`
+	require.Errorf(t, err, "expected error '%s' but found none", errMsg)
+	require.True(t, testutils.IsError(err, errMsg),
+		"expected error '%s' found '%s'", errMsg, err)
 }
 
 // TestResolveIntentWithLowerEpoch verifies that trying to resolve
