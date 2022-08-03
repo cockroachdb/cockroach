@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -127,7 +128,8 @@ func RunCopyFrom(
 		rd: bufio.NewReader(bytes.NewReader(buf)),
 	}
 	rows := 0
-	c, err := newCopyMachine(ctx, conn, stmt.AST.(*tree.CopyFrom), p, txnOpt,
+	mon := mon.NewUnlimitedMonitor(ctx, "copyshim", mon.MemoryResource, nil, nil, 0, nil)
+	c, err := newCopyMachine(ctx, conn, stmt.AST.(*tree.CopyFrom), p, txnOpt, mon,
 		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 			err := dsp.ExecLocalAll(ctx, execCfg, p, res)
 			if err != nil {

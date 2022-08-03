@@ -433,6 +433,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ValuesOp:
 		return sb.colStatValues(colSet, e.(*ValuesExpr))
 
+	case opt.LiteralValuesOp:
+		return sb.colStatLiteralValues(colSet, e.(*LiteralValuesExpr))
+
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp, opt.MergeJoinOp, opt.LookupJoinOp,
@@ -2062,7 +2065,7 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 // +--------+
 
 // buildValues builds the statistics for a VALUES expression.
-func (sb *statisticsBuilder) buildValues(values *ValuesExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildValues(values ValuesContainer, relProps *props.Relational) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
@@ -2070,7 +2073,7 @@ func (sb *statisticsBuilder) buildValues(values *ValuesExpr, relProps *props.Rel
 	}
 	s.Available = sb.availabilityFromInput(values)
 
-	s.RowCount = float64(len(values.Rows))
+	s.RowCount = float64(values.Len())
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2110,6 +2113,52 @@ func (sb *statisticsBuilder) colStatValues(
 			nullCount++
 		}
 		distinct[hash] = struct{}{}
+	}
+
+	// Update the column statistics.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = float64(len(distinct))
+	colStat.NullCount = float64(nullCount)
+	// TODO(harding): The AvgSize would be more accurate if we took the width and/
+	// or type of the values.
+	colStat.AvgSize = float64(defaultColSize * colSet.Len())
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+func (sb *statisticsBuilder) colStatLiteralValues(
+	colSet opt.ColSet, values *LiteralValuesExpr,
+) *props.ColumnStatistic {
+	s := &values.Relational().Stats
+	if values.Len() == 0 {
+		colStat, _ := s.ColStats.Add(colSet)
+		return colStat
+	}
+
+	// Determine distinct count from the number of distinct memo groups. Use a
+	// map to find the exact count of distinct values for the columns in colSet.
+	// Use a hash to combine column values (this does not have to be exact).
+	distinct := make(map[uint64]struct{}, len(values.Cols))
+	// Determine null count by looking at tuples that have only NullOps in them.
+	nullCount := 0
+
+	for i := 0; i < values.Len(); i++ {
+		var h hasher
+		h.Init()
+		hasNonNull := false
+		for j := 0; j < len(values.Cols); j++ {
+			if colSet.Contains(values.Cols[i]) {
+				elem := values.Rows.Rows.Get(i, j).(tree.Datum)
+				if elem.ResolvedType().Family() == types.UnknownFamily {
+					hasNonNull = true
+				}
+				h.HashDatum(elem)
+			}
+		}
+		if !hasNonNull {
+			nullCount++
+		}
+		distinct[uint64(h.hash)] = struct{}{}
 	}
 
 	// Update the column statistics.

@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -171,4 +172,19 @@ func rightHasMoreSpecificTuple(left, right *types.T) (isMoreSpecific bool, isEqu
 	}
 	// At this point, both left and right are neither tuples nor arrays.
 	return false, left.Equivalent(right)
+}
+
+func (b *Builder) buildLiteralValuesClause(
+	values *tree.LiteralValuesClause, desiredTypes []*types.T, inScope *scope,
+) (outScope *scope) {
+	outScope = inScope.push()
+	for colIdx := 0; colIdx < len(desiredTypes); colIdx++ {
+		// The column names for VALUES are column1, column2, etc.
+		colName := scopeColName(tree.Name(fmt.Sprintf("column%d", colIdx+1)))
+		b.synthesizeColumn(outScope, colName, desiredTypes[colIdx], nil, nil /* scalar */)
+	}
+
+	colList := colsToColList(outScope.cols)
+	outScope.expr = b.factory.ConstructLiteralValues(&opt.LiteralRows{Rows: values.Rows}, colList)
+	return
 }

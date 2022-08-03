@@ -123,29 +123,10 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast)
 
 	case stateOpen:
-		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
-			remoteAddr := "internal"
-			if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
-				remoteAddr = rAddr.String()
-			}
-			var stmtNoConstants string
-			if prepared != nil {
-				stmtNoConstants = prepared.StatementNoConstants
-			} else {
-				stmtNoConstants = formatStatementHideConstants(ast)
-			}
-			labels := pprof.Labels(
-				"appname", ex.sessionData().ApplicationName,
-				"addr", remoteAddr,
-				"stmt.tag", ast.StatementTag(),
-				"stmt.no.constants", stmtNoConstants,
-			)
-			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
-			})
-		} else {
+		err = ex.execWithProfiling(ctx, ast, prepared, func(ctx context.Context) error {
 			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
-		}
+			return err
+		})
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
@@ -2291,4 +2272,37 @@ func logTraceAboveThreshold(
 	// Note that log lines larger than 65k are truncated in the debug zip (see
 	// #50166).
 	log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
+}
+
+func (ex *connExecutor) execWithProfiling(
+	ctx context.Context,
+	ast tree.Statement,
+	prepared *PreparedStatement,
+	op func(context.Context) error,
+) error {
+	var err error
+	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+		remoteAddr := "internal"
+		if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
+			remoteAddr = rAddr.String()
+		}
+		var stmtNoConstants string
+		if prepared != nil {
+			stmtNoConstants = prepared.StatementNoConstants
+		} else {
+			stmtNoConstants = formatStatementHideConstants(ast)
+		}
+		labels := pprof.Labels(
+			"appname", ex.sessionData().ApplicationName,
+			"addr", remoteAddr,
+			"stmt.tag", ast.StatementTag(),
+			"stmt.no.constants", stmtNoConstants,
+		)
+		pprof.Do(ctx, labels, func(ctx context.Context) {
+			err = op(ctx)
+		})
+	} else {
+		err = op(ctx)
+	}
+	return err
 }

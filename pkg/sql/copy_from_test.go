@@ -75,8 +75,8 @@ func TestCopyFrom(t *testing.T) {
 	r.Exec(t, lineitemSchema)
 	rows := []string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)}
 	numrows, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", rows)
-	require.Equal(t, 2, numrows)
 	require.NoError(t, err)
+	require.Equal(t, 2, numrows)
 
 	partKey := 0
 	r.QueryRow(t, "SELECT l_partkey FROM c.lineitem WHERE l_orderkey = 1").Scan(&partKey)

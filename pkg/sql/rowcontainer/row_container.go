@@ -990,3 +990,13 @@ func (ir IndexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) 
 	}
 	return datums, nil
 }
+
+// Get implments tree.ExprContainer interface.
+func (r *RowContainer) Get(i, j int) tree.Expr {
+	return r.At(i)[j]
+}
+
+// NumRows implments tree.ExprContainer interface.
+func (r *RowContainer) NumRows() int {
+	return r.Len()
+}

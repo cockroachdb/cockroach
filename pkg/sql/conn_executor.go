@@ -2459,11 +2459,11 @@ func (ex *connExecutor) execCopyIn(
 	var cm copyMachineInterface
 	var err error
 	if isCopyToExternalStorage(cmd) {
-		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
+		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg, ex.state.mon)
 	} else {
 		p := planner{execCfg: ex.server.cfg, alloc: &tree.DatumAlloc{}}
 		cm, err = newCopyMachine(
-			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt,
+			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt, ex.state.mon,
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 				_, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, DistributionTypeNone, nil /* progressAtomic */)
@@ -2476,7 +2476,11 @@ func (ex *connExecutor) execCopyIn(
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload, nil
 	}
-	if err := cm.run(ctx); err != nil {
+	defer cm.Close(ctx)
+
+	if err := ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
+		return cm.run(ctx)
+	}); err != nil {
 		// TODO(andrei): We don't have a retriable error story for the copy machine.
 		// When running outside of a txn, the copyMachine should probably do retries
 		// internally. When not, it's unclear what we should do. For now, we abort
