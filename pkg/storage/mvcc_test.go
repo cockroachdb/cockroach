@@ -872,7 +872,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 }
 
 // Regression test for #28205: MVCCGet and MVCCScan, FindSplitKey, and
-// ComputeStats need to invalidate the cached iterator data.
+// ComputeStatsForIter need to invalidate the cached iterator data.
 func TestMVCCInvalidateIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -923,9 +923,9 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 						_, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, ts2, MVCCScanOptions{})
 					case "findSplitKey":
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
-					case "computeStats":
+					case "computeStatsForIter":
 						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
-						_, err = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
+						_, err = ComputeStatsForIter(iter, 0)
 						iter.Close()
 					}
 					if err != nil {
@@ -2204,7 +2204,7 @@ func computeStats(
 		UpperBound: to,
 	})
 	defer iter.Close()
-	ms, err := ComputeStatsForRange(iter, from, to, nowNanos)
+	ms, err := ComputeStatsForIter(iter, nowNanos)
 	require.NoError(t, err)
 	return ms
 }
@@ -4909,12 +4909,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 
 			// Verify aggregated stats match computed stats after GC.
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-				IterOptions{UpperBound: roachpb.KeyMax, KeyTypes: IterKeyTypePointsAndRanges})
-			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					expMS, err := mvccStatsTest.fn(iter, localMax, roachpb.KeyMax, gcTime.WallTime)
+					expMS, err := mvccStatsTest.fn(engine, localMax, roachpb.KeyMax, gcTime.WallTime)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -5778,7 +5775,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 						LowerBound: d.rangeStart,
 						UpperBound: d.rangeEnd,
 					})
-					expMs, err := ComputeStatsForRange(it, rangeStart, rangeEnd, tsMax.WallTime)
+					expMs, err := ComputeStatsForIter(it, tsMax.WallTime)
 					require.NoError(t, err, "failed to compute stats for range")
 					require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 				})

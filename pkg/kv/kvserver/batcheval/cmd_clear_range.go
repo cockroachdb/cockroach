@@ -178,13 +178,7 @@ func computeStatsDelta(
 	// range tombstones that straddle the span bounds, since we must adjust the
 	// stats for their new key bounds.
 	if !entireRange || util.RaceEnabled {
-		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-			LowerBound: from,
-			UpperBound: to,
-		})
-		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
-		iter.Close()
+		computed, err := storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -213,7 +207,7 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			iter = readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,
 				LowerBound: leftPeekBound,
 				UpperBound: rightPeekBound,

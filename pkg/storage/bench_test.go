@@ -837,13 +837,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: keys.LocalMax,
-			UpperBound: roachpb.KeyMax,
-		})
-		_, _ = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
-		iter.Close()
+		if _, err := ComputeStats(eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+			b.Fatalf("stats failed: %s", err)
+		}
 	}
 
 	var startKey, endKey roachpb.Key
@@ -1332,13 +1328,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, emk engineMaker, val
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: keys.LocalMax,
-			UpperBound: roachpb.KeyMax,
-		})
-		stats, err = iter.ComputeStats(keys.LocalMax, roachpb.KeyMax, 0)
-		iter.Close()
+		stats, err = ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
