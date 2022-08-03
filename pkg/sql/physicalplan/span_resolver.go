@@ -211,6 +211,13 @@ func (it *spanResolverIterator) Seek(
 		seekKey = it.curSpan.Key
 	} else {
 		seekKey = it.curSpan.EndKey
+		if len(seekKey) == 0 {
+			// It is possible that the span doesn't have the EndKey set (when we
+			// want to use the Get request), so we need to use the start Key
+			// even if we're scanning in the reverse direction - having
+			// ReverseScans and Gets is allowed in a single BatchRequest.
+			seekKey = it.curSpan.Key
+		}
 	}
 
 	// Check if the start of the span falls within the descriptor on which we're
