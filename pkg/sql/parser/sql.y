@@ -851,7 +851,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> CURRENT_USER CURSOR CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS DEFINER
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -1057,6 +1057,10 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 // ALTER FUNCTION
 %type <tree.Statement> alter_func_options_stmt
+%type <tree.Statement> alter_func_rename_stmt
+%type <tree.Statement> alter_func_set_schema_stmt
+%type <tree.Statement> alter_func_owner_stmt
+%type <tree.Statement> alter_func_dep_extension_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1543,7 +1547,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.TenantID> opt_as_tenant_clause
 
 // User defined function relevant components.
-%type <bool> opt_or_replace opt_return_set
+%type <bool> opt_or_replace opt_return_set opt_no
 %type <str> param_name func_as
 %type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list func_args func_args_list
 %type <tree.FuncArg> func_arg_with_default func_arg
@@ -1861,6 +1865,10 @@ alter_database_stmt:
 
 alter_func_stmt:
   alter_func_options_stmt
+| alter_func_rename_stmt
+| alter_func_owner_stmt
+| alter_func_set_schema_stmt
+| alter_func_dep_extension_stmt
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -4275,6 +4283,53 @@ alter_func_opt_list:
 opt_restrict:
   RESTRICT {}
 | /* EMPTY */ {}
+
+alter_func_rename_stmt:
+  ALTER FUNCTION function_with_argtypes RENAME TO name
+  {
+    $$.val = &tree.AlterFunctionRename{
+      Function: $3.functionObj(),
+      NewName: tree.Name($6),
+    }
+  }
+
+alter_func_set_schema_stmt:
+  ALTER FUNCTION function_with_argtypes SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterFunctionSetSchema{
+      Function: $3.functionObj(),
+      NewSchemaName: tree.Name($6),
+    }
+  }
+
+alter_func_owner_stmt:
+  ALTER FUNCTION function_with_argtypes OWNER TO role_spec
+  {
+    $$.val = &tree.AlterFunctionSetOwner{
+      Function: $3.functionObj(),
+      NewOwner: $6.roleSpec(),
+    }
+  }
+
+alter_func_dep_extension_stmt:
+  ALTER FUNCTION function_with_argtypes opt_no DEPENDS ON EXTENSION name
+  {
+    $$.val = &tree.AlterFunctionDepExtension{
+      Function: $3.functionObj(),
+      Remove: $4.bool(),
+      Extension: tree.Name($8),
+    }
+  }
+
+opt_no:
+  NO
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
@@ -14752,6 +14807,7 @@ unreserved_keyword:
 | DEFERRED
 | DEFINER
 | DELIMITER
+| DEPENDS
 | DESTINATION
 | DETACHED
 | DISCARD
@@ -15098,6 +15154,7 @@ bare_label_keywords:
 | CALLED
 | COST
 | DEFINER
+| DEPENDS
 | EXTERNAL
 | IMMUTABLE
 | INPUT
