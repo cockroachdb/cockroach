@@ -16,11 +16,13 @@ package slinstance
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -237,6 +240,56 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	return true, nil
 }
 
+type TimeoutError struct{}
+
+func (t TimeoutError) Error() string {
+	return "session timeout"
+}
+
+var _ error = &TimeoutError{}
+
+func (l *Instance) createSessionWithTimeout(
+	ctx context.Context, timeout time.Duration,
+) (*session, error) {
+	var s *session
+	var err error
+	var createChan = make(chan struct{})
+	go func() {
+		s, err = l.createSession(ctx)
+		close(createChan)
+	}()
+
+	t := timeutil.NewTimer()
+	t.Reset(timeout)
+	select {
+	case <-t.C:
+		return nil, &TimeoutError{}
+	case <-createChan:
+		return s, err
+	}
+}
+
+func (l *Instance) extendSessionWithTimeout(
+	ctx context.Context, s *session, timeout time.Duration,
+) (bool, error) {
+	var found bool
+	var err error
+	var createChan = make(chan struct{})
+	go func() {
+		found, err = l.extendSession(ctx, s)
+		close(createChan)
+	}()
+
+	t := timeutil.NewTimer()
+	t.Reset(timeout)
+	select {
+	case <-t.C:
+		return false, &TimeoutError{}
+	case <-createChan:
+		return found, err
+	}
+}
+
 func (l *Instance) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		log.Warning(ctx, "exiting heartbeat loop")
@@ -253,8 +306,10 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
 			if s == nil {
-				newSession, err := l.createSession(ctx)
+				var newSession *session
+				newSession, err := l.createSessionWithTimeout(ctx, l.hb())
 				if err != nil {
+					fmt.Printf("ERORR ON NEW SESSION: %v\n", err)
 					func() {
 						l.mu.Lock()
 						defer l.mu.Unlock()
@@ -266,21 +321,27 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 					}()
 					return
 				}
+				fmt.Printf("SUCCESS??? ON NEW SESSION: %v\n", newSession)
 				l.setSession(newSession)
 				t.Reset(l.hb())
 				continue
 			}
-			found, err := l.extendSession(ctx, s)
-			if err != nil {
+			found, err := l.extendSessionWithTimeout(ctx, s, l.hb())
+			if err != nil && !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+				// Unable to extend session due to unknown error.
+				// Clear and stop heartbeat loop.
+				fmt.Printf("ERORR ON EXTEND SESSION: %v\n", err)
 				l.clearSession(ctx)
 				return
 			}
 			if !found {
+				// No existing session found, immediately create one.
 				l.clearSession(ctx)
 				// Start next loop iteration immediately to insert a new session.
 				t.Reset(0)
 				continue
 			}
+			fmt.Printf("SUCCESS??? ON EXTEND SESSION: %v\n", found)
 			if log.V(2) {
 				log.Infof(ctx, "extended SQL liveness session %s", s.ID())
 			}
