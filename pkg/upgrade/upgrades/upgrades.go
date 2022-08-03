@@ -77,18 +77,6 @@ var upgrades = []upgrade.Upgrade{
 		postRaftAppliedIndexTermMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"add the system.span_count table",
-		toCV(clusterversion.SpanCountTable),
-		NoPrecondition,
-		spanCountTableMigration,
-	),
-	upgrade.NewTenantUpgrade(
-		"seed system.span_count with span count for existing tenants",
-		toCV(clusterversion.SeedSpanCountTable),
-		NoPrecondition,
-		seedSpanCountTableMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
 		toCV(clusterversion.UpgradeSequenceToBeReferencedByID),
 		NoPrecondition,
