@@ -2,7 +2,7 @@
 
 # List of commit statuses that must pass on the merge commit before it is
 # pushed to master.
-status = ["GitHub CI (Cockroach)"]
+status = ["Bazel Essential CI (Cockroach)"]
 
 # List of commit statuses that must not be failing on the PR commit when it is
 # r+-ed. If it's still in progress (for e.g. if CI is still running), bors will
@@ -18,6 +18,7 @@ block_labels = ["do-not-merge"]
 #
 # Set to 4 hours
 timeout_sec = 14400
+required_approvals = 1
 
 [committer]
 name = "craig[bot]"
