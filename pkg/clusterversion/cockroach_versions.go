@@ -186,8 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// SuperRegions enables the usage on super regions.
-	SuperRegions
 	// EnableNewChangefeedOptions enables the usage of new changefeed options
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
@@ -325,10 +323,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     SuperRegions,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
 	},
 	{
 		Key:     EnableNewChangefeedOptions,
