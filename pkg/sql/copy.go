@@ -38,6 +38,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// When this many rows are in the copy buffer, they are inserted.
+const CopyBatchRowSize = 100
+
 type copyMachineInterface interface {
 	run(ctx context.Context) error
 }
@@ -100,7 +103,7 @@ type copyMachine struct {
 
 	// p is the planner used to plan inserts. preparePlanner() needs to be called
 	// before preparing each new statement.
-	p planner
+	p *planner
 
 	// parsingEvalCtx is an EvalContext used for the very limited needs to strings
 	// parsing. Is it not correctly initialized with timestamps, transactions and
@@ -115,8 +118,8 @@ func newCopyMachine(
 	ctx context.Context,
 	conn pgwirebase.Conn,
 	n *tree.CopyFrom,
+	p *planner,
 	txnOpt copyTxnOpt,
-	execCfg *ExecutorConfig,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -129,7 +132,7 @@ func newCopyMachine(
 		txnOpt:          txnOpt,
 		csvExpectHeader: n.Options.Header,
 		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
+		p:              p,
 		execInsertPlan: execInsertPlan,
 	}
 
@@ -213,7 +216,7 @@ func newCopyMachine(
 	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
+	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -385,9 +388,6 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}()
 
-	// When this many rows are in the copy buffer, they are inserted.
-	const copyBatchRowSize = 100
-
 	if len(data) > (c.buf.Cap() - c.buf.Len()) {
 		// If it looks like the buffer will need to allocate to accommodate data,
 		// account for the memory here. This is not particularly accurate - we don't
@@ -418,7 +418,7 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := len(c.rows); !final && (ln == 0 || ln < copyBatchRowSize) {
+	if ln := len(c.rows); !final && (ln == 0 || ln < CopyBatchRowSize) {
 		return nil
 	}
 	return c.processRows(ctx)
@@ -755,7 +755,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	}
 
 	var res streamingCommandResult
-	err := c.execInsertPlan(ctx, &c.p, &res)
+	err := c.execInsertPlan(ctx, c.p, &res)
 	if err != nil {
 		return err
 	}
