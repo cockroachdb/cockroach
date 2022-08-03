@@ -186,9 +186,6 @@ const (
 	// AddRaftAppliedIndexTermMigration is a migration that causes each range
 	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
 	AddRaftAppliedIndexTermMigration // TODO(celia) - still some dependencies.
-	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
-	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
-	PebbleFormatSplitUserKeysMarked
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
@@ -340,10 +337,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     PebbleFormatSplitUserKeysMarked,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
 	},
 	{
 		Key:     IncrementalBackupSubdir,
