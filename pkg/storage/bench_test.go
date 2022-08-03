@@ -1306,6 +1306,73 @@ func runMVCCDeleteRange(ctx context.Context, b *testing.B, emk engineMaker, valu
 	}
 }
 
+func runMVCCDeleteRangeUsingTombstone(
+	ctx context.Context, b *testing.B, emk engineMaker, numKeys int, valueBytes int, entireRange bool,
+) {
+	eng, dir := setupMVCCData(ctx, b, emk, benchDataOptions{
+		numVersions: 1,
+		numKeys:     numKeys,
+		valueBytes:  valueBytes,
+	})
+	require.NoError(b, eng.Compact())
+
+	var msCovered *enginepb.MVCCStats
+	var leftPeekBound, rightPeekBound roachpb.Key
+	if entireRange {
+		iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: keys.LocalMax,
+			UpperBound: keys.MaxKey,
+		})
+		ms, err := ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, 0)
+		iter.Close()
+		require.NoError(b, err)
+
+		leftPeekBound = keys.LocalMax
+		rightPeekBound = keys.MaxKey
+		msCovered = &ms
+	}
+
+	eng.Close()
+
+	b.SetBytes(int64(numKeys) * int64(overhead+valueBytes))
+	b.StopTimer()
+	b.ResetTimer()
+
+	locDirty := dir + "_dirty"
+
+	for i := 0; i < b.N; i++ {
+		if err := os.RemoveAll(locDirty); err != nil {
+			b.Fatal(err)
+		}
+		if err := fileutil.CopyDir(dir, locDirty); err != nil {
+			b.Fatal(err)
+		}
+		func() {
+			eng := emk(b, locDirty)
+			defer eng.Close()
+
+			b.StartTimer()
+			if err := MVCCDeleteRangeUsingTombstone(
+				ctx,
+				eng,
+				&enginepb.MVCCStats{},
+				keys.LocalMax,
+				roachpb.KeyMax,
+				hlc.MaxTimestamp,
+				hlc.ClockTimestamp{},
+				leftPeekBound,
+				rightPeekBound,
+				0,
+				msCovered,
+			); err != nil {
+				b.Fatal(err)
+			}
+			b.StopTimer()
+		}()
+	}
+}
+
 func runClearRange(
 	ctx context.Context,
 	b *testing.B,
