@@ -78,10 +78,10 @@ func makeExternalConnectionStorage(
 	// Construct an ExternalStorage handle for the underlying resource represented
 	// by the external connection object.
 	switch d := ec.ConnectionProto().Details.(type) {
-	case *connectionpb.ConnectionDetails_Nodelocal:
+	case *connectionpb.ConnectionDetails_SimpleURI:
 		// Append the subdirectory that was passed in with the `external` URI to the
 		// underlying `nodelocal` URI.
-		uri, err := url.Parse(d.Nodelocal.URI)
+		uri, err := url.Parse(d.SimpleURI.URI)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to parse `nodelocal` URI")
 		}

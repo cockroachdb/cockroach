@@ -27,8 +27,9 @@ func parseAndValidateLocalFileConnectionURI(
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Details: &connectionpb.ConnectionDetails_Nodelocal{
-			Nodelocal: &connectionpb.NodelocalConnectionDetails{
+		Provider: connectionpb.ConnectionProvider_TypeNodelocal,
+		Details: &connectionpb.ConnectionDetails_SimpleURI{
+			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),
 			},
 		},
