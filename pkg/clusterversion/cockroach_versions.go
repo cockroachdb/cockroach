@@ -628,9 +628,9 @@ var (
 )
 
 func init() {
-	const isReleaseBranch = false
+	const isReleaseBranch = true
 	if isReleaseBranch {
-		if binaryVersion != ByKey(V21_2) {
+		if binaryVersion != ByKey(V22_1) {
 			panic("unexpected cluster version greater than release's binary version")
 		}
 	}
