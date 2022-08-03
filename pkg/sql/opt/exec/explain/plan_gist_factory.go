@@ -400,7 +400,11 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 		f.encodeInt(0)
 	}
 
-	f.encodeInt(int(params.HardLimit))
+	if params.HardLimit > 0 {
+		f.encodeInt(1)
+	} else {
+		f.encodeInt(0)
+	}
 }
 
 func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
