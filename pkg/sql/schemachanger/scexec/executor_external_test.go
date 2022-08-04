@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -486,13 +487,13 @@ type noopEventLogger struct{}
 var _ scexec.EventLogger = noopEventLogger{}
 
 func (noopEventLogger) LogEvent(
-	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ eventpb.EventPayload,
+	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ logpb.EventPayload,
 ) error {
 	return nil
 }
 
 func (noopEventLogger) LogEventForSchemaChange(
-	_ context.Context, _ descpb.ID, _ eventpb.EventPayload,
+	_ context.Context, _ descpb.ID, _ logpb.EventPayload,
 ) error {
 	return nil
 }

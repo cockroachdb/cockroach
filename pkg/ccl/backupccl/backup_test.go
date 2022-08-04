@@ -93,6 +93,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -10191,7 +10192,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE r1, r2 INTO  ($1, $2) AS OF SYSTEM TIME '-1ms' WITH revision_history`, loc1, loc2)
 
 	expectedBackupEvent := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType:            backupEventType,
@@ -10208,7 +10209,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	// Also verify that there's a telemetry event corresponding to the completion
 	// of the job.
 	expectedBackupJobEvent := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType: backupJobEventType,
@@ -10225,7 +10226,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	sqlDB.Exec(t, restoreQuery, loc1, loc2, "r2")
 
 	expectedRestoreEvent := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType:            restoreEventType,
@@ -10242,7 +10243,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	// Also verify that there's a telemetry event corresponding to the completion
 	// of the job.
 	expectedRestoreJobEvent := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,
@@ -10260,7 +10261,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	beforeRestore = timeutil.Now()
 	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", restoreQuery, loc1, loc2, "r2")
 	expectedRestoreFailEvent := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,

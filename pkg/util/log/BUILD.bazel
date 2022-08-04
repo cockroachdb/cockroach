@@ -64,7 +64,6 @@ go_library(
         "//pkg/util/fileutil",
         "//pkg/util/jsonbytes",
         "//pkg/util/log/channel",
-        "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logflags",
         "//pkg/util/log/logpb",

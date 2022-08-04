@@ -13,7 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
-import "util/log/eventpb/events.proto";
+import "util/log/logpb/event.proto";
 
 // Category: Debugging events
 // Channel: OPS
