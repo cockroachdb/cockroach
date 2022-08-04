@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// RoutinePlanFn creates a plan for the execution of one statement with a
+// RoutinePlanFn creates a plan for the execution of one statement within a
 // routine.
-type RoutinePlanFn func(_ context.Context, _ RoutineExecFactory) (RoutinePlan, error)
+type RoutinePlanFn func(_ context.Context, _ RoutineExecFactory, stmtIdx int) (RoutinePlan, error)
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather then exec.Plan to avoid
@@ -36,18 +36,22 @@ type RoutineExecFactory interface{}
 // function. It is only created by execbuilder - it is never constructed during
 // parsing.
 type RoutineExpr struct {
-	PlanFn RoutinePlanFn
-	Typ    *types.T
+	PlanFn   RoutinePlanFn
+	NumStmts int
+	Typ      *types.T
 
 	name string
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
-func NewTypedRoutineExpr(name string, planFn RoutinePlanFn, typ *types.T) *RoutineExpr {
+func NewTypedRoutineExpr(
+	name string, planFn RoutinePlanFn, numStmts int, typ *types.T,
+) *RoutineExpr {
 	return &RoutineExpr{
-		PlanFn: planFn,
-		Typ:    typ,
-		name:   name,
+		PlanFn:   planFn,
+		NumStmts: numStmts,
+		Typ:      typ,
+		name:     name,
 	}
 }
 

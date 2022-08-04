@@ -665,12 +665,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Note: we put o outside of the function so we allocate it only once.
 	udf := scalar.(*memo.UDFExpr)
 	var o xform.Optimizer
-	planFn := func(ctx context.Context, ref tree.RoutineExecFactory) (tree.RoutinePlan, error) {
+	planFn := func(ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int) (tree.RoutinePlan, error) {
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
-
-		// TODO(mgartner): Support UDFs with more than 1 statement.
-		stmt := udf.Body[len(udf.Body)-1]
+		stmt := udf.Body[stmtIdx]
 
 		// Copy the expression into a new memo.
 		// TODO(mgartner): Replace argument references with constant values.
@@ -706,5 +704,5 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 		return plan, nil
 	}
-	return tree.NewTypedRoutineExpr(udf.Name, planFn, udf.Typ), nil
+	return tree.NewTypedRoutineExpr(udf.Name, planFn, len(udf.Body), udf.Typ), nil
 }

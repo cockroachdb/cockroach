@@ -27,34 +27,48 @@ func (p *planner) EvalRoutineExpr(
 ) (result tree.Datum, err error) {
 	typs := []*types.T{expr.ResolvedType()}
 
-	// Generate a plan for executing the routine.
-	plan, err := expr.PlanFn(ctx, newExecFactory(p))
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a rowResultWriter for storing the results of the last statement in
-	// the routine.
+	// The result of the routine is the result of the last statement. The result
+	// of any preceding statements is ignored. We set up a rowResultWriter that
+	// can store the results of the final statement here.
 	var rch rowContainerHelper
 	rch.Init(typs, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
-	rowResultWriter := NewRowResultWriter(&rch)
+	rrw := NewRowResultWriter(&rch)
 
-	// TODO(mgartner): Add a new tracing.ChildSpan to the context for better
-	// tracing of UDFs, like we do with apply-joins.
-	err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), rowResultWriter)
-	if err != nil {
-		return nil, err
+	// Execute each statement in the routine sequentially.
+	for i := 0; i < expr.NumStmts; i++ {
+		// Generate a plan for executing the ith statement.
+		plan, err := expr.PlanFn(ctx, newExecFactory(p), i)
+		if err != nil {
+			return nil, err
+		}
+
+		// If this is the last statement, use the rowResultWriter created above.
+		// Otherwise, use a rowResultWriter that drops all rows added to it.
+		var w rowResultWriter
+		if i == expr.NumStmts-1 {
+			w = rrw
+		} else {
+			w = &droppingResultWriter{}
+		}
+
+		// TODO(mgartner): Add a new tracing.ChildSpan to the context for better
+		// tracing of UDFs, like we do with apply-joins.
+		err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Fetch the first row from the row container and return the first datum.
-	// TODO(mgartner): Consider adding an assertion error if more than one row
-	// exists in the row container. This would require the optimizer to
-	// automatically add LIMIT 1 expressions on the last statement in a routine
-	// to avoid errors when a statement returns more than one row. Adding the
-	// limit would be valid because any other rows after the first can simply be
-	// ignored. The limit could also be beneficial becuase it could allow
-	// additional query plan optimizations.
+	// Fetch the first row from the row container and return the first
+	// datum.
+	// TODO(mgartner): Consider adding an assertion error if more than one
+	// row exists in the row container. This would require the optimizer to
+	// automatically add LIMIT 1 expressions on the last statement in a
+	// routine to avoid errors when a statement returns more than one row.
+	// Adding the limit would be valid because any other rows after the
+	// first can simply be ignored. The limit could also be beneficial
+	// because it could allow additional query plan optimizations.
 	rightRowsIterator := newRowContainerIterator(ctx, rch, typs)
 	defer rightRowsIterator.Close()
 	res, err := rightRowsIterator.Next()
@@ -62,4 +76,28 @@ func (p *planner) EvalRoutineExpr(
 		return nil, err
 	}
 	return res[0], nil
+}
+
+// droppingResultWriter drops all rows that are added to it. It only tracks
+// errors with the SetError and Err functions.
+type droppingResultWriter struct {
+	err error
+}
+
+// AddRow is part of the rowResultWriter interface.
+func (d *droppingResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return nil
+}
+
+// IncrementRowsAffected is part of the rowResultWriter interface.
+func (d *droppingResultWriter) IncrementRowsAffected(ctx context.Context, n int) {}
+
+// SetError is part of the rowResultWriter interface.
+func (d *droppingResultWriter) SetError(err error) {
+	d.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (d *droppingResultWriter) Err() error {
+	return d.err
 }
