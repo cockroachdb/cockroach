@@ -51,9 +51,11 @@ func (r *Replica) addToTSCacheChecked(
 	r.store.tsCache.Add(start, end, ts, txnID)
 }
 
-// updateTimestampCache updates the timestamp cache in order to set a low water
-// mark for the timestamp at which mutations to keys overlapping the provided
-// request can write, such that they don't re-write history.
+// updateTimestampCache updates the timestamp cache in order to set a low
+// watermark for the timestamp at which mutations to keys overlapping the
+// provided request can write, such that they don't re-write history. It can be
+// called before or after a batch is done evaluating. A nil `br` indicates that
+// this method is being called before the batch is done evaluating.
 func (r *Replica) updateTimestampCache(
 	ctx context.Context,
 	st *kvserverpb.LeaseStatus,
@@ -75,6 +77,7 @@ func (r *Replica) updateTimestampCache(
 	if ba.Txn != nil {
 		txnID = ba.Txn.ID
 	}
+	beforeEval := br == nil && pErr == nil
 	for i, union := range ba.Requests {
 		req := union.GetInner()
 		if !roachpb.UpdatesTimestampCache(req) {
@@ -220,13 +223,14 @@ func (r *Replica) updateTimestampCache(
 				addToTSCache(start, end, ts, txnID)
 			}
 		case *roachpb.GetRequest:
-			if resume := resp.(*roachpb.GetResponse).ResumeSpan; resume != nil {
+			if !beforeEval && resp.(*roachpb.GetResponse).ResumeSpan != nil {
 				// The request did not evaluate. Ignore it.
 				continue
 			}
 			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ScanRequest:
-			if resume := resp.(*roachpb.ScanResponse).ResumeSpan; resume != nil {
+			if !beforeEval && resp.(*roachpb.ScanResponse).ResumeSpan != nil {
+				resume := resp.(*roachpb.ScanResponse).ResumeSpan
 				if start.Equal(resume.Key) {
 					// The request did not evaluate. Ignore it.
 					continue
@@ -238,7 +242,8 @@ func (r *Replica) updateTimestampCache(
 			}
 			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ReverseScanRequest:
-			if resume := resp.(*roachpb.ReverseScanResponse).ResumeSpan; resume != nil {
+			if !beforeEval && resp.(*roachpb.ReverseScanResponse).ResumeSpan != nil {
+				resume := resp.(*roachpb.ReverseScanResponse).ResumeSpan
 				if end.Equal(resume.EndKey) {
 					// The request did not evaluate. Ignore it.
 					continue
