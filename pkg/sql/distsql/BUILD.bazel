@@ -12,6 +12,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colflow",
         "//pkg/sql/execinfra",

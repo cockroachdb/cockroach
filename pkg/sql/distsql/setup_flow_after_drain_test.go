@@ -47,7 +47,9 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 		flowScheduler,
 	)
 	distSQLSrv.flowRegistry.Drain(
-		time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */, nil /* reporter */)
+		time.Duration(0) /* flowDrainWait */, time.Duration(0), /* minFlowDrainWait */
+		nil /* reporter */, false, /* cancelStillRunning */
+	)
 
 	// We create some flow; it doesn't matter what.
 	req := execinfrapb.SetupFlowRequest{Version: execinfra.Version}
