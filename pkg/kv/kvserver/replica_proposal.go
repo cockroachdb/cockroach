@@ -348,7 +348,7 @@ func (r *Replica) leasePostApplyLocked(
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
 	r.mu.state.Lease = newLease
-	expirationBasedLease := r.requiresExpiringLeaseRLocked()
+	requiresExpirationBasedLease := r.requiresExpiringLeaseRLocked()
 
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
@@ -358,10 +358,10 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	// Whenever we first acquire an expiration-based lease, notify the lease
-	// renewer worker that we want it to keep proactively renewing the lease
-	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.ownsValidLeaseRLocked(ctx, now) {
+	// Whenever we first acquire an expiration-based lease for ranges that
+	// require it, notify the lease renewer worker that we want it to keep
+	// proactively renewing the lease before it expires.
+	if leaseChangingHands && iAmTheLeaseHolder && requiresExpirationBasedLease && r.ownsValidLeaseRLocked(ctx, now) {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:

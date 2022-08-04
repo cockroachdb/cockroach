@@ -2748,10 +2748,13 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 
 	// Increment the manual clock and do a write to increase the qps above zero.
 	manualClock.Increment(int64(replicastats.MinStatsDuration))
-	pArgs := incrementArgs(key, 10)
-	if _, pErr := kv.SendWrapped(ctx, s.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		pArgs := incrementArgs(key, 10)
+		if _, pErr := kv.SendWrapped(ctx, s.TestSender(), pArgs); pErr != nil {
+			return errors.Errorf("failed to increment data: %s", pErr)
+		}
+		return nil
+	})
 	// We want to make sure we can read the value through raft, so we know
 	// the stats are updated.
 	testutils.SucceedsSoon(t, func() error {
