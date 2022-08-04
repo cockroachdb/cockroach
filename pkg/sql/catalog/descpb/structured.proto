@@ -1180,7 +1180,23 @@ message TableDescriptor {
   // this table, in which case the global setting is used.
   optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
 
-  // Next ID: 54
+  // ImportIntoEpoch is the count of IMPORT INTO jobs that have been attempted on this
+  // table once it __already had data__. The ImportEpoch can include an in progress import, as the
+  // field gets incremented while preparing the table for ingestion.
+  optional uint32 import_epoch = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
+
+  // ImportType indicates the kind of import currently occurring on the table.
+  enum ImportType {
+    NO_IMPORT = 0;
+    IMPORT = 1;
+    IMPORT_INTO_EMPTY = 2;
+    IMPORT_INTO_NON_EMPTY = 3;
+  }
+
+  // ImportTypeInProgress describes the type of in-progress import, if any.
+  optional ImportType import_type_in_progress = 55 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportTypeInProgress"];
+
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.

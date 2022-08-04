@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -267,6 +268,17 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ImportRollbacksWithoutMVCC) {
+					importType := descpb.TableDescriptor_IMPORT_INTO_NON_EMPTY
+					if details.Tables[i].WasEmpty {
+						importType = descpb.TableDescriptor_IMPORT_INTO_EMPTY
+					}
+					importEpoch, err := incrementImportEpoch(ctx, p, tblDesc.GetID(), importType)
+					if err != nil {
+						return err
+					}
+					details.Tables[i].Desc.ImportEpoch = importEpoch
+				}
 			}
 		}
 
@@ -386,7 +398,8 @@ func (r *importResumer) prepareTablesForIngestion(
 				return importDetails, err
 			}
 			importDetails.Tables[i] = jobspb.ImportDetails_Table{
-				Desc: desc, Name: table.Name,
+				Desc:       desc,
+				Name:       table.Name,
 				SeqVal:     table.SeqVal,
 				IsNew:      table.IsNew,
 				TargetCols: table.TargetCols,
@@ -480,7 +493,7 @@ func prepareExistingTablesForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.SetOffline("importing")
+	importing.SetOffline(tabledesc.OfflineReasonImporting)
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
@@ -564,7 +577,10 @@ func prepareNewTablesForIngestion(
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
-		newMutableTableDescriptors[i].SetOffline("importing")
+		newMutableTableDescriptors[i].SetOffline(tabledesc.OfflineReasonImporting)
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ImportRollbacksWithoutMVCC) {
+			newMutableTableDescriptors[i].InitializeImport(descpb.TableDescriptor_IMPORT)
+		}
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
 
@@ -676,6 +692,34 @@ func (r *importResumer) prepareSchemasForIngestion(
 	}
 
 	return schemaMetadata, err
+}
+
+func incrementImportEpoch(
+	ctx context.Context,
+	p sql.JobExecContext,
+	id catid.DescID,
+	importType descpb.TableDescriptor_ImportType,
+) (uint32, error) {
+	var importEpoch uint32
+	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		mutableDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+		if err != nil {
+			return err
+		}
+		mutableDesc.InitializeImport(importType)
+		if err := descsCol.WriteDesc(
+			ctx, false /* kvTrace */, mutableDesc, txn,
+		); err != nil {
+			return err
+		}
+		importEpoch = mutableDesc.ImportEpoch
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	return importEpoch, nil
 }
 
 // createSchemaDescriptorWithID writes a schema descriptor with `id` to disk.
@@ -981,7 +1025,7 @@ func (r *importResumer) publishTables(
 					c.Validity = descpb.ConstraintValidity_Unvalidated
 				}
 			}
-
+			newTableDesc.FinalizeImport()
 			// TODO(dt): re-validate any FKs?
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, newTableDesc, b,
@@ -1526,6 +1570,7 @@ func (r *importResumer) dropTables(
 		return err
 	}
 	intoDesc.SetPublic()
+	intoDesc.FinalizeImport()
 	const kvTrace = false
 	if err := descsCol.WriteDescToBatch(ctx, kvTrace, intoDesc, b); err != nil {
 		return err

@@ -39,6 +39,9 @@ var _ catalog.TableDescriptor = (*wrapper)(nil)
 // descriptors at this cluster version.
 const ConstraintIDsAddedToTableDescsVersion = clusterversion.RemoveIncompatibleDatabasePrivileges
 
+// OfflineReasonImporting hard codes the Offline Reason for Importing Tables
+const OfflineReasonImporting = "importing"
+
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
 type wrapper struct {
@@ -183,6 +186,18 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// InitializeImport increments the import epoch and sets
+// ImportTypeInProgress enum, signalling a new import job is occurring.
+func (desc *Mutable) InitializeImport(importType descpb.TableDescriptor_ImportType) {
+	desc.ImportEpoch++
+	desc.ImportTypeInProgress = importType
+}
+
+// FinalizeImport flips ImportTypeInProgress to NO_IMPORT.
+func (desc *Mutable) FinalizeImport() {
+	desc.ImportTypeInProgress = descpb.TableDescriptor_NO_IMPORT
 }
 
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
@@ -653,4 +668,13 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 		return privilege.Sequence
 	}
 	return privilege.Table
+}
+
+// GetInProgressImportEpoch returns the ImportEpoch and ImportType of the descriptor if there's
+// an in-progress import.
+func (desc *wrapper) GetInProgressImportEpoch() (uint32, descpb.TableDescriptor_ImportType) {
+	if desc.ImportTypeInProgress != 0 {
+		return desc.ImportEpoch, desc.ImportTypeInProgress
+	}
+	return 0, 0
 }
