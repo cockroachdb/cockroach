@@ -54,4 +54,57 @@ if [[ -n "${ALWAYS_RUN_GAZELLE}" ]]; then
     esac
 fi
 
-$BAZEL_REAL "$@"
+BASE="/private/var/tmp/_bazel_${USER}/bases/"
+
+# If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
+if [ ! -d "${BASE}" ]; then 
+    exec $BAZEL_REAL "$@"
+fi
+
+# If we got here, we are going to try to find an available output_base to pass
+# to bazel. Typically only one bazel server can be running in one output_base at
+# a time, which means if we always use the default base, only one bazel server 
+# can be running for a given workspace at a time. Since servers do not allow any
+# concurrent execution of separate invocations, this can be annoying if you e.g.
+# want to run a quick gazelle or query but have a long `test` run crawling along
+# in another terminal session. 
+# 
+# To mitigate this, we can route concurrent bazel invocations to different 
+# output_base directories, allowing them to run at the same time. We do not want
+# to just make a new base for every invocation as this leads to slow cold starts
+# and we do not want to make too many bases to improve cache utilization in the
+# long-lived per-base bazel server and keep memory footprints in check. Thus, we
+# keep a fixed set (currently 3) of bases and just claim the first that is not
+# in-use when starting bazel. 
+#
+# While the approach below attempts to ensure it only assigns an available base,
+# if for any reaosn a racing invocation assigns the same base, bazel will just
+# end up queuing on its lock as it would if we did not assign a base at all, so
+# this is not critical and can be seen as best-effort.
+
+# We need to use a unique output base for each workspace; if we weren't manually
+# specifying bazel would resolve the workspace root then hash it. Rather than 
+# resolve the root, we're going to pretend we're only run from the root, and if
+# we're run elsewhere, just make a separate base for that location. 
+SUFFIX="$(pwd | md5 | head -c12)"
+
+# Check if any of our extra bases are available: no pidfile or pidfile's PID is
+# no longer running. If we find one, claim it via a PID and then run bazel with
+# that as its output_base.
+for i in {1..3}; do
+  PIDFILE="${BASE}${i}/inuse"
+  if [ ! -f ${PIDFILE} ] || ! ps -p "$(cat ${PIDFILE} 2> /dev/null)" >/dev/null 2>/dev/null; then
+    # Claim this base.
+    mkdir -p "${BASE}${i}"
+    echo "$$" > "${PIDFILE}"
+    # We don't need to cleanup claim files since we check pids, but doing so can
+    # save us a ps call later.
+    trap 'rm "${PIDFILE}"' EXIT
+    $BAZEL_REAL --output_base="${BASE}${i}/${SUFFIX}" "$@"
+    exit $?
+  fi
+done
+
+# If all our bases are in-use, just use the default base and let bazel queue.
+exec $BAZEL_REAL "$@"
+
