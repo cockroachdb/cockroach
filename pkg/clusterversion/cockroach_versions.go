@@ -340,6 +340,9 @@ const (
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
+	// ImportRollbacksInRestore allows BACKUP to back up an in progress import incrementally and
+	// RESTORE to roll back an in-progress IMPORT.
+	ImportRollbacksInRestore
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -596,6 +599,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
+	},
+	{
+		Key:     ImportRollbacksInRestore,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
