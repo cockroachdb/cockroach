@@ -194,7 +194,6 @@ func ValidCast(src, tgt *types.T, ctx Context) bool {
 func LookupCast(src, tgt *types.T) (Cast, bool) {
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
-	srcFamily.Name()
 
 	// Unknown is the type given to an expression that statically evaluates
 	// to NULL. NULL can be immutably cast to any type in any context.
