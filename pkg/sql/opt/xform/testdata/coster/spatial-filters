@@ -270,28 +270,55 @@ SELECT * FROM g JOIN x
 ON g.id = x.id
 WHERE st_area(g.geog) > st_area(x.geog);
 ----
-inner-join (merge)
+project
  ├── columns: id:1!null a:2 b:3 geog:4 id:7!null a:8 b:9 geog:10
- ├── left ordering: +1
- ├── right ordering: +7
  ├── immutable
- ├── stats: [rows=166666.7, distinct(1)=166667, null(1)=0, avgsize(1)=4, distinct(7)=166667, null(7)=0, avgsize(7)=4]
- ├── cost: 2095049.67
+ ├── stats: [rows=166666.7]
+ ├── cost: 1116716.4
  ├── key: (7)
  ├── fd: (1)-->(2-4), (7)-->(8-10), (1)==(7), (7)==(1)
- ├── scan g
- │    ├── columns: g.id:1!null g.a:2 g.b:3 g.geog:4
- │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4]
- │    ├── cost: 540024.82
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
- │    └── ordering: +1
- ├── scan x
- │    ├── columns: x.id:7!null x.a:8 x.b:9 x.geog:10
- │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, avgsize(7)=4]
- │    ├── cost: 540024.82
- │    ├── key: (7)
- │    ├── fd: (7)-->(8-10)
- │    └── ordering: +7
- └── filters
-      └── st_area(g.geog:4) > st_area(x.geog:10) [outer=(4,10), immutable]
+ └── inner-join (merge)
+      ├── columns: g.id:1!null g.a:2 g.b:3 g.geog:4 x.id:7!null x.a:8 x.b:9 x.geog:10 column13:13!null column14:14!null
+      ├── left ordering: +1
+      ├── right ordering: +7
+      ├── immutable
+      ├── stats: [rows=166666.7, distinct(1)=166667, null(1)=0, avgsize(1)=4, distinct(7)=166667, null(7)=0, avgsize(7)=4, distinct(13)=50000, null(13)=0, avgsize(13)=4, distinct(14)=50000, null(14)=0, avgsize(14)=4]
+      ├── cost: 1115049.71
+      ├── key: (7)
+      ├── fd: (1)-->(2-4), (4)-->(13), (7)-->(8-10), (10)-->(14), (1)==(7), (7)==(1)
+      ├── project
+      │    ├── columns: column13:13 g.id:1!null g.a:2 g.b:3 g.geog:4
+      │    ├── immutable
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(13)=50000, null(13)=0, avgsize(13)=4]
+      │    ├── cost: 550024.84
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4), (4)-->(13)
+      │    ├── ordering: +1
+      │    ├── scan g
+      │    │    ├── columns: g.id:1!null g.a:2 g.b:3 g.geog:4
+      │    │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(4)=50000, null(4)=5000, avgsize(4)=4]
+      │    │    ├── cost: 540024.82
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    └── ordering: +1
+      │    └── projections
+      │         └── st_area(g.geog:4) [as=column13:13, outer=(4), immutable]
+      ├── project
+      │    ├── columns: column14:14 x.id:7!null x.a:8 x.b:9 x.geog:10
+      │    ├── immutable
+      │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, avgsize(7)=4, distinct(14)=50000, null(14)=0, avgsize(14)=4]
+      │    ├── cost: 550024.84
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8-10), (10)-->(14)
+      │    ├── ordering: +7
+      │    ├── scan x
+      │    │    ├── columns: x.id:7!null x.a:8 x.b:9 x.geog:10
+      │    │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, avgsize(7)=4, distinct(10)=50000, null(10)=5000, avgsize(10)=4]
+      │    │    ├── cost: 540024.82
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8-10)
+      │    │    └── ordering: +7
+      │    └── projections
+      │         └── st_area(x.geog:10) [as=column14:14, outer=(10), immutable]
+      └── filters
+           └── column13:13 > column14:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
