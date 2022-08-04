@@ -71,8 +71,10 @@ CREATE TABLE system.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username, option),
-	FAMILY "primary" (username, option, value)
+	INDEX users_user_id_idx (user_id ASC),
+	FAMILY "primary" (username, option, value, user_id)
 )`
 
 	// Zone settings per DB/Table.
@@ -1798,13 +1800,13 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "option", ID: 2, Type: types.String},
 				{Name: "value", ID: 3, Type: types.String, Nullable: true},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name:            "primary",
-					ColumnNames:     []string{"username", "option", "value"},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-					DefaultColumnID: 3,
+					Name:        "primary",
+					ColumnNames: []string{"username", "option", "value", "user_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1814,6 +1816,16 @@ var (
 				KeyColumnNames:      []string{"username", "option"},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "users_user_id_idx",
+				ID:                  2,
+				Unique:              false,
+				KeyColumnNames:      []string{"user_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},
 		))
 

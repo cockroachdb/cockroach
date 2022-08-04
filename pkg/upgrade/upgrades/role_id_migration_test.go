@@ -106,9 +106,8 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		numUsers += 1
 		var wg sync.WaitGroup
 		wg.Add(100)
-		// Make creating users faster.
+		// Parallelize user creation.
 		for i := 0; i < 100; i++ {
-			// Each goroutine creates 100 users.
 			go func(capI int) {
 				defer wg.Done()
 				// This is hacky but INSERT into is faster

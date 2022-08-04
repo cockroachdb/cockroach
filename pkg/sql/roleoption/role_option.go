@@ -97,6 +97,37 @@ var toSQLStmts = map[Option]string{
 	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWCLUSTERSETTING'`,
 }
 
+// toSQLStmtsWithID is a map of Kind -> SQL statement string for applying the
+// option to the role.
+// toSQLStmtsWithID differs from toSQLStmts by including IDs.
+var toSQLStmtsWithID = map[Option]string{
+	CREATEROLE:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATEROLE', $2) ON CONFLICT DO NOTHING`,
+	NOCREATEROLE:           `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATEROLE'`,
+	LOGIN:                  `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOLOGIN'`,
+	NOLOGIN:                `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'NOLOGIN', $2) ON CONFLICT DO NOTHING`,
+	VALIDUNTIL:             `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string, $3)`,
+	CONTROLJOB:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CONTROLJOB', $2) ON CONFLICT DO NOTHING`,
+	NOCONTROLJOB:           `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CONTROLJOB'`,
+	CONTROLCHANGEFEED:      `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CONTROLCHANGEFEED', $2) ON CONFLICT DO NOTHING`,
+	NOCONTROLCHANGEFEED:    `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CONTROLCHANGEFEED'`,
+	CREATEDB:               `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATEDB', $2) ON CONFLICT DO NOTHING`,
+	NOCREATEDB:             `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATEDB'`,
+	CREATELOGIN:            `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATELOGIN', $2) ON CONFLICT DO NOTHING`,
+	NOCREATELOGIN:          `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATELOGIN'`,
+	VIEWACTIVITY:           `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWACTIVITY', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWACTIVITY:         `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITY'`,
+	CANCELQUERY:            `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CANCELQUERY', $2) ON CONFLICT DO NOTHING`,
+	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CANCELQUERY'`,
+	MODIFYCLUSTERSETTING:   `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'MODIFYCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
+	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'MODIFYCLUSTERSETTING'`,
+	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOSQLLOGIN'`,
+	NOSQLLOGIN:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'NOSQLLOGIN', $2) ON CONFLICT DO NOTHING`,
+	VIEWACTIVITYREDACTED:   `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWACTIVITYREDACTED', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
+	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWCLUSTERSETTING'`,
+}
+
 // Mask returns the bitmask for a given role option.
 func (o Option) Mask() uint32 {
 	return 1 << o
@@ -148,7 +179,7 @@ type List []RoleOption
 // GetSQLStmts returns a map of SQL stmts to apply each role option.
 // Maps stmts to values (value of the role option).
 func (rol List) GetSQLStmts(
-	onRoleOption func(Option),
+	onRoleOption func(Option), withID bool,
 ) (map[string]func() (bool, string, error), error) {
 	if len(rol) <= 0 {
 		return nil, nil
@@ -174,6 +205,9 @@ func (rol List) GetSQLStmts(
 		}
 
 		stmt := toSQLStmts[ro.Option]
+		if withID {
+			stmt = toSQLStmtsWithID[ro.Option]
+		}
 		if ro.HasValue {
 			stmts[stmt] = ro.Value
 		} else {

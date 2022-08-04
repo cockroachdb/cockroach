@@ -1579,6 +1579,7 @@ system              public             630200280_23_3_not_null                  
 system              public             primary                                                                                                         system         public        role_members                     PRIMARY KEY      NO             NO
 system              public             630200280_33_1_not_null                                                                                         system         public        role_options                     CHECK            NO             NO
 system              public             630200280_33_2_not_null                                                                                         system         public        role_options                     CHECK            NO             NO
+system              public             630200280_33_4_not_null                                                                                         system         public        role_options                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        role_options                     PRIMARY KEY      NO             NO
 system              public             630200280_37_10_not_null                                                                                        system         public        scheduled_jobs                   CHECK            NO             NO
 system              public             630200280_37_1_not_null                                                                                         system         public        scheduled_jobs                   CHECK            NO             NO
@@ -1778,6 +1779,7 @@ system              public             630200280_32_6_not_null                  
 system              public             630200280_32_7_not_null                                                                                         verified IS NOT NULL
 system              public             630200280_33_1_not_null                                                                                         username IS NOT NULL
 system              public             630200280_33_2_not_null                                                                                         option IS NOT NULL
+system              public             630200280_33_4_not_null                                                                                         user_id IS NOT NULL
 system              public             630200280_34_1_not_null                                                                                         id IS NOT NULL
 system              public             630200280_34_3_not_null                                                                                         data IS NOT NULL
 system              public             630200280_35_1_not_null                                                                                         id IS NOT NULL
@@ -2154,6 +2156,7 @@ system         public        role_members                     isAdmin           
 system         public        role_members                     member                                                                                                    2
 system         public        role_members                     role                                                                                                      1
 system         public        role_options                     option                                                                                                    2
+system         public        role_options                     user_id                                                                                                   4
 system         public        role_options                     username                                                                                                  1
 system         public        role_options                     value                                                                                                     3
 system         public        scheduled_jobs                   created                                                                                                   3
