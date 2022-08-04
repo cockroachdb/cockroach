@@ -171,6 +171,16 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
+    variable: "mvccRangeKeyBytesCount",
+    display: "MVCC Range Key Bytes/Count",
+    compareToLeader: true,
+  },
+  {
+    variable: "mvccRangeValueBytesCount",
+    display: "MVCC Range Value Bytes/Count",
+    compareToLeader: true,
+  },
+  {
     variable: "mvccIntentBytesCount",
     display: "MVCC Intent Bytes/Count",
     compareToLeader: true,
@@ -795,6 +805,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         mvccValueBytesCount: this.contentMVCC(
           FixLong(mvcc.val_bytes),
           FixLong(mvcc.val_count),
+        ),
+        mvccRangeKeyBytesCount: this.contentMVCC(
+          FixLong(mvcc.range_key_bytes || 0),
+          FixLong(mvcc.range_key_count || 0),
+        ),
+        mvccRangeValueBytesCount: this.contentMVCC(
+          FixLong(mvcc.range_val_bytes || 0),
+          FixLong(mvcc.range_val_count || 0),
         ),
         mvccIntentBytesCount: this.contentMVCC(
           FixLong(mvcc.intent_bytes),
