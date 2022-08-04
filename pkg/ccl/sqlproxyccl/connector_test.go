@@ -89,8 +89,8 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 
 		defer testutils.TestingHook(
 			&readTokenAuthResult,
-			func(serverConn net.Conn) error {
-				return errors.New("bar")
+			func(serverConn net.Conn) (*pgproto3.BackendKeyData, error) {
+				return nil, errors.New("bar")
 			},
 		)()
 
@@ -114,9 +114,18 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
 			},
+			CancelInfo: makeCancelInfo(
+				&net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+				&net.TCPAddr{IP: net.IP{11, 22, 33, 44}},
+			),
 		}
-		conn, _ := net.Pipe()
-		defer conn.Close()
+		pipeConn, _ := net.Pipe()
+		defer pipeConn.Close()
+		conn := &fakeTCPConn{
+			Conn:       pipeConn,
+			remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
+			localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+		}
 
 		var openCalled bool
 		c.testingKnobs.dialTenantCluster = func(
@@ -134,12 +143,16 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		}
 
 		var authCalled bool
+		crdbBackendKeyData := &pgproto3.BackendKeyData{
+			ProcessID: 4,
+			SecretKey: 5,
+		}
 		defer testutils.TestingHook(
 			&readTokenAuthResult,
-			func(serverConn net.Conn) error {
+			func(serverConn net.Conn) (*pgproto3.BackendKeyData, error) {
 				authCalled = true
 				require.Equal(t, conn, serverConn)
-				return nil
+				return crdbBackendKeyData, nil
 			},
 		)()
 
@@ -148,6 +161,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		require.True(t, authCalled)
 		require.NoError(t, err)
 		require.Equal(t, conn, crdbConn)
+		require.Equal(t, crdbBackendKeyData, c.CancelInfo.mu.origBackendKeyData)
 
 		// Ensure that token is deleted.
 		_, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
