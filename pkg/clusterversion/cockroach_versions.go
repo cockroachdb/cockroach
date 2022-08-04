@@ -358,6 +358,9 @@ const (
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
 	PebbleFormatPrePebblev1Marked
+	// ImportRollbacksInRestore allows BACKUP to back up an in progress import incrementally and
+	// RESTORE to roll back an in-progress IMPORT.
+	ImportRollbacksInRestore
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -626,6 +629,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
+	},
+	{
+		Key:     ImportRollbacksInRestore,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

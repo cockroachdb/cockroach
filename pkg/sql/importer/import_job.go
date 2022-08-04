@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -269,6 +270,21 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ImportRollbacksInRestore) {
+					// Update the descriptor in the job record and in the database with the import info
+					importType := descpb.TableDescriptor_IMPORT_EXISTS_NON_EMPTY
+					if details.Tables[i].WasEmpty {
+						importType = descpb.TableDescriptor_IMPORT_EXISTS_EMPTY
+					}
+
+					details.Tables[i].Desc.ImportType = importType
+					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
+
+					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime, importType)
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 
@@ -388,7 +404,8 @@ func (r *importResumer) prepareTablesForIngestion(
 				return importDetails, err
 			}
 			importDetails.Tables[i] = jobspb.ImportDetails_Table{
-				Desc: desc, Name: table.Name,
+				Desc:       desc,
+				Name:       table.Name,
 				SeqVal:     table.SeqVal,
 				IsNew:      table.IsNew,
 				TargetCols: table.TargetCols,
@@ -452,10 +469,17 @@ func (r *importResumer) prepareTablesForIngestion(
 	// wait for all nodes to see the same descriptor version before doing so.
 	if !hasExistingTables {
 		importDetails.Walltime = p.ExecCfg().Clock.Now().WallTime
+
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ImportRollbacksInRestore) {
+			for i := 0; i < len(importDetails.Tables); i++ {
+				// Update the descriptor in the job record
+				importDetails.Tables[i].Desc.ImportStartWallTime = details.Walltime
+				importDetails.Tables[i].Desc.ImportType = descpb.TableDescriptor_IMPORT_NEW
+			}
+		}
 	} else {
 		importDetails.Walltime = 0
 	}
-
 	return importDetails, nil
 }
 
@@ -678,6 +702,36 @@ func (r *importResumer) prepareSchemasForIngestion(
 	}
 
 	return schemaMetadata, err
+}
+
+// bindImportStarTime writes the ImportStarTime to the descriptor.
+func bindImportStartTime(
+	ctx context.Context,
+	p sql.JobExecContext,
+	id catid.DescID,
+	startWallTime int64,
+	importType descpb.TableDescriptor_ImportType,
+) error {
+	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		mutableDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+		if err != nil {
+			return err
+		}
+		if err := mutableDesc.InitializeImport(startWallTime, importType); err != nil {
+			return err
+		}
+		if err := descsCol.WriteDesc(
+			ctx, false /* kvTrace */, mutableDesc, txn,
+		); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // createSchemaDescriptorWithID writes a schema descriptor with `id` to disk.
@@ -983,7 +1037,7 @@ func (r *importResumer) publishTables(
 					c.Validity = descpb.ConstraintValidity_Unvalidated
 				}
 			}
-
+			newTableDesc.FinalizeImport()
 			// TODO(dt): re-validate any FKs?
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, newTableDesc, b,
@@ -1554,6 +1608,7 @@ func (r *importResumer) dropTables(
 		return err
 	}
 	intoDesc.SetPublic()
+	intoDesc.FinalizeImport()
 	const kvTrace = false
 	if err := descsCol.WriteDescToBatch(ctx, kvTrace, intoDesc, b); err != nil {
 		return err

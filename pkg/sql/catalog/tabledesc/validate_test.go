@@ -132,6 +132,8 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
 			"AutoStatsSettings":             {status: iSolemnlySwearThisFieldIsValidated},
 			"ForecastStats":                 {status: thisFieldReferencesNoObjects},
+			"ImportStartWallTime":           {status: thisFieldReferencesNoObjects},
+			"ImportType":                    {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
