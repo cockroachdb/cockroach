@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -70,16 +69,6 @@ var ErrMissingColumns = errors.New("table must contain at least 1 column")
 
 // ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
-
-// UseMVCCCompliantIndexCreation controls whether index additions will
-// use the MVCC compliant scheme which requires both temporary indexes
-// and a different initial state.
-var UseMVCCCompliantIndexCreation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.mvcc_compliant_index_creation.enabled",
-	"if true, schema changes will use the an index backfiller designed for MVCC-compliant bulk operations",
-	true,
-)
 
 // DescriptorType returns the type of this descriptor.
 func (desc *wrapper) DescriptorType() catalog.DescriptorType {
@@ -2084,21 +2073,10 @@ func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
 }
 
 // AddIndexMutationMaybeWithTempIndex adds an index mutation to desc.Mutations
-// for the provided index, and, if the MVCC-compliant backfill protocol is not
-// disabled, also synthesize and add the temp index mutation.
+// for the provided index, and also synthesize and add the temp index mutation.
 func (desc *Mutable) AddIndexMutationMaybeWithTempIndex(
-	ctx context.Context,
-	idx *descpb.IndexDescriptor,
-	direction descpb.DescriptorMutation_Direction,
-	settings *cluster.Settings,
+	idx *descpb.IndexDescriptor, direction descpb.DescriptorMutation_Direction,
 ) error {
-	// Maybe use the old index backfill protocol to add an index.
-	if direction == descpb.DescriptorMutation_ADD && !UseMVCCCompliantIndexCreation.Get(&settings.SV) {
-		return desc.AddIndexMutation(
-			idx, direction, descpb.DescriptorMutation_DELETE_ONLY,
-		)
-	}
-
 	if err := desc.checkValidIndex(idx); err != nil {
 		return err
 	}

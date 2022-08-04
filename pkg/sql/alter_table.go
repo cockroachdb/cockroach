@@ -321,7 +321,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
-					params.ctx, &idx, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings,
+					&idx, descpb.DescriptorMutation_ADD,
 				); err != nil {
 					return err
 				}
