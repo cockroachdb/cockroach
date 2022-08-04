@@ -89,6 +89,14 @@ type StoreTestingKnobs struct {
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter kvserverbase.ReplicaResponseFilter
 
+	// RetainEvalKindOnConcurrencyRetry disables the behavior to mark requests as
+	// `PessimisticEval` when they hit concurrency retry errors.
+	RetainEvalKindOnConcurrencyRetry bool
+
+	// DisableDroppingLatchesBeforeEval makes it such no read requests will
+	// attempt to resolve their conflicts upfront and drop latches before eval.
+	DisableDroppingLatchesBeforeEval bool
+
 	// SlowReplicationThresholdOverride is an interceptor that allows setting a
 	// per-Batch SlowReplicationThreshold.
 	SlowReplicationThresholdOverride func(ba *roachpb.BatchRequest) time.Duration
