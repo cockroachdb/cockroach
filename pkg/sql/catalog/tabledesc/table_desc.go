@@ -186,6 +186,20 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
+// InitializeImport binds the import start time to the table descriptor
+func (desc *Mutable) InitializeImport(startWallTime int64) error {
+	if desc.ImportStartWallTime != 0 {
+		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
+	}
+	desc.ImportStartWallTime = startWallTime
+	return nil
+}
+
+// FinalizeImport removes the ImportStartTime
+func (desc *Mutable) FinalizeImport() {
+	desc.ImportStartWallTime = 0
+}
+
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
 // for the specified index descriptor. Returns false iff this was a no-op.
 func UpdateIndexPartitioning(
@@ -654,4 +668,9 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 		return privilege.Sequence
 	}
 	return privilege.Table
+}
+
+// GetInProgressImportStartTime returns the start wall time of the import if there's one in progress
+func (desc *wrapper) GetInProgressImportStartTime() int64 {
+	return desc.ImportStartWallTime
 }
