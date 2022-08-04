@@ -557,6 +557,7 @@ type benchDataOptions struct {
 	numKeys           int
 	valueBytes        int
 	numColumnFamilies int
+	numRangeKeys      int // MVCC range tombstones, 1=global
 
 	// In transactional mode, data is written by writing and later resolving
 	// intents. In non-transactional mode, data is written directly, without
@@ -667,6 +668,9 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 // skip more historical versions; later timestamps mean scans which
 // skip fewer.
 //
+// MVCC range keys are always written below all point keys, with random
+// start/end bounds, at increasing logical timestamps (WallTime 0).
+//
 // The creation of the database is time consuming, especially for larger numbers
 // of versions. The database is persisted between runs and stored in the current
 // directory as "mvcc_scan_<versions>_<keys>_<columnFamilies>_<valueBytes>"
@@ -674,8 +678,8 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 func setupMVCCData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (Engine, string) {
-	loc := fmt.Sprintf("mvcc_data_%d_%d_%d_%d",
-		opts.numVersions, opts.numKeys, opts.numColumnFamilies, opts.valueBytes)
+	loc := fmt.Sprintf("mvcc_data_%d_%d_%d_%d_%d",
+		opts.numVersions, opts.numKeys, opts.numColumnFamilies, opts.valueBytes, opts.numRangeKeys)
 	if opts.transactional {
 		loc += "_txn"
 	}
@@ -699,6 +703,27 @@ func setupMVCCData(
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
 
+	// Write MVCC range keys.
+	batch := eng.NewBatch()
+	for i := 0; i < opts.numRangeKeys; i++ {
+		ts := hlc.Timestamp{Logical: int32(i + 1)}
+		start := rng.Intn(opts.numKeys)
+		end := start + rng.Intn(opts.numKeys-start) + 1
+		// As a special case, if we're only writing one range key, write it across
+		// the entire span.
+		if opts.numRangeKeys == 1 {
+			start = 0
+			end = opts.numKeys + 1
+		}
+		startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
+		endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
+		require.NoError(b, MVCCDeleteRangeUsingTombstone(
+			ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, 0))
+	}
+	require.NoError(b, batch.Commit(false /* sync */))
+	batch.Close()
+
+	// Generate point keys.
 	keySlice := make([]roachpb.Key, opts.numKeys)
 	var order []int
 	var cf uint32
@@ -757,7 +782,7 @@ func setupMVCCData(
 		}
 	}
 
-	batch := eng.NewBatch()
+	batch = eng.NewBatch()
 	for i, idx := range order {
 		// Output the keys in ~20 batches. If we used a single batch to output all
 		// of the keys rocksdb would create a single sstable. We want multiple
@@ -1316,13 +1341,16 @@ func runClearRange(
 }
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
-func runMVCCComputeStats(ctx context.Context, b *testing.B, emk engineMaker, valueBytes int) {
+func runMVCCComputeStats(
+	ctx context.Context, b *testing.B, emk engineMaker, valueBytes int, numRangeKeys int,
+) {
 	const rangeBytes = 64 * 1024 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
 	eng, _ := setupMVCCData(ctx, b, emk, benchDataOptions{
-		numVersions: 1,
-		numKeys:     numKeys,
-		valueBytes:  valueBytes,
+		numVersions:  1,
+		numKeys:      numKeys,
+		valueBytes:   valueBytes,
+		numRangeKeys: numRangeKeys,
 	})
 	defer eng.Close()
 
