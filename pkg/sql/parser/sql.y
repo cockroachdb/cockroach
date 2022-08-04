@@ -2015,12 +2015,21 @@ alter_database_set_secondary_region_stmt:
    }
 
 alter_database_drop_secondary_region:
-  ALTER DATABASE database_name DROP SECONDARY REGION
-  {
-    $$.val = &tree.AlterDatabaseDropSecondaryRegion{
-      DatabaseName: tree.Name($3),
+    ALTER DATABASE database_name DROP SECONDARY REGION
+    {
+      $$.val = &tree.AlterDatabaseDropSecondaryRegion{
+        DatabaseName: tree.Name($3),
+        IfExists: false,
+      }
     }
-  }
+
+  | ALTER DATABASE database_name DROP SECONDARY REGION IF EXISTS
+    {
+      $$.val = &tree.AlterDatabaseDropSecondaryRegion{
+        DatabaseName: tree.Name($3),
+        IfExists: true,
+      }
+    }
 
 alter_database_set_zone_config_extension_stmt:
   ALTER DATABASE database_name ALTER LOCALITY GLOBAL set_zone_config
