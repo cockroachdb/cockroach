@@ -21,7 +21,7 @@ bazel test pkg/bench:all --test_arg -test.run=- --test_arg -test.bench=Benchmark
 exec
 dev bench pkg/spanconfig/spanconfigkvsubscriber -f=BenchmarkSpanConfigDecoder --cpus=10 --ignore-cache -v --timeout=50s
 ----
-bazel test --local_cpu_resources=10 --test_timeout=50 pkg/spanconfig/spanconfigkvsubscriber:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkSpanConfigDecoder --test_sharding_strategy=disabled --test_arg -test.v --test_output all
+bazel test --local_cpu_resources=10 --test_timeout=55 --test_arg -test.timeout=50s pkg/spanconfig/spanconfigkvsubscriber:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkSpanConfigDecoder --test_sharding_strategy=disabled --test_arg -test.v --test_output all
 
 exec
 dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --test-args '-test.memprofile=mem.out -test.cpuprofile=cpu.out'
