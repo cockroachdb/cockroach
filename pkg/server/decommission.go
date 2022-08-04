@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -148,7 +149,7 @@ func (s *Server) Decommission(
 		nodeIDs = orderedNodeIDs
 	}
 
-	var event eventpb.EventPayload
+	var event logpb.EventPayload
 	var nodeDetails *eventpb.CommonNodeDecommissionDetails
 	if targetStatus.Decommissioning() {
 		ev := &eventpb.NodeDecommissioning{}

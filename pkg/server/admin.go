@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1344,7 +1345,7 @@ func (s *adminServer) usersHelper(
 	return &resp, nil
 }
 
-var eventSetClusterSettingName = eventpb.GetEventTypeName(&eventpb.SetClusterSetting{})
+var eventSetClusterSettingName = logpb.GetEventTypeName(&eventpb.SetClusterSetting{})
 
 // combineAllErrors combines all passed-in errors into a single object.
 func combineAllErrors(errs []error) error {
@@ -2998,7 +2999,7 @@ func (s *adminServer) SendKVBatch(
 		return nil, serverError(ctx, errors.Wrap(err, "failed to encode BatchRequest as JSON"))
 	}
 	event := &eventpb.DebugSendKvBatch{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			Timestamp: timeutil.Now().UnixNano(),
 		},
 		CommonDebugEventDetails: eventpb.CommonDebugEventDetails{

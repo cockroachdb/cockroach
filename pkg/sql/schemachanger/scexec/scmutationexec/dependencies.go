@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // NameResolver is used to retrieve fully qualified names from the catalog.
@@ -108,7 +109,7 @@ type MutationVisitorStateUpdater interface {
 		id descpb.ID,
 		metadata scpb.TargetMetadata,
 		details eventpb.CommonSQLEventDetails,
-		event eventpb.EventPayload,
+		event logpb.EventPayload,
 	) error
 
 	// DeleteSchedule deletes a scheduled job.

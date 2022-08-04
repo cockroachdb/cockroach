@@ -5,15 +5,26 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "logpb",
-    srcs = ["severity.go"],
+    srcs = [
+        "event.go",
+        "severity.go",
+        ":gen-json-encode-generated-go",  # keep
+    ],
     embed = [":logpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logpb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/jsonbytes",  # keep
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
 
 proto_library(
     name = "logpb_proto",
-    srcs = ["log.proto"],
+    srcs = [
+        "event.proto",
+        "log.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
@@ -31,8 +42,29 @@ go_proto_library(
 exports_files(
     [
         "log.proto",
+        "event.proto",
     ],
     visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "gen-json-encode-generated-go",
+    srcs = ["event.proto"],
+    outs = ["json_encode_generated.go"],
+    cmd = """
+    $(location //pkg/util/log/eventpb/eventpbgen:eventpbgen) \
+        --package=logpb \
+        json_encode_go \
+        $(location event.proto) \
+        >$(location json_encode_generated.go)
+    """,
+    exec_tools = [
+        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 get_x_data(name = "get_x_data")

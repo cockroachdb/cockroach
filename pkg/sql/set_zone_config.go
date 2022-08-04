@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -803,7 +804,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			Config:  strings.TrimSpace(yamlConfig),
 			Options: optionsStr,
 		}
-		var info eventpb.EventPayload
+		var info logpb.EventPayload
 		if deleteZone {
 			info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
 		} else {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -74,12 +75,12 @@ type EventLogger interface {
 		ctx context.Context,
 		descID descpb.ID,
 		details eventpb.CommonSQLEventDetails,
-		event eventpb.EventPayload,
+		event logpb.EventPayload,
 	) error
 
 	// LogEventForSchemaChange write a schema change event entry into the event log.
 	LogEventForSchemaChange(
-		ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+		ctx context.Context, descID descpb.ID, event logpb.EventPayload,
 	) error
 }
 

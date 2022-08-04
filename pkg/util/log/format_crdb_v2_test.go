@@ -54,7 +54,7 @@ func TestFormatCrdbV2(t *testing.T) {
 	}
 
 	ev := &eventpb.RenameDatabase{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			Timestamp: 123,
 			EventType: "rename_database",
 		},
@@ -103,7 +103,7 @@ func TestFormatCrdbV2(t *testing.T) {
 		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "%s", longLine),
 		// Many-byte structured.
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
-			CommonEventDetails: eventpb.CommonEventDetails{
+			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
 			},

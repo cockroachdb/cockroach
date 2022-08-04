@@ -13,6 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
 
 // This file contains common payloads to multiple event types.
 //
@@ -21,14 +22,6 @@ import "gogoproto/gogo.proto";
 // here, not protobuf.
 // *Really look at doc.go before modifying this file.*
 
-// CommonEventDetails contains the fields common to all events.
-message CommonEventDetails {
-  // The timestamp of the event. Expressed as nanoseconds since
-  // the Unix epoch.
-  int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
-  // The type of the event.
-  string event_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-}
 
 // CommonSQLEventDetails contains the fields common to all
 // SQL events.

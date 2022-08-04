@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -293,7 +294,7 @@ func (rh *rowHelper) checkRowSize(
 		if rh.metrics != nil {
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
-		var event eventpb.EventPayload
+		var event logpb.EventPayload
 		if rh.internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
 		} else {

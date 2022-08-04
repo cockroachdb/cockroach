@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -295,7 +296,7 @@ func (c *conn) serveImpl(
 			if c.authLogEnabled() {
 				endTime := timeutil.Now()
 				ev := &eventpb.ClientSessionEnd{
-					CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+					CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
 					CommonConnectionDetails: authOpt.connDetails,
 					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
 				}

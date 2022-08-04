@@ -20,9 +20,11 @@ EVENTPB_PROTOS = [
     "telemetry.proto",
 ]
 
+EVENTPB_PROTO_DEPS = [ "//pkg/util/log/logpb:event.proto", ] + EVENTPB_PROTOS
+
 # The same list as above, but formatted such that outside Bazel rules can depend
 # on them as `srcs`.
-EVENTPB_PROTO_SRCS = ["//pkg/util/log/eventpb:{}".format(proto) for proto in EVENTPB_PROTOS]
+EVENTPB_PROTO_SRCS =  [ "//pkg/util/log/logpb:event.proto", ] + ["//pkg/util/log/eventpb:{}".format(proto) for proto in EVENTPB_PROTOS]
 
 # The $(location) of each of these .protos in the order above.
 EVENTPB_PROTO_LOCATIONS = " ".join(["$(location {})".format(src) for src in EVENTPB_PROTO_SRCS])

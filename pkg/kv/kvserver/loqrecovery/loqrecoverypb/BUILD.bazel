@@ -41,6 +41,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/keysutil",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
     ],

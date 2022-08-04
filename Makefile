@@ -1616,37 +1616,50 @@ docs/generated/redact_safe.md:
 #### WARNING ####
 # You must keep this list in sync with the list in `pkg/util/log/eventpb/PROTOS.bzl`.
 # Order matters!!
-EVENTLOG_PROTOS = \
-	pkg/util/log/eventpb/events.proto \
-	pkg/util/log/eventpb/debug_events.proto \
-	pkg/util/log/eventpb/ddl_events.proto \
-	pkg/util/log/eventpb/misc_sql_events.proto \
-	pkg/util/log/eventpb/privilege_events.proto \
-	pkg/util/log/eventpb/role_events.proto \
-	pkg/util/log/eventpb/zone_events.proto \
-	pkg/util/log/eventpb/session_events.proto \
-	pkg/util/log/eventpb/sql_audit_events.proto \
-	pkg/util/log/eventpb/cluster_events.proto \
-	pkg/util/log/eventpb/job_events.proto \
-	pkg/util/log/eventpb/health_events.proto \
-	pkg/util/log/eventpb/telemetry.proto
+EVENTPB_PROTOS = \
+  pkg/util/log/eventpb/events.proto \
+  pkg/util/log/eventpb/debug_events.proto \
+  pkg/util/log/eventpb/ddl_events.proto \
+  pkg/util/log/eventpb/misc_sql_events.proto \
+  pkg/util/log/eventpb/privilege_events.proto \
+  pkg/util/log/eventpb/role_events.proto \
+  pkg/util/log/eventpb/zone_events.proto \
+  pkg/util/log/eventpb/session_events.proto \
+  pkg/util/log/eventpb/sql_audit_events.proto \
+  pkg/util/log/eventpb/cluster_events.proto \
+  pkg/util/log/eventpb/job_events.proto \
+  pkg/util/log/eventpb/health_events.proto \
+  pkg/util/log/eventpb/telemetry.proto
+
+EVENTLOG_PROTOS = pkg/util/log/logpb/event.proto $(EVENTPB_PROTOS)
+
+EVENTPBGEN_PKG = pkg/util/log/eventpb/eventpbgen
 
 LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
+
+$(EVENTPBGEN_PKG)/log_channels_generated.go: pkg/util/log/logpb/log.proto
+	awk -f $(EVENTPBGEN_PKG)/extract_log_channels.awk <$< >$@
+
+$(EVENTPBGEN_PKG): $(EVENTPBGEN_PKG)/*.go $(EVENTPBGEN_PKG)/log_channels_generated.go
 
 docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP) | bin/.bootstrap
 	$(GO) run $(GOMODVENDORFLAGS) $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+docs/generated/eventlog.md: $(EVENTPBGEN_PKG) $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOMODVENDORFLAGS) ./$< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-pkg/util/log/eventpb/eventlog_channels_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) $< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+pkg/util/log/eventpb/eventlog_channels_generated.go: $(EVENTPBGEN_PKG) $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOMODVENDORFLAGS) ./$< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-pkg/util/log/eventpb/json_encode_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) $< json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+pkg/util/log/eventpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/eventpb $(EVENTPB_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOMODVENDORFLAGS) ./$< --excluded-events CommonEventDetails json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+
+pkg/util/log/logpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/logpb/event.proto | bin/.go_protobuf_sources
+	$(GO) run $(GOMODVENDORFLAGS) ./$< json_encode_go pkg/util/log/logpb/event.proto >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap

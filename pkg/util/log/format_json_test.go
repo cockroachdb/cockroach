@@ -56,7 +56,7 @@ func TestJSONFormats(t *testing.T) {
 		{idPayload: idPayload{clusterID: "abc", nodeID: "123"}},
 		{idPayload: idPayload{tenantID: "456", sqlInstanceID: "123"}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
-			CommonEventDetails: eventpb.CommonEventDetails{
+			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
 			},

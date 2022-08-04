@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -56,7 +57,7 @@ func isErrEventPayloadNotRequired(err error) bool {
 
 func asEventPayload(
 	ctx context.Context, fullName string, e scpb.Element, targetStatus scpb.Status, m *visitor,
-) (eventpb.EventPayload, error) {
+) (logpb.EventPayload, error) {
 	if targetStatus == scpb.Status_ABSENT {
 		switch e.(type) {
 		case *scpb.Table:
@@ -136,7 +137,7 @@ func asCommentEventPayload(
 	targetStatus scpb.Status,
 	m *visitor,
 	isNullComment bool,
-) (eventpb.EventPayload, error) {
+) (logpb.EventPayload, error) {
 	switch e := e.(type) {
 	case *scpb.TableComment:
 		return &eventpb.CommentOnTable{

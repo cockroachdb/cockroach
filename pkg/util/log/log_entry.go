@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -209,7 +208,7 @@ func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEn
 
 // makeStructuredEntry creates a logEntry using a structured payload.
 func makeStructuredEntry(
-	ctx context.Context, s Severity, c Channel, depth int, payload eventpb.EventPayload,
+	ctx context.Context, s Severity, c Channel, depth int, payload logpb.EventPayload,
 ) (res logEntry) {
 	res = makeEntry(ctx, s, c, depth+1)
 

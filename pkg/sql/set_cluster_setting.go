@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -317,7 +318,7 @@ func writeSettingInternal(
 	value tree.TypedExpr,
 	evalCtx *eval.Context,
 	forSystemTenant bool,
-	logFn func(context.Context, descpb.ID, eventpb.EventPayload) error,
+	logFn func(context.Context, descpb.ID, logpb.EventPayload) error,
 	releaseLeases func(context.Context),
 ) (expectedEncodedValue string, err error) {
 	err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
