@@ -120,6 +120,8 @@ type ProxyOptions struct {
 
 		// balancerOpts is used to customize the balancer created by the proxy.
 		balancerOpts []balancer.Option
+
+		httpCancelErrHandler func(err error)
 	}
 }
 
@@ -491,7 +493,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 // handleCancelRequest handles a pgwire query cancel request by either
 // forwarding it to a SQL node or to another proxy.
 func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowForward bool) error {
-	const timeout = 2 * time.Second
 	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
 		return ci.sendCancelToBackend(cr.ClientIP)
 	}
@@ -499,13 +500,18 @@ func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowFo
 	if !allowForward {
 		return nil
 	}
-	u := "https://" + cr.ProxyIP.String() + ":8080/_status/cancel"
+	u := "http://" + cr.ProxyIP.String() + ":8080/_status/cancel/"
 	reqBody := bytes.NewReader(cr.Encode())
+	return forwardCancelRequest(u, reqBody)
+}
+
+var forwardCancelRequest = func(url string, reqBody *bytes.Reader) error {
+	const timeout = 2 * time.Second
 	client := http.Client{
 		Timeout: timeout,
 	}
 
-	if _, err := client.Post(u, "application/octet-stream", reqBody); err != nil {
+	if _, err := client.Post(url, "application/octet-stream", reqBody); err != nil {
 		return err
 	}
 	return nil

@@ -115,7 +115,8 @@ func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleCancel
+// handleCancel processes a cancel request that has been forwarded from another
+// sqlproxy.
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	var retErr error
 	defer func() {
@@ -126,6 +127,9 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 				r.Context(), "could not handle cancel request from client %s: %v",
 				r.RemoteAddr, retErr,
 			)
+		}
+		if f := s.handler.testingKnobs.httpCancelErrHandler; f != nil {
+			f(retErr)
 		}
 	}()
 	buf := make([]byte, proxyCancelRequestLen)

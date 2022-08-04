@@ -98,6 +98,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",

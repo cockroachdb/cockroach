@@ -9,12 +9,15 @@
 package sqlproxyccl
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -41,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -83,7 +87,7 @@ func TestLongDBName(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(
+	s, addr, _ := newSecureProxyServer(
 		ctx, t, stopper, &ProxyOptions{RoutingRule: "127.0.0.1:26257"})
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
@@ -109,7 +113,7 @@ func TestBackendDownRetry(t *testing.T) {
 	// Set RefreshDelay to -1 so that we could simulate a ListPod call under
 	// the hood, which then triggers an EnsurePod again.
 	opts.testingKnobs.dirOpts = []tenant.DirOption{tenant.RefreshDelay(-1)}
-	server, addr := newSecureProxyServer(ctx, t, stopper, opts)
+	server, addr, _ := newSecureProxyServer(ctx, t, stopper, opts)
 	directoryServer := mustGetTestSimpleDirectoryServer(t, server.handler)
 
 	callCount := 0
@@ -140,7 +144,7 @@ func TestFailedConnection(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, proxyAddr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
+	s, proxyAddr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
 
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
@@ -200,7 +204,7 @@ func TestUnexpectedError(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
+	_, addr, _ := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
 	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&connect_timeout=5", addr)
 
@@ -242,7 +246,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
-	s, addr := newSecureProxyServer(
+	s, addr, _ := newSecureProxyServer(
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 	_, port, err := net.SplitHostPort(addr)
@@ -314,7 +318,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+		_, addr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    true,
 			RoutingRule: "127.0.0.1:26257",
 		})
@@ -337,7 +341,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+		_, addr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  true,
 			RoutingRule: "127.0.0.1:26257",
@@ -365,7 +369,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+		_, addr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  false,
 			RoutingRule: "127.0.0.1:26257",
@@ -414,7 +418,7 @@ func TestProxyTLSClose(t *testing.T) {
 		return originalFrontendAdmit(conn, incomingTLSConfig)
 	})()
 
-	s, addr := newSecureProxyServer(
+	s, addr, _ := newSecureProxyServer(
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
@@ -491,7 +495,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
-	s, proxyAddr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
+	s, proxyAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
 
 	u := fmt.Sprintf("postgres://bogususer:foo123@%s/?sslmode=require&authToken=abc123&options=--cluster=tenant-cluster-28&sslmode=require", proxyAddr)
 	te.TestConnect(ctx, t, u, func(conn *pgx.Conn) {
@@ -526,7 +530,7 @@ func TestInsecureProxy(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
-	s, addr := newProxyServer(
+	s, addr, _ := newProxyServer(
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
@@ -558,7 +562,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
+	_, addr, _ := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
 	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 
@@ -584,7 +588,7 @@ func TestErroneousBackend(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
+	_, addr, _ := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
 	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 
@@ -610,7 +614,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
+	s, addr, _ := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
 
 	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
@@ -678,7 +682,7 @@ func TestDenylistUpdate(t *testing.T) {
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
-	s, addr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{
+	s, addr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{
 		Denylist:           denyList.Name(),
 		PollConfigInterval: 10 * time.Millisecond,
 	})
@@ -739,7 +743,7 @@ func TestDirectoryConnect(t *testing.T) {
 		DirectoryAddr: tdsAddr.String(),
 		Insecure:      true,
 	}
-	_, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
+	_, addr, _ := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
 		url := fmt.Sprintf(
@@ -853,7 +857,7 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 
 	opts := &ProxyOptions{SkipVerify: true, DisableConnectionRebalancing: true}
 	opts.testingKnobs.directoryServer = tds
-	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	proxy, addr, _ := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
 
 	// Open 12 connections to the first pod.
@@ -906,6 +910,239 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 	require.Len(t, dist, 1)
 }
 
+func TestCancelQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	// Start KV server, and enable session migration.
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+
+	// Start two SQL pods for the test tenant.
+	const podCount = 2
+	tenantID := serverutils.TestTenantID()
+	tenants := startTestTenantPods(ctx, t, s, tenantID, podCount)
+	defer func() {
+		for _, tenant := range tenants {
+			tenant.Stopper().Stop(ctx)
+		}
+	}()
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	// Register one SQL pod in the directory server.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), timeSource)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           tenants[0].SQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeSource.Now(),
+	})
+	require.NoError(t, tds.Start(ctx))
+
+	opts := &ProxyOptions{SkipVerify: true}
+	opts.testingKnobs.directoryServer = tds
+	var httpCancelErr error
+	opts.testingKnobs.httpCancelErrHandler = func(err error) {
+		httpCancelErr = err
+	}
+	opts.testingKnobs.balancerOpts = []balancer.Option{
+		balancer.TimeSource(timeSource),
+		balancer.RebalanceRate(1),
+		balancer.RebalanceDelay(-1),
+	}
+	proxy, addr, httpAddr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	connectionString := fmt.Sprintf(
+		"postgres://testuser:hunter2@%s/defaultdb?sslmode=require&sslrootcert=%s&options=--cluster=tenant-cluster-%s",
+		addr, testutils.TestDataPath(t, "testserver.crt"), tenantID,
+	)
+
+	// Open a connection to the first pod.
+	conn, err := pgx.Connect(ctx, connectionString)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	// Add a second SQL pod.
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           tenants[1].SQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeSource.Now(),
+	})
+
+	// Wait until the update gets propagated to the directory cache.
+	testutils.SucceedsSoon(t, func() error {
+		pods, err := proxy.handler.directoryCache.TryLookupTenantPods(ctx, tenantID)
+		if err != nil {
+			return err
+		}
+		if len(pods) != 2 {
+			return errors.Newf("expected 2 pods, but got %d", len(pods))
+		}
+		return nil
+	})
+
+	t.Run("cancel over sql", func(t *testing.T) {
+		group := ctxgroup.WithContext(ctx)
+		group.GoCtx(func(ctx context.Context) error {
+			time.Sleep(50 * time.Millisecond)
+			return conn.PgConn().CancelRequest(ctx)
+		})
+		var b bool
+		err = conn.QueryRow(ctx, "SELECT pg_sleep(5)").Scan(&b)
+		require.Error(t, err)
+		require.Regexp(t, "query execution canceled", err.Error())
+		require.NoError(t, group.Wait())
+	})
+
+	t.Run("cancel over http", func(t *testing.T) {
+		group := ctxgroup.WithContext(ctx)
+		group.GoCtx(func(ctx context.Context) error {
+			time.Sleep(50 * time.Millisecond)
+			cancelRequest := proxyCancelRequest{
+				ProxyIP:   net.IP{},
+				SecretKey: conn.PgConn().SecretKey(),
+				ClientIP:  net.IP{127, 0, 0, 1},
+			}
+			u := "http://" + httpAddr + "/_status/cancel/"
+			reqBody := bytes.NewReader(cancelRequest.Encode())
+			client := http.Client{
+				Timeout: 1 * time.Second,
+			}
+			resp, err := client.Post(u, "application/octet-stream", reqBody)
+			if err != nil {
+				return err
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			assert.Equal(t, "OK", string(respBytes))
+			return nil
+		})
+		var b bool
+		err = conn.QueryRow(ctx, "SELECT pg_sleep(5)").Scan(&b)
+		require.Error(t, err)
+		require.Regexp(t, "query execution canceled", err.Error())
+		require.NoError(t, group.Wait())
+	})
+
+	t.Run("cancel after migrating a session", func(t *testing.T) {
+		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Minute)()
+		origCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
+		require.True(t, found)
+		b := tds.DrainPod(tenantID, tenants[0].SQLAddr())
+		require.True(t, b)
+		testutils.SucceedsSoon(t, func() error {
+			pods, err := proxy.handler.directoryCache.TryLookupTenantPods(ctx, tenantID)
+			if err != nil {
+				return err
+			}
+			for _, pod := range pods {
+				if pod.State == tenant.DRAINING {
+					return nil
+				}
+			}
+			return errors.New("expected DRAINING pod")
+		})
+		origCancelInfo.mu.RLock()
+		origKey := origCancelInfo.mu.origBackendKeyData.SecretKey
+		origCancelInfo.mu.RUnlock()
+		// Advance the time so that rebalancing will occur.
+		timeSource.Advance(2 * time.Minute)
+		proxy.handler.balancer.RebalanceTenant(ctx, tenantID)
+		testutils.SucceedsSoon(t, func() error {
+			newCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
+			if !found {
+				return errors.New("expected to find cancel info")
+			}
+			newCancelInfo.mu.RLock()
+			newKey := newCancelInfo.mu.origBackendKeyData.SecretKey
+			newCancelInfo.mu.RUnlock()
+			if origKey == newKey {
+				return errors.Newf("expected %d to differ", origKey)
+			}
+			return nil
+		})
+
+		group := ctxgroup.WithContext(ctx)
+		group.GoCtx(func(ctx context.Context) error {
+			time.Sleep(50 * time.Millisecond)
+			return conn.PgConn().CancelRequest(ctx)
+		})
+		err = conn.QueryRow(ctx, "SELECT pg_sleep(5)").Scan(&b)
+		require.Error(t, err)
+		require.Regexp(t, "query execution canceled", err.Error())
+		require.NoError(t, group.Wait())
+	})
+
+	t.Run("reject cancel from wrong client IP", func(t *testing.T) {
+		cancelRequest := proxyCancelRequest{
+			ProxyIP:   net.IP{},
+			SecretKey: conn.PgConn().SecretKey(),
+			ClientIP:  net.IP{127, 1, 2, 3},
+		}
+		u := "http://" + httpAddr + "/_status/cancel/"
+		reqBody := bytes.NewReader(cancelRequest.Encode())
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+		resp, err := client.Post(u, "application/octet-stream", reqBody)
+		require.NoError(t, err)
+		respBytes, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "OK", string(respBytes))
+		require.Error(t, httpCancelErr)
+		require.Regexp(t, "mismatched client IP for cancel request", httpCancelErr.Error())
+	})
+
+	t.Run("forward over http", func(t *testing.T) {
+		var forwardedTo string
+		var forwardedReq proxyCancelRequest
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer testutils.TestingHook(&forwardCancelRequest, func(url string, reqBody *bytes.Reader) error {
+			forwardedTo = url
+			var err error
+			reqBytes, err := ioutil.ReadAll(reqBody)
+			assert.NoError(t, err)
+			err = forwardedReq.Decode(reqBytes)
+			assert.NoError(t, err)
+			wg.Done()
+			return nil
+		})()
+		crdbRequest := &pgproto3.CancelRequest{
+			ProcessID: 1,
+			SecretKey: 2,
+		}
+		buf := crdbRequest.Encode(nil /* buf */)
+		proxyAddr := conn.PgConn().Conn().RemoteAddr()
+		cancelConn, err := net.Dial(proxyAddr.Network(), proxyAddr.String())
+		require.NoError(t, err)
+		defer cancelConn.Close()
+
+		_, err = cancelConn.Write(buf)
+		require.NoError(t, err)
+		_, err = cancelConn.Read(buf)
+		require.ErrorIs(t, io.EOF, err)
+		wg.Wait()
+		require.Equal(t, "http://0.0.0.1:8080/_status/cancel/", forwardedTo)
+		expectedReq := proxyCancelRequest{
+			ProxyIP:   net.IP{0, 0, 0, 1},
+			SecretKey: 2,
+			ClientIP:  net.IP{127, 0, 0, 1},
+		}
+		require.Equal(t, expectedReq, forwardedReq)
+	})
+}
+
 func TestPodWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -948,7 +1185,7 @@ func TestPodWatcher(t *testing.T) {
 		balancer.NoRebalanceLoop(),
 		balancer.RebalanceRate(1.0),
 	}
-	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	proxy, addr, _ := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
 
 	// Open 12 connections to it. The balancer should distribute the connections
@@ -1044,7 +1281,7 @@ func TestConnectionMigration(t *testing.T) {
 	// loads. For this test, we will stub out lookupAddr in the connector. We
 	// will alternate between tenant1 and tenant2, starting with tenant1.
 	opts := &ProxyOptions{SkipVerify: true, RoutingRule: tenant1.SQLAddr()}
-	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	proxy, addr, _ := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
 
@@ -1408,7 +1645,7 @@ func TestCurConnCountMetric(t *testing.T) {
 
 	opts := &ProxyOptions{SkipVerify: true, DisableConnectionRebalancing: true}
 	opts.testingKnobs.directoryServer = tds
-	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	proxy, addr, _ := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
 
 	// Open 500 connections to the SQL pod.
@@ -1819,7 +2056,7 @@ func (te *tester) TestConnectErr(
 
 func newSecureProxyServer(
 	ctx context.Context, t *testing.T, stopper *stop.Stopper, opts *ProxyOptions,
-) (server *Server, addr string) {
+) (server *Server, addr, httpAddr string) {
 	// Created via:
 	const _ = `
 openssl genrsa -out testdata/testserver.key 2048
@@ -1834,10 +2071,15 @@ openssl req -new -x509 -sha256 -key testdata/testserver.key -out testdata/testse
 
 func newProxyServer(
 	ctx context.Context, t *testing.T, stopper *stop.Stopper, opts *ProxyOptions,
-) (server *Server, addr string) {
+) (server *Server, addr, httpAddr string) {
 	const listenAddress = "127.0.0.1:0"
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 	ln, err := net.Listen("tcp", listenAddress)
 	require.NoError(t, err)
+	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
+	httpLn, err := net.Listen("tcp", listenAddress)
+	require.NoError(t, err)
+	stopper.AddCloser(stop.CloserFn(func() { _ = httpLn.Close() }))
 
 	server, err = NewServer(ctx, stopper, *opts)
 	require.NoError(t, err)
@@ -1846,8 +2088,12 @@ func newProxyServer(
 		_ = server.Serve(ctx, ln)
 	})
 	require.NoError(t, err)
+	err = server.Stopper.RunAsyncTask(ctx, "proxy-http-server-serve", func(ctx context.Context) {
+		_ = server.ServeHTTP(ctx, httpLn)
+	})
+	require.NoError(t, err)
 
-	return server, ln.Addr().String()
+	return server, ln.Addr().String(), httpLn.Addr().String()
 }
 
 func runTestQuery(ctx context.Context, conn *pgx.Conn) error {
