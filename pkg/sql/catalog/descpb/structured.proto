@@ -1180,7 +1180,31 @@ message TableDescriptor {
   // this table, in which case the global setting is used.
   optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
 
-  // Next ID: 54
+  // ImportStartWallTime contains the start wall time of an in-progress import.
+  // This field is non zero if this table is offline during an import.
+  optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
+
+  // ImportType indicates the kind of import currently occurring on the table.
+  enum ImportType {
+    // NO_IMPORT indicates that no import is currently occurring on the table.
+    NO_IMPORT = 0;
+
+    // IMPORT_NEW indicates that an in-progress IMPORT job created this new table.
+    IMPORT_NEW = 1;
+
+    // IMPORT_EXISTS_EMPTY indicates that the table existed with no data before the
+    // in-progress IMPORT job began.
+    IMPORT_EXISTS_EMPTY = 2;
+
+    // IMPORT_EXISTED_EMPTY indicates that the table existed with data before the
+    // in-progress IMPORT job began.
+    IMPORT_EXISTS_NON_EMPTY = 3;
+  }
+
+  // ImportType describes the type of in-progress import, if any.
+  optional ImportType import_type = 55 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
+
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.
