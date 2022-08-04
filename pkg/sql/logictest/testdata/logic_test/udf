@@ -312,3 +312,25 @@ ALTER FUNCTION f() SET SCHEMA test_sc
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
+
+subtest udf_pg_proc
+
+statement ok
+CREATE FUNCTION proc_f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement
+CREATE FUNCTION proc_f(STRING, b INT) RETURNS SETOF STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+statement ok
+CREATE SCHEMA sc;
+
+statement
+CREATE FUNCTION sc.proc_f_2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
+----
+100115  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100116  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100118  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
