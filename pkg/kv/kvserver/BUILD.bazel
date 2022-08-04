@@ -210,6 +210,7 @@ go_library(
         "@io_etcd_go_etcd_raft_v3//:raft",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
+        "@io_opentelemetry_go_otel//attribute",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_time//rate",
     ],
