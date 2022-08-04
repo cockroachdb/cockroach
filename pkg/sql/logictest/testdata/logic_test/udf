@@ -361,3 +361,22 @@ query I
 SELECT max_in_values()
 ----
 3
+
+statement ok
+CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM ab WHERE a = 1;
+  SELECT b FROM ab WHERE a = 2;
+$$
+
+query II
+SELECT i, fetch_one_then_two()
+FROM (VALUES (1), (2), (3)) AS v(i)
+WHERE i = fetch_one_then_two()
+----
+2  2
+
+query I colnames
+SELECT * FROM fetch_one_then_two()
+----
+fetch_one_then_two
+2
