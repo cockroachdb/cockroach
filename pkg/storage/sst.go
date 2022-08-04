@@ -49,6 +49,7 @@ func CheckSSTConflicts(
 	sst []byte,
 	reader Reader,
 	start, end MVCCKey,
+	rightPeekBound roachpb.Key,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	maxIntents int64,
@@ -124,7 +125,7 @@ func CheckSSTConflicts(
 
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:     IterKeyTypePointsAndRanges,
-		UpperBound:   end.Key,
+		UpperBound:   rightPeekBound,
 		Prefix:       usePrefixSeek,
 		useL6Filters: true,
 	})
@@ -261,6 +262,7 @@ func CheckSSTConflicts(
 	sstOK, sstErr := sstIter.Valid()
 	var extOK bool
 	var extErr error
+	var sstPrevRangeKeys, extPrevRangeKeys MVCCRangeKeyStack
 
 	if usePrefixSeek {
 		// In the case of prefix seeks, do not look at engine iter exhaustion. This
@@ -324,15 +326,14 @@ func CheckSSTConflicts(
 		if extHasRange {
 			extRangeKeys = extIter.RangeKeys()
 		}
+		sstRangeKeysChanged := sstHasRange && !sstPrevRangeKeys.Bounds.Equal(sstRangeKeys.Bounds)
+		extRangeKeysChanged := extHasRange && !extPrevRangeKeys.Bounds.Equal(extRangeKeys.Bounds)
 		// Case where SST and engine both have range keys at the current iterator
 		// points. The SST range keys must be newer than engine range keys.
 		if extHasRange && sstHasRange {
 			// Check if the oldest SST range key conflicts with the newest ext
 			// range key.
-			//
-			// TODO(bilal): Do this check (and similar checks below) only if range keys
-			// have changed since the last iteration.
-			if sstRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) {
+			if (sstRangeKeysChanged || extRangeKeysChanged) && sstRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) {
 				sstTombstone := sstRangeKeys.Versions[len(sstRangeKeys.Versions)-1]
 				if sstTombstone.Timestamp.Less(extRangeKeys.Versions[0].Timestamp) {
 					// Conflict. We can't slide an MVCC range tombstone below an
@@ -340,11 +341,24 @@ func CheckSSTConflicts(
 					return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
 						sstTombstone.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstRangeKeys.Bounds.Key)
 				}
-				if ok := allowIdempotentHelper(extRangeKeys.Versions[0].Timestamp); !ok &&
-					(extRangeKeys.Versions[0].Timestamp == sstTombstone.Timestamp) {
-					// Idempotence is not allowed.
-					return enginepb.MVCCStats{}, errors.Errorf(
-						"ingested range key collides with an existing one: %s", sstTombstone)
+				if !extRangeKeys.Versions[0].Timestamp.Less(sstTombstone.Timestamp) {
+					// Check for idempotent range key additions. The top
+					// len(sstRangeKeys.Versions) timestamps must match between the two range
+					// key stacks.
+					extTombstones := extRangeKeys.Versions.Clone()
+					extTombstones.Trim(sstTombstone.Timestamp, hlc.MaxTimestamp)
+					isIdempotent := len(extTombstones) == len(sstRangeKeys.Versions)
+					for i := range extTombstones {
+						if !isIdempotent {
+							break
+						}
+						isIdempotent = extTombstones[i].Equal(sstRangeKeys.Versions[i])
+					}
+					if ok := allowIdempotentHelper(extRangeKeys.Versions[0].Timestamp); !ok || !isIdempotent {
+						// Idempotence is either not allowed or there's a conflict.
+						return enginepb.MVCCStats{}, errors.Errorf(
+							"ingested range key collides with an existing one: %s", sstTombstone)
+					}
 				}
 			}
 		}
@@ -358,13 +372,6 @@ func CheckSSTConflicts(
 				return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
 					sstKey.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstKey.Key)
 			}
-		}
-		// Mark stats as estimated if there are any SST range keys.
-		//
-		// TODO(bilal): Remove this when we are able to accurately calculate
-		// stats from ingesting MVCC range tombstones.
-		if sstHasRange {
-			statsDiff.ContainsEstimates = 1
 		}
 		// Check that the oldest SST range key is not underneath the current ext
 		// point key. If requested (with disallowShadowing or
@@ -400,6 +407,138 @@ func CheckSSTConflicts(
 				}
 			}
 		}
+		fragmentRangeKeys := func(rangeKeys MVCCRangeKeyStack, splitKey roachpb.Key) {
+			for i, v := range rangeKeys.Versions {
+				keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+				valBytes := int64(len(v.Value))
+				if i == 0 {
+					statsDiff.RangeKeyCount++
+					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
+				}
+				statsDiff.RangeKeyBytes += keyBytes
+				statsDiff.RangeValCount++
+				statsDiff.RangeValBytes += valBytes
+			}
+		}
+
+		if sstRangeKeysChanged {
+			if extHasRange && extRangeKeys.Bounds.Overlaps(sstRangeKeys.Bounds) {
+				switch sstRangeKeys.Bounds.Key.Compare(extRangeKeys.Bounds.Key) {
+				case -1:
+					// sstRangeKey starts earlier than extRangeKey. Add a fragment
+					statsDiff.RangeKeyBytes += int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.Key))
+					// Add the sst range key versions again, to account for the overlap
+					// with extRangeKeys.
+					for _, v := range sstRangeKeys.Versions {
+						keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+						valBytes := int64(len(v.Value))
+						statsDiff.RangeKeyBytes += keyBytes
+						statsDiff.RangeValCount++
+						statsDiff.RangeValBytes += valBytes
+					}
+				case 0:
+					// Same start key. No need to encode the start key again.
+					statsDiff.RangeKeyCount--
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.Key))
+				case 1:
+					fragmentRangeKeys(extRangeKeys, sstRangeKeys.Bounds.Key)
+					// No need to re-encode the start key, as fragmentRangeKeys has already
+					// done that for us.
+					statsDiff.RangeKeyCount--
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.Key))
+				}
+				// Check if the overlapping part of sstRangeKeys and extRangeKeys has
+				// idempotent versions. We already know this isn't a conflict, as that
+				// check happened earlier.
+				idempotentIdx := 0
+				for _, v := range sstRangeKeys.Versions {
+					if idempotentIdx >= len(extRangeKeys.Versions) || !v.Timestamp.Equal(extRangeKeys.Versions[idempotentIdx].Timestamp) {
+						break
+					}
+					// Subtract stats for this version, as it already exists in the
+					// engine.
+					keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					valBytes := int64(len(v.Value))
+					statsDiff.RangeKeyBytes -= keyBytes
+					statsDiff.RangeValCount--
+					statsDiff.RangeValBytes -= valBytes
+					idempotentIdx++
+				}
+				switch extRangeKeys.Bounds.EndKey.Compare(sstRangeKeys.Bounds.EndKey) {
+				case +1:
+					// This SST range key will fragment this ext range key.
+					fragmentRangeKeys(extRangeKeys, sstRangeKeys.Bounds.EndKey)
+					// Remove the contribution for the end key.
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
+				case 0:
+					// Remove the contribution for the end key.
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
+				}
+			}
+			if extRangeKeysChanged && !sstPrevRangeKeys.IsEmpty() && sstPrevRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) {
+				// Because we always re-seek the extIter after every sstIter step,
+				// it is possible that we missed an overlap between extRangeKeys and
+				// sstPrevRangeKeys. Account for that here by adding the version stats
+				// for sstPrevRangeKeys.
+				for _, v := range sstPrevRangeKeys.Versions {
+					statsDiff.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					statsDiff.RangeValCount++
+					statsDiff.RangeValBytes += int64(len(v.Value))
+				}
+			}
+			sstPrevRangeKeys = sstRangeKeys.Clone()
+		}
+		if extRangeKeysChanged {
+			if extPrevRangeKeys.Bounds.EndKey.Compare(extRangeKeys.Bounds.Key) < 0 &&
+				sstHasRange && sstRangeKeys.Bounds.Key.Compare(extRangeKeys.Bounds.Key) < 0 &&
+				sstRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) {
+				// We're adding a fragment between two non-abutting engine range keys.
+				startKey := extPrevRangeKeys.Bounds.EndKey
+				if sstRangeKeys.Bounds.Key.Compare(startKey) > 0 {
+					startKey = sstRangeKeys.Bounds.Key
+				}
+				endKey := extRangeKeys.Bounds.Key
+				statsDiff.RangeKeyCount++
+				statsDiff.RangeKeyBytes += int64(EncodedMVCCKeyPrefixLength(startKey) +
+					EncodedMVCCKeyPrefixLength(endKey))
+				for _, v := range sstRangeKeys.Versions {
+					statsDiff.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					statsDiff.RangeValCount++
+					statsDiff.RangeValBytes += int64(len(v.Value))
+				}
+			}
+			// Note that we exclude sstRangeKeysChanged below, as this case only
+			// accounts for additional ext range keys that this SST range key stack
+			// could be adding versions to. The very first ext range key stack that
+			// this sst stack contributes stats to is already accounted by the
+			// sstRangeKeysChanged conditional above.
+			if sstHasRange && sstRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) && !sstRangeKeysChanged {
+				idempotentIdx := 0
+				for _, v := range sstRangeKeys.Versions {
+					if len(extRangeKeys.Versions) > idempotentIdx && v.Timestamp.Equal(extRangeKeys.Versions[idempotentIdx].Timestamp) {
+						// Skip this version, as it already exists in the engine.
+						idempotentIdx++
+						continue
+					}
+					statsDiff.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					statsDiff.RangeValCount++
+					statsDiff.RangeValBytes += int64(len(v.Value))
+				}
+				// Check if this ext range key is going to be fragmented by the sst
+				// range key's end key.
+				switch extRangeKeys.Bounds.EndKey.Compare(sstRangeKeys.Bounds.EndKey) {
+				case +1:
+					// This SST range key will fragment this ext range key.
+					fragmentRangeKeys(extRangeKeys, sstRangeKeys.Bounds.EndKey)
+					// Remove the contribution for the end key.
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
+				case 0:
+					// Remove the contribution for the end key.
+					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
+				}
+			}
+			extPrevRangeKeys = extRangeKeys.Clone()
+		}
 
 		extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
 		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
@@ -429,6 +568,7 @@ func CheckSSTConflicts(
 			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
 
+		steppedExtIter := false
 		// Calling NextKey is only safe if both iterators are at a point key. This is
 		// because there could be a point key hiding behind the range key that we're
 		// currently at, and NextKey() would skip over it.
@@ -453,6 +593,7 @@ func CheckSSTConflicts(
 				// Check if ext has a point at this key. If not, NextKey() on sstIter
 				// and seek extIter.
 				extIter.Next()
+				steppedExtIter = true
 				extOK, extErr = extIter.Valid()
 				if extErr != nil {
 					return enginepb.MVCCStats{}, extErr
@@ -493,6 +634,7 @@ func CheckSSTConflicts(
 				sstIter.Next()
 				sstOK, sstErr = sstIter.Valid()
 				extIter.Next()
+				steppedExtIter = true
 				extOK, extErr = extIter.Valid()
 				sstChangedKeys := !sstOK || !sstIter.UnsafeKey().Key.Equal(oldKey.Key)
 				extChangedKeys := !extOK || !extIter.UnsafeKey().Key.Equal(oldKey.Key)
@@ -507,6 +649,24 @@ func CheckSSTConflicts(
 				// If both iterators are invalid, we are now done. If one both iterators
 				// are at point keys under the same MVCC key, then we can check for
 				// conflicts between them.
+			}
+		}
+		if !sstOK && extOK && !sstPrevRangeKeys.IsEmpty() {
+			// If the SST iter previously had a range key, it's possible that the
+			// ext iter has future range keys that we have yet to process. Check
+			// if that's the case.
+			if !steppedExtIter {
+				extIter.NextKey()
+			}
+			extOK, extErr = extIter.Valid()
+			if extOK {
+				sstIter.SeekGE(MVCCKey{Key: extIter.UnsafeKey().Key})
+				sstOK, sstErr = sstIter.Valid()
+				if sstOK {
+					// This SeekGE is purely to maintain the extIter > sstIter invariant
+					// as in most cases it'll be a no-op.
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+				}
 			}
 		}
 	}
