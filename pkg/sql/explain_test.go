@@ -337,11 +337,12 @@ func TestExplainMVCCSteps(t *testing.T) {
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
+
 	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
 	r.Exec(t, "CREATE TABLE bc (b PRIMARY KEY, c) AS SELECT g, g FROM generate_series(1,1000) g(g)")
 
 	scanQuery := "SELECT count(*) FROM ab"
-	expectedSteps, expectedSeeks := 1000, 2
+	expectedSteps, expectedSeeks := 1000, 1
 	foundSteps, foundSeeks := getMVCCStats(t, r, scanQuery)
 
 	assert.Equal(t, expectedSteps, foundSteps)
@@ -352,7 +353,7 @@ func TestExplainMVCCSteps(t *testing.T) {
 	// Update all rows.
 	r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
 
-	expectedSteps, expectedSeeks = 2000, 2
+	expectedSteps, expectedSeeks = 2000, 1
 	foundSteps, foundSeeks = getMVCCStats(t, r, scanQuery)
 
 	assert.Equal(t, expectedSteps, foundSteps)

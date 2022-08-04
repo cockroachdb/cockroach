@@ -2133,8 +2133,8 @@ func TestReplicaLatching(t *testing.T) {
 	}{
 		// Read/read doesn't wait.
 		{true, true, false, false},
-		// A write doesn't wait for an earlier read (except for local keys).
-		{true, false, false, true},
+		// A write doesn't wait for an earlier read.
+		{true, false, false, false},
 		// A read must wait for an earlier write.
 		{false, true, true, true},
 		// Writes always wait for other writes.
@@ -2458,7 +2458,7 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 	blockReader.Store(false)
 	blockWriter.Store(false)
 	blockCh := make(chan struct{}, 1)
-	blockedCh := make(chan struct{}, 1)
+	waitForRequestBlocked := make(chan struct{}, 1)
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
@@ -2469,10 +2469,10 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 				return nil
 			}
 			if filterArgs.Req.Method() == roachpb.Get && blockReader.Load().(bool) {
-				blockedCh <- struct{}{}
+				waitForRequestBlocked <- struct{}{}
 				<-blockCh
 			} else if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
-				blockedCh <- struct{}{}
+				waitForRequestBlocked <- struct{}{}
 				<-blockCh
 			}
 			return nil
@@ -2490,17 +2490,79 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 		interferes  bool
 	}{
 		// Reader & writer have same timestamps.
-		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("a"), true, true},
-		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("b"), false, true},
-		// Reader has earlier timestamp.
-		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("c"), true, false},
-		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("d"), false, false},
-		// Writer has earlier timestamp.
-		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("e"), true, true},
-		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("f"), false, true},
-		// Local keys always interfere.
-		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("a")), true, true},
-		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("b")), false, true},
+		//
+		// Reader goes first, but the reader does not need to hold latches during
+		// evaluation, so we expect no interference.
+		{
+			readerTS:    makeTS(1, 0),
+			writerTS:    makeTS(1, 0),
+			key:         roachpb.Key("a"),
+			readerFirst: true,
+			interferes:  false,
+		},
+		// Writer goes first, but the writer does need to hold latches during
+		// evaluation, so it should block the reader.
+		{
+			readerTS:    makeTS(1, 0),
+			writerTS:    makeTS(1, 0),
+			key:         roachpb.Key("b"),
+			readerFirst: false,
+			interferes:  true,
+		},
+		// Reader has earlier timestamp, so it doesn't interfere with the write
+		// that's in its future.
+		{
+			readerTS:    makeTS(1, 0),
+			writerTS:    makeTS(1, 1),
+			key:         roachpb.Key("c"),
+			readerFirst: true,
+			interferes:  false,
+		},
+		{
+			readerTS:    makeTS(1, 0),
+			writerTS:    makeTS(1, 1),
+			key:         roachpb.Key("d"),
+			readerFirst: false,
+			interferes:  false,
+		},
+		// Writer has an earlier timestamp. We expect no interference for the writer
+		// as the reader will be evaluating over a pebble snapshot. We'd expect the
+		// writer to be able to continue without interference but to get bumped by
+		// the timestamp cache.
+		{
+			readerTS:    makeTS(1, 1),
+			writerTS:    makeTS(1, 0),
+			key:         roachpb.Key("e"),
+			readerFirst: true,
+			interferes:  false,
+		},
+		// We expect the reader to block for the writer that's writing in the
+		// reader's past.
+		{
+			readerTS:    makeTS(1, 1),
+			writerTS:    makeTS(1, 0),
+			key:         roachpb.Key("f"),
+			readerFirst: false,
+			interferes:  true,
+		},
+		// Even though local key accesses are NonMVCC, the reader should not block
+		// the writer because it should not need to hold its latches during
+		// evaluation.
+		{
+			readerTS:    makeTS(1, 0),
+			writerTS:    makeTS(1, 1),
+			key:         keys.RangeDescriptorKey(roachpb.RKey("a")),
+			readerFirst: true,
+			interferes:  false,
+		},
+		// The writer will block the reader since it holds NonMVCC latches during
+		// evaluation.
+		{
+			readerTS:   makeTS(1, 0),
+			writerTS:   makeTS(1, 1),
+			key:        keys.RangeDescriptorKey(roachpb.RKey("b")),
+			interferes: true,
+		},
 	}
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
@@ -2524,7 +2586,8 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 					_, pErr := tc.Sender().Send(context.Background(), baR)
 					errCh <- pErr
 				}()
-				<-blockedCh
+				// Wait for the above read to get blocked on blockCh.
+				<-waitForRequestBlocked
 				go func() {
 					_, pErr := tc.Sender().Send(context.Background(), baW)
 					errCh <- pErr
@@ -2535,7 +2598,9 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 					_, pErr := tc.Sender().Send(context.Background(), baW)
 					errCh <- pErr
 				}()
-				<-blockedCh
+				// Wait for the above write to get blocked on blockCh while it's holding
+				// latches.
+				<-waitForRequestBlocked
 				go func() {
 					_, pErr := tc.Sender().Send(context.Background(), baR)
 					errCh <- pErr

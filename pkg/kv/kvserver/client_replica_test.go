@@ -254,17 +254,13 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		restartKey = "restart"
 	)
 	// Set up a filter to so that the get operation at Step 3 will return an error.
-	var numGets int32
+	var shouldFailGet atomic.Value
 
 	testingEvalFilter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 			filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
 			filterArgs.Hdr.Txn == nil {
-			// The Reader executes two get operations, each of which triggers two get requests
-			// (the first request fails and triggers txn push, and then the second request
-			// succeeds). Returns an error for the fourth get request to avoid timestamp cache
-			// update after the third get operation pushes the txn timestamp.
-			if atomic.AddInt32(&numGets, 1) == 4 {
+			if shouldFail := shouldFailGet.Load(); shouldFail != nil && shouldFail.(bool) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("Test"), filterArgs.Hdr.Txn)
 			}
 		}
@@ -403,6 +399,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manual.Increment(100)
 
 	h.Timestamp = s.Clock().Now()
+	shouldFailGet.Store(true)
 	if _, err := kv.SendWrappedWith(
 		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err == nil {
@@ -4582,20 +4579,6 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	var txn2ID atomic.Value
 	var txn2BBlockOnce sync.Once
 	txn2BlockedC := make(chan chan struct{})
-	postEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
-		if txn := args.Hdr.Txn; txn != nil && txn.ID == txn2ID.Load() {
-			txn2BBlockOnce.Do(func() {
-				if !errors.HasType(args.Err, (*roachpb.WriteIntentError)(nil)) {
-					t.Errorf("expected WriteIntentError; got %v", args.Err)
-				}
-
-				unblockCh := make(chan struct{})
-				txn2BlockedC <- unblockCh
-				<-unblockCh
-			})
-		}
-		return nil
-	}
 
 	// Detect when txn4 discovers txn3's intent and begins to push.
 	var txn4ID atomic.Value
@@ -4616,10 +4599,20 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-					TestingPostEvalFilter: postEvalFilter,
-				},
 				TestingRequestFilter: requestFilter,
+				TestingConcurrencyRetryFilter: func(ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error) {
+					if txn := ba.Txn; txn != nil && txn.ID == txn2ID.Load() {
+						txn2BBlockOnce.Do(func() {
+							if !errors.HasType(pErr.GoError(), (*roachpb.WriteIntentError)(nil)) {
+								t.Errorf("expected WriteIntentError; got %v", pErr)
+							}
+
+							unblockCh := make(chan struct{})
+							txn2BlockedC <- unblockCh
+							<-unblockCh
+						})
+					}
+				},
 				// Required by TestCluster.MoveRangeLeaseNonCooperatively.
 				AllowLeaseRequestProposalsWhenNotLeader: true,
 			},
@@ -4652,7 +4645,12 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 		_, err := txn2.Get(ctx, key)
 		err2C <- err
 	}()
-	txn2UnblockC := <-txn2BlockedC
+	var txn2UnblockC chan struct{}
+	select {
+	case txn2UnblockC = <-txn2BlockedC:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for txn2 to block")
+	}
 
 	// Transfer the lease to Server 1. Do so non-cooperatively instead of using
 	// a lease transfer, because the cooperative lease transfer would get stuck
