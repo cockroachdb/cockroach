@@ -40,18 +40,19 @@ func ReverseScan(
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
-		SkipLocked:       h.WaitPolicy == lock.WaitPolicy_SkipLocked,
-		Txn:              h.Txn,
-		MaxKeys:          h.MaxSpanRequestKeys,
-		MaxIntents:       storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:      h.TargetBytes,
-		AllowEmpty:       h.AllowEmpty,
-		WholeRowsOfSize:  h.WholeRowsOfSize,
-		FailOnMoreRecent: args.KeyLocking != lock.None,
-		Reverse:          true,
-		MemoryAccount:    cArgs.EvalCtx.GetResponseMemoryAccount(),
-		LockTable:        cArgs.Concurrency,
+		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
+		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
+		Txn:                   h.Txn,
+		MaxKeys:               h.MaxSpanRequestKeys,
+		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:           h.TargetBytes,
+		AllowEmpty:            h.AllowEmpty,
+		WholeRowsOfSize:       h.WholeRowsOfSize,
+		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		Reverse:               true,
+		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:             cArgs.Concurrency,
+		DontInterleaveIntents: cArgs.DontInterleaveIntents,
 	}
 
 	switch args.ScanFormat {

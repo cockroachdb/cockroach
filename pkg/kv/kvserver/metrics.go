@@ -1593,6 +1593,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
+		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
+		Help:        `Number of times read-only batches dropped latches before evaluation.`,
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicaReadBatchWithoutInterleavingIter = metric.Metadata{
+		Name:        "kv.replica_read_batch_evaluate.without_interleaving_iter",
+		Help:        `Number of read-only batches evaluated without an intent interleaving iter.`,
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1875,8 +1887,10 @@ type StoreMetrics struct {
 	ReplicaCircuitBreakerCumTripped *metric.Counter
 
 	// Replica batch evaluation metrics.
-	ReplicaReadBatchEvaluationLatency  *metric.Histogram
-	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+	ReplicaReadBatchEvaluationLatency        *metric.Histogram
+	ReplicaWriteBatchEvaluationLatency       *metric.Histogram
+	ReplicaReadBatchDroppedLatchesBeforeEval *metric.Counter
+	ReplicaReadBatchWithoutInterleavingIter  *metric.Counter
 }
 
 type tenantMetricsRef struct {
@@ -2388,6 +2402,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Replica batch evaluation.
 		ReplicaReadBatchEvaluationLatency:  metric.NewLatency(metaReplicaReadBatchEvaluationLatency, histogramWindow),
 		ReplicaWriteBatchEvaluationLatency: metric.NewLatency(metaReplicaWriteBatchEvaluationLatency, histogramWindow),
+
+		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
+		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
 	}
 
 	{
