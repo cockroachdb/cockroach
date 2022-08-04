@@ -237,6 +237,9 @@ func ExampleClient() {
 				case streamingccl.SSTableEvent:
 					sst := event.GetSSTable()
 					fmt.Printf("sst: %s->%s@%d\n", sst.Span.String(), string(sst.Data), sst.WriteTS.WallTime)
+				case streamingccl.DeleteRangeEvent:
+					delRange := event.GetDeleteRange()
+					fmt.Printf("delRange: %s@%d\n", delRange.Span.String(), delRange.Timestamp.WallTime)
 				case streamingccl.CheckpointEvent:
 					ingested.Lock()
 					minTS := hlc.MaxTimestamp
@@ -248,8 +251,6 @@ func ExampleClient() {
 					ingested.ts.Forward(minTS)
 					ingested.Unlock()
 					fmt.Printf("resolved %d\n", minTS.WallTime)
-				case streamingccl.GenerationEvent:
-					fmt.Printf("received generation event")
 				default:
 					panic(fmt.Sprintf("unexpected event type %v", event.Type()))
 				}

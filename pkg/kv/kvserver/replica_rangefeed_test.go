@@ -419,6 +419,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			Key: roachpb.Key("q"), Value: expVal7q, PrevValue: expVal6q,
 		}},
 	}...)
+	// here
 	checkForExpEvents(expEvents)
 
 	// Cancel each of the rangefeed streams.
@@ -1085,12 +1086,12 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	ts1 := tc.Server(0).Clock().Now()
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
-	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
+	rangeFeedChs := make([]chan kvcoord.RangeFeedMessage, len(repls))
 	rangeFeedErrC := make(chan error, len(repls))
 	for i := range repls {
 		desc := repls[i].Desc()
 		ds := tc.Server(i).DistSenderI().(*kvcoord.DistSender)
-		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+		rangeFeedCh := make(chan kvcoord.RangeFeedMessage)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {
 			span := roachpb.Span{
@@ -1239,7 +1240,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
-	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedCh := make(chan kvcoord.RangeFeedMessage)
 	rangeFeedErrC := make(chan error, 1)
 	go func() {
 		span := roachpb.Span{
@@ -1259,6 +1260,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 				if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
 					checkpointed = true
 				}
+
 			case err := <-rangeFeedErrC:
 				t.Fatal(err)
 			case <-timeout:
@@ -1402,12 +1404,13 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
 	defer rangeFeedCancel()
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
-	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedCh := make(chan kvcoord.RangeFeedMessage)
 	rangeFeedErrC := make(chan error, 1)
+	rangefeedSpan := roachpb.Span{
+		Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
+	}
 	startRangefeed := func() {
-		span := roachpb.Span{
-			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
-		}
+		span := rangefeedSpan
 		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, false /* withDiff */, rangeFeedCh)
 	}
 
@@ -1421,6 +1424,10 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 			case event := <-rangeFeedCh:
 				if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
 					checkpointed = true
+				}
+				if !event.RegisteredSpan.Equal(rangefeedSpan) {
+					t.Fatal("registered span in the message should be equal to " +
+						"the span used to create the rangefeed")
 				}
 			case err := <-rangeFeedErrC:
 				t.Fatal(err)

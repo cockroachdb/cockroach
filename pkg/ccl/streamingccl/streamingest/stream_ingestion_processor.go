@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,10 +71,47 @@ var streamIngestionResultTypes = []*types.T{
 }
 
 type mvccKeyValues []storage.MVCCKeyValue
+type mvccRangeKeyValues []storage.MVCCRangeKeyValue
 
 func (s mvccKeyValues) Len() int           { return len(s) }
 func (s mvccKeyValues) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s mvccKeyValues) Less(i, j int) bool { return s[i].Key.Less(s[j].Key) }
+
+// Specialized SST batcher that is responsible for ingesting range tombstones.
+type rangeKeyBatcher struct {
+	db *kv.DB
+
+	// Functor that creates a new range key SST writer in case
+	// we need to operate on a new batch. The created SST writer
+	// operates on the rangeKeySSTFile below.
+	// TODO(casper): replace this if SSTBatcher someday has support for
+	// adding MVCCRangeKeyValue
+	rangeKeySSTWriterMaker func() *storage.SSTWriter
+	// In-memory SST file for flushing MVCC range keys
+	rangeKeySSTFile *storage.MemFile
+	// curRangeKVBatch is the current batch of range KVs which will
+	// be ingested through 'flush' later.
+	curRangeKVBatch mvccRangeKeyValues
+
+	// Minimum timestamp in the current batch. Used for metrics purpose.
+	minTimestamp hlc.Timestamp
+	// Data size of the current batch.
+	dataSize int
+}
+
+func newRangeKeyBatcher(ctx context.Context, cs *cluster.Settings, db *kv.DB) *rangeKeyBatcher {
+	batcher := &rangeKeyBatcher{
+		db:              db,
+		minTimestamp:    hlc.MaxTimestamp,
+		dataSize:        0,
+		rangeKeySSTFile: &storage.MemFile{},
+	}
+	batcher.rangeKeySSTWriterMaker = func() *storage.SSTWriter {
+		w := storage.MakeIngestionSSTWriter(ctx, cs, batcher.rangeKeySSTFile)
+		return &w
+	}
+	return batcher
+}
 
 type streamIngestionProcessor struct {
 	execinfra.ProcessorBase
@@ -82,14 +123,16 @@ type streamIngestionProcessor struct {
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
 	rewriteToDiffKey bool
 
-	// curBatch temporarily batches MVCC Keys so they can be
+	// curKVBatch temporarily batches MVCC Keys so they can be
 	// sorted before ingestion.
 	// TODO: This doesn't yet use a buffering adder since the current
 	// implementation is specific to ingesting KV pairs without timestamps rather
 	// than MVCCKeys.
-	curBatch mvccKeyValues
-	// batcher is used to flush SSTs to the storage layer.
-	batcher           *bulk.SSTBatcher
+	curKVBatch mvccKeyValues
+	// batcher is used to flush KVs into SST to the storage layer.
+	batcher *bulk.SSTBatcher
+	// rangeBatcher is used to flush range KVs into SST to the storage layer.
+	rangeBatcher      *rangeKeyBatcher
 	maxFlushRateTimer *timeutil.Timer
 
 	// client is a streaming client which provides a stream of events from a given
@@ -198,7 +241,7 @@ func newStreamIngestionDataProcessor(
 		flowCtx:           flowCtx,
 		spec:              spec,
 		output:            output,
-		curBatch:          make([]storage.MVCCKeyValue, 0),
+		curKVBatch:        make([]storage.MVCCKeyValue, 0),
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
@@ -242,6 +285,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
+
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db)
 
 	// Start a poller that checks if the stream ingestion job has been signaled to
 	// cutover.
@@ -375,7 +420,6 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.cancelMergeAndWait != nil {
 		sip.cancelMergeAndWait()
 	}
-
 	sip.InternalClose()
 }
 
@@ -509,6 +553,10 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				if err := sip.bufferSST(event.GetSSTable()); err != nil {
 					return nil, err
 				}
+			case streamingccl.DeleteRangeEvent:
+				if err := sip.bufferDelRange(event.GetDeleteRange()); err != nil {
+					return nil, err
+				}
 			case streamingccl.CheckpointEvent:
 				if err := sip.bufferCheckpoint(event); err != nil {
 					return nil, err
@@ -525,15 +573,6 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 
 				return sip.flush()
-			case streamingccl.GenerationEvent:
-				log.Info(sip.Ctx, "GenerationEvent received")
-				select {
-				case <-sip.cutoverCh:
-					sip.internalDrained = true
-					return nil, nil
-				case <-sip.Ctx.Done():
-					return nil, sip.Ctx.Err()
-				}
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}
@@ -558,30 +597,74 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
+	// TODO(casper): we currently buffer all keys in an SST at once even for large SSTs.
+	// If in the future we decide buffer them in separate batches, we need to be
+	// careful with checkpoints: we can only send checkpoint whose TS >= SST batch TS
+	// after the full SST gets ingested.
+
 	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-sst")
 	defer sp.Finish()
+	return streamingccl.ScanSST(sst, sst.Span,
+		func(keyVal storage.MVCCKeyValue) error {
+			return sip.bufferKV(&roachpb.KeyValue{
+				Key: keyVal.Key.Key,
+				Value: roachpb.Value{
+					RawBytes:  keyVal.Value,
+					Timestamp: keyVal.Key.Timestamp,
+				},
+			})
+		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
+			return sip.bufferRangeKeyVal(rangeKeyVal)
+		})
+}
 
-	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
+	rekey, ok, err := sip.rekeyer.RewriteKey(key)
+	if !ok {
+		return nil, errors.New("every key is expected to match tenant prefix")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rekey, nil
+}
+
+func (sip *streamIngestionProcessor) bufferDelRange(delRange *roachpb.RangeFeedDeleteRange) error {
+	tombstoneVal, err := storage.EncodeMVCCValue(storage.MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: hlc.ClockTimestamp{
+				WallTime: 0,
+			}},
+	})
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok { // cursor passed the span end key
-			break
-		}
-		if err = sip.bufferKV(&roachpb.KeyValue{
-			Key: iter.UnsafeKey().Key,
-			Value: roachpb.Value{
-				RawBytes:  iter.UnsafeValue(),
-				Timestamp: iter.UnsafeKey().Timestamp,
-			},
-		}); err != nil {
-			return err
-		}
+	return sip.bufferRangeKeyVal(storage.MVCCRangeKeyValue{
+		RangeKey: storage.MVCCRangeKey{
+			StartKey:  delRange.Span.Key,
+			EndKey:    delRange.Span.EndKey,
+			Timestamp: delRange.Timestamp,
+		},
+		Value: tombstoneVal,
+	})
+}
+
+func (sip *streamIngestionProcessor) bufferRangeKeyVal(
+	rangeKeyVal storage.MVCCRangeKeyValue,
+) error {
+	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-range-key")
+	defer sp.Finish()
+
+	var err error
+	rangeKeyVal.RangeKey.StartKey, err = sip.rekey(rangeKeyVal.RangeKey.StartKey)
+	if err != nil {
+		return err
 	}
+	rangeKeyVal.RangeKey.EndKey, err = sip.rekey(rangeKeyVal.RangeKey.EndKey)
+	if err != nil {
+		return err
+	}
+	sip.rangeBatcher.buffer(rangeKeyVal)
 	return nil
 }
 
@@ -593,14 +676,11 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 		return errors.New("kv event expected to have kv")
 	}
 
-	rekey, ok, err := sip.rekeyer.RewriteKey(kv.Key)
-	if !ok {
-		return errors.New("every key is expected to match tenant prefix")
-	}
+	var err error
+	kv.Key, err = sip.rekey(kv.Key)
 	if err != nil {
 		return err
 	}
-	kv.Key = rekey
 
 	if sip.rewriteToDiffKey {
 		kv.Value.ClearChecksum()
@@ -611,7 +691,8 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 		Key:       kv.Key,
 		Timestamp: kv.Value.Timestamp,
 	}
-	sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+	sip.curKVBatch = append(sip.curKVBatch,
+		storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
 	return nil
 }
 
@@ -643,37 +724,117 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 	return nil
 }
 
+// Write a batch of MVCC range keys into the SST batcher, and returns
+// the current size of all buffered range keys.
+func (r *rangeKeyBatcher) buffer(rangeKV storage.MVCCRangeKeyValue) {
+	r.curRangeKVBatch = append(r.curRangeKVBatch, rangeKV)
+	r.dataSize += rangeKV.RangeKey.EncodedSize() + len(rangeKV.Value)
+}
+
+func (r *rangeKeyBatcher) size() int {
+	return r.dataSize
+}
+
+// Flush all the range keys buffered so far into storage as an SST.
+func (r *rangeKeyBatcher) flush(ctx context.Context) error {
+	if len(r.curRangeKVBatch) == 0 {
+		return nil
+	}
+
+	sstWriter := r.rangeKeySSTWriterMaker()
+	defer sstWriter.Close()
+	// Sort current batch as the SST writer requires a sorted order.
+	sort.Slice(r.curRangeKVBatch, func(i, j int) bool {
+		return r.curRangeKVBatch[i].RangeKey.Compare(r.curRangeKVBatch[j].RangeKey) < 0
+	})
+
+	start, end := keys.MaxKey, keys.MinKey
+	for _, rangeKeyVal := range r.curRangeKVBatch {
+		if err := sstWriter.PutRawMVCCRangeKey(rangeKeyVal.RangeKey, rangeKeyVal.Value); err != nil {
+			return err
+		}
+
+		if rangeKeyVal.RangeKey.StartKey.Compare(start) < 0 {
+			start = rangeKeyVal.RangeKey.StartKey
+		}
+		if rangeKeyVal.RangeKey.EndKey.Compare(end) > 0 {
+			end = rangeKeyVal.RangeKey.EndKey
+		}
+		if rangeKeyVal.RangeKey.Timestamp.Less(r.minTimestamp) {
+			r.minTimestamp = rangeKeyVal.RangeKey.Timestamp
+		}
+	}
+
+	// Finish the current batch.
+	if err := sstWriter.Finish(); err != nil {
+		return err
+	}
+
+	_, _, err := r.db.AddSSTable(ctx, start, end, r.rangeKeySSTFile.Data(),
+		false /* disallowConflicts */, false, /* disallowShadowing */
+		hlc.Timestamp{}, nil /* stats */, false, /* ingestAsWrites */
+		r.db.Clock().Now())
+	return err
+}
+
+// Reset all the states inside the batcher and needs to called after flush
+// for further uses.
+func (r *rangeKeyBatcher) reset() {
+	if len(r.curRangeKVBatch) == 0 {
+		return
+	}
+	r.rangeKeySSTFile.Reset()
+	r.minTimestamp = hlc.MaxTimestamp
+	r.dataSize = 0
+	r.curRangeKVBatch = r.curRangeKVBatch[:0]
+}
+
 func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-flush")
 	defer sp.Finish()
 
 	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 	// Ensure that the current batch is sorted.
-	sort.Sort(sip.curBatch)
-
+	sort.Sort(sip.curKVBatch)
 	totalSize := 0
 	minBatchMVCCTimestamp := hlc.MaxTimestamp
-	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(ctx, kv.Key, kv.Value); err != nil {
-			return nil, errors.Wrapf(err, "adding key %+v", kv)
+	for _, keyVal := range sip.curKVBatch {
+		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
+			return nil, errors.Wrapf(err, "adding key %+v", keyVal)
 		}
-		if kv.Key.Timestamp.Less(minBatchMVCCTimestamp) {
-			minBatchMVCCTimestamp = kv.Key.Timestamp
+		if keyVal.Key.Timestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = keyVal.Key.Timestamp
 		}
-		totalSize += len(kv.Key.Key) + len(kv.Value)
+		totalSize += len(keyVal.Key.Key) + len(keyVal.Value)
 	}
 
-	if len(sip.curBatch) > 0 {
+	if sip.rangeBatcher.size() > 0 {
+		totalSize += sip.rangeBatcher.size()
+		if sip.rangeBatcher.minTimestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = sip.rangeBatcher.minTimestamp
+		}
+	}
+
+	if len(sip.curKVBatch) > 0 || sip.rangeBatcher.size() > 0 {
 		preFlushTime := timeutil.Now()
 		defer func() {
 			sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
 			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
 			sip.metrics.Flushes.Inc(1)
 			sip.metrics.IngestedBytes.Inc(int64(totalSize))
-			sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
+			sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
+			sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
 		}()
-		if err := sip.batcher.Flush(ctx); err != nil {
-			return nil, errors.Wrap(err, "flushing")
+		if len(sip.curKVBatch) > 0 {
+			if err := sip.batcher.Flush(ctx); err != nil {
+				return nil, errors.Wrap(err, "flushing sst batcher")
+			}
+		}
+
+		if sip.rangeBatcher.size() > 0 {
+			if err := sip.rangeBatcher.flush(ctx); err != nil {
+				return nil, errors.Wrap(err, "flushing range key sst")
+			}
 		}
 	}
 
@@ -685,8 +846,9 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	})
 
 	// Reset the current batch.
-	sip.curBatch = nil
 	sip.lastFlushTime = timeutil.Now()
+	sip.curKVBatch = nil
+	sip.rangeBatcher.reset()
 
 	return &flushedCheckpoints, sip.batcher.Reset(ctx)
 }

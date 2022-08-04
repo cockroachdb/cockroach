@@ -87,7 +87,7 @@ func (ds *DistSender) RangeFeed(
 	spans []roachpb.Span,
 	startAfter hlc.Timestamp, // exclusive
 	withDiff bool,
-	eventCh chan<- *roachpb.RangeFeedEvent,
+	eventCh chan<- RangeFeedMessage,
 ) error {
 	timedSpans := make([]SpanTimePair, 0, len(spans))
 	for _, sp := range spans {
@@ -110,7 +110,7 @@ type SpanTimePair struct {
 // RangeFeedSpans is similar to RangeFeed but allows specification of different
 // starting time for each span.
 func (ds *DistSender) RangeFeedSpans(
-	ctx context.Context, spans []SpanTimePair, withDiff bool, eventCh chan<- *roachpb.RangeFeedEvent,
+	ctx context.Context, spans []SpanTimePair, withDiff bool, eventCh chan<- RangeFeedMessage,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("expected at least 1 span, got none")
@@ -299,7 +299,7 @@ func (ds *DistSender) partialRangeFeed(
 	withDiff bool,
 	catchupSem *limit.ConcurrentRequestLimiter,
 	rangeCh chan<- singleRangeInfo,
-	eventCh chan<- *roachpb.RangeFeedEvent,
+	eventCh chan<- RangeFeedMessage,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
@@ -407,7 +407,7 @@ func (ds *DistSender) singleRangeFeed(
 	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	catchupSem *limit.ConcurrentRequestLimiter,
-	eventCh chan<- *roachpb.RangeFeedEvent,
+	eventCh chan<- RangeFeedMessage,
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
@@ -491,6 +491,7 @@ func (ds *DistSender) singleRangeFeed(
 			if err != nil {
 				return args.Timestamp, err
 			}
+			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
@@ -500,6 +501,7 @@ func (ds *DistSender) singleRangeFeed(
 					}
 					args.Timestamp.Forward(t.ResolvedTS.Next())
 				}
+			case *roachpb.RangeFeedSSTable:
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
@@ -510,7 +512,7 @@ func (ds *DistSender) singleRangeFeed(
 			onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
 
 			select {
-			case eventCh <- event:
+			case eventCh <- msg:
 			case <-ctx.Done():
 				return args.Timestamp, ctx.Err()
 			}
