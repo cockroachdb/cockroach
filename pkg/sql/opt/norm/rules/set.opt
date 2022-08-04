@@ -125,7 +125,14 @@
 #       distinguish rows resulting from the union. Ex: union together the same
 #       (single) row, for which the empty set is a key.
 #
-#    5) Finally, the key columns must form a strict subset of the union columns.
+#    5) There must be at least one key column, since in the empty-key case
+#       null-extension by outer joins can violate the requirement that a given
+#       tuple of values on the key columns implies the same values on all other
+#       columns over both sides. (e.g. for an empty key, the key values would
+#       always be an empty tuple, while the remaining columns could have
+#       different values).
+#
+#    6) Finally, the key columns must form a strict subset of the union columns.
 #       This is not strictly necessary for correctness, but the transformation
 #       does not gain anything if the number of columns to de-duplicate on does
 #       not decrease.
