@@ -34,6 +34,7 @@ kv.bulk_io_write.max_rate	byte size	1.0 TiB	the rate limit (bytes/sec) to use fo
 kv.bulk_sst.max_allowed_overage	byte size	64 MiB	if positive, allowed size in excess of target size for SSTs from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
 kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information
+kv.log_range_and_node_events.enabled	boolean	true	set to true to transactionally log range events (e.g., split, merge, add/remove voter/non-voter) into system.rangelogand node join and restart events into system.eventolog
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
