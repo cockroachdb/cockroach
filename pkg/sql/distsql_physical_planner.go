@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"sort"
 
@@ -135,8 +134,6 @@ type DistSQLPlanner struct {
 	codec keys.SQLCodec
 
 	clock *hlc.Clock
-
-	rng *rand.Rand
 }
 
 // DistributionType is an enum defining when a plan should be distributed.
@@ -182,7 +179,6 @@ func NewDistSQLPlanner(
 	sqlInstanceProvider sqlinstance.Provider,
 	clock *hlc.Clock,
 ) *DistSQLPlanner {
-	rng, _ := randutil.NewPseudoRand()
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
 		st:                   st,
@@ -203,7 +199,6 @@ func NewDistSQLPlanner(
 		sqlInstanceProvider: sqlInstanceProvider,
 		codec:               codec,
 		clock:               clock,
-		rng:                 rng,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -1300,6 +1295,7 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 		regionToSQLInstanceIDs[region] = instancesInRegion
 	}
 
+	rng, _ := randutil.NewPseudoRand()
 	if len(regionToSQLInstanceIDs) > 0 {
 		// If we were able to determine the region information at least for some
 		// instances, use the region-aware resolver.
@@ -1332,7 +1328,7 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 			// favor those that are closed to the gateway. However, we need to
 			// be careful since non-query code paths (like CDC and BulkIO) do
 			// benefit from the even spread of the spans.
-			return instancesInRegion[dsp.rng.Intn(len(instancesInRegion))]
+			return instancesInRegion[rng.Intn(len(instancesInRegion))]
 		}
 	} else {
 		// If it just so happens that we couldn't determine the region for all
@@ -1341,7 +1337,7 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 		hasLocalitySet = false
 		// Randomize the order in which we choose instances so that work is
 		// allocated fairly across queries.
-		dsp.rng.Shuffle(len(instances), func(i, j int) {
+		rng.Shuffle(len(instances), func(i, j int) {
 			instances[i], instances[j] = instances[j], instances[i]
 		})
 		var i int
