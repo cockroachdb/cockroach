@@ -366,6 +366,12 @@ ALTER DATABASE db DROP SECONDARY REGION
 statement error pq: database .* doesn't have a secondary region defined
 ALTER DATABASE db DROP SECONDARY REGION
 
+query T noticetrace
+ALTER DATABASE db DROP SECONDARY REGION IF EXISTS
+----
+ NOTICE: No secondary region is not defined on the database; skipping
+
+
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
 ----

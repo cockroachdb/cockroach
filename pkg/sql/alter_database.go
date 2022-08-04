@@ -1896,6 +1896,13 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 	}
 
 	if n.desc.RegionConfig.SecondaryRegion == "" {
+		if n.n.IfExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("No secondary region is not defined on the database; skipping"),
+			)
+			return nil
+		}
 		return pgerror.Newf(pgcode.UndefinedParameter,
 			"database %s doesn't have a secondary region defined", n.desc.GetName(),
 		)
