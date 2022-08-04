@@ -128,6 +128,21 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
+	upgrade.NewTenantUpgrade("alter system.role_options to include user_id column",
+		toCV(clusterversion.RoleOptionsTableHasIDColumn),
+		NoPrecondition,
+		alterSystemRoleOptionsAddUserIDColumnWithIndex,
+	),
+	upgrade.NewTenantUpgrade("backfill entries in system.role_options to include IDs",
+		toCV(clusterversion.RoleOptionsIDColumnIsBackfilled),
+		NoPrecondition,
+		backfillSystemRoleOptionsIDColumn,
+	),
+	upgrade.NewTenantUpgrade("set system.role_options user_id column to not null",
+		toCV(clusterversion.SetRoleOptionsUserIDColumnNotNull),
+		NoPrecondition,
+		setSystemRoleOptionsUserIDColumnNotNull,
+	),
 }
 
 func init() {

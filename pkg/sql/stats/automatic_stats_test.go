@@ -139,7 +139,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descRoleOptions, 4 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descRoleOptions, 5 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
