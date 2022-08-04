@@ -749,6 +749,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_not_visible_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_not_visible_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_not_visible_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseNotVisibleIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseNotVisibleIndexes), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(optUseNotVisibleIndexesClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`locality_optimized_partitioned_index_scan`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`locality_optimized_partitioned_index_scan`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
