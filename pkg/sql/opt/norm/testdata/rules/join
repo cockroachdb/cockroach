@@ -3480,7 +3480,7 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           └── column9:9 <= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+           └── column9:9 < u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
 # Case with <= operator.
 norm expect=ExtractJoinComparisons
@@ -3512,7 +3512,7 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           └── column9:9 < u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+           └── column9:9 <= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
 # Case with > operator.
 norm expect=ExtractJoinComparisons
@@ -3544,7 +3544,7 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           └── column9:9 >= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+           └── column9:9 > u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
 # Case with >= operator.
 norm expect=ExtractJoinComparisons
@@ -3576,7 +3576,7 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           └── column9:9 > u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+           └── column9:9 >= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
 # --------------------------------------------------
 # LeftAssociateJoinsLeft,  LeftAssociateJoinsRight,

@@ -525,7 +525,7 @@ func (c *CustomFuncs) ExtractJoinComparison(
 	memo.BuildSharedProps(condLeft, &cmpLeftProps, c.f.evalCtx)
 	if cmpLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
-		op = commuteInequality(op)
+		op = opt.CommuteEqualityOrInequalityOp(op)
 	}
 
 	var leftProj, rightProj projectBuilder
@@ -570,18 +570,6 @@ func (c *CustomFuncs) ExtractJoinComparison(
 		outputCols = leftCols.Union(rightCols)
 	}
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outputCols)
-}
-
-// commuteInequality returns the commuted version of the given inequality
-// operator.
-func commuteInequality(op opt.Operator) opt.Operator {
-	switch op {
-	case opt.EqOp:
-		return op
-	case opt.LtOp, opt.LeOp, opt.GtOp, opt.GeOp:
-		return opt.NegateOpMap[op]
-	}
-	panic(errors.AssertionFailedf("unexpected operator for commuteInequality: %s", op.String()))
 }
 
 // CommuteJoinFlags returns a join private for the commuted join (where the left
