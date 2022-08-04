@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -120,7 +121,7 @@ var _ AuthorizationAccessor = &planner{}
 func (p *planner) CheckPrivilegeForUser(
 	ctx context.Context,
 	privilegeObject catalog.PrivilegeObject,
-	privilege privilege.Kind,
+	privilegeKind privilege.Kind,
 	user username.SQLUsername,
 ) error {
 	// Verify that the txn is valid in any case, so that
@@ -130,12 +131,29 @@ func (p *planner) CheckPrivilegeForUser(
 		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
+	// root, admin and node user should always have privileges.
+	// However, this allows us to short-circuit privilege checks for
+	// virtual object such that we don't have to query the system.privileges
+	// table. This is especially import for internal executor queries.
+	// Right now we only short-circuit non-descriptor backed objects.
+	// There are certain descriptor backed objects that we can't
+	// short-circuit, ie system tables.
+	if (user.IsRootUser() || user.IsAdminRole() || user.IsNodeUser()) &&
+		!privilegeObject.GetObjectType().IsDescriptorBacked() {
+		if privilege.GetValidPrivilegesForObject(
+			privilegeObject.GetObjectType(),
+		).Contains(privilegeKind) {
+			return nil
+		}
+		return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+	}
+
 	// Test whether the object is being audited, and if so, record an
 	// audit event. We place this check here to increase the likelihood
 	// it will not be forgotten if features are added that access
 	// descriptors (since every use of descriptors presumably need a
 	// permission check).
-	p.maybeAudit(privilegeObject, privilege)
+	p.maybeAudit(privilegeObject, privilegeKind)
 
 	privs, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
 	if err != nil {
@@ -143,12 +161,13 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(username.PublicRoleName(), privilege) {
+	if privs.CheckPrivilege(username.PublicRoleName(), privilegeKind) {
 		return nil
 	}
 
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return IsOwner(privilegeObject, role) || privs.CheckPrivilege(role, privilege)
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
+		isOwner, err := IsOwner(ctx, p, privilegeObject, role)
+		return isOwner || privs.CheckPrivilege(role, privilegeKind), err
 	})
 	if err != nil {
 		return err
@@ -156,9 +175,7 @@ func (p *planner) CheckPrivilegeForUser(
 	if hasPriv {
 		return nil
 	}
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s privilege on %s %s",
-		user, privilege, privilegeObject.GetObjectType(), privilegeObject.GetName())
+	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
@@ -192,8 +209,9 @@ func (p *planner) CheckGrantOptionsForUser(
 		return nil
 	}
 
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return privs.CheckGrantOptions(role, privList) || IsOwner(privilegeObject, role)
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
+		isOwner, err := IsOwner(ctx, p, privilegeObject, role)
+		return privs.CheckGrantOptions(role, privList) || isOwner, err
 	})
 	if err != nil {
 		return err
@@ -218,13 +236,19 @@ func (p *planner) CheckGrantOptionsForUser(
 	)
 }
 
-func getOwnerOfDesc(desc catalog.Descriptor) username.SQLUsername {
+func getOwnerOfPrivilegeObject(
+	ctx context.Context, p eval.Planner, privilegeObject catalog.PrivilegeObject,
+) (username.SQLUsername, error) {
+	privDesc, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
+	if err != nil {
+		return username.SQLUsername{}, err
+	}
 	// Descriptors created prior to 20.2 do not have owners set.
-	owner := desc.GetPrivileges().Owner()
+	owner := privDesc.Owner()
 	if owner.Undefined() {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
-		if catalog.IsSystemDescriptor(desc) {
+		if d, ok := privilegeObject.(catalog.Descriptor); ok && catalog.IsSystemDescriptor(d) {
 			owner = username.NodeUserName()
 		} else {
 			// This check is redundant in this case since admin already has privilege
@@ -232,19 +256,21 @@ func getOwnerOfDesc(desc catalog.Descriptor) username.SQLUsername {
 			owner = username.AdminRoleName()
 		}
 	}
-	return owner
+	return owner, nil
 }
 
 // IsOwner returns if the role has ownership on the privilege object.
-func IsOwner(privilegeObject catalog.PrivilegeObject, role username.SQLUsername) bool {
-	switch p := privilegeObject.(type) {
-	case catalog.Descriptor:
-		return role == getOwnerOfDesc(p)
-	case catalog.SyntheticPrivilegeObject:
-		return role.IsAdminRole()
-	default:
-		panic(errors.AssertionFailedf("unknown privilege object type %v", privilegeObject))
+func IsOwner(
+	ctx context.Context,
+	p eval.Planner,
+	privilegeObject catalog.PrivilegeObject,
+	role username.SQLUsername,
+) (bool, error) {
+	owner, err := getOwnerOfPrivilegeObject(ctx, p, privilegeObject)
+	if err != nil {
+		return false, err
 	}
+	return role == owner, nil
 }
 
 // HasOwnership returns if the role or any role the role is a member of
@@ -256,25 +282,36 @@ func (p *planner) HasOwnership(
 ) (bool, error) {
 	user := p.SessionData().User()
 
-	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return IsOwner(privilegeObject, role)
+	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
+		return IsOwner(ctx, p, privilegeObject, role)
 	})
 }
 
 // checkRolePredicate checks if the predicate is true for the user or
 // any roles the user is a member of.
 func (p *planner) checkRolePredicate(
-	ctx context.Context, user username.SQLUsername, predicate func(role username.SQLUsername) bool,
+	ctx context.Context,
+	user username.SQLUsername,
+	predicate func(role username.SQLUsername) (bool, error),
 ) (bool, error) {
-	if ok := predicate(user); ok {
+	ok, err := predicate(user)
+	if err != nil {
+		return false, err
+	}
+	if ok {
 		return ok, nil
 	}
+
 	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
 		return false, err
 	}
 	for role := range memberOf {
-		if ok := predicate(role); ok {
+		ok, err := predicate(role)
+		if err != nil {
+			return false, err
+		}
+		if ok {
 			return ok, nil
 		}
 	}
@@ -328,9 +365,7 @@ func (p *planner) CheckAnyPrivilege(
 		}
 	}
 
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s has no privileges on %s %s",
-		p.SessionData().User(), privilegeObject.GetObjectType(), privilegeObject.GetName())
+	return insufficientPrivilegeError(user, 0 /* kind */, privilegeObject)
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.
@@ -876,4 +911,26 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	}
 
 	return true, nil
+}
+
+func insufficientPrivilegeError(
+	user username.SQLUsername, kind privilege.Kind, object catalog.PrivilegeObject,
+) error {
+	// For consistency Postgres, we report the error message as not
+	// having a privilege on the object type "relation".
+	typeForError := object.GetObjectType()
+	if typeForError == privilege.VirtualTable || typeForError == privilege.Table || typeForError == privilege.Sequence {
+		typeForError = catalog.Table
+	}
+
+	// If kind is 0 (no-privilege is 0), we return that the user has no privileges.
+	if kind == 0 {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s has no privileges on %s %s",
+			user, typeForError, object.GetName())
+	}
+
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not have %s privilege on %s %s",
+		user, kind, typeForError, object.GetName())
 }

@@ -19,135 +19,135 @@ DROP DATABASE pg_catalog
 query TTTTIT
 SHOW TABLES FROM pg_catalog
 ----
-pg_catalog  pg_aggregate                     table  NULL  NULL  NULL
-pg_catalog  pg_am                            table  NULL  NULL  NULL
-pg_catalog  pg_amop                          table  NULL  NULL  NULL
-pg_catalog  pg_amproc                        table  NULL  NULL  NULL
-pg_catalog  pg_attrdef                       table  NULL  NULL  NULL
-pg_catalog  pg_attribute                     table  NULL  NULL  NULL
-pg_catalog  pg_auth_members                  table  NULL  NULL  NULL
-pg_catalog  pg_authid                        table  NULL  NULL  NULL
-pg_catalog  pg_available_extension_versions  table  NULL  NULL  NULL
-pg_catalog  pg_available_extensions          table  NULL  NULL  NULL
-pg_catalog  pg_cast                          table  NULL  NULL  NULL
-pg_catalog  pg_class                         table  NULL  NULL  NULL
-pg_catalog  pg_collation                     table  NULL  NULL  NULL
-pg_catalog  pg_config                        table  NULL  NULL  NULL
-pg_catalog  pg_constraint                    table  NULL  NULL  NULL
-pg_catalog  pg_conversion                    table  NULL  NULL  NULL
-pg_catalog  pg_cursors                       table  NULL  NULL  NULL
-pg_catalog  pg_database                      table  NULL  NULL  NULL
-pg_catalog  pg_db_role_setting               table  NULL  NULL  NULL
-pg_catalog  pg_default_acl                   table  NULL  NULL  NULL
-pg_catalog  pg_depend                        table  NULL  NULL  NULL
-pg_catalog  pg_description                   table  NULL  NULL  NULL
-pg_catalog  pg_enum                          table  NULL  NULL  NULL
-pg_catalog  pg_event_trigger                 table  NULL  NULL  NULL
-pg_catalog  pg_extension                     table  NULL  NULL  NULL
-pg_catalog  pg_file_settings                 table  NULL  NULL  NULL
-pg_catalog  pg_foreign_data_wrapper          table  NULL  NULL  NULL
-pg_catalog  pg_foreign_server                table  NULL  NULL  NULL
-pg_catalog  pg_foreign_table                 table  NULL  NULL  NULL
-pg_catalog  pg_group                         table  NULL  NULL  NULL
-pg_catalog  pg_hba_file_rules                table  NULL  NULL  NULL
-pg_catalog  pg_index                         table  NULL  NULL  NULL
-pg_catalog  pg_indexes                       table  NULL  NULL  NULL
-pg_catalog  pg_inherits                      table  NULL  NULL  NULL
-pg_catalog  pg_init_privs                    table  NULL  NULL  NULL
-pg_catalog  pg_language                      table  NULL  NULL  NULL
-pg_catalog  pg_largeobject                   table  NULL  NULL  NULL
-pg_catalog  pg_largeobject_metadata          table  NULL  NULL  NULL
-pg_catalog  pg_locks                         table  NULL  NULL  NULL
-pg_catalog  pg_matviews                      table  NULL  NULL  NULL
-pg_catalog  pg_namespace                     table  NULL  NULL  NULL
-pg_catalog  pg_opclass                       table  NULL  NULL  NULL
-pg_catalog  pg_operator                      table  NULL  NULL  NULL
-pg_catalog  pg_opfamily                      table  NULL  NULL  NULL
-pg_catalog  pg_partitioned_table             table  NULL  NULL  NULL
-pg_catalog  pg_policies                      table  NULL  NULL  NULL
-pg_catalog  pg_policy                        table  NULL  NULL  NULL
-pg_catalog  pg_prepared_statements           table  NULL  NULL  NULL
-pg_catalog  pg_prepared_xacts                table  NULL  NULL  NULL
-pg_catalog  pg_proc                          table  NULL  NULL  NULL
-pg_catalog  pg_publication                   table  NULL  NULL  NULL
-pg_catalog  pg_publication_rel               table  NULL  NULL  NULL
-pg_catalog  pg_publication_tables            table  NULL  NULL  NULL
-pg_catalog  pg_range                         table  NULL  NULL  NULL
-pg_catalog  pg_replication_origin            table  NULL  NULL  NULL
-pg_catalog  pg_replication_origin_status     table  NULL  NULL  NULL
-pg_catalog  pg_replication_slots             table  NULL  NULL  NULL
-pg_catalog  pg_rewrite                       table  NULL  NULL  NULL
-pg_catalog  pg_roles                         table  NULL  NULL  NULL
-pg_catalog  pg_rules                         table  NULL  NULL  NULL
-pg_catalog  pg_seclabel                      table  NULL  NULL  NULL
-pg_catalog  pg_seclabels                     table  NULL  NULL  NULL
-pg_catalog  pg_sequence                      table  NULL  NULL  NULL
-pg_catalog  pg_sequences                     table  NULL  NULL  NULL
-pg_catalog  pg_settings                      table  NULL  NULL  NULL
-pg_catalog  pg_shadow                        table  NULL  NULL  NULL
-pg_catalog  pg_shdepend                      table  NULL  NULL  NULL
-pg_catalog  pg_shdescription                 table  NULL  NULL  NULL
-pg_catalog  pg_shmem_allocations             table  NULL  NULL  NULL
-pg_catalog  pg_shseclabel                    table  NULL  NULL  NULL
-pg_catalog  pg_stat_activity                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_all_indexes              table  NULL  NULL  NULL
-pg_catalog  pg_stat_all_tables               table  NULL  NULL  NULL
-pg_catalog  pg_stat_archiver                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_bgwriter                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_database                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_database_conflicts       table  NULL  NULL  NULL
-pg_catalog  pg_stat_gssapi                   table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_analyze         table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_basebackup      table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_cluster         table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_create_index    table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_vacuum          table  NULL  NULL  NULL
-pg_catalog  pg_stat_replication              table  NULL  NULL  NULL
-pg_catalog  pg_stat_slru                     table  NULL  NULL  NULL
-pg_catalog  pg_stat_ssl                      table  NULL  NULL  NULL
-pg_catalog  pg_stat_subscription             table  NULL  NULL  NULL
-pg_catalog  pg_stat_sys_indexes              table  NULL  NULL  NULL
-pg_catalog  pg_stat_sys_tables               table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_functions           table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_indexes             table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_tables              table  NULL  NULL  NULL
-pg_catalog  pg_stat_wal_receiver             table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_all_tables          table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_sys_tables          table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_user_functions      table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_user_tables         table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_indexes            table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_sequences          table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_tables             table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_indexes            table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_sequences          table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_tables             table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_indexes           table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_sequences         table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_tables            table  NULL  NULL  NULL
-pg_catalog  pg_statistic                     table  NULL  NULL  NULL
-pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
-pg_catalog  pg_statistic_ext_data            table  NULL  NULL  NULL
-pg_catalog  pg_stats                         table  NULL  NULL  NULL
-pg_catalog  pg_stats_ext                     table  NULL  NULL  NULL
-pg_catalog  pg_subscription                  table  NULL  NULL  NULL
-pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
-pg_catalog  pg_tables                        table  NULL  NULL  NULL
-pg_catalog  pg_tablespace                    table  NULL  NULL  NULL
-pg_catalog  pg_timezone_abbrevs              table  NULL  NULL  NULL
-pg_catalog  pg_timezone_names                table  NULL  NULL  NULL
-pg_catalog  pg_transform                     table  NULL  NULL  NULL
-pg_catalog  pg_trigger                       table  NULL  NULL  NULL
-pg_catalog  pg_ts_config                     table  NULL  NULL  NULL
-pg_catalog  pg_ts_config_map                 table  NULL  NULL  NULL
-pg_catalog  pg_ts_dict                       table  NULL  NULL  NULL
-pg_catalog  pg_ts_parser                     table  NULL  NULL  NULL
-pg_catalog  pg_ts_template                   table  NULL  NULL  NULL
-pg_catalog  pg_type                          table  NULL  NULL  NULL
-pg_catalog  pg_user                          table  NULL  NULL  NULL
-pg_catalog  pg_user_mapping                  table  NULL  NULL  NULL
-pg_catalog  pg_user_mappings                 table  NULL  NULL  NULL
-pg_catalog  pg_views                         table  NULL  NULL  NULL
+pg_catalog  pg_aggregate                     table  admin  NULL  NULL
+pg_catalog  pg_am                            table  admin  NULL  NULL
+pg_catalog  pg_amop                          table  admin  NULL  NULL
+pg_catalog  pg_amproc                        table  admin  NULL  NULL
+pg_catalog  pg_attrdef                       table  admin  NULL  NULL
+pg_catalog  pg_attribute                     table  admin  NULL  NULL
+pg_catalog  pg_auth_members                  table  admin  NULL  NULL
+pg_catalog  pg_authid                        table  admin  NULL  NULL
+pg_catalog  pg_available_extension_versions  table  admin  NULL  NULL
+pg_catalog  pg_available_extensions          table  admin  NULL  NULL
+pg_catalog  pg_cast                          table  admin  NULL  NULL
+pg_catalog  pg_class                         table  admin  NULL  NULL
+pg_catalog  pg_collation                     table  admin  NULL  NULL
+pg_catalog  pg_config                        table  admin  NULL  NULL
+pg_catalog  pg_constraint                    table  admin  NULL  NULL
+pg_catalog  pg_conversion                    table  admin  NULL  NULL
+pg_catalog  pg_cursors                       table  admin  NULL  NULL
+pg_catalog  pg_database                      table  admin  NULL  NULL
+pg_catalog  pg_db_role_setting               table  admin  NULL  NULL
+pg_catalog  pg_default_acl                   table  admin  NULL  NULL
+pg_catalog  pg_depend                        table  admin  NULL  NULL
+pg_catalog  pg_description                   table  admin  NULL  NULL
+pg_catalog  pg_enum                          table  admin  NULL  NULL
+pg_catalog  pg_event_trigger                 table  admin  NULL  NULL
+pg_catalog  pg_extension                     table  admin  NULL  NULL
+pg_catalog  pg_file_settings                 table  admin  NULL  NULL
+pg_catalog  pg_foreign_data_wrapper          table  admin  NULL  NULL
+pg_catalog  pg_foreign_server                table  admin  NULL  NULL
+pg_catalog  pg_foreign_table                 table  admin  NULL  NULL
+pg_catalog  pg_group                         table  admin  NULL  NULL
+pg_catalog  pg_hba_file_rules                table  admin  NULL  NULL
+pg_catalog  pg_index                         table  admin  NULL  NULL
+pg_catalog  pg_indexes                       table  admin  NULL  NULL
+pg_catalog  pg_inherits                      table  admin  NULL  NULL
+pg_catalog  pg_init_privs                    table  admin  NULL  NULL
+pg_catalog  pg_language                      table  admin  NULL  NULL
+pg_catalog  pg_largeobject                   table  admin  NULL  NULL
+pg_catalog  pg_largeobject_metadata          table  admin  NULL  NULL
+pg_catalog  pg_locks                         table  admin  NULL  NULL
+pg_catalog  pg_matviews                      table  admin  NULL  NULL
+pg_catalog  pg_namespace                     table  admin  NULL  NULL
+pg_catalog  pg_opclass                       table  admin  NULL  NULL
+pg_catalog  pg_operator                      table  admin  NULL  NULL
+pg_catalog  pg_opfamily                      table  admin  NULL  NULL
+pg_catalog  pg_partitioned_table             table  admin  NULL  NULL
+pg_catalog  pg_policies                      table  admin  NULL  NULL
+pg_catalog  pg_policy                        table  admin  NULL  NULL
+pg_catalog  pg_prepared_statements           table  admin  NULL  NULL
+pg_catalog  pg_prepared_xacts                table  admin  NULL  NULL
+pg_catalog  pg_proc                          table  admin  NULL  NULL
+pg_catalog  pg_publication                   table  admin  NULL  NULL
+pg_catalog  pg_publication_rel               table  admin  NULL  NULL
+pg_catalog  pg_publication_tables            table  admin  NULL  NULL
+pg_catalog  pg_range                         table  admin  NULL  NULL
+pg_catalog  pg_replication_origin            table  admin  NULL  NULL
+pg_catalog  pg_replication_origin_status     table  admin  NULL  NULL
+pg_catalog  pg_replication_slots             table  admin  NULL  NULL
+pg_catalog  pg_rewrite                       table  admin  NULL  NULL
+pg_catalog  pg_roles                         table  admin  NULL  NULL
+pg_catalog  pg_rules                         table  admin  NULL  NULL
+pg_catalog  pg_seclabel                      table  admin  NULL  NULL
+pg_catalog  pg_seclabels                     table  admin  NULL  NULL
+pg_catalog  pg_sequence                      table  admin  NULL  NULL
+pg_catalog  pg_sequences                     table  admin  NULL  NULL
+pg_catalog  pg_settings                      table  admin  NULL  NULL
+pg_catalog  pg_shadow                        table  admin  NULL  NULL
+pg_catalog  pg_shdepend                      table  admin  NULL  NULL
+pg_catalog  pg_shdescription                 table  admin  NULL  NULL
+pg_catalog  pg_shmem_allocations             table  admin  NULL  NULL
+pg_catalog  pg_shseclabel                    table  admin  NULL  NULL
+pg_catalog  pg_stat_activity                 table  admin  NULL  NULL
+pg_catalog  pg_stat_all_indexes              table  admin  NULL  NULL
+pg_catalog  pg_stat_all_tables               table  admin  NULL  NULL
+pg_catalog  pg_stat_archiver                 table  admin  NULL  NULL
+pg_catalog  pg_stat_bgwriter                 table  admin  NULL  NULL
+pg_catalog  pg_stat_database                 table  admin  NULL  NULL
+pg_catalog  pg_stat_database_conflicts       table  admin  NULL  NULL
+pg_catalog  pg_stat_gssapi                   table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_analyze         table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_basebackup      table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_cluster         table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_create_index    table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_vacuum          table  admin  NULL  NULL
+pg_catalog  pg_stat_replication              table  admin  NULL  NULL
+pg_catalog  pg_stat_slru                     table  admin  NULL  NULL
+pg_catalog  pg_stat_ssl                      table  admin  NULL  NULL
+pg_catalog  pg_stat_subscription             table  admin  NULL  NULL
+pg_catalog  pg_stat_sys_indexes              table  admin  NULL  NULL
+pg_catalog  pg_stat_sys_tables               table  admin  NULL  NULL
+pg_catalog  pg_stat_user_functions           table  admin  NULL  NULL
+pg_catalog  pg_stat_user_indexes             table  admin  NULL  NULL
+pg_catalog  pg_stat_user_tables              table  admin  NULL  NULL
+pg_catalog  pg_stat_wal_receiver             table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_all_tables          table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_sys_tables          table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_user_functions      table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_user_tables         table  admin  NULL  NULL
+pg_catalog  pg_statio_all_indexes            table  admin  NULL  NULL
+pg_catalog  pg_statio_all_sequences          table  admin  NULL  NULL
+pg_catalog  pg_statio_all_tables             table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_indexes            table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_sequences          table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_tables             table  admin  NULL  NULL
+pg_catalog  pg_statio_user_indexes           table  admin  NULL  NULL
+pg_catalog  pg_statio_user_sequences         table  admin  NULL  NULL
+pg_catalog  pg_statio_user_tables            table  admin  NULL  NULL
+pg_catalog  pg_statistic                     table  admin  NULL  NULL
+pg_catalog  pg_statistic_ext                 table  admin  NULL  NULL
+pg_catalog  pg_statistic_ext_data            table  admin  NULL  NULL
+pg_catalog  pg_stats                         table  admin  NULL  NULL
+pg_catalog  pg_stats_ext                     table  admin  NULL  NULL
+pg_catalog  pg_subscription                  table  admin  NULL  NULL
+pg_catalog  pg_subscription_rel              table  admin  NULL  NULL
+pg_catalog  pg_tables                        table  admin  NULL  NULL
+pg_catalog  pg_tablespace                    table  admin  NULL  NULL
+pg_catalog  pg_timezone_abbrevs              table  admin  NULL  NULL
+pg_catalog  pg_timezone_names                table  admin  NULL  NULL
+pg_catalog  pg_transform                     table  admin  NULL  NULL
+pg_catalog  pg_trigger                       table  admin  NULL  NULL
+pg_catalog  pg_ts_config                     table  admin  NULL  NULL
+pg_catalog  pg_ts_config_map                 table  admin  NULL  NULL
+pg_catalog  pg_ts_dict                       table  admin  NULL  NULL
+pg_catalog  pg_ts_parser                     table  admin  NULL  NULL
+pg_catalog  pg_ts_template                   table  admin  NULL  NULL
+pg_catalog  pg_type                          table  admin  NULL  NULL
+pg_catalog  pg_user                          table  admin  NULL  NULL
+pg_catalog  pg_user_mapping                  table  admin  NULL  NULL
+pg_catalog  pg_user_mappings                 table  admin  NULL  NULL
+pg_catalog  pg_views                         table  admin  NULL  NULL
 
 # Verify "pg_catalog" is a regular db name
 
@@ -174,135 +174,135 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 query TTTTIT
 SHOW TABLES FROM test.pg_catalog
 ----
-pg_catalog  pg_aggregate                     table  NULL  NULL  NULL
-pg_catalog  pg_am                            table  NULL  NULL  NULL
-pg_catalog  pg_amop                          table  NULL  NULL  NULL
-pg_catalog  pg_amproc                        table  NULL  NULL  NULL
-pg_catalog  pg_attrdef                       table  NULL  NULL  NULL
-pg_catalog  pg_attribute                     table  NULL  NULL  NULL
-pg_catalog  pg_auth_members                  table  NULL  NULL  NULL
-pg_catalog  pg_authid                        table  NULL  NULL  NULL
-pg_catalog  pg_available_extension_versions  table  NULL  NULL  NULL
-pg_catalog  pg_available_extensions          table  NULL  NULL  NULL
-pg_catalog  pg_cast                          table  NULL  NULL  NULL
-pg_catalog  pg_class                         table  NULL  NULL  NULL
-pg_catalog  pg_collation                     table  NULL  NULL  NULL
-pg_catalog  pg_config                        table  NULL  NULL  NULL
-pg_catalog  pg_constraint                    table  NULL  NULL  NULL
-pg_catalog  pg_conversion                    table  NULL  NULL  NULL
-pg_catalog  pg_cursors                       table  NULL  NULL  NULL
-pg_catalog  pg_database                      table  NULL  NULL  NULL
-pg_catalog  pg_db_role_setting               table  NULL  NULL  NULL
-pg_catalog  pg_default_acl                   table  NULL  NULL  NULL
-pg_catalog  pg_depend                        table  NULL  NULL  NULL
-pg_catalog  pg_description                   table  NULL  NULL  NULL
-pg_catalog  pg_enum                          table  NULL  NULL  NULL
-pg_catalog  pg_event_trigger                 table  NULL  NULL  NULL
-pg_catalog  pg_extension                     table  NULL  NULL  NULL
-pg_catalog  pg_file_settings                 table  NULL  NULL  NULL
-pg_catalog  pg_foreign_data_wrapper          table  NULL  NULL  NULL
-pg_catalog  pg_foreign_server                table  NULL  NULL  NULL
-pg_catalog  pg_foreign_table                 table  NULL  NULL  NULL
-pg_catalog  pg_group                         table  NULL  NULL  NULL
-pg_catalog  pg_hba_file_rules                table  NULL  NULL  NULL
-pg_catalog  pg_index                         table  NULL  NULL  NULL
-pg_catalog  pg_indexes                       table  NULL  NULL  NULL
-pg_catalog  pg_inherits                      table  NULL  NULL  NULL
-pg_catalog  pg_init_privs                    table  NULL  NULL  NULL
-pg_catalog  pg_language                      table  NULL  NULL  NULL
-pg_catalog  pg_largeobject                   table  NULL  NULL  NULL
-pg_catalog  pg_largeobject_metadata          table  NULL  NULL  NULL
-pg_catalog  pg_locks                         table  NULL  NULL  NULL
-pg_catalog  pg_matviews                      table  NULL  NULL  NULL
-pg_catalog  pg_namespace                     table  NULL  NULL  NULL
-pg_catalog  pg_opclass                       table  NULL  NULL  NULL
-pg_catalog  pg_operator                      table  NULL  NULL  NULL
-pg_catalog  pg_opfamily                      table  NULL  NULL  NULL
-pg_catalog  pg_partitioned_table             table  NULL  NULL  NULL
-pg_catalog  pg_policies                      table  NULL  NULL  NULL
-pg_catalog  pg_policy                        table  NULL  NULL  NULL
-pg_catalog  pg_prepared_statements           table  NULL  NULL  NULL
-pg_catalog  pg_prepared_xacts                table  NULL  NULL  NULL
-pg_catalog  pg_proc                          table  NULL  NULL  NULL
-pg_catalog  pg_publication                   table  NULL  NULL  NULL
-pg_catalog  pg_publication_rel               table  NULL  NULL  NULL
-pg_catalog  pg_publication_tables            table  NULL  NULL  NULL
-pg_catalog  pg_range                         table  NULL  NULL  NULL
-pg_catalog  pg_replication_origin            table  NULL  NULL  NULL
-pg_catalog  pg_replication_origin_status     table  NULL  NULL  NULL
-pg_catalog  pg_replication_slots             table  NULL  NULL  NULL
-pg_catalog  pg_rewrite                       table  NULL  NULL  NULL
-pg_catalog  pg_roles                         table  NULL  NULL  NULL
-pg_catalog  pg_rules                         table  NULL  NULL  NULL
-pg_catalog  pg_seclabel                      table  NULL  NULL  NULL
-pg_catalog  pg_seclabels                     table  NULL  NULL  NULL
-pg_catalog  pg_sequence                      table  NULL  NULL  NULL
-pg_catalog  pg_sequences                     table  NULL  NULL  NULL
-pg_catalog  pg_settings                      table  NULL  NULL  NULL
-pg_catalog  pg_shadow                        table  NULL  NULL  NULL
-pg_catalog  pg_shdepend                      table  NULL  NULL  NULL
-pg_catalog  pg_shdescription                 table  NULL  NULL  NULL
-pg_catalog  pg_shmem_allocations             table  NULL  NULL  NULL
-pg_catalog  pg_shseclabel                    table  NULL  NULL  NULL
-pg_catalog  pg_stat_activity                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_all_indexes              table  NULL  NULL  NULL
-pg_catalog  pg_stat_all_tables               table  NULL  NULL  NULL
-pg_catalog  pg_stat_archiver                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_bgwriter                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_database                 table  NULL  NULL  NULL
-pg_catalog  pg_stat_database_conflicts       table  NULL  NULL  NULL
-pg_catalog  pg_stat_gssapi                   table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_analyze         table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_basebackup      table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_cluster         table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_create_index    table  NULL  NULL  NULL
-pg_catalog  pg_stat_progress_vacuum          table  NULL  NULL  NULL
-pg_catalog  pg_stat_replication              table  NULL  NULL  NULL
-pg_catalog  pg_stat_slru                     table  NULL  NULL  NULL
-pg_catalog  pg_stat_ssl                      table  NULL  NULL  NULL
-pg_catalog  pg_stat_subscription             table  NULL  NULL  NULL
-pg_catalog  pg_stat_sys_indexes              table  NULL  NULL  NULL
-pg_catalog  pg_stat_sys_tables               table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_functions           table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_indexes             table  NULL  NULL  NULL
-pg_catalog  pg_stat_user_tables              table  NULL  NULL  NULL
-pg_catalog  pg_stat_wal_receiver             table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_all_tables          table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_sys_tables          table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_user_functions      table  NULL  NULL  NULL
-pg_catalog  pg_stat_xact_user_tables         table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_indexes            table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_sequences          table  NULL  NULL  NULL
-pg_catalog  pg_statio_all_tables             table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_indexes            table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_sequences          table  NULL  NULL  NULL
-pg_catalog  pg_statio_sys_tables             table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_indexes           table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_sequences         table  NULL  NULL  NULL
-pg_catalog  pg_statio_user_tables            table  NULL  NULL  NULL
-pg_catalog  pg_statistic                     table  NULL  NULL  NULL
-pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
-pg_catalog  pg_statistic_ext_data            table  NULL  NULL  NULL
-pg_catalog  pg_stats                         table  NULL  NULL  NULL
-pg_catalog  pg_stats_ext                     table  NULL  NULL  NULL
-pg_catalog  pg_subscription                  table  NULL  NULL  NULL
-pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
-pg_catalog  pg_tables                        table  NULL  NULL  NULL
-pg_catalog  pg_tablespace                    table  NULL  NULL  NULL
-pg_catalog  pg_timezone_abbrevs              table  NULL  NULL  NULL
-pg_catalog  pg_timezone_names                table  NULL  NULL  NULL
-pg_catalog  pg_transform                     table  NULL  NULL  NULL
-pg_catalog  pg_trigger                       table  NULL  NULL  NULL
-pg_catalog  pg_ts_config                     table  NULL  NULL  NULL
-pg_catalog  pg_ts_config_map                 table  NULL  NULL  NULL
-pg_catalog  pg_ts_dict                       table  NULL  NULL  NULL
-pg_catalog  pg_ts_parser                     table  NULL  NULL  NULL
-pg_catalog  pg_ts_template                   table  NULL  NULL  NULL
-pg_catalog  pg_type                          table  NULL  NULL  NULL
-pg_catalog  pg_user                          table  NULL  NULL  NULL
-pg_catalog  pg_user_mapping                  table  NULL  NULL  NULL
-pg_catalog  pg_user_mappings                 table  NULL  NULL  NULL
-pg_catalog  pg_views                         table  NULL  NULL  NULL
+pg_catalog  pg_aggregate                     table  admin  NULL  NULL
+pg_catalog  pg_am                            table  admin  NULL  NULL
+pg_catalog  pg_amop                          table  admin  NULL  NULL
+pg_catalog  pg_amproc                        table  admin  NULL  NULL
+pg_catalog  pg_attrdef                       table  admin  NULL  NULL
+pg_catalog  pg_attribute                     table  admin  NULL  NULL
+pg_catalog  pg_auth_members                  table  admin  NULL  NULL
+pg_catalog  pg_authid                        table  admin  NULL  NULL
+pg_catalog  pg_available_extension_versions  table  admin  NULL  NULL
+pg_catalog  pg_available_extensions          table  admin  NULL  NULL
+pg_catalog  pg_cast                          table  admin  NULL  NULL
+pg_catalog  pg_class                         table  admin  NULL  NULL
+pg_catalog  pg_collation                     table  admin  NULL  NULL
+pg_catalog  pg_config                        table  admin  NULL  NULL
+pg_catalog  pg_constraint                    table  admin  NULL  NULL
+pg_catalog  pg_conversion                    table  admin  NULL  NULL
+pg_catalog  pg_cursors                       table  admin  NULL  NULL
+pg_catalog  pg_database                      table  admin  NULL  NULL
+pg_catalog  pg_db_role_setting               table  admin  NULL  NULL
+pg_catalog  pg_default_acl                   table  admin  NULL  NULL
+pg_catalog  pg_depend                        table  admin  NULL  NULL
+pg_catalog  pg_description                   table  admin  NULL  NULL
+pg_catalog  pg_enum                          table  admin  NULL  NULL
+pg_catalog  pg_event_trigger                 table  admin  NULL  NULL
+pg_catalog  pg_extension                     table  admin  NULL  NULL
+pg_catalog  pg_file_settings                 table  admin  NULL  NULL
+pg_catalog  pg_foreign_data_wrapper          table  admin  NULL  NULL
+pg_catalog  pg_foreign_server                table  admin  NULL  NULL
+pg_catalog  pg_foreign_table                 table  admin  NULL  NULL
+pg_catalog  pg_group                         table  admin  NULL  NULL
+pg_catalog  pg_hba_file_rules                table  admin  NULL  NULL
+pg_catalog  pg_index                         table  admin  NULL  NULL
+pg_catalog  pg_indexes                       table  admin  NULL  NULL
+pg_catalog  pg_inherits                      table  admin  NULL  NULL
+pg_catalog  pg_init_privs                    table  admin  NULL  NULL
+pg_catalog  pg_language                      table  admin  NULL  NULL
+pg_catalog  pg_largeobject                   table  admin  NULL  NULL
+pg_catalog  pg_largeobject_metadata          table  admin  NULL  NULL
+pg_catalog  pg_locks                         table  admin  NULL  NULL
+pg_catalog  pg_matviews                      table  admin  NULL  NULL
+pg_catalog  pg_namespace                     table  admin  NULL  NULL
+pg_catalog  pg_opclass                       table  admin  NULL  NULL
+pg_catalog  pg_operator                      table  admin  NULL  NULL
+pg_catalog  pg_opfamily                      table  admin  NULL  NULL
+pg_catalog  pg_partitioned_table             table  admin  NULL  NULL
+pg_catalog  pg_policies                      table  admin  NULL  NULL
+pg_catalog  pg_policy                        table  admin  NULL  NULL
+pg_catalog  pg_prepared_statements           table  admin  NULL  NULL
+pg_catalog  pg_prepared_xacts                table  admin  NULL  NULL
+pg_catalog  pg_proc                          table  admin  NULL  NULL
+pg_catalog  pg_publication                   table  admin  NULL  NULL
+pg_catalog  pg_publication_rel               table  admin  NULL  NULL
+pg_catalog  pg_publication_tables            table  admin  NULL  NULL
+pg_catalog  pg_range                         table  admin  NULL  NULL
+pg_catalog  pg_replication_origin            table  admin  NULL  NULL
+pg_catalog  pg_replication_origin_status     table  admin  NULL  NULL
+pg_catalog  pg_replication_slots             table  admin  NULL  NULL
+pg_catalog  pg_rewrite                       table  admin  NULL  NULL
+pg_catalog  pg_roles                         table  admin  NULL  NULL
+pg_catalog  pg_rules                         table  admin  NULL  NULL
+pg_catalog  pg_seclabel                      table  admin  NULL  NULL
+pg_catalog  pg_seclabels                     table  admin  NULL  NULL
+pg_catalog  pg_sequence                      table  admin  NULL  NULL
+pg_catalog  pg_sequences                     table  admin  NULL  NULL
+pg_catalog  pg_settings                      table  admin  NULL  NULL
+pg_catalog  pg_shadow                        table  admin  NULL  NULL
+pg_catalog  pg_shdepend                      table  admin  NULL  NULL
+pg_catalog  pg_shdescription                 table  admin  NULL  NULL
+pg_catalog  pg_shmem_allocations             table  admin  NULL  NULL
+pg_catalog  pg_shseclabel                    table  admin  NULL  NULL
+pg_catalog  pg_stat_activity                 table  admin  NULL  NULL
+pg_catalog  pg_stat_all_indexes              table  admin  NULL  NULL
+pg_catalog  pg_stat_all_tables               table  admin  NULL  NULL
+pg_catalog  pg_stat_archiver                 table  admin  NULL  NULL
+pg_catalog  pg_stat_bgwriter                 table  admin  NULL  NULL
+pg_catalog  pg_stat_database                 table  admin  NULL  NULL
+pg_catalog  pg_stat_database_conflicts       table  admin  NULL  NULL
+pg_catalog  pg_stat_gssapi                   table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_analyze         table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_basebackup      table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_cluster         table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_create_index    table  admin  NULL  NULL
+pg_catalog  pg_stat_progress_vacuum          table  admin  NULL  NULL
+pg_catalog  pg_stat_replication              table  admin  NULL  NULL
+pg_catalog  pg_stat_slru                     table  admin  NULL  NULL
+pg_catalog  pg_stat_ssl                      table  admin  NULL  NULL
+pg_catalog  pg_stat_subscription             table  admin  NULL  NULL
+pg_catalog  pg_stat_sys_indexes              table  admin  NULL  NULL
+pg_catalog  pg_stat_sys_tables               table  admin  NULL  NULL
+pg_catalog  pg_stat_user_functions           table  admin  NULL  NULL
+pg_catalog  pg_stat_user_indexes             table  admin  NULL  NULL
+pg_catalog  pg_stat_user_tables              table  admin  NULL  NULL
+pg_catalog  pg_stat_wal_receiver             table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_all_tables          table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_sys_tables          table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_user_functions      table  admin  NULL  NULL
+pg_catalog  pg_stat_xact_user_tables         table  admin  NULL  NULL
+pg_catalog  pg_statio_all_indexes            table  admin  NULL  NULL
+pg_catalog  pg_statio_all_sequences          table  admin  NULL  NULL
+pg_catalog  pg_statio_all_tables             table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_indexes            table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_sequences          table  admin  NULL  NULL
+pg_catalog  pg_statio_sys_tables             table  admin  NULL  NULL
+pg_catalog  pg_statio_user_indexes           table  admin  NULL  NULL
+pg_catalog  pg_statio_user_sequences         table  admin  NULL  NULL
+pg_catalog  pg_statio_user_tables            table  admin  NULL  NULL
+pg_catalog  pg_statistic                     table  admin  NULL  NULL
+pg_catalog  pg_statistic_ext                 table  admin  NULL  NULL
+pg_catalog  pg_statistic_ext_data            table  admin  NULL  NULL
+pg_catalog  pg_stats                         table  admin  NULL  NULL
+pg_catalog  pg_stats_ext                     table  admin  NULL  NULL
+pg_catalog  pg_subscription                  table  admin  NULL  NULL
+pg_catalog  pg_subscription_rel              table  admin  NULL  NULL
+pg_catalog  pg_tables                        table  admin  NULL  NULL
+pg_catalog  pg_tablespace                    table  admin  NULL  NULL
+pg_catalog  pg_timezone_abbrevs              table  admin  NULL  NULL
+pg_catalog  pg_timezone_names                table  admin  NULL  NULL
+pg_catalog  pg_transform                     table  admin  NULL  NULL
+pg_catalog  pg_trigger                       table  admin  NULL  NULL
+pg_catalog  pg_ts_config                     table  admin  NULL  NULL
+pg_catalog  pg_ts_config_map                 table  admin  NULL  NULL
+pg_catalog  pg_ts_dict                       table  admin  NULL  NULL
+pg_catalog  pg_ts_parser                     table  admin  NULL  NULL
+pg_catalog  pg_ts_template                   table  admin  NULL  NULL
+pg_catalog  pg_type                          table  admin  NULL  NULL
+pg_catalog  pg_user                          table  admin  NULL  NULL
+pg_catalog  pg_user_mapping                  table  admin  NULL  NULL
+pg_catalog  pg_user_mappings                 table  admin  NULL  NULL
+pg_catalog  pg_views                         table  admin  NULL  NULL
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
@@ -1693,294 +1693,294 @@ oid         typname                                typnamespace  typowner    typ
 100132      _newtype1                              3082627813    1546506610  -1      false     b
 100133      newtype2                               3082627813    1546506610  -1      false     e
 100134      _newtype2                              3082627813    1546506610  -1      false     b
-4294967004  spatial_ref_sys                        1700435119    3233629770  -1      false     c
-4294967005  geometry_columns                       1700435119    3233629770  -1      false     c
-4294967006  geography_columns                      1700435119    3233629770  -1      false     c
-4294967008  pg_views                               591606261     3233629770  -1      false     c
-4294967009  pg_user                                591606261     3233629770  -1      false     c
-4294967010  pg_user_mappings                       591606261     3233629770  -1      false     c
-4294967011  pg_user_mapping                        591606261     3233629770  -1      false     c
-4294967012  pg_type                                591606261     3233629770  -1      false     c
-4294967013  pg_ts_template                         591606261     3233629770  -1      false     c
-4294967014  pg_ts_parser                           591606261     3233629770  -1      false     c
-4294967015  pg_ts_dict                             591606261     3233629770  -1      false     c
-4294967016  pg_ts_config                           591606261     3233629770  -1      false     c
-4294967017  pg_ts_config_map                       591606261     3233629770  -1      false     c
-4294967018  pg_trigger                             591606261     3233629770  -1      false     c
-4294967019  pg_transform                           591606261     3233629770  -1      false     c
-4294967020  pg_timezone_names                      591606261     3233629770  -1      false     c
-4294967021  pg_timezone_abbrevs                    591606261     3233629770  -1      false     c
-4294967022  pg_tablespace                          591606261     3233629770  -1      false     c
-4294967023  pg_tables                              591606261     3233629770  -1      false     c
-4294967024  pg_subscription                        591606261     3233629770  -1      false     c
-4294967025  pg_subscription_rel                    591606261     3233629770  -1      false     c
-4294967026  pg_stats                               591606261     3233629770  -1      false     c
-4294967027  pg_stats_ext                           591606261     3233629770  -1      false     c
-4294967028  pg_statistic                           591606261     3233629770  -1      false     c
-4294967029  pg_statistic_ext                       591606261     3233629770  -1      false     c
-4294967030  pg_statistic_ext_data                  591606261     3233629770  -1      false     c
-4294967031  pg_statio_user_tables                  591606261     3233629770  -1      false     c
-4294967032  pg_statio_user_sequences               591606261     3233629770  -1      false     c
-4294967033  pg_statio_user_indexes                 591606261     3233629770  -1      false     c
-4294967034  pg_statio_sys_tables                   591606261     3233629770  -1      false     c
-4294967035  pg_statio_sys_sequences                591606261     3233629770  -1      false     c
-4294967036  pg_statio_sys_indexes                  591606261     3233629770  -1      false     c
-4294967037  pg_statio_all_tables                   591606261     3233629770  -1      false     c
-4294967038  pg_statio_all_sequences                591606261     3233629770  -1      false     c
-4294967039  pg_statio_all_indexes                  591606261     3233629770  -1      false     c
-4294967040  pg_stat_xact_user_tables               591606261     3233629770  -1      false     c
-4294967041  pg_stat_xact_user_functions            591606261     3233629770  -1      false     c
-4294967042  pg_stat_xact_sys_tables                591606261     3233629770  -1      false     c
-4294967043  pg_stat_xact_all_tables                591606261     3233629770  -1      false     c
-4294967044  pg_stat_wal_receiver                   591606261     3233629770  -1      false     c
-4294967045  pg_stat_user_tables                    591606261     3233629770  -1      false     c
-4294967046  pg_stat_user_indexes                   591606261     3233629770  -1      false     c
-4294967047  pg_stat_user_functions                 591606261     3233629770  -1      false     c
-4294967048  pg_stat_sys_tables                     591606261     3233629770  -1      false     c
-4294967049  pg_stat_sys_indexes                    591606261     3233629770  -1      false     c
-4294967050  pg_stat_subscription                   591606261     3233629770  -1      false     c
-4294967051  pg_stat_ssl                            591606261     3233629770  -1      false     c
-4294967052  pg_stat_slru                           591606261     3233629770  -1      false     c
-4294967053  pg_stat_replication                    591606261     3233629770  -1      false     c
-4294967054  pg_stat_progress_vacuum                591606261     3233629770  -1      false     c
-4294967055  pg_stat_progress_create_index          591606261     3233629770  -1      false     c
-4294967056  pg_stat_progress_cluster               591606261     3233629770  -1      false     c
-4294967057  pg_stat_progress_basebackup            591606261     3233629770  -1      false     c
-4294967058  pg_stat_progress_analyze               591606261     3233629770  -1      false     c
-4294967059  pg_stat_gssapi                         591606261     3233629770  -1      false     c
-4294967060  pg_stat_database                       591606261     3233629770  -1      false     c
-4294967061  pg_stat_database_conflicts             591606261     3233629770  -1      false     c
-4294967062  pg_stat_bgwriter                       591606261     3233629770  -1      false     c
-4294967063  pg_stat_archiver                       591606261     3233629770  -1      false     c
-4294967064  pg_stat_all_tables                     591606261     3233629770  -1      false     c
-4294967065  pg_stat_all_indexes                    591606261     3233629770  -1      false     c
-4294967066  pg_stat_activity                       591606261     3233629770  -1      false     c
-4294967067  pg_shmem_allocations                   591606261     3233629770  -1      false     c
-4294967068  pg_shdepend                            591606261     3233629770  -1      false     c
-4294967069  pg_shseclabel                          591606261     3233629770  -1      false     c
-4294967070  pg_shdescription                       591606261     3233629770  -1      false     c
-4294967071  pg_shadow                              591606261     3233629770  -1      false     c
-4294967072  pg_settings                            591606261     3233629770  -1      false     c
-4294967073  pg_sequences                           591606261     3233629770  -1      false     c
-4294967074  pg_sequence                            591606261     3233629770  -1      false     c
-4294967075  pg_seclabel                            591606261     3233629770  -1      false     c
-4294967076  pg_seclabels                           591606261     3233629770  -1      false     c
-4294967077  pg_rules                               591606261     3233629770  -1      false     c
-4294967078  pg_roles                               591606261     3233629770  -1      false     c
-4294967079  pg_rewrite                             591606261     3233629770  -1      false     c
-4294967080  pg_replication_slots                   591606261     3233629770  -1      false     c
-4294967081  pg_replication_origin                  591606261     3233629770  -1      false     c
-4294967082  pg_replication_origin_status           591606261     3233629770  -1      false     c
-4294967083  pg_range                               591606261     3233629770  -1      false     c
-4294967084  pg_publication_tables                  591606261     3233629770  -1      false     c
-4294967085  pg_publication                         591606261     3233629770  -1      false     c
-4294967086  pg_publication_rel                     591606261     3233629770  -1      false     c
-4294967087  pg_proc                                591606261     3233629770  -1      false     c
-4294967088  pg_prepared_xacts                      591606261     3233629770  -1      false     c
-4294967089  pg_prepared_statements                 591606261     3233629770  -1      false     c
-4294967090  pg_policy                              591606261     3233629770  -1      false     c
-4294967091  pg_policies                            591606261     3233629770  -1      false     c
-4294967092  pg_partitioned_table                   591606261     3233629770  -1      false     c
-4294967093  pg_opfamily                            591606261     3233629770  -1      false     c
-4294967094  pg_operator                            591606261     3233629770  -1      false     c
-4294967095  pg_opclass                             591606261     3233629770  -1      false     c
-4294967096  pg_namespace                           591606261     3233629770  -1      false     c
-4294967097  pg_matviews                            591606261     3233629770  -1      false     c
-4294967098  pg_locks                               591606261     3233629770  -1      false     c
-4294967099  pg_largeobject                         591606261     3233629770  -1      false     c
-4294967100  pg_largeobject_metadata                591606261     3233629770  -1      false     c
-4294967101  pg_language                            591606261     3233629770  -1      false     c
-4294967102  pg_init_privs                          591606261     3233629770  -1      false     c
-4294967103  pg_inherits                            591606261     3233629770  -1      false     c
-4294967104  pg_indexes                             591606261     3233629770  -1      false     c
-4294967105  pg_index                               591606261     3233629770  -1      false     c
-4294967106  pg_hba_file_rules                      591606261     3233629770  -1      false     c
-4294967107  pg_group                               591606261     3233629770  -1      false     c
-4294967108  pg_foreign_table                       591606261     3233629770  -1      false     c
-4294967109  pg_foreign_server                      591606261     3233629770  -1      false     c
-4294967110  pg_foreign_data_wrapper                591606261     3233629770  -1      false     c
-4294967111  pg_file_settings                       591606261     3233629770  -1      false     c
-4294967112  pg_extension                           591606261     3233629770  -1      false     c
-4294967113  pg_event_trigger                       591606261     3233629770  -1      false     c
-4294967114  pg_enum                                591606261     3233629770  -1      false     c
-4294967115  pg_description                         591606261     3233629770  -1      false     c
-4294967116  pg_depend                              591606261     3233629770  -1      false     c
-4294967117  pg_default_acl                         591606261     3233629770  -1      false     c
-4294967118  pg_db_role_setting                     591606261     3233629770  -1      false     c
-4294967119  pg_database                            591606261     3233629770  -1      false     c
-4294967120  pg_cursors                             591606261     3233629770  -1      false     c
-4294967121  pg_conversion                          591606261     3233629770  -1      false     c
-4294967122  pg_constraint                          591606261     3233629770  -1      false     c
-4294967123  pg_config                              591606261     3233629770  -1      false     c
-4294967124  pg_collation                           591606261     3233629770  -1      false     c
-4294967125  pg_class                               591606261     3233629770  -1      false     c
-4294967126  pg_cast                                591606261     3233629770  -1      false     c
-4294967127  pg_available_extensions                591606261     3233629770  -1      false     c
-4294967128  pg_available_extension_versions        591606261     3233629770  -1      false     c
-4294967129  pg_auth_members                        591606261     3233629770  -1      false     c
-4294967130  pg_authid                              591606261     3233629770  -1      false     c
-4294967131  pg_attribute                           591606261     3233629770  -1      false     c
-4294967132  pg_attrdef                             591606261     3233629770  -1      false     c
-4294967133  pg_amproc                              591606261     3233629770  -1      false     c
-4294967134  pg_amop                                591606261     3233629770  -1      false     c
-4294967135  pg_am                                  591606261     3233629770  -1      false     c
-4294967136  pg_aggregate                           591606261     3233629770  -1      false     c
-4294967138  views                                  198834802     3233629770  -1      false     c
-4294967139  view_table_usage                       198834802     3233629770  -1      false     c
-4294967140  view_routine_usage                     198834802     3233629770  -1      false     c
-4294967141  view_column_usage                      198834802     3233629770  -1      false     c
-4294967142  user_privileges                        198834802     3233629770  -1      false     c
-4294967143  user_mappings                          198834802     3233629770  -1      false     c
-4294967144  user_mapping_options                   198834802     3233629770  -1      false     c
-4294967145  user_defined_types                     198834802     3233629770  -1      false     c
-4294967146  user_attributes                        198834802     3233629770  -1      false     c
-4294967147  usage_privileges                       198834802     3233629770  -1      false     c
-4294967148  udt_privileges                         198834802     3233629770  -1      false     c
-4294967149  type_privileges                        198834802     3233629770  -1      false     c
-4294967150  triggers                               198834802     3233629770  -1      false     c
-4294967151  triggered_update_columns               198834802     3233629770  -1      false     c
-4294967152  transforms                             198834802     3233629770  -1      false     c
-4294967153  tablespaces                            198834802     3233629770  -1      false     c
-4294967154  tablespaces_extensions                 198834802     3233629770  -1      false     c
-4294967155  tables                                 198834802     3233629770  -1      false     c
-4294967156  tables_extensions                      198834802     3233629770  -1      false     c
-4294967157  table_privileges                       198834802     3233629770  -1      false     c
-4294967158  table_constraints_extensions           198834802     3233629770  -1      false     c
-4294967159  table_constraints                      198834802     3233629770  -1      false     c
-4294967160  statistics                             198834802     3233629770  -1      false     c
-4294967161  st_units_of_measure                    198834802     3233629770  -1      false     c
-4294967162  st_spatial_reference_systems           198834802     3233629770  -1      false     c
-4294967163  st_geometry_columns                    198834802     3233629770  -1      false     c
-4294967164  session_variables                      198834802     3233629770  -1      false     c
-4294967165  sequences                              198834802     3233629770  -1      false     c
-4294967166  schema_privileges                      198834802     3233629770  -1      false     c
-4294967167  schemata                               198834802     3233629770  -1      false     c
-4294967168  schemata_extensions                    198834802     3233629770  -1      false     c
-4294967169  sql_sizing                             198834802     3233629770  -1      false     c
-4294967170  sql_parts                              198834802     3233629770  -1      false     c
-4294967171  sql_implementation_info                198834802     3233629770  -1      false     c
-4294967172  sql_features                           198834802     3233629770  -1      false     c
-4294967173  routines                               198834802     3233629770  -1      false     c
-4294967174  routine_privileges                     198834802     3233629770  -1      false     c
-4294967175  role_usage_grants                      198834802     3233629770  -1      false     c
-4294967176  role_udt_grants                        198834802     3233629770  -1      false     c
-4294967177  role_table_grants                      198834802     3233629770  -1      false     c
-4294967178  role_routine_grants                    198834802     3233629770  -1      false     c
-4294967179  role_column_grants                     198834802     3233629770  -1      false     c
-4294967180  resource_groups                        198834802     3233629770  -1      false     c
-4294967181  referential_constraints                198834802     3233629770  -1      false     c
-4294967182  profiling                              198834802     3233629770  -1      false     c
-4294967183  processlist                            198834802     3233629770  -1      false     c
-4294967184  plugins                                198834802     3233629770  -1      false     c
-4294967185  partitions                             198834802     3233629770  -1      false     c
-4294967186  parameters                             198834802     3233629770  -1      false     c
-4294967187  optimizer_trace                        198834802     3233629770  -1      false     c
-4294967188  keywords                               198834802     3233629770  -1      false     c
-4294967189  key_column_usage                       198834802     3233629770  -1      false     c
-4294967190  information_schema_catalog_name        198834802     3233629770  -1      false     c
-4294967191  foreign_tables                         198834802     3233629770  -1      false     c
-4294967192  foreign_table_options                  198834802     3233629770  -1      false     c
-4294967193  foreign_servers                        198834802     3233629770  -1      false     c
-4294967194  foreign_server_options                 198834802     3233629770  -1      false     c
-4294967195  foreign_data_wrappers                  198834802     3233629770  -1      false     c
-4294967196  foreign_data_wrapper_options           198834802     3233629770  -1      false     c
-4294967197  files                                  198834802     3233629770  -1      false     c
-4294967198  events                                 198834802     3233629770  -1      false     c
-4294967199  engines                                198834802     3233629770  -1      false     c
-4294967200  enabled_roles                          198834802     3233629770  -1      false     c
-4294967201  element_types                          198834802     3233629770  -1      false     c
-4294967202  domains                                198834802     3233629770  -1      false     c
-4294967203  domain_udt_usage                       198834802     3233629770  -1      false     c
-4294967204  domain_constraints                     198834802     3233629770  -1      false     c
-4294967205  data_type_privileges                   198834802     3233629770  -1      false     c
-4294967206  constraint_table_usage                 198834802     3233629770  -1      false     c
-4294967207  constraint_column_usage                198834802     3233629770  -1      false     c
-4294967208  columns                                198834802     3233629770  -1      false     c
-4294967209  columns_extensions                     198834802     3233629770  -1      false     c
-4294967210  column_udt_usage                       198834802     3233629770  -1      false     c
-4294967211  column_statistics                      198834802     3233629770  -1      false     c
-4294967212  column_privileges                      198834802     3233629770  -1      false     c
-4294967213  column_options                         198834802     3233629770  -1      false     c
-4294967214  column_domain_usage                    198834802     3233629770  -1      false     c
-4294967215  column_column_usage                    198834802     3233629770  -1      false     c
-4294967216  collations                             198834802     3233629770  -1      false     c
-4294967217  collation_character_set_applicability  198834802     3233629770  -1      false     c
-4294967218  check_constraints                      198834802     3233629770  -1      false     c
-4294967219  check_constraint_routine_usage         198834802     3233629770  -1      false     c
-4294967220  character_sets                         198834802     3233629770  -1      false     c
-4294967221  attributes                             198834802     3233629770  -1      false     c
-4294967222  applicable_roles                       198834802     3233629770  -1      false     c
-4294967223  administrable_role_authorizations      198834802     3233629770  -1      false     c
-4294967225  super_regions                          194902141     3233629770  -1      false     c
-4294967226  pg_catalog_table_is_implemented        194902141     3233629770  -1      false     c
-4294967227  tenant_usage_details                   194902141     3233629770  -1      false     c
-4294967228  active_range_feeds                     194902141     3233629770  -1      false     c
-4294967229  default_privileges                     194902141     3233629770  -1      false     c
-4294967230  regions                                194902141     3233629770  -1      false     c
-4294967231  cluster_inflight_traces                194902141     3233629770  -1      false     c
-4294967232  lost_descriptors_with_data             194902141     3233629770  -1      false     c
-4294967233  cross_db_references                    194902141     3233629770  -1      false     c
-4294967234  cluster_database_privileges            194902141     3233629770  -1      false     c
-4294967235  invalid_objects                        194902141     3233629770  -1      false     c
-4294967236  zones                                  194902141     3233629770  -1      false     c
-4294967237  transaction_statistics                 194902141     3233629770  -1      false     c
-4294967238  node_transaction_statistics            194902141     3233629770  -1      false     c
-4294967239  table_row_statistics                   194902141     3233629770  -1      false     c
-4294967240  tables                                 194902141     3233629770  -1      false     c
-4294967241  table_indexes                          194902141     3233629770  -1      false     c
-4294967242  table_columns                          194902141     3233629770  -1      false     c
-4294967243  statement_statistics                   194902141     3233629770  -1      false     c
-4294967244  session_variables                      194902141     3233629770  -1      false     c
-4294967245  session_trace                          194902141     3233629770  -1      false     c
-4294967246  schema_changes                         194902141     3233629770  -1      false     c
-4294967247  node_runtime_info                      194902141     3233629770  -1      false     c
-4294967248  ranges                                 194902141     3233629770  -1      false     c
-4294967249  ranges_no_leases                       194902141     3233629770  -1      false     c
-4294967250  predefined_comments                    194902141     3233629770  -1      false     c
-4294967251  partitions                             194902141     3233629770  -1      false     c
-4294967252  node_txn_stats                         194902141     3233629770  -1      false     c
-4294967253  node_statement_statistics              194902141     3233629770  -1      false     c
-4294967254  node_metrics                           194902141     3233629770  -1      false     c
-4294967255  node_sessions                          194902141     3233629770  -1      false     c
-4294967256  node_transactions                      194902141     3233629770  -1      false     c
-4294967257  node_queries                           194902141     3233629770  -1      false     c
-4294967258  node_execution_insights                194902141     3233629770  -1      false     c
-4294967259  node_distsql_flows                     194902141     3233629770  -1      false     c
-4294967260  node_contention_events                 194902141     3233629770  -1      false     c
-4294967261  leases                                 194902141     3233629770  -1      false     c
-4294967262  kv_store_status                        194902141     3233629770  -1      false     c
-4294967263  kv_node_status                         194902141     3233629770  -1      false     c
-4294967264  jobs                                   194902141     3233629770  -1      false     c
-4294967265  node_inflight_trace_spans              194902141     3233629770  -1      false     c
-4294967266  index_usage_statistics                 194902141     3233629770  -1      false     c
-4294967267  index_columns                          194902141     3233629770  -1      false     c
-4294967268  transaction_contention_events          194902141     3233629770  -1      false     c
-4294967269  gossip_network                         194902141     3233629770  -1      false     c
-4294967270  gossip_liveness                        194902141     3233629770  -1      false     c
-4294967271  gossip_alerts                          194902141     3233629770  -1      false     c
-4294967272  gossip_nodes                           194902141     3233629770  -1      false     c
-4294967273  kv_node_liveness                       194902141     3233629770  -1      false     c
-4294967274  forward_dependencies                   194902141     3233629770  -1      false     c
-4294967275  feature_usage                          194902141     3233629770  -1      false     c
-4294967276  databases                              194902141     3233629770  -1      false     c
-4294967277  create_type_statements                 194902141     3233629770  -1      false     c
-4294967278  create_statements                      194902141     3233629770  -1      false     c
-4294967279  create_schema_statements               194902141     3233629770  -1      false     c
-4294967280  cluster_transaction_statistics         194902141     3233629770  -1      false     c
-4294967281  cluster_statement_statistics           194902141     3233629770  -1      false     c
-4294967282  cluster_settings                       194902141     3233629770  -1      false     c
-4294967283  cluster_sessions                       194902141     3233629770  -1      false     c
-4294967284  cluster_transactions                   194902141     3233629770  -1      false     c
-4294967285  cluster_queries                        194902141     3233629770  -1      false     c
-4294967286  cluster_locks                          194902141     3233629770  -1      false     c
-4294967287  cluster_distsql_flows                  194902141     3233629770  -1      false     c
-4294967288  cluster_contention_events              194902141     3233629770  -1      false     c
-4294967289  cluster_contended_tables               194902141     3233629770  -1      false     c
-4294967290  cluster_contended_keys                 194902141     3233629770  -1      false     c
-4294967291  cluster_contended_indexes              194902141     3233629770  -1      false     c
-4294967292  builtin_functions                      194902141     3233629770  -1      false     c
-4294967293  node_build_info                        194902141     3233629770  -1      false     c
-4294967294  backward_dependencies                  194902141     3233629770  -1      false     c
+4294967004  spatial_ref_sys                        1700435119    2310524507  -1      false     c
+4294967005  geometry_columns                       1700435119    2310524507  -1      false     c
+4294967006  geography_columns                      1700435119    2310524507  -1      false     c
+4294967008  pg_views                               591606261     2310524507  -1      false     c
+4294967009  pg_user                                591606261     2310524507  -1      false     c
+4294967010  pg_user_mappings                       591606261     2310524507  -1      false     c
+4294967011  pg_user_mapping                        591606261     2310524507  -1      false     c
+4294967012  pg_type                                591606261     2310524507  -1      false     c
+4294967013  pg_ts_template                         591606261     2310524507  -1      false     c
+4294967014  pg_ts_parser                           591606261     2310524507  -1      false     c
+4294967015  pg_ts_dict                             591606261     2310524507  -1      false     c
+4294967016  pg_ts_config                           591606261     2310524507  -1      false     c
+4294967017  pg_ts_config_map                       591606261     2310524507  -1      false     c
+4294967018  pg_trigger                             591606261     2310524507  -1      false     c
+4294967019  pg_transform                           591606261     2310524507  -1      false     c
+4294967020  pg_timezone_names                      591606261     2310524507  -1      false     c
+4294967021  pg_timezone_abbrevs                    591606261     2310524507  -1      false     c
+4294967022  pg_tablespace                          591606261     2310524507  -1      false     c
+4294967023  pg_tables                              591606261     2310524507  -1      false     c
+4294967024  pg_subscription                        591606261     2310524507  -1      false     c
+4294967025  pg_subscription_rel                    591606261     2310524507  -1      false     c
+4294967026  pg_stats                               591606261     2310524507  -1      false     c
+4294967027  pg_stats_ext                           591606261     2310524507  -1      false     c
+4294967028  pg_statistic                           591606261     2310524507  -1      false     c
+4294967029  pg_statistic_ext                       591606261     2310524507  -1      false     c
+4294967030  pg_statistic_ext_data                  591606261     2310524507  -1      false     c
+4294967031  pg_statio_user_tables                  591606261     2310524507  -1      false     c
+4294967032  pg_statio_user_sequences               591606261     2310524507  -1      false     c
+4294967033  pg_statio_user_indexes                 591606261     2310524507  -1      false     c
+4294967034  pg_statio_sys_tables                   591606261     2310524507  -1      false     c
+4294967035  pg_statio_sys_sequences                591606261     2310524507  -1      false     c
+4294967036  pg_statio_sys_indexes                  591606261     2310524507  -1      false     c
+4294967037  pg_statio_all_tables                   591606261     2310524507  -1      false     c
+4294967038  pg_statio_all_sequences                591606261     2310524507  -1      false     c
+4294967039  pg_statio_all_indexes                  591606261     2310524507  -1      false     c
+4294967040  pg_stat_xact_user_tables               591606261     2310524507  -1      false     c
+4294967041  pg_stat_xact_user_functions            591606261     2310524507  -1      false     c
+4294967042  pg_stat_xact_sys_tables                591606261     2310524507  -1      false     c
+4294967043  pg_stat_xact_all_tables                591606261     2310524507  -1      false     c
+4294967044  pg_stat_wal_receiver                   591606261     2310524507  -1      false     c
+4294967045  pg_stat_user_tables                    591606261     2310524507  -1      false     c
+4294967046  pg_stat_user_indexes                   591606261     2310524507  -1      false     c
+4294967047  pg_stat_user_functions                 591606261     2310524507  -1      false     c
+4294967048  pg_stat_sys_tables                     591606261     2310524507  -1      false     c
+4294967049  pg_stat_sys_indexes                    591606261     2310524507  -1      false     c
+4294967050  pg_stat_subscription                   591606261     2310524507  -1      false     c
+4294967051  pg_stat_ssl                            591606261     2310524507  -1      false     c
+4294967052  pg_stat_slru                           591606261     2310524507  -1      false     c
+4294967053  pg_stat_replication                    591606261     2310524507  -1      false     c
+4294967054  pg_stat_progress_vacuum                591606261     2310524507  -1      false     c
+4294967055  pg_stat_progress_create_index          591606261     2310524507  -1      false     c
+4294967056  pg_stat_progress_cluster               591606261     2310524507  -1      false     c
+4294967057  pg_stat_progress_basebackup            591606261     2310524507  -1      false     c
+4294967058  pg_stat_progress_analyze               591606261     2310524507  -1      false     c
+4294967059  pg_stat_gssapi                         591606261     2310524507  -1      false     c
+4294967060  pg_stat_database                       591606261     2310524507  -1      false     c
+4294967061  pg_stat_database_conflicts             591606261     2310524507  -1      false     c
+4294967062  pg_stat_bgwriter                       591606261     2310524507  -1      false     c
+4294967063  pg_stat_archiver                       591606261     2310524507  -1      false     c
+4294967064  pg_stat_all_tables                     591606261     2310524507  -1      false     c
+4294967065  pg_stat_all_indexes                    591606261     2310524507  -1      false     c
+4294967066  pg_stat_activity                       591606261     2310524507  -1      false     c
+4294967067  pg_shmem_allocations                   591606261     2310524507  -1      false     c
+4294967068  pg_shdepend                            591606261     2310524507  -1      false     c
+4294967069  pg_shseclabel                          591606261     2310524507  -1      false     c
+4294967070  pg_shdescription                       591606261     2310524507  -1      false     c
+4294967071  pg_shadow                              591606261     2310524507  -1      false     c
+4294967072  pg_settings                            591606261     2310524507  -1      false     c
+4294967073  pg_sequences                           591606261     2310524507  -1      false     c
+4294967074  pg_sequence                            591606261     2310524507  -1      false     c
+4294967075  pg_seclabel                            591606261     2310524507  -1      false     c
+4294967076  pg_seclabels                           591606261     2310524507  -1      false     c
+4294967077  pg_rules                               591606261     2310524507  -1      false     c
+4294967078  pg_roles                               591606261     2310524507  -1      false     c
+4294967079  pg_rewrite                             591606261     2310524507  -1      false     c
+4294967080  pg_replication_slots                   591606261     2310524507  -1      false     c
+4294967081  pg_replication_origin                  591606261     2310524507  -1      false     c
+4294967082  pg_replication_origin_status           591606261     2310524507  -1      false     c
+4294967083  pg_range                               591606261     2310524507  -1      false     c
+4294967084  pg_publication_tables                  591606261     2310524507  -1      false     c
+4294967085  pg_publication                         591606261     2310524507  -1      false     c
+4294967086  pg_publication_rel                     591606261     2310524507  -1      false     c
+4294967087  pg_proc                                591606261     2310524507  -1      false     c
+4294967088  pg_prepared_xacts                      591606261     2310524507  -1      false     c
+4294967089  pg_prepared_statements                 591606261     2310524507  -1      false     c
+4294967090  pg_policy                              591606261     2310524507  -1      false     c
+4294967091  pg_policies                            591606261     2310524507  -1      false     c
+4294967092  pg_partitioned_table                   591606261     2310524507  -1      false     c
+4294967093  pg_opfamily                            591606261     2310524507  -1      false     c
+4294967094  pg_operator                            591606261     2310524507  -1      false     c
+4294967095  pg_opclass                             591606261     2310524507  -1      false     c
+4294967096  pg_namespace                           591606261     2310524507  -1      false     c
+4294967097  pg_matviews                            591606261     2310524507  -1      false     c
+4294967098  pg_locks                               591606261     2310524507  -1      false     c
+4294967099  pg_largeobject                         591606261     2310524507  -1      false     c
+4294967100  pg_largeobject_metadata                591606261     2310524507  -1      false     c
+4294967101  pg_language                            591606261     2310524507  -1      false     c
+4294967102  pg_init_privs                          591606261     2310524507  -1      false     c
+4294967103  pg_inherits                            591606261     2310524507  -1      false     c
+4294967104  pg_indexes                             591606261     2310524507  -1      false     c
+4294967105  pg_index                               591606261     2310524507  -1      false     c
+4294967106  pg_hba_file_rules                      591606261     2310524507  -1      false     c
+4294967107  pg_group                               591606261     2310524507  -1      false     c
+4294967108  pg_foreign_table                       591606261     2310524507  -1      false     c
+4294967109  pg_foreign_server                      591606261     2310524507  -1      false     c
+4294967110  pg_foreign_data_wrapper                591606261     2310524507  -1      false     c
+4294967111  pg_file_settings                       591606261     2310524507  -1      false     c
+4294967112  pg_extension                           591606261     2310524507  -1      false     c
+4294967113  pg_event_trigger                       591606261     2310524507  -1      false     c
+4294967114  pg_enum                                591606261     2310524507  -1      false     c
+4294967115  pg_description                         591606261     2310524507  -1      false     c
+4294967116  pg_depend                              591606261     2310524507  -1      false     c
+4294967117  pg_default_acl                         591606261     2310524507  -1      false     c
+4294967118  pg_db_role_setting                     591606261     2310524507  -1      false     c
+4294967119  pg_database                            591606261     2310524507  -1      false     c
+4294967120  pg_cursors                             591606261     2310524507  -1      false     c
+4294967121  pg_conversion                          591606261     2310524507  -1      false     c
+4294967122  pg_constraint                          591606261     2310524507  -1      false     c
+4294967123  pg_config                              591606261     2310524507  -1      false     c
+4294967124  pg_collation                           591606261     2310524507  -1      false     c
+4294967125  pg_class                               591606261     2310524507  -1      false     c
+4294967126  pg_cast                                591606261     2310524507  -1      false     c
+4294967127  pg_available_extensions                591606261     2310524507  -1      false     c
+4294967128  pg_available_extension_versions        591606261     2310524507  -1      false     c
+4294967129  pg_auth_members                        591606261     2310524507  -1      false     c
+4294967130  pg_authid                              591606261     2310524507  -1      false     c
+4294967131  pg_attribute                           591606261     2310524507  -1      false     c
+4294967132  pg_attrdef                             591606261     2310524507  -1      false     c
+4294967133  pg_amproc                              591606261     2310524507  -1      false     c
+4294967134  pg_amop                                591606261     2310524507  -1      false     c
+4294967135  pg_am                                  591606261     2310524507  -1      false     c
+4294967136  pg_aggregate                           591606261     2310524507  -1      false     c
+4294967138  views                                  198834802     2310524507  -1      false     c
+4294967139  view_table_usage                       198834802     2310524507  -1      false     c
+4294967140  view_routine_usage                     198834802     2310524507  -1      false     c
+4294967141  view_column_usage                      198834802     2310524507  -1      false     c
+4294967142  user_privileges                        198834802     2310524507  -1      false     c
+4294967143  user_mappings                          198834802     2310524507  -1      false     c
+4294967144  user_mapping_options                   198834802     2310524507  -1      false     c
+4294967145  user_defined_types                     198834802     2310524507  -1      false     c
+4294967146  user_attributes                        198834802     2310524507  -1      false     c
+4294967147  usage_privileges                       198834802     2310524507  -1      false     c
+4294967148  udt_privileges                         198834802     2310524507  -1      false     c
+4294967149  type_privileges                        198834802     2310524507  -1      false     c
+4294967150  triggers                               198834802     2310524507  -1      false     c
+4294967151  triggered_update_columns               198834802     2310524507  -1      false     c
+4294967152  transforms                             198834802     2310524507  -1      false     c
+4294967153  tablespaces                            198834802     2310524507  -1      false     c
+4294967154  tablespaces_extensions                 198834802     2310524507  -1      false     c
+4294967155  tables                                 198834802     2310524507  -1      false     c
+4294967156  tables_extensions                      198834802     2310524507  -1      false     c
+4294967157  table_privileges                       198834802     2310524507  -1      false     c
+4294967158  table_constraints_extensions           198834802     2310524507  -1      false     c
+4294967159  table_constraints                      198834802     2310524507  -1      false     c
+4294967160  statistics                             198834802     2310524507  -1      false     c
+4294967161  st_units_of_measure                    198834802     2310524507  -1      false     c
+4294967162  st_spatial_reference_systems           198834802     2310524507  -1      false     c
+4294967163  st_geometry_columns                    198834802     2310524507  -1      false     c
+4294967164  session_variables                      198834802     2310524507  -1      false     c
+4294967165  sequences                              198834802     2310524507  -1      false     c
+4294967166  schema_privileges                      198834802     2310524507  -1      false     c
+4294967167  schemata                               198834802     2310524507  -1      false     c
+4294967168  schemata_extensions                    198834802     2310524507  -1      false     c
+4294967169  sql_sizing                             198834802     2310524507  -1      false     c
+4294967170  sql_parts                              198834802     2310524507  -1      false     c
+4294967171  sql_implementation_info                198834802     2310524507  -1      false     c
+4294967172  sql_features                           198834802     2310524507  -1      false     c
+4294967173  routines                               198834802     2310524507  -1      false     c
+4294967174  routine_privileges                     198834802     2310524507  -1      false     c
+4294967175  role_usage_grants                      198834802     2310524507  -1      false     c
+4294967176  role_udt_grants                        198834802     2310524507  -1      false     c
+4294967177  role_table_grants                      198834802     2310524507  -1      false     c
+4294967178  role_routine_grants                    198834802     2310524507  -1      false     c
+4294967179  role_column_grants                     198834802     2310524507  -1      false     c
+4294967180  resource_groups                        198834802     2310524507  -1      false     c
+4294967181  referential_constraints                198834802     2310524507  -1      false     c
+4294967182  profiling                              198834802     2310524507  -1      false     c
+4294967183  processlist                            198834802     2310524507  -1      false     c
+4294967184  plugins                                198834802     2310524507  -1      false     c
+4294967185  partitions                             198834802     2310524507  -1      false     c
+4294967186  parameters                             198834802     2310524507  -1      false     c
+4294967187  optimizer_trace                        198834802     2310524507  -1      false     c
+4294967188  keywords                               198834802     2310524507  -1      false     c
+4294967189  key_column_usage                       198834802     2310524507  -1      false     c
+4294967190  information_schema_catalog_name        198834802     2310524507  -1      false     c
+4294967191  foreign_tables                         198834802     2310524507  -1      false     c
+4294967192  foreign_table_options                  198834802     2310524507  -1      false     c
+4294967193  foreign_servers                        198834802     2310524507  -1      false     c
+4294967194  foreign_server_options                 198834802     2310524507  -1      false     c
+4294967195  foreign_data_wrappers                  198834802     2310524507  -1      false     c
+4294967196  foreign_data_wrapper_options           198834802     2310524507  -1      false     c
+4294967197  files                                  198834802     2310524507  -1      false     c
+4294967198  events                                 198834802     2310524507  -1      false     c
+4294967199  engines                                198834802     2310524507  -1      false     c
+4294967200  enabled_roles                          198834802     2310524507  -1      false     c
+4294967201  element_types                          198834802     2310524507  -1      false     c
+4294967202  domains                                198834802     2310524507  -1      false     c
+4294967203  domain_udt_usage                       198834802     2310524507  -1      false     c
+4294967204  domain_constraints                     198834802     2310524507  -1      false     c
+4294967205  data_type_privileges                   198834802     2310524507  -1      false     c
+4294967206  constraint_table_usage                 198834802     2310524507  -1      false     c
+4294967207  constraint_column_usage                198834802     2310524507  -1      false     c
+4294967208  columns                                198834802     2310524507  -1      false     c
+4294967209  columns_extensions                     198834802     2310524507  -1      false     c
+4294967210  column_udt_usage                       198834802     2310524507  -1      false     c
+4294967211  column_statistics                      198834802     2310524507  -1      false     c
+4294967212  column_privileges                      198834802     2310524507  -1      false     c
+4294967213  column_options                         198834802     2310524507  -1      false     c
+4294967214  column_domain_usage                    198834802     2310524507  -1      false     c
+4294967215  column_column_usage                    198834802     2310524507  -1      false     c
+4294967216  collations                             198834802     2310524507  -1      false     c
+4294967217  collation_character_set_applicability  198834802     2310524507  -1      false     c
+4294967218  check_constraints                      198834802     2310524507  -1      false     c
+4294967219  check_constraint_routine_usage         198834802     2310524507  -1      false     c
+4294967220  character_sets                         198834802     2310524507  -1      false     c
+4294967221  attributes                             198834802     2310524507  -1      false     c
+4294967222  applicable_roles                       198834802     2310524507  -1      false     c
+4294967223  administrable_role_authorizations      198834802     2310524507  -1      false     c
+4294967225  super_regions                          194902141     2310524507  -1      false     c
+4294967226  pg_catalog_table_is_implemented        194902141     2310524507  -1      false     c
+4294967227  tenant_usage_details                   194902141     2310524507  -1      false     c
+4294967228  active_range_feeds                     194902141     2310524507  -1      false     c
+4294967229  default_privileges                     194902141     2310524507  -1      false     c
+4294967230  regions                                194902141     2310524507  -1      false     c
+4294967231  cluster_inflight_traces                194902141     2310524507  -1      false     c
+4294967232  lost_descriptors_with_data             194902141     2310524507  -1      false     c
+4294967233  cross_db_references                    194902141     2310524507  -1      false     c
+4294967234  cluster_database_privileges            194902141     2310524507  -1      false     c
+4294967235  invalid_objects                        194902141     2310524507  -1      false     c
+4294967236  zones                                  194902141     2310524507  -1      false     c
+4294967237  transaction_statistics                 194902141     2310524507  -1      false     c
+4294967238  node_transaction_statistics            194902141     2310524507  -1      false     c
+4294967239  table_row_statistics                   194902141     2310524507  -1      false     c
+4294967240  tables                                 194902141     2310524507  -1      false     c
+4294967241  table_indexes                          194902141     2310524507  -1      false     c
+4294967242  table_columns                          194902141     2310524507  -1      false     c
+4294967243  statement_statistics                   194902141     2310524507  -1      false     c
+4294967244  session_variables                      194902141     2310524507  -1      false     c
+4294967245  session_trace                          194902141     2310524507  -1      false     c
+4294967246  schema_changes                         194902141     2310524507  -1      false     c
+4294967247  node_runtime_info                      194902141     2310524507  -1      false     c
+4294967248  ranges                                 194902141     2310524507  -1      false     c
+4294967249  ranges_no_leases                       194902141     2310524507  -1      false     c
+4294967250  predefined_comments                    194902141     2310524507  -1      false     c
+4294967251  partitions                             194902141     2310524507  -1      false     c
+4294967252  node_txn_stats                         194902141     2310524507  -1      false     c
+4294967253  node_statement_statistics              194902141     2310524507  -1      false     c
+4294967254  node_metrics                           194902141     2310524507  -1      false     c
+4294967255  node_sessions                          194902141     2310524507  -1      false     c
+4294967256  node_transactions                      194902141     2310524507  -1      false     c
+4294967257  node_queries                           194902141     2310524507  -1      false     c
+4294967258  node_execution_insights                194902141     2310524507  -1      false     c
+4294967259  node_distsql_flows                     194902141     2310524507  -1      false     c
+4294967260  node_contention_events                 194902141     2310524507  -1      false     c
+4294967261  leases                                 194902141     2310524507  -1      false     c
+4294967262  kv_store_status                        194902141     2310524507  -1      false     c
+4294967263  kv_node_status                         194902141     2310524507  -1      false     c
+4294967264  jobs                                   194902141     2310524507  -1      false     c
+4294967265  node_inflight_trace_spans              194902141     2310524507  -1      false     c
+4294967266  index_usage_statistics                 194902141     2310524507  -1      false     c
+4294967267  index_columns                          194902141     2310524507  -1      false     c
+4294967268  transaction_contention_events          194902141     2310524507  -1      false     c
+4294967269  gossip_network                         194902141     2310524507  -1      false     c
+4294967270  gossip_liveness                        194902141     2310524507  -1      false     c
+4294967271  gossip_alerts                          194902141     2310524507  -1      false     c
+4294967272  gossip_nodes                           194902141     2310524507  -1      false     c
+4294967273  kv_node_liveness                       194902141     2310524507  -1      false     c
+4294967274  forward_dependencies                   194902141     2310524507  -1      false     c
+4294967275  feature_usage                          194902141     2310524507  -1      false     c
+4294967276  databases                              194902141     2310524507  -1      false     c
+4294967277  create_type_statements                 194902141     2310524507  -1      false     c
+4294967278  create_statements                      194902141     2310524507  -1      false     c
+4294967279  create_schema_statements               194902141     2310524507  -1      false     c
+4294967280  cluster_transaction_statistics         194902141     2310524507  -1      false     c
+4294967281  cluster_statement_statistics           194902141     2310524507  -1      false     c
+4294967282  cluster_settings                       194902141     2310524507  -1      false     c
+4294967283  cluster_sessions                       194902141     2310524507  -1      false     c
+4294967284  cluster_transactions                   194902141     2310524507  -1      false     c
+4294967285  cluster_queries                        194902141     2310524507  -1      false     c
+4294967286  cluster_locks                          194902141     2310524507  -1      false     c
+4294967287  cluster_distsql_flows                  194902141     2310524507  -1      false     c
+4294967288  cluster_contention_events              194902141     2310524507  -1      false     c
+4294967289  cluster_contended_tables               194902141     2310524507  -1      false     c
+4294967290  cluster_contended_keys                 194902141     2310524507  -1      false     c
+4294967291  cluster_contended_indexes              194902141     2310524507  -1      false     c
+4294967292  builtin_functions                      194902141     2310524507  -1      false     c
+4294967293  node_build_info                        194902141     2310524507  -1      false     c
+4294967294  backward_dependencies                  194902141     2310524507  -1      false     c
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -5176,10 +5176,10 @@ DROP TABLE pg_catalog.pg_tables
 statement error pg_tables is a system catalog
 DROP INDEX pg_catalog.pg_tables@i
 
-statement error pg_tables is a system catalog
+statement error pq: invalid privilege type CREATE for virtual_table
 GRANT CREATE ON pg_catalog.pg_tables TO root
 
-statement error pg_tables is a system catalog
+statement error pq: invalid privilege type CREATE for virtual_table
 REVOKE CREATE ON pg_catalog.pg_tables FROM root
 
 # Verify pg_catalog tables handles read-only property correctly.

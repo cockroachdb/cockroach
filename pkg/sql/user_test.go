@@ -143,6 +143,19 @@ GRANT admin TO foo`); err != nil {
 			t.Fatal(err)
 		}
 
+		// Cache our privilege check for `SHOW is_superuser` and the
+		// underlying query to a virtual table.
+		dbSQL, err := pgxConn(t, fooURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			_ = dbSQL.Close(ctx)
+		}()
+		var isSuperuser string
+		require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
+		require.Equal(t, "on", isSuperuser)
+
 		func() {
 			t.Log("-- make ranges unavailable --")
 

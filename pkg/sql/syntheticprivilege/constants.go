@@ -8,14 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catalog
+package syntheticprivilege
 
-import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-// SyntheticPrivilegeObject represents an object that has its privileges stored
-// in system.privileges.
-type SyntheticPrivilegeObject interface {
-	PrivilegeObject
-	ToString() string
-	PrivilegeObjectType() privilege.ObjectType
-}
+// SystemPrivilegesTableName represents system.database_role_settings.
+var SystemPrivilegesTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "privileges")

@@ -133,14 +133,22 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	for _, oldRole := range n.normalizedOldRoles {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
-			if IsOwner(lCtx.dbDescs[dbID], oldRole) {
+			isOwner, err := IsOwner(params.ctx, params.p, lCtx.dbDescs[dbID], oldRole)
+			if err != nil {
+				return err
+			}
+			if isOwner {
 				if err := n.reassignDatabaseOwner(lCtx.dbDescs[dbID], params); err != nil {
 					return err
 				}
 			}
 		}
 		for _, schemaID := range lCtx.schemaIDs {
-			if IsOwner(lCtx.schemaDescs[schemaID], oldRole) {
+			isOwner, err := IsOwner(params.ctx, params.p, lCtx.schemaDescs[schemaID], oldRole)
+			if err != nil {
+				return err
+			}
+			if isOwner {
 				// Don't reassign public schema.
 				// TODO(richardjcai): revisit this in 22.2, in 22.1 we do not allow
 				// modifying the public schema.
@@ -154,14 +162,22 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 
 		for _, tbID := range lCtx.tbIDs {
-			if IsOwner(lCtx.tbDescs[tbID], oldRole) {
+			isOwner, err := IsOwner(params.ctx, params.p, lCtx.tbDescs[tbID], oldRole)
+			if err != nil {
+				return err
+			}
+			if isOwner {
 				if err := n.reassignTableOwner(lCtx.tbDescs[tbID], params); err != nil {
 					return err
 				}
 			}
 		}
 		for _, typID := range lCtx.typIDs {
-			if IsOwner(lCtx.typDescs[typID], oldRole) && (lCtx.typDescs[typID].GetKind() != descpb.TypeDescriptor_ALIAS) {
+			isOwner, err := IsOwner(params.ctx, params.p, lCtx.typDescs[typID], oldRole)
+			if err != nil {
+				return err
+			}
+			if isOwner && (lCtx.typDescs[typID].GetKind() != descpb.TypeDescriptor_ALIAS) {
 				if err := n.reassignTypeOwner(lCtx.typDescs[typID], params); err != nil {
 					return err
 				}

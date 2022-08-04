@@ -70,11 +70,9 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	return catpb.DefaultSuperuserPrivileges
 }
 
-// ValidateSyntheticPrivilegeObject validates a SyntheticPrivilegeObject.
-func ValidateSyntheticPrivilegeObject(
-	systemPrivilegeObject catalog.SyntheticPrivilegeObject,
-) error {
-	out, err := syntheticprivilege.Parse(systemPrivilegeObject.ToString())
+// ValidateSyntheticPrivilegeObject validates a Object.
+func ValidateSyntheticPrivilegeObject(systemPrivilegeObject syntheticprivilege.Object) error {
+	out, err := syntheticprivilege.Parse(systemPrivilegeObject.GetPath())
 	if err != nil {
 		return err
 	}

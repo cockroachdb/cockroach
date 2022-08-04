@@ -11,10 +11,8 @@
 package delegate
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,7 +25,6 @@ var ValidVars = make(map[string]struct{})
 
 // Show a session-local variable name.
 func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
-	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if name == "locality" {
@@ -40,19 +37,24 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 		)
 	}
 
+	// TODO(richardjcai): Remove this clause by making the `SetVar` for
+	// the database session variable verify if the database exists or not.
+	// Currently, on connection to a database, we rely on a query to
+	// hit the database resolution path giving us a database is undefined
+	// error. The below query allows us to keep this behaviour.
+	if name == "database" {
+		return parse(
+			"SELECT value as database FROM crdb_internal.session_variables WHERE variable = 'database'")
+	}
+
 	if _, ok := ValidVars[name]; !ok {
 		// Custom options go to planNode.
 		if strings.Contains(name, ".") {
 			return nil, nil
 		}
 		return nil, pgerror.Newf(pgcode.UndefinedObject,
-			"unrecognized configuration parameter %q", origName)
+			"unrecognized configuration parameter %q", n.Name)
 	}
 
-	varName := lexbase.EscapeSQLString(name)
-	nm := tree.Name(name)
-	return parse(fmt.Sprintf(
-		`SELECT value AS %[1]s FROM crdb_internal.session_variables WHERE variable = %[2]s`,
-		nm.String(), varName,
-	))
+	return nil, nil
 }

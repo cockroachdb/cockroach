@@ -37,6 +37,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/keys",
@@ -47,6 +48,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/lex",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

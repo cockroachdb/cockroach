@@ -13,7 +13,6 @@ go_library(
         "post_deserialization_changes.go",
         "privilege_object.go",
         "schema.go",
-        "synthetic_privilege.go",
         "system_table.go",
         "table_col_map.go",
         "table_col_set.go",

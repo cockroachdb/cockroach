@@ -1823,9 +1823,10 @@ var _ sqlliveness.Session = (*fakeSession)(nil)
 func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
 	t.Helper()
 	sqlutils.MakeSQLRunner(tx).QueryRow(t, `
-SELECT id
-  FROM crdb_internal.node_transactions
- WHERE session_id = (SELECT * FROM [SHOW session_id])`,
+SELECT id 
+  FROM crdb_internal.node_transactions a
+  JOIN [SHOW session_id] b ON a.session_id = b.session_id
+`,
 	).Scan(&id)
 	return id
 }

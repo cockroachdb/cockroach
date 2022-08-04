@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -560,15 +559,14 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
 	}
 
-	// Validate the privilege descriptor.
-	if desc.Privileges == nil {
-		vea.Report(errors.AssertionFailedf("privileges not set"))
-	} else {
-		if desc.IsSequence() {
-			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Sequence))
-		} else {
-			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+	// VirtualTables have their privileges stored in system.privileges which
+	// is validated outside of the descriptor.
+	if !desc.IsVirtualTable() {
+		// Validate the privilege descriptor.
+		if desc.Privileges == nil {
+			vea.Report(errors.AssertionFailedf("privileges not set"))
 		}
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, desc.GetObjectType()))
 	}
 
 	// Validate that the depended-on-by references are well-formed.

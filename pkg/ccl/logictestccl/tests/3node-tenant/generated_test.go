@@ -92,6 +92,27 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
 
+// TestLogic_tmp runs any tests that are prefixed with "_", in which a dedicated
+// test is not generated for. This allows developers to create and run temporary
+// test files that are not checked into the repository, without repeatedly
+// regenerating and reverting changes to this file, generated_test.go.
+//
+// TODO(mgartner): Add file filtering so that individual files can be run,
+// instead of all files with the "_" prefix.
+func TestLogic_tmp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var glob string
+	glob = filepath.Join(logicTestDir, "_*")
+	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
+	glob = filepath.Join(cclLogicTestDir, "_*")
+	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
+	glob = filepath.Join(execBuildLogicTestDir, "_*")
+	serverArgs := logictest.TestServerArgs{
+		DisableWorkmemRandomization: true,
+	}
+	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
+}
+
 func TestTenantLogic_aggregate(
 	t *testing.T,
 ) {
@@ -2001,6 +2022,13 @@ func TestTenantLogic_virtual_columns(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "virtual_columns")
+}
+
+func TestTenantLogic_virtual_table_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "virtual_table_privileges")
 }
 
 func TestTenantLogic_void(

@@ -19,6 +19,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Object represents an object that has its privileges stored
+// in system.privileges.
+type Object interface {
+	catalog.PrivilegeObject
+	// GetPath returns the path used to identify the object in
+	// system.privileges.
+	GetPath() string
+}
+
 // Metadata for system privileges.
 type Metadata struct {
 	prefix string
@@ -32,6 +41,11 @@ var registry = []*Metadata{
 		regex:  regexp.MustCompile("(/global/)$"),
 		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
 	},
+	{
+		prefix: "/vtable",
+		regex:  regexp.MustCompile(`(/vtable/((?P<SchemaName>.*))/((?P<TableName>.*)))$`),
+		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
+	},
 }
 
 func findMetadata(val string) *Metadata {
@@ -43,8 +57,8 @@ func findMetadata(val string) *Metadata {
 	return nil
 }
 
-// Parse turns a privilege path string to a SyntheticPrivilegeObject.
-func Parse(privPath string) (catalog.SyntheticPrivilegeObject, error) {
+// Parse turns a privilege path string to a Object.
+func Parse(privPath string) (Object, error) {
 	md := findMetadata(privPath)
 	if md == nil {
 		return nil, errors.AssertionFailedf("no prefix match found for privilege path %s", privPath)
@@ -71,7 +85,23 @@ func Parse(privPath string) (catalog.SyntheticPrivilegeObject, error) {
 		if idx == -1 {
 			return nil, errors.AssertionFailedf("no field found with name %s", f.Name)
 		}
-		v.Elem().Field(i).Set(reflect.ValueOf(matches[idx]))
+		val := reflect.ValueOf(matches[idx])
+		val, err := unmarshal(val, f)
+		if err != nil {
+			return nil, err
+		}
+		v.Elem().Field(i).Set(val)
 	}
-	return v.Interface().(catalog.SyntheticPrivilegeObject), nil
+	return v.Interface().(Object), nil
+}
+
+func unmarshal(val reflect.Value, f reflect.StructField) (reflect.Value, error) {
+	switch f.Name {
+	case "TableName":
+		return val, nil
+	case "SchemaName":
+		return val, nil
+	default:
+		panic(errors.AssertionFailedf("unhandled type %v", f.Type))
+	}
 }

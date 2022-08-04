@@ -335,11 +335,14 @@ CREATE TABLE crdb_internal.databases (
 						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
 					}
 				}
-
+				owner, err := getOwnerOfPrivilegeObject(ctx, p, db)
+				if err != nil {
+					return err
+				}
 				return addRow(
-					tree.NewDInt(tree.DInt(db.GetID())),            // id
-					tree.NewDString(db.GetName()),                  // name
-					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
+					tree.NewDInt(tree.DInt(db.GetID())),  // id
+					tree.NewDString(db.GetName()),        // name
+					tree.NewDName(owner.Normalized()),    // owner
 					primaryRegion,                        // primary_region
 					regions,                              // regions
 					survivalGoal,                         // survival_goal
