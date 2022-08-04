@@ -173,6 +173,9 @@ type cliContext struct {
 
 	// logConfigInput is the YAML input for the logging configuration.
 	logConfigInput settableString
+	// logConfigVars is an array of environment variables used in the logging
+	// configuration that will be expanded by CRDB.
+	logConfigVars []string
 	// logConfig is the resulting logging configuration after the input
 	// configuration has been parsed and validated.
 	logConfig logconfig.Config
@@ -215,6 +218,7 @@ func setCliContextDefaults() {
 	cliCtx.sqlConnDBName = ""
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
+	cliCtx.logConfigVars = nil
 	cliCtx.logConfig = logconfig.Config{}
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.

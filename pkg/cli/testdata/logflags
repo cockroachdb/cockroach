@@ -325,6 +325,48 @@ telemetry: <telemetryCfg(<defaultLogDir>)>},
 <stderrCfg(ERROR,true)>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
+# Ensure variable expansion works.
+run
+start
+--log=sinks: {fluent-servers: {health: {channels: [DEV], address: ${HOST_IP}:5170}}}
+--log-config-vars=HOST_IP
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+<httpDefaults>,
+sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
+OPS],
+WARNING: [HEALTH,
+STORAGE,
+SESSIONS,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES,
+SENSITIVE_ACCESS,
+SQL_EXEC,
+SQL_PERF,
+SQL_INTERNAL_PERF,
+TELEMETRY],<defaultLogDir>,true,crdb-v2)>,
+health: <fileCfg(INFO: [HEALTH],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg(INFO: [STORAGE],<defaultLogDir>,true,crdb-v2)>,
+security: <fileCfg(INFO: [USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,false,crdb-v2)>,
+sql-audit: <fileCfg(INFO: [SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg(INFO: [SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg(INFO: [SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-schema: <fileCfg(INFO: [SQL_SCHEMA],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg(INFO: [SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg(INFO: [SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>,
+telemetry: <telemetryCfg(<defaultLogDir>)>},
+fluent-servers: {health: {channels: {INFO: [DEV]},
+net: tcp,
+address: '1.2.3.4:5170',
+filter: INFO,
+format: json-fluent-compact,
+redactable: true,
+exit-on-error: false}},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
 
 # It's possible to disable the stderr capture.
 run

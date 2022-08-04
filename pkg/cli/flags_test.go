@@ -1159,26 +1159,30 @@ Available Commands:
   help              Help about any command
 
 Flags:
-  -h, --help                     help for cockroach
-      --log <string>             
-                                  Logging configuration, expressed using YAML syntax. For example, you can
-                                  change the default logging directory with: --log='file-defaults: {dir: ...}'.
-                                  See the documentation for more options and details.  To preview how the log
-                                  configuration is applied, or preview the default configuration, you can use
-                                  the 'cockroach debug check-log-config' sub-command.
-                                 
-      --log-config-file <file>   
-                                  File name to read the logging configuration from. This has the same effect as
-                                  passing the content of the file via the --log flag.
-                                  (default <unset>)
-      --version                  version for cockroach
+  -h, --help                      help for cockroach
+      --log <string>              
+                                   Logging configuration, expressed using YAML syntax. For example, you can
+                                   change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                   See the documentation for more options and details.  To preview how the log
+                                   configuration is applied, or preview the default configuration, you can use
+                                   the 'cockroach debug check-log-config' sub-command.
+                                  
+      --log-config-file <file>    
+                                   File name to read the logging configuration from. This has the same effect as
+                                   passing the content of the file via the --log flag.
+                                   (default <unset>)
+      --log-config-vars strings   
+                                   Environment variables that will be expanded if present in the body of the
+                                   logging configuration.
+                                  
+      --version                   version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.
 `
 	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
 		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
 		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
-		strings.ReplaceAll(expUsage, "      --version                  version for cockroach\n", ""))
+		strings.ReplaceAll(expUsage, "      --version                   version for cockroach\n", ""))
 	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
 	testCases := []struct {
