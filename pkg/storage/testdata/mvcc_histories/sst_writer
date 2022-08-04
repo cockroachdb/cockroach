@@ -6,7 +6,7 @@ sst_put k=a ts=1 v=a1
 ----
 >> at end:
 <no data>
-error: (*withstack.withStack:) pebble: keys must be added in order: "b"/1.000000000,0#0,SET, "a"/1.000000000,0#0,SET
+error: (*withstack.withStack:) pebble: keys must be added in strictly increasing order: "b"/1.000000000,0#0,SET, "a"/1.000000000,0#0,SET
 
 run error
 sst_put k=a ts=1 v=a1
@@ -14,7 +14,7 @@ sst_put k=a ts=2 v=a2
 ----
 >> at end:
 <no data>
-error: (*withstack.withStack:) pebble: keys must be added in order: "a"/1.000000000,0#0,SET, "a"/2.000000000,0#0,SET
+error: (*withstack.withStack:) pebble: keys must be added in strictly increasing order: "a"/1.000000000,0#0,SET, "a"/2.000000000,0#0,SET
 
 run error
 sst_put_rangekey k=d end=f ts=1
