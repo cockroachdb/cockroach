@@ -13,20 +13,20 @@ package log
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // StructuredEvent emits a structured event to the debug log.
-func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
+func StructuredEvent(ctx context.Context, event logpb.EventPayload) {
 	// Populate the missing common fields.
 	common := event.CommonDetails()
 	if common.Timestamp == 0 {
 		common.Timestamp = timeutil.Now().UnixNano()
 	}
 	if len(common.EventType) == 0 {
-		common.EventType = eventpb.GetEventTypeName(event)
+		common.EventType = logpb.GetEventTypeName(event)
 	}
 
 	entry := makeStructuredEntry(ctx,
