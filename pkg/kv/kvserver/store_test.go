@@ -2108,8 +2108,8 @@ func TestStoreScanIntents(t *testing.T) {
 		expFinish  bool  // do we expect the scan to finish?
 		expCount   int32 // how many times do we expect to scan?
 	}{
-		// Consistent which can push will make two loops.
-		{true, true, true, 2},
+		// Consistent which can push will detect conflicts and resolve them.
+		{true, true, true, 1},
 		// Consistent but can't push will backoff and retry and not finish.
 		{true, false, false, -1},
 		// Inconsistent and can push will make one loop, with async resolves.

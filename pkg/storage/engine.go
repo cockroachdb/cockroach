@@ -423,6 +423,10 @@ type IterOptions struct {
 	// is minimized if the probability of the key existing is not low or if
 	// this is a one-time Seek (where loading the data block directly is better).
 	useL6Filters bool
+	// DontInterleaveIntents allows the caller to ask for an iterator that only
+	// scans the MVCC keyspace and does not interleave intents into the results.
+	// This is only relevant for MVCCIterators.
+	DontInterleaveIntents bool
 }
 
 // IterKeyType configures which types of keys an iterator should surface.
@@ -1165,6 +1169,84 @@ func ScanIntents(
 		return nil, err
 	}
 	return intents, nil
+}
+
+// ScanConflictingIntents scans intents using only the separated intents lock
+// table. It ignores intents that do not conflict with `txn`. If it encounters
+// intents that were written by `txn` that are either at a higher sequence
+// number than txn's or at a lower sequence number but at a higher timestamp,
+// `needIntentHistory` is set to true. This flag is used to signal to the caller
+// that a subsequent scan over the MVCC key space (for the batch in question)
+// will need to be performed using an intent interleaving iterator in order to
+// be able to read the correct provisional value.
+//
+// Note that this method does not take interleaved intents into account at all.
+func ScanConflictingIntents(
+	ctx context.Context,
+	reader Reader,
+	txn *roachpb.Transaction,
+	ts hlc.Timestamp,
+	start, end roachpb.Key,
+	maxIntents, targetBytes int64,
+) (intents []roachpb.Intent, needIntentHistory bool, err error) {
+	if bytes.Compare(start, end) >= 0 {
+		return intents, false, nil
+	}
+
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	ltEnd, _ := keys.LockTableSingleKey(end, nil)
+	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	defer iter.Close()
+
+	var meta enginepb.MVCCMetadata
+	var intentBytes int64
+	var ok bool
+	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
+		if err := ctx.Err(); err != nil {
+			return nil, needIntentHistory, err
+		}
+		if maxIntents != 0 && int64(len(intents)) >= maxIntents {
+			break
+		}
+		if targetBytes != 0 && intentBytes >= targetBytes {
+			break
+		}
+		key, err := iter.EngineKey()
+		if err != nil {
+			return nil, false /* needIntentHistory */, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return nil, false /* needIntentHistory */, err
+		}
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return nil, false /* needIntentHistory */, err
+		}
+		if meta.Txn == nil {
+			return nil, false /* needIntentHistory */, errors.Errorf("intent without transaction")
+		}
+		ownIntent := txn != nil && txn.ID == meta.Txn.ID
+		if ownIntent {
+			// If we ran into one of our own intents, check whether the intent has a
+			// higher sequence number or a higher timestamp. If either of these
+			// conditions is true, a corresponding scan over the MVCC key space will
+			// need access to the key's intent history in order to read the correct
+			// provisional value. So we set `needIntentHistory` to true.
+			if txn.Sequence < meta.Txn.Sequence || ts.Less(meta.Timestamp.ToTimestamp()) {
+				needIntentHistory = true
+			}
+			continue
+		}
+		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {
+			continue
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return intents, needIntentHistory, nil
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.

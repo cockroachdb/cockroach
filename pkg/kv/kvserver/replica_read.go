@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
 
@@ -93,13 +94,26 @@ func (r *Replica) executeReadOnlyBatch(
 	// request does not "see" the effect of any later requests that happen after
 	// the latches are released.
 
+	canDropLatches, needIntentHistory, pErr := r.canDropLatchesBeforeEval(ctx, rw, ba, g, st)
+	if pErr != nil {
+		return nil, g, nil, pErr
+	}
+	if canDropLatches {
+		log.VEventf(ctx, 3, "lock table scan complete without conflicts; dropping latches early")
+		r.updateTimestampCacheAndDropLatches(ctx, g, ba, nil /* br */, nil /* pErr */, st)
+	}
+
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui)
+	evalPath := readOnlyDefault
+	if !needIntentHistory {
+		evalPath = readOnlyWithoutInterleavedIntents
+	}
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
-		if g.EvalKind == concurrency.OptimisticEval {
+		if g != nil && g.EvalKind == concurrency.OptimisticEval {
 			// Since this request was not holding latches, it could have raced with
 			// intent resolution. So we can't trust it to add discovered locks, if
 			// there is a latch conflict. This means that a discovered lock plus a
@@ -120,7 +134,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, g, nil, pErr
 	}
 
-	if g.EvalKind == concurrency.OptimisticEval {
+	if g != nil && g.EvalKind == concurrency.OptimisticEval {
 		if pErr == nil {
 			// Gather the spans that were read -- we distinguish the spans in the
 			// request from the spans that were actually read, using resume spans in
@@ -150,17 +164,10 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr == nil {
 		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)
 	}
-
-	// Otherwise, update the timestamp cache and release the concurrency guard.
-	// Note:
-	// - The update to the timestamp cache is not gated on pErr == nil,
-	//   since certain semantic errors (e.g. ConditionFailedError on CPut)
-	//   require updating the timestamp cache (see updatesTSCacheOnErr).
-	// - For optimistic evaluation, used for limited scans, the update to the
-	//   timestamp cache limits itself to the spans that were read, by using
-	//   the ResumeSpans.
-	ec, g := endCmds{repl: r, g: g, st: st}, nil
-	ec.done(ctx, ba, br, pErr)
+	if !canDropLatches {
+		// If we didn't already drop latches earlier, do so now.
+		r.updateTimestampCacheAndDropLatches(ctx, g, ba, br, pErr, st)
+	}
 
 	// Semi-synchronously process any intents that need resolving here in
 	// order to apply back pressure on the client which generated them. The
@@ -180,7 +187,11 @@ func (r *Replica) executeReadOnlyBatch(
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT &&
 			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
-		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
+		if err := r.store.intentResolver.CleanupIntentsAsync(
+			ctx,
+			intents,
+			allowSyncProcessing,
+		); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
@@ -194,6 +205,92 @@ func (r *Replica) executeReadOnlyBatch(
 		log.Event(ctx, "read completed")
 	}
 	return br, nil, nil, pErr
+}
+
+// updateTimestampCacheAndDropLatches updates the timestamp cache and releases
+// the concurrency guard.
+// Note:
+// - If `br` is nil, then this method assumes that latches are being released
+// before evaluation of the request, and the timestamp cache is updated based
+// only on the spans declared in the request.
+// - The update to the timestamp cache is not gated on pErr == nil, since
+// certain semantic errors (e.g. ConditionFailedError on CPut) require updating
+// the timestamp cache (see updatesTSCacheOnErr).
+// - For optimistic evaluation, used for limited scans, the update to the
+// timestamp cache limits itself to the spans that were read, by using the
+// ResumeSpans.
+func (r *Replica) updateTimestampCacheAndDropLatches(
+	ctx context.Context,
+	g *concurrency.Guard,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+	st kvserverpb.LeaseStatus,
+) {
+	var ec endCmds
+	ec, g = endCmds{repl: r, g: g, st: st}, nil
+	ec.done(ctx, ba, br, pErr)
+}
+
+// canDropLatchesBeforeEval determines whether a given batch request can proceed
+// with evaluation without continuing to hold onto its latches[1] and whether the
+// evaluation of the requests in the batch needs an intent interleaving
+// iterator[2].
+//
+// [1] whether the request can safely release latches at this point in the
+// execution.
+// For certain qualifying types of requests (certain types of read-only
+// requests: see `canRequestDropLatchesBeforeEval`), this method performs a scan
+// of the lock table keyspace corresponding to the latch spans declared by the
+// BatchRequest.
+// If no conflicting intents are found, then it is deemed safe for this request
+// to release its latches at this point. This is because read-only requests
+// evaluate over a stable pebble snapshot (see the call to
+// `PinEngineStateForIterators` in `executeReadOnlyBatch`), so if there are no
+// lock conflicts, the rest of the execution is guaranteed to be isolated from
+// the effects of other requests.
+// If any conflicting intents are found, then it returns a WriteIntentError
+// which needs to be handled by the caller before proceeding.
+//
+// [2] whether the request needs an intent interleaving iterator to perform its
+// evaluation.
+// If the aforementioned lock table scan determines that any of the requests in
+// the batch may need access to the intent history of a key, then an intent
+// interleaving iterator is needed to perform the evaluation.
+func (r *Replica) canDropLatchesBeforeEval(
+	ctx context.Context,
+	rw storage.ReadWriter,
+	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
+	st kvserverpb.LeaseStatus,
+) (canDropLatches, needIntentHistory bool, pErr *roachpb.Error) {
+	if !canRequestDropLatchesBeforeEval(ba, g) {
+		// If the request does not qualify, we can neither drop latches nor use a
+		// non-interleaving iterator.
+		return false /* canDropLatches */, true /* needIntentHistory */, nil
+	}
+	log.VEventf(
+		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
+	)
+	maximalLatchSpan := g.LatchSpans().BoundarySpan(spanset.SpanGlobal)
+	start, end := maximalLatchSpan.Key, maximalLatchSpan.EndKey
+	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&r.store.cfg.Settings.SV)
+	intents, needIntentHistory, err := storage.ScanConflictingIntents(
+		ctx, rw, ba.Txn, ba.Header.Timestamp, start, end, maxIntents, ba.TargetBytes,
+	)
+	if err != nil {
+		return false /* canDropLatches */, false /* needIntentHistory */, roachpb.NewError(
+			errors.Wrap(err, "scanning intents"),
+		)
+	}
+	if len(intents) > 0 {
+		return false /* canDropLatches */, false /* needIntentHistory */, maybeAttachLease(
+			roachpb.NewError(&roachpb.WriteIntentError{Intents: intents}), &st.Lease,
+		)
+	}
+	// If there were no conflicts, then the request can drop its latches and
+	// proceed with evaluation.
+	return true /* canDropLatches */, needIntentHistory, nil
 }
 
 // evalContextWithAccount wraps an EvalContext to provide a non-nil
@@ -244,6 +341,19 @@ func (e evalContextWithAccount) GetResponseMemoryAccount() *mon.BoundAccount {
 	return e.memAccount
 }
 
+// batchEvalPath enumerates the different evaluation paths that can be taken by
+// a batch.
+type batchEvalPath int
+
+const (
+	// readOnlyDefault is the default evaluation path taken by read only requests.
+	readOnlyDefault batchEvalPath = iota
+	// readOnlyWithoutInterleavedIntents indicates that the request does not need
+	// an intent interleaving iterator during its evaluation.
+	readOnlyWithoutInterleavedIntents
+	readWrite
+)
+
 // executeReadOnlyBatchWithServersideRefreshes invokes evaluateBatch and retries
 // at a higher timestamp in the event of some retriable errors if allowed by the
 // batch/txn.
@@ -255,6 +365,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
+	evalPath batchEvalPath,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
@@ -305,13 +416,19 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		now := timeutil.Now()
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
+		br, res, pErr = evaluateBatch(
+			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, evalPath,
+		)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 		// Allow only one retry.
 		if pErr == nil || retries > 0 {
 			break
 		}
 		// If we can retry, set a higher batch timestamp and continue.
+		// !!! Requests that have already released their latches need to somehow
+		// pass in a latch guard here that indicates as much. In other words, what
+		// we want is to ensure that requests that have acquired-and-then-dropped
+		// latches at ts X cannot retry above ts X.
 		if !canDoServersideRetry(ctx, pErr, ba, br, g, hlc.Timestamp{} /* deadline */) {
 			r.store.Metrics().ReadEvaluationServerSideRetryFailure.Inc(1)
 			break

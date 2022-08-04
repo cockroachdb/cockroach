@@ -51,10 +51,37 @@ func (r *Replica) addToTSCacheChecked(
 	r.store.tsCache.Add(start, end, ts, txnID)
 }
 
-// updateTimestampCache updates the timestamp cache in order to set a low water
-// mark for the timestamp at which mutations to keys overlapping the provided
-// request can write, such that they don't re-write history.
-func (r *Replica) updateTimestampCache(
+// updateTimestampCacheBeforeEval updates the timestamp cache in order to set a
+// low water mark for the timestamp at which mutations to keys overlapping the
+// provided request can write, such that they don't re-write history. It is
+// expected to be called when a request is dropping its latches before it
+// is evaluated.
+func (r *Replica) updateTimestampCacheBeforeEval(
+	ctx context.Context, st *kvserverpb.LeaseStatus, ba *roachpb.BatchRequest,
+) {
+	var txnID uuid.UUID
+	if ba.Txn != nil {
+		txnID = ba.Txn.ID
+	}
+	for _, union := range ba.Requests {
+		req := union.GetInner()
+		if !roachpb.UpdatesTimestampCache(req) {
+			continue
+		}
+		header := req.Header()
+		start, end := header.Key, header.EndKey
+		r.addToTSCacheChecked(
+			ctx, st, ba, nil /* br */, nil /* pErr */, start, end, ba.Timestamp, txnID,
+		)
+	}
+}
+
+// updateTimestampCacheAfterEval updates the timestamp cache in order to set a
+// low water mark for the timestamp at which mutations to keys overlapping the
+// provided request can write, such that they don't re-write history. It is
+// expected to be called after a request is done evaluation, and with a non-nil
+// BatchResponse.
+func (r *Replica) updateTimestampCacheAfterEval(
 	ctx context.Context,
 	st *kvserverpb.LeaseStatus,
 	ba *roachpb.BatchRequest,
@@ -453,7 +480,7 @@ func (r *Replica) applyTimestampCache(
 //
 // In the diagram, CanCreateTxnRecord is consulted in all three of the
 // state transitions that move away from the "no txn record" state.
-// Updating v1 and v2 is performed in updateTimestampCache.
+// Updating v1 and v2 is performed in updateTimestampCacheAfterEval.
 //
 // The are three separate simplifications to the transaction model that would
 // allow us to simplify this state machine:
