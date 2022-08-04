@@ -390,6 +390,10 @@ type StoreTestingKnobs struct {
 	LeaseRenewalSignalChan chan struct{}
 	// LeaseRenewalOnPostCycle is invoked after each lease renewal cycle.
 	LeaseRenewalOnPostCycle func()
+	// LeaseRenewalUntrackCallback, if set, is invoked with the range ID of a
+	// replica when it's no longer tracked in the set of replicas holding
+	// renewable expiration leases.
+	LeaseRenewalUntrackCallback func(roachpb.RangeID)
 	// LeaseRenewalDurationOverride replaces the timer duration for proactively
 	// renewing expiration based leases.
 	LeaseRenewalDurationOverride time.Duration

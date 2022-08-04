@@ -248,7 +248,20 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpiringLeaseRLocked() {
+	if p.repl.requiresExpiringLeaseRLocked() || transfer {
+		// In addition to ranges that unconditionally require expiration-based
+		// leases (node liveness and earlier), we also use them during lease
+		// transfers for all other ranges. After acquiring these expiration
+		// based leases, the leaseholders are expected to upgrade them to the
+		// more efficient epoch-based ones. But by transferring an
+		// expiration-based lease, we can limit the effect of an ill-advised
+		// lease transfer since the incoming leaseholder needs to recognize
+		// itself as such within a few seconds; if it doesn't (we accidentally
+		// sent the lease to a replica in need of a snapshot or far behind on
+		// its log), the lease is up for grabs. If we simply transferred epoch
+		// based leases, it's possible for the new leaseholder that's delayed
+		// in applying the lease transfer to maintain its lease (assuming the
+		// node it's on is able to heartbeat its liveness record).
 		reqLease.Expiration = &hlc.Timestamp{}
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
@@ -772,10 +785,12 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 	return st.IsValid() && st.OwnedBy(r.store.StoreID())
 }
 
-// requiresExpiringLeaseRLocked returns whether this range uses an
-// expiration-based lease; false if epoch-based. Ranges located before or
-// including the node liveness table must use expiration leases to avoid
-// circular dependencies on the node liveness table.
+// requiresExpiringLeaseRLocked returns whether this range unconditionally uses
+// an expiration-based lease. Ranges located before or including the node
+// liveness table must always use expiration leases to avoid circular
+// dependencies on the node liveness table. All other ranges typically use
+// epoch-based leases, but may temporarily use expiration based leases during
+// lease transfers.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
@@ -1453,7 +1468,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequestWithoutTimeout(
 // returns true if this range uses expiration-based leases, the lease is
 // in need of renewal, and there's not already an extension pending.
 func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
-	if !r.requiresExpiringLeaseRLocked() {
+	if st.Lease.Type() != roachpb.LeaseExpiration {
 		return false
 	}
 	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {

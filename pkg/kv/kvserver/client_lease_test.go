@@ -34,11 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1177,4 +1179,84 @@ func TestAlterRangeRelocate(t *testing.T) {
 	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges where range_id = $3)", 3, 5, rhsDesc.RangeID)
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
+}
+
+func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	manualClock := hlc.NewHybridManualClock()
+	mu := struct {
+		syncutil.Mutex
+		untrackedRangeID roachpb.RangeID
+	}{}
+	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					LeaseRenewalDurationOverride: 10 * time.Millisecond, // speed up the test
+					LeaseRenewalUntrackCallback: func(id roachpb.RangeID) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.untrackedRangeID = id
+					},
+				},
+			},
+		},
+	})
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	// Add a replica; we're going to move the lease to it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+
+	n2 := tc.Server(1)
+	n2Target := tc.Target(1)
+
+	// Transfer the lease from n1 to n2. Expect it to be transferred as an
+	// expiration based lease.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
+			return errors.New("lease still owned by n1")
+		}
+		require.Equal(t, roachpb.LeaseExpiration, li.Current().Type())
+		return nil
+	})
+
+	// Run up the clock to force a lease renewal (and thus the change in lease
+	// types).
+	manualClock.Increment(
+		tc.GetFirstStoreFromServer(t, 1).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
+			time.Second.Nanoseconds(),
+	)
+
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if li.Current().Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease still an expiration based lease")
+		}
+		require.Equal(t, int64(1), li.Current().Epoch)
+		return nil
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if mu.untrackedRangeID != desc.RangeID {
+			return errors.Errorf("range %s still tracked in set of renewable leases", desc.RangeID)
+		}
+		return nil
+	})
 }

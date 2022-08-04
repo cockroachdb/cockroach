@@ -2242,12 +2242,24 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				numRenewableLeases++
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
-				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
+				if leaseStatus, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
 					s.renewableLeases.Delete(k)
+				} else if leaseStatus.Lease.Type() == roachpb.LeaseEpoch {
+					// We're dealing with an epoch based lease that was
+					// previously an expiration based one (we always transfer
+					// expiration based leases, and for ranges after the
+					// liveness table, they're upgraded to epoch based ones). We
+					// can stop tracking this range in our renewable map, its
+					// lease extensions take place through liveness heartbeats.
+					if cb := s.TestingKnobs().LeaseRenewalUntrackCallback; cb != nil {
+						cb(repl.RangeID)
+					}
+					s.renewableLeases.Delete(k)
 				}
+
 				return true
 			})
 
