@@ -1322,3 +1322,55 @@ vectorized: true
 
 statement ok
 DROP TABLE t
+
+# The following tests check session variable optimizer_use_not_visible_indexes.
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, INDEX idx_v_visible(v) NOT VISIBLE)
+
+# By default, optimizer_use_not_visible_indexes is false.
+query T
+SHOW SESSION optimizer_use_not_visible_indexes
+----
+off
+
+# idx_v_visible is not selected if it is invisible.
+query T
+EXPLAIN SELECT * FROM t WHERE v = 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: v = 2
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET SESSION optimizer_use_not_visible_indexes = true
+
+# idx_v_visible stays as a not visible index but will still be used for query plan.
+query TTB
+SELECT index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY index_name, seq_in_index
+----
+idx_v_visible  v  false
+idx_v_visible  k  false
+t_pkey         k  true
+t_pkey         v  true
+
+# idx_v_visible is selected now since the optimizer_use_not_visible_indexes is true now.
+query T
+EXPLAIN SELECT * FROM t WHERE v = 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@idx_v_visible
+  spans: [/2 - /2]
+
+statement ok
+DROP TABLE t
