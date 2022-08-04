@@ -200,6 +200,7 @@ func (node *AlterDatabaseSecondaryRegion) Format(ctx *FmtCtx) {
 // ALTER DATABASE DROP SECONDARY REGION statement.
 type AlterDatabaseDropSecondaryRegion struct {
 	DatabaseName Name
+	IfExists     bool
 }
 
 var _ Statement = &AlterDatabaseDropSecondaryRegion{}
@@ -209,4 +210,7 @@ func (node *AlterDatabaseDropSecondaryRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.DatabaseName)
 	ctx.WriteString(" DROP SECONDARY REGION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
 }
