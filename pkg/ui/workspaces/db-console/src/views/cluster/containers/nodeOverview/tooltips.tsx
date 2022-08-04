@@ -85,6 +85,48 @@ export const ValueBytesTooltip: React.FC<
   </Tooltip>
 );
 
+export const MVCCRangeKeyBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>
+          Number of bytes stored in MVCC range keys on node{" "}
+          {props.nodeName || "NodeName"}.
+        </p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
+);
+
+export const MVCCRangeValueBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>
+          Number of bytes stored in MVCC range values on node{" "}
+          {props.nodeName || "NodeName"}.
+        </p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
+);
+
 export const IntentBytesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}

@@ -44,6 +44,8 @@ import {
   NodeUsedCapacityTooltip,
   NodeAvailableCapacityTooltip,
   NodeMaximumCapacityTooltip,
+  MVCCRangeKeyBytesTooltip,
+  MVCCRangeValueBytesTooltip,
 } from "./tooltips";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
@@ -186,6 +188,24 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                   valueFn={metrics => Bytes(metrics[MetricConstants.valBytes])}
                   nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
                   CellTooltip={ValueBytesTooltip}
+                />
+                <TableRow
+                  data={node}
+                  title="MVCC Range Key Bytes"
+                  valueFn={metrics =>
+                    Bytes(metrics[MetricConstants.rangeKeyBytes] || 0)
+                  }
+                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                  CellTooltip={MVCCRangeKeyBytesTooltip}
+                />
+                <TableRow
+                  data={node}
+                  title="MVCC Range Value Bytes"
+                  valueFn={metrics =>
+                    Bytes(metrics[MetricConstants.rangeValBytes] || 0)
+                  }
+                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                  CellTooltip={MVCCRangeValueBytesTooltip}
                 />
                 <TableRow
                   data={node}
