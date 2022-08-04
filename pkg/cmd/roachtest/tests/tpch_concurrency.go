@@ -172,9 +172,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// supported concurrency is always sustained and fail the test if it
 		// isn't.
 		minConcurrency, maxConcurrency := 48, 160
-		if !lowerRefreshSpansBytes {
-			minConcurrency, maxConcurrency = 4, 64
-		}
 		// Run the binary search to find the largest concurrency that doesn't
 		// crash a node in the cluster. The current range is represented by
 		// [minConcurrency, maxConcurrency).
