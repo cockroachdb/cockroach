@@ -121,7 +121,8 @@ type CommandArgs struct {
 	Args    roachpb.Request
 	Now     hlc.ClockTimestamp
 	// *Stats should be mutated to reflect any writes made by the command.
-	Stats       *enginepb.MVCCStats
-	Concurrency *concurrency.Guard
-	Uncertainty uncertainty.Interval
+	Stats                 *enginepb.MVCCStats
+	Concurrency           *concurrency.Guard
+	Uncertainty           uncertainty.Interval
+	DontInterleaveIntents bool
 }

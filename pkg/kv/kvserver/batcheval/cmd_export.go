@@ -91,6 +91,8 @@ func declareKeysExport(
 ) {
 	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
+	// Export requests will usually not hold latches during their evaluation.
+	latchSpans.DisableUndeclaredAccessAssertions()
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -136,6 +138,10 @@ func evalExport(
 	// *revisions* since the gc threshold, so noting that in the reply allows the
 	// BACKUP to correctly note the supported time bounds for RESTORE AS OF SYSTEM
 	// TIME.
+	//
+	// NOTE: Since export requests may not be holding latches during evaluation,
+	// this `GetGCThreshold()` call is going to potentially return a higher GC
+	// threshold than the pebble state we're evaluating over. This is copacetic.
 	if args.MVCCFilter == roachpb.MVCCFilter_All {
 		reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
 	}
