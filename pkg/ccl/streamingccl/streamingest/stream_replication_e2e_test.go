@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -219,8 +218,8 @@ func createTenantStreamingClusters(
 		TenantID: args.srcTenantID,
 		TestingKnobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableSplitQueue: true,
-				DisableMergeQueue: true,
+				// DisableSplitQueue: true,
+				// DisableMergeQueue: true,
 			},
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				AllowSplitAndScatter: true,
@@ -334,45 +333,74 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer dataSrv.Close()
 
 	ctx := context.Background()
-	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	args := defaultTenantStreamingClustersArgs
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
+	log.Warningf(ctx, "\n\x1b[32m RUNNING SCATTER\x1b[0m\n")
+	numRanges := 50
+	rowsPerRange := 20
+	c.srcTenantSQL.Exec(t, fmt.Sprintf(`
+	CREATE TABLE d.scattered (key INT PRIMARY KEY);
+	INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, %d);
+	ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+	ALTER TABLE d.scattered SCATTER;
+	`, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+	log.Warningf(ctx, "\n\x1b[32m RAN SCATTER\x1b[0m\n")
+
+	// Allow time for the scatter to settle (without this running
+	// startStreamReplication immediately after may result in it running twice for some reason)
+	// <-time.NewTimer(1 * time.Second).C
+	log.Warningf(ctx, "\n\x1b[32m STARTING REPLICATION \x1b[0m\n")
 	producerJobID, ingestionJobID := c.startStreamReplication()
+	log.Warningf(ctx, "\n\x1b[32m RAN REPLICATION (%+v) (%+v)\x1b[0m\n", producerJobID, ingestionJobID)
 
-	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
-		tenantSQL.Exec(t, "IMPORT INTO d.x CSV DATA ($1)", dataSrv.URL)
-	})
+	// jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	// jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
-	var cutoverTime time.Time
-	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-	})
+	// srcTime := c.srcCluster.Server(0).Clock().Now()
+	// c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
 
-	// TODO(samiskin): enable this check once #83650 is resolved
-	// // We should not be able to connect to the tenant prior to the cutoff time
-	// <-time.NewTimer(2 * time.Second).C
-	// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
-	// require.Error(t, err)
+	// progress := jobutils.GetJobProgress(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	// streamAddresses := progress.GetStreamIngest().StreamAddresses
+	// require.Greater(t, len(streamAddresses), 1)
 
-	c.cutover(producerJobID, ingestionJobID, cutoverTime)
-	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	// c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+	// 	tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+	// 	tenantSQL.Exec(t, "IMPORT INTO d.x CSV DATA ($1)", dataSrv.URL)
+	// })
 
-	cleanupTenant := c.createDestTenantSQL(ctx)
-	defer func() {
-		require.NoError(t, cleanupTenant())
-	}()
+	// var cutoverTime time.Time
+	// c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+	// 	sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	// })
 
-	c.compareResult("SELECT * FROM d.t1")
-	c.compareResult("SELECT * FROM d.t2")
-	c.compareResult("SELECT * FROM d.x")
-	// After cutover, changes to source won't be streamed into destination cluster.
-	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
-	})
-	// Check the dst cluster didn't receive the change after a while.
-	<-time.NewTimer(3 * time.Second).C
-	require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
+	// // TODO(samiskin): enable this check once #83650 is resolved
+	// // // We should not be able to connect to the tenant prior to the cutoff time
+	// // <-time.NewTimer(2 * time.Second).C
+	// // _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	// // require.Error(t, err)
+
+	// c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
+	// cleanupTenant := c.createDestTenantSQL(ctx)
+	// defer func() {
+	// 	require.NoError(t, cleanupTenant())
+	// }()
+
+	// c.compareResult("SELECT * FROM d.t1")
+	// c.compareResult("SELECT * FROM d.t2")
+	// c.compareResult("SELECT * FROM d.x")
+	// // c.compareResult("SELECT * FROM d.scattered")
+	// // After cutover, changes to source won't be streamed into destination cluster.
+	// c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+	// 	tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
+	// })
+	// // Check the dst cluster didn't receive the change after a while.
+	// <-time.NewTimer(3 * time.Second).C
+	// require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
 }
 
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
@@ -709,11 +737,73 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 	})
 }
 
+func TestTenantStreamingMultinode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	// Create a source table with multiple ranges spread across multiple nodes
+	numRanges := 50
+	rowsPerRange := 20
+	c.srcTenantSQL.Exec(t, fmt.Sprintf(`
+  CREATE TABLE d.scattered (key INT PRIMARY KEY);
+  INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, %d);
+  ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+  ALTER TABLE d.scattered SCATTER;
+  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
+	})
+
+	// c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
+	// jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+	// 	tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
+	// })
+
+	// c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
+	// jobutils.WaitForJobToRun(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+	// 	tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
+	// })
+
+	var cutoverTime time.Time
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	})
+
+	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+	c.compareResult("SELECT * FROM d.x")
+	c.compareResult("SELECT * FROM d.scattered")
+}
+
 func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 85283, "flaky test due to multi-node")
+	// skip.WithIssue(t, 85283, "flaky test due to multi-node")
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
@@ -789,8 +879,6 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRaceWithIssue(t, 83867)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
