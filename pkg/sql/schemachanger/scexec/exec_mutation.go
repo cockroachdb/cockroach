@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -422,7 +423,7 @@ type eventPayload struct {
 	scpb.TargetMetadata
 
 	details eventpb.CommonSQLEventDetails
-	event   eventpb.EventPayload
+	event   logpb.EventPayload
 }
 
 type schemaChangerJobUpdate struct {
@@ -625,7 +626,7 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 	id descpb.ID,
 	metadata scpb.TargetMetadata,
 	details eventpb.CommonSQLEventDetails,
-	event eventpb.EventPayload,
+	event logpb.EventPayload,
 ) error {
 	mvs.eventsByStatement[metadata.StatementID] = append(
 		mvs.eventsByStatement[metadata.StatementID],
