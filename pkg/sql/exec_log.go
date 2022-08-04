@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -465,7 +466,7 @@ func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privi
 		default:
 			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: false})
 		}
-	case catalog.SyntheticPrivilegeObject:
+	case syntheticprivilege.Object:
 		// TODO(richardjcai): Add auditing here.
 	}
 }

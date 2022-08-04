@@ -15,7 +15,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -293,6 +295,16 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+// SynthesizePrivilegeDescriptor is part of the Planner interface.
+func (*DummyEvalPlanner) SynthesizePrivilegeDescriptor(
+	ctx context.Context,
+	privilegeObjectName string,
+	privilegeObjectPath string,
+	privilegeObjectType privilege.ObjectType,
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+	return nil, nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
@@ -409,6 +421,11 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// IsActive is part of the Planner interface.
+func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bool {
+	return true
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

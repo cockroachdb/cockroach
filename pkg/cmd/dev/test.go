@@ -36,7 +36,6 @@ const (
 	stressArgsFlag   = "stress-args"
 	raceFlag         = "race"
 	ignoreCacheFlag  = "ignore-cache"
-	noGenFlag        = "no-gen"
 	rewriteFlag      = "rewrite"
 	streamOutputFlag = "stream-output"
 	testArgsFlag     = "test-args"
@@ -102,7 +101,6 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
-	testCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
@@ -125,7 +123,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
-		noGen         = mustGetFlagBool(cmd, noGenFlag)
 		changed       = mustGetFlagBool(cmd, changedFlag)
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
@@ -237,27 +234,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 	args = append(args, "--test_env=GOTRACEBACK=all")
-
-	// We need to re-generate logictest files if we're testing a
-	// logictest target.
-	if !noGen {
-		var shouldGenerateLogicTestFiles bool
-		for _, testTarget := range testTargets {
-			for _, logicTestPath := range logicTestPaths {
-				if strings.Contains(testTarget, logicTestPath) {
-					shouldGenerateLogicTestFiles = true
-					break
-				}
-			}
-		}
-
-		if shouldGenerateLogicTestFiles {
-			err := d.generateLogicTest(cmd)
-			if err != nil {
-				return err
-			}
-		}
-	}
 
 	if rewrite {
 		if stress {

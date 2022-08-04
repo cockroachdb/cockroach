@@ -14,7 +14,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -324,6 +326,19 @@ type Planner interface {
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
 	QueryIteratorEx(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
+
+	// IsActive returns if the version specified by key is active.
+	IsActive(ctx context.Context, key clusterversion.Key) bool
+
+	// SynthesizePrivilegeDescriptor synthesizes a
+	// PrivilegeDescriptor given a SyntheticPrivilegeObject's path
+	// from system.privileges.
+	SynthesizePrivilegeDescriptor(
+		ctx context.Context,
+		privilegeObjectName string,
+		privilegeObjectPath string,
+		privilegeObjectType privilege.ObjectType,
+	) (*catpb.PrivilegeDescriptor, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

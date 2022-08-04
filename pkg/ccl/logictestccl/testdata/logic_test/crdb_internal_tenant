@@ -8,11 +8,9 @@ SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
 query IT
 SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 ----
-0  defaultdb
 0  eventlog
 0  jobs
 0  locations
-0  privileges
 0  protected_ts_meta
 0  protected_ts_records
 0  role_members
@@ -36,76 +34,76 @@ DROP DATABASE crdb_internal
 query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
-crdb_internal  active_range_feeds               table  NULL  NULL  NULL
-crdb_internal  backward_dependencies            table  NULL  NULL  NULL
-crdb_internal  builtin_functions                table  NULL  NULL  NULL
-crdb_internal  cluster_contended_indexes        view   NULL  NULL  NULL
-crdb_internal  cluster_contended_keys           view   NULL  NULL  NULL
-crdb_internal  cluster_contended_tables         view   NULL  NULL  NULL
-crdb_internal  cluster_contention_events        table  NULL  NULL  NULL
-crdb_internal  cluster_database_privileges      table  NULL  NULL  NULL
-crdb_internal  cluster_distsql_flows            table  NULL  NULL  NULL
-crdb_internal  cluster_inflight_traces          table  NULL  NULL  NULL
-crdb_internal  cluster_locks                    table  NULL  NULL  NULL
-crdb_internal  cluster_queries                  table  NULL  NULL  NULL
-crdb_internal  cluster_sessions                 table  NULL  NULL  NULL
-crdb_internal  cluster_settings                 table  NULL  NULL  NULL
-crdb_internal  cluster_statement_statistics     table  NULL  NULL  NULL
-crdb_internal  cluster_transaction_statistics   table  NULL  NULL  NULL
-crdb_internal  cluster_transactions             table  NULL  NULL  NULL
-crdb_internal  create_schema_statements         table  NULL  NULL  NULL
-crdb_internal  create_statements                table  NULL  NULL  NULL
-crdb_internal  create_type_statements           table  NULL  NULL  NULL
-crdb_internal  cross_db_references              table  NULL  NULL  NULL
-crdb_internal  databases                        table  NULL  NULL  NULL
-crdb_internal  default_privileges               table  NULL  NULL  NULL
-crdb_internal  feature_usage                    table  NULL  NULL  NULL
-crdb_internal  forward_dependencies             table  NULL  NULL  NULL
-crdb_internal  gossip_alerts                    table  NULL  NULL  NULL
-crdb_internal  gossip_liveness                  table  NULL  NULL  NULL
-crdb_internal  gossip_network                   table  NULL  NULL  NULL
-crdb_internal  gossip_nodes                     table  NULL  NULL  NULL
-crdb_internal  index_columns                    table  NULL  NULL  NULL
-crdb_internal  index_usage_statistics           table  NULL  NULL  NULL
-crdb_internal  invalid_objects                  table  NULL  NULL  NULL
-crdb_internal  jobs                             table  NULL  NULL  NULL
-crdb_internal  kv_node_liveness                 table  NULL  NULL  NULL
-crdb_internal  kv_node_status                   table  NULL  NULL  NULL
-crdb_internal  kv_store_status                  table  NULL  NULL  NULL
-crdb_internal  leases                           table  NULL  NULL  NULL
-crdb_internal  lost_descriptors_with_data       table  NULL  NULL  NULL
-crdb_internal  node_build_info                  table  NULL  NULL  NULL
-crdb_internal  node_contention_events           table  NULL  NULL  NULL
-crdb_internal  node_distsql_flows               table  NULL  NULL  NULL
-crdb_internal  node_execution_insights          table  NULL  NULL  NULL
-crdb_internal  node_inflight_trace_spans        table  NULL  NULL  NULL
-crdb_internal  node_metrics                     table  NULL  NULL  NULL
-crdb_internal  node_queries                     table  NULL  NULL  NULL
-crdb_internal  node_runtime_info                table  NULL  NULL  NULL
-crdb_internal  node_sessions                    table  NULL  NULL  NULL
-crdb_internal  node_statement_statistics        table  NULL  NULL  NULL
-crdb_internal  node_transaction_statistics      table  NULL  NULL  NULL
-crdb_internal  node_transactions                table  NULL  NULL  NULL
-crdb_internal  node_txn_stats                   table  NULL  NULL  NULL
-crdb_internal  partitions                       table  NULL  NULL  NULL
-crdb_internal  pg_catalog_table_is_implemented  table  NULL  NULL  NULL
-crdb_internal  predefined_comments              table  NULL  NULL  NULL
-crdb_internal  ranges                           view   NULL  NULL  NULL
-crdb_internal  ranges_no_leases                 table  NULL  NULL  NULL
-crdb_internal  regions                          table  NULL  NULL  NULL
-crdb_internal  schema_changes                   table  NULL  NULL  NULL
-crdb_internal  session_trace                    table  NULL  NULL  NULL
-crdb_internal  session_variables                table  NULL  NULL  NULL
-crdb_internal  statement_statistics             view   NULL  NULL  NULL
-crdb_internal  super_regions                    table  NULL  NULL  NULL
-crdb_internal  table_columns                    table  NULL  NULL  NULL
-crdb_internal  table_indexes                    table  NULL  NULL  NULL
-crdb_internal  table_row_statistics             table  NULL  NULL  NULL
-crdb_internal  tables                           table  NULL  NULL  NULL
-crdb_internal  tenant_usage_details             view   NULL  NULL  NULL
-crdb_internal  transaction_contention_events    table  NULL  NULL  NULL
-crdb_internal  transaction_statistics           view   NULL  NULL  NULL
-crdb_internal  zones                            table  NULL  NULL  NULL
+crdb_internal  active_range_feeds               table  admin  NULL  NULL
+crdb_internal  backward_dependencies            table  admin  NULL  NULL
+crdb_internal  builtin_functions                table  admin  NULL  NULL
+crdb_internal  cluster_contended_indexes        view   admin  NULL  NULL
+crdb_internal  cluster_contended_keys           view   admin  NULL  NULL
+crdb_internal  cluster_contended_tables         view   admin  NULL  NULL
+crdb_internal  cluster_contention_events        table  admin  NULL  NULL
+crdb_internal  cluster_database_privileges      table  admin  NULL  NULL
+crdb_internal  cluster_distsql_flows            table  admin  NULL  NULL
+crdb_internal  cluster_inflight_traces          table  admin  NULL  NULL
+crdb_internal  cluster_locks                    table  admin  NULL  NULL
+crdb_internal  cluster_queries                  table  admin  NULL  NULL
+crdb_internal  cluster_sessions                 table  admin  NULL  NULL
+crdb_internal  cluster_settings                 table  admin  NULL  NULL
+crdb_internal  cluster_statement_statistics     table  admin  NULL  NULL
+crdb_internal  cluster_transaction_statistics   table  admin  NULL  NULL
+crdb_internal  cluster_transactions             table  admin  NULL  NULL
+crdb_internal  create_schema_statements         table  admin  NULL  NULL
+crdb_internal  create_statements                table  admin  NULL  NULL
+crdb_internal  create_type_statements           table  admin  NULL  NULL
+crdb_internal  cross_db_references              table  admin  NULL  NULL
+crdb_internal  databases                        table  admin  NULL  NULL
+crdb_internal  default_privileges               table  admin  NULL  NULL
+crdb_internal  feature_usage                    table  admin  NULL  NULL
+crdb_internal  forward_dependencies             table  admin  NULL  NULL
+crdb_internal  gossip_alerts                    table  admin  NULL  NULL
+crdb_internal  gossip_liveness                  table  admin  NULL  NULL
+crdb_internal  gossip_network                   table  admin  NULL  NULL
+crdb_internal  gossip_nodes                     table  admin  NULL  NULL
+crdb_internal  index_columns                    table  admin  NULL  NULL
+crdb_internal  index_usage_statistics           table  admin  NULL  NULL
+crdb_internal  invalid_objects                  table  admin  NULL  NULL
+crdb_internal  jobs                             table  admin  NULL  NULL
+crdb_internal  kv_node_liveness                 table  admin  NULL  NULL
+crdb_internal  kv_node_status                   table  admin  NULL  NULL
+crdb_internal  kv_store_status                  table  admin  NULL  NULL
+crdb_internal  leases                           table  admin  NULL  NULL
+crdb_internal  lost_descriptors_with_data       table  admin  NULL  NULL
+crdb_internal  node_build_info                  table  admin  NULL  NULL
+crdb_internal  node_contention_events           table  admin  NULL  NULL
+crdb_internal  node_distsql_flows               table  admin  NULL  NULL
+crdb_internal  node_execution_insights          table  admin  NULL  NULL
+crdb_internal  node_inflight_trace_spans        table  admin  NULL  NULL
+crdb_internal  node_metrics                     table  admin  NULL  NULL
+crdb_internal  node_queries                     table  admin  NULL  NULL
+crdb_internal  node_runtime_info                table  admin  NULL  NULL
+crdb_internal  node_sessions                    table  admin  NULL  NULL
+crdb_internal  node_statement_statistics        table  admin  NULL  NULL
+crdb_internal  node_transaction_statistics      table  admin  NULL  NULL
+crdb_internal  node_transactions                table  admin  NULL  NULL
+crdb_internal  node_txn_stats                   table  admin  NULL  NULL
+crdb_internal  partitions                       table  admin  NULL  NULL
+crdb_internal  pg_catalog_table_is_implemented  table  admin  NULL  NULL
+crdb_internal  predefined_comments              table  admin  NULL  NULL
+crdb_internal  ranges                           view   admin  NULL  NULL
+crdb_internal  ranges_no_leases                 table  admin  NULL  NULL
+crdb_internal  regions                          table  admin  NULL  NULL
+crdb_internal  schema_changes                   table  admin  NULL  NULL
+crdb_internal  session_trace                    table  admin  NULL  NULL
+crdb_internal  session_variables                table  admin  NULL  NULL
+crdb_internal  statement_statistics             view   admin  NULL  NULL
+crdb_internal  super_regions                    table  admin  NULL  NULL
+crdb_internal  table_columns                    table  admin  NULL  NULL
+crdb_internal  table_indexes                    table  admin  NULL  NULL
+crdb_internal  table_row_statistics             table  admin  NULL  NULL
+crdb_internal  tables                           table  admin  NULL  NULL
+crdb_internal  tenant_usage_details             view   admin  NULL  NULL
+crdb_internal  transaction_contention_events    table  admin  NULL  NULL
+crdb_internal  transaction_statistics           view   admin  NULL  NULL
+crdb_internal  zones                            table  admin  NULL  NULL
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1310,6 +1311,9 @@ type ExecutorConfig struct {
 
 	// DescIDGenerator generates unique descriptor IDs.
 	DescIDGenerator eval.DescIDGenerator
+
+	// SyntheticPrivilegeCache
+	SyntheticPrivilegeCache *cacheutil.Cache
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

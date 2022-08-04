@@ -7,7 +7,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/faketreeeval",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/security/username",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

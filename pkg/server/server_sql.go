@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -784,6 +785,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
 		KVStoresIterator:        cfg.kvStoresIterator,
+		SyntheticPrivilegeCache: cacheutil.NewCache(
+			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

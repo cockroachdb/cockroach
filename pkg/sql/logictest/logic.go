@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -3606,6 +3607,19 @@ type TestServerArgs struct {
 	ForceProductionValues bool
 	// If set, then sql.distsql.temp_storage.workmem is not randomized.
 	DisableWorkmemRandomization bool
+}
+
+// RunLogicTests runs logic tests for all files matching the given glob.
+func RunLogicTests(
+	t *testing.T, serverArgs TestServerArgs, configIdx logictestbase.ConfigIdx, glob string,
+) {
+	paths, err := filepath.Glob(glob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		RunLogicTest(t, serverArgs, configIdx, p)
+	}
 }
 
 // RunLogicTest is the main entry point for the logic test.
