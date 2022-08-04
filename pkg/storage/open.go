@@ -150,7 +150,7 @@ func CacheSize(size int64) ConfigOption {
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.MaxConcurrentCompactions = n
+		cfg.Opts.MaxConcurrentCompactions = func() int { return n }
 		return nil
 	}
 }
