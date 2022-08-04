@@ -178,43 +178,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		)
 	}
 
-	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(func(o roleoption.Option) {
-		sqltelemetry.IncIAMOptionCounter(sqltelemetry.CreateRole, strings.ToLower(o.String()))
-	})
+	_, err = updateRoleOptions(params, opName, n.roleOptions, n.roleName, sqltelemetry.CreateRole)
 	if err != nil {
 		return err
-	}
-
-	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
-
-		if value != nil {
-			isNull, val, err := value()
-			if err != nil {
-				return err
-			}
-			if isNull {
-				// If the value of the role option is NULL, ensure that nil is passed
-				// into the statement placeholder, since val is string type "NULL"
-				// will not be interpreted as NULL by the InternalExecutor.
-				qargs = append(qargs, nil)
-			} else {
-				qargs = append(qargs, val)
-			}
-		}
-
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			stmt,
-			qargs...,
-		)
-		if err != nil {
-			return err
-		}
 	}
 
 	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
@@ -230,6 +196,70 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		0, /* no target */
 		&eventpb.CreateRole{RoleName: n.roleName.Normalized()})
+}
+
+func updateRoleOptions(
+	params runParams,
+	opName string,
+	roleOptions roleoption.List,
+	roleName username.SQLUsername,
+	telemetryOp string,
+) (rowsAffected int, err error) {
+	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleOptionsTableHasIDColumn)
+	// Get a map of statements to execute for role options and their values.
+	stmts, err := roleOptions.GetSQLStmts(func(o roleoption.Option) {
+		sqltelemetry.IncIAMOptionCounter(telemetryOp, strings.ToLower(o.String()))
+	}, withID)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected = 0
+	for stmt, value := range stmts {
+		qargs := []interface{}{roleName}
+
+		if value != nil {
+			isNull, val, err := value()
+			if err != nil {
+				return 0, err
+			}
+			if isNull {
+				// If the value of the role option is NULL, ensure that nil is passed
+				// into the statement placeholder, since val is string type "NULL"
+				// will not be interpreted as NULL by the InternalExecutor.
+				qargs = append(qargs, nil)
+			} else {
+				qargs = append(qargs, val)
+			}
+		}
+
+		if withID {
+			idRow, err := params.p.ExecCfg().InternalExecutor.QueryRowEx(
+				params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+				`SELECT user_id FROM system.users WHERE username = $1`, roleName.Normalized(),
+			)
+			if err != nil {
+				return 0, err
+			}
+			qargs = append(qargs, tree.MustBeDOid(idRow[0]))
+		}
+
+		affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			params.ctx,
+			opName,
+			params.p.txn,
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			stmt,
+			qargs...,
+		)
+		if err != nil {
+			return 0, err
+		}
+
+		rowsAffected += affected
+	}
+
+	return rowsAffected, err
 }
 
 // Next implements the planNode interface.
