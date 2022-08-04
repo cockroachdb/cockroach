@@ -457,6 +457,11 @@ func (desc *immutable) FuncDesc() *descpb.FunctionDescriptor {
 	return &desc.FunctionDescriptor
 }
 
+// GetLanguage implements the FunctionDescriptor interface.
+func (desc *immutable) GetLanguage() catpb.Function_Language {
+	return desc.Lang
+}
+
 // ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
 func (desc *immutable) ContainsUserDefinedTypes() bool {
 	for i := range desc.Args {

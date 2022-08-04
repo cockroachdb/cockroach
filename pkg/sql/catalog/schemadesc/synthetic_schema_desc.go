@@ -153,6 +153,13 @@ func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, b
 	return descpb.SchemaDescriptor_Function{}, false
 }
 
+// ForEachFunctionOverload implements the SchemaDescriptor interface.
+func (p synthetic) ForEachFunctionOverload(
+	fn func(overload descpb.SchemaDescriptor_FunctionOverload) error,
+) error {
+	return nil
+}
+
 func (p synthetic) ContainsUserDefinedTypes() bool {
 	return false
 }
