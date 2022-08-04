@@ -249,7 +249,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if err := tableDesc.AddIndexMutationMaybeWithTempIndex(
-		ctx, newPrimaryIndexDesc, descpb.DescriptorMutation_ADD, p.ExecCfg().Settings,
+		newPrimaryIndexDesc, descpb.DescriptorMutation_ADD,
 	); err != nil {
 		return err
 	}
@@ -741,9 +741,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
-	if err := table.AddIndexMutationMaybeWithTempIndex(
-		ctx, toAdd, descpb.DescriptorMutation_ADD, settings,
-	); err != nil {
+	if err := table.AddIndexMutationMaybeWithTempIndex(toAdd, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	if err := table.AllocateIDsWithoutValidation(ctx); err != nil {

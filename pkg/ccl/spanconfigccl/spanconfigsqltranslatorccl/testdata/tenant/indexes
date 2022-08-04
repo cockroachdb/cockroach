@@ -96,12 +96,7 @@ translate database=db table=t
 block-gc-jobs
 ----
 
-# Create an index and create a zone configuration in the same transaction
-# with the mvcc-index-backfiller.
-exec-sql
-SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = true;
-----
-
+# Create an index and create a zone configuration in the same transaction.
 exec-sql
 CREATE INDEX idx2 ON db.t (j);
 ALTER INDEX db.t@idx2 CONFIGURE ZONE USING gc.ttlseconds = 1;
@@ -133,34 +128,8 @@ translate database=db table=t
 /Tenant/10/Table/106/{4-5}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
 /Tenant/10/Table/10{6/5-7}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
 
-# Create an index and create a zone configuration in the same transaction
-# with the non-mvcc-index-backfiller.
-exec-sql
-SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false;
-----
-
-exec-sql
-CREATE INDEX idx3 ON db.t (j);
-ALTER INDEX db.t@idx3 CONFIGURE ZONE USING gc.ttlseconds = 1;
-----
-
-translate database=db table=t
-----
-/Tenant/10/Table/106{-/2}                  range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Tenant/10/Table/106/{3-4}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{4-5}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
-/Tenant/10/Table/106/{5-6}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{6-7}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
-/Tenant/10/Table/10{6/7-7}                 range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-
-
 # Create and drop an index inside the same transaction. The related
 # zone configuration should also be cleaned up.
-exec-sql
-SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = true;
-----
-
 exec-sql
 CREATE TABLE db.t2(i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON db.t2 (j);
@@ -171,18 +140,3 @@ DROP INDEX db.t2@idx
 translate database=db table=t2
 ----
 /Tenant/10/Table/10{7-8}                   ttl_seconds=3600 num_replicas=7
-
-exec-sql
-SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false;
-----
-
-exec-sql
-CREATE TABLE db.t3(i INT PRIMARY KEY, j INT);
-CREATE INDEX idx ON db.t3 (j);
-ALTER INDEX db.t3@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
-DROP INDEX db.t3@idx
-----
-
-translate database=db table=t3
-----
-/Tenant/10/Table/10{8-9}                   ttl_seconds=3600 num_replicas=7

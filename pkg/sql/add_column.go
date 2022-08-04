@@ -124,9 +124,7 @@ func (p *planner) addColumnImpl(
 
 	n.tableDesc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
 	if idx != nil {
-		if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
-			params.ctx, idx, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings,
-		); err != nil {
+		if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(idx, descpb.DescriptorMutation_ADD); err != nil {
 			return err
 		}
 	}

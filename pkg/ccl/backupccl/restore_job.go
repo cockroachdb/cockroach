@@ -1901,7 +1901,7 @@ func (r *restoreResumer) publishDescriptors(
 			newIdx := found.IndexDescDeepCopy()
 			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
 			if err := mutTable.AddIndexMutationMaybeWithTempIndex(
-				ctx, &newIdx, descpb.DescriptorMutation_ADD, r.settings,
+				&newIdx, descpb.DescriptorMutation_ADD,
 			); err != nil {
 				return err
 			}

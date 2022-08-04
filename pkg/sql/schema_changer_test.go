@@ -7860,42 +7860,6 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 	}
 }
 
-func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-
-	changeSetting := make(chan struct{})
-	wait := make(chan struct{})
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		RunBeforeResume: func(jobID jobspb.JobID) error {
-			close(changeSetting)
-			<-wait
-			return nil
-		},
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	errC := make(chan error)
-
-	go func() {
-		_, err := sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
-		require.NoError(t, err)
-		_, err = sqlDB.Exec("CREATE INDEX ON t (b)")
-		errC <- err
-	}()
-
-	<-changeSetting
-	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false")
-	require.NoError(t, err)
-	close(wait)
-
-	require.Error(t, <-errC, "schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
-}
-
 func TestPauseBeforeRandomDescTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
