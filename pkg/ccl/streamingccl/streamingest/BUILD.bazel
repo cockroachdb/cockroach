@@ -65,7 +65,7 @@ go_library(
 
 go_test(
     name = "streamingest_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "main_test.go",
         "stream_ingestion_frontier_processor_test.go",
