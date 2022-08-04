@@ -27,8 +27,8 @@ const scheme = "external"
 
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
-) (cloudpb.ExternalConnectionConfig, error) {
-	externalConnCfg := cloudpb.ExternalConnectionConfig{}
+) (cloudpb.ExternalStorage_ExternalConnectionConfig, error) {
+	externalConnCfg := cloudpb.ExternalStorage_ExternalConnectionConfig{}
 	if uri.Host == "" {
 		return externalConnCfg, errors.Newf("host component of an external URI must refer to an "+
 			"existing External Connection object: %s", uri.String())
